@@ -15,6 +15,7 @@
     "drive": {
       "max_speed_kmh": 7.0,
       "max_reverse_kmh": 2.0,
+      "mass_kg": 48.0,
       "accel_kmh_per_s": 1.2,
       "decel_kmh_per_s": 0.9,
       "reverse_accel_kmh_per_s": 0.8,

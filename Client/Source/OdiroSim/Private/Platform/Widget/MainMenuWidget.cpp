@@ -81,6 +81,7 @@ namespace
 	const FName SuggestionInfoIndicatorName(TEXT("SuggestionInfoIndicator"));
 	const TCHAR* MainMenuUserProjectScenarioFileName = TEXT("scenario.json");
 	const FName ProjectScenarioEditTabId(TEXT("ScenarioEdit"));
+	const FName ProjectRobotConfigTabId(TEXT("RobotConfig"));
 	const FName ProjectExperimentStatusTabId(TEXT("ExperimentStatus"));
 	const FName ProjectExperimentConfigTabId(TEXT("ExperimentConfig"));
 	const FName ProjectExperimentResultDetailTabId(TEXT("ExperimentResultDetail"));
@@ -1742,6 +1743,9 @@ void UMainMenuWidget::ShowProjectWorkspaceTab(const EProjectWorkspaceTabType tab
 		case EProjectWorkspaceTabType::ScenarioEdit:
 			tabId = ProjectScenarioEditTabId;
 			break;
+		case EProjectWorkspaceTabType::RobotConfig:
+			tabId = ProjectRobotConfigTabId;
+			break;
 		case EProjectWorkspaceTabType::ExperimentStatus:
 			tabId = ProjectExperimentStatusTabId;
 			break;
@@ -1785,18 +1789,25 @@ void UMainMenuWidget::ShowProjectWorkspaceTab(const EProjectWorkspaceTabType tab
 		ShowProjectExperimentConfigPanel(false);
 		setSwitcherIndex(0);
 		break;
+	case EProjectWorkspaceTabType::RobotConfig:
+		ShowProjectExperimentConfigPanel(false);
+		if (!setSwitcherWidget(ProjectRobotConfigPanel.Get()))
+		{
+			setSwitcherIndex(1);
+		}
+		break;
 	case EProjectWorkspaceTabType::ExperimentStatus:
 		ShowProjectExperimentConfigPanel(false);
 		if (!setSwitcherWidget(ProjectExperimentStatusPanel.Get()))
 		{
-			setSwitcherIndex(1);
+			setSwitcherIndex(2);
 		}
 		break;
 	case EProjectWorkspaceTabType::ExperimentConfig:
 		ShowProjectExperimentConfigPanel(true);
 		if (!setSwitcherWidget(ProjectExperimentConfigPanel.Get()))
 		{
-			setSwitcherIndex(1);
+			setSwitcherIndex(3);
 		}
 		break;
 	case EProjectWorkspaceTabType::ExperimentResultDetail:
@@ -1876,6 +1887,11 @@ void UMainMenuWidget::ApplyProjectWorkspaceTabState(const EProjectWorkspaceTabTy
 		ScenarioEditTab->SetTabVisible(true);
 		ScenarioEditTab->SetTabActive(activeTabType == EProjectWorkspaceTabType::ScenarioEdit);
 	}
+	if (RobotConfigTab)
+	{
+		RobotConfigTab->SetTabVisible(true);
+		RobotConfigTab->SetTabActive(activeTabType == EProjectWorkspaceTabType::RobotConfig);
+	}
 	if (ExperimentStatusTab)
 	{
 		ExperimentStatusTab->SetTabVisible(true);
@@ -1903,6 +1919,10 @@ void UMainMenuWidget::HandleProjectWorkspaceTabSelected(UProjectWorkspaceTabWidg
 	if (tabWidget == ScenarioEditTab.Get() || tabWidget->GetTabId() == ProjectScenarioEditTabId)
 	{
 		HandleShowProjectScenarioTabClicked();
+	}
+	else if (tabWidget == RobotConfigTab.Get() || tabWidget->GetTabId() == ProjectRobotConfigTabId)
+	{
+		ShowProjectWorkspaceTab(EProjectWorkspaceTabType::RobotConfig);
 	}
 	else if (tabWidget == ExperimentStatusTab.Get() || tabWidget->GetTabId() == ProjectExperimentStatusTabId)
 	{
@@ -1967,9 +1987,11 @@ bool UMainMenuWidget::ValidateRequiredBindings() const
 	requireWidget(ScenarioEditorRootWidget, TEXT("ScenarioEditorRootWidget"));
 	requireWidget(ProjectWorkspaceSwitcher, TEXT("ProjectWorkspaceSwitcher"));
 	requireWidget(ScenarioEditTab, TEXT("ScenarioEditTab"));
+	requireWidget(RobotConfigTab, TEXT("RobotConfigTab"));
 	requireWidget(ExperimentStatusTab, TEXT("ExperimentStatusTab"));
 	requireWidget(ConfigureExperimentButton, TEXT("ConfigureExperimentButton"));
 	requireWidget(RunExperimentButton, TEXT("RunExperimentButton"));
+	requireWidget(ProjectRobotConfigPanel, TEXT("ProjectRobotConfigPanel"));
 	requireWidget(ProjectExperimentConfigPanel, TEXT("ProjectExperimentConfigPanel"));
 	requireWidget(ProjectExperimentResultDetailPanel, TEXT("ProjectExperimentResultDetailPanel"));
 	requireWidget(CreateExperimentConfigButton, TEXT("CreateExperimentConfigButton"));
@@ -2163,7 +2185,7 @@ void UMainMenuWidget::BindProjectModeControls()
 		LogMainMenuWidget,
 		Log,
 		TEXT("Project mode controls bound: %s"),
-		ScenarioEditTab && ExperimentStatusTab && ConfigureExperimentButton && RunExperimentButton
+		ScenarioEditTab && RobotConfigTab && ExperimentStatusTab && ConfigureExperimentButton && RunExperimentButton
 			? TEXT("true")
 			: TEXT("false"));
 
@@ -2193,6 +2215,12 @@ void UMainMenuWidget::BindProjectModeControls()
 		ScenarioEditTab.Get(),
 		ProjectScenarioEditTabId,
 		FText::FromString(TEXT("시나리오")),
+		false,
+		true);
+	bindWorkspaceTab(
+		RobotConfigTab.Get(),
+		ProjectRobotConfigTabId,
+		FText::FromString(TEXT("로봇 구성")),
 		false,
 		true);
 	bindWorkspaceTab(

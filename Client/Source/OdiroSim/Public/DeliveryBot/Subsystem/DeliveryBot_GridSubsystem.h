@@ -99,7 +99,7 @@ private:
 	void ApplyBlockedCell(FDeliveryBotGridCellInfo& cellInfo, const FName& sourceCollisionProfileName) const;
 
 	bool ClassifyCellByCollisionPreset(const FVector& cellCenterLocation, const FVector& robotBoxExtent,	float maxWalkableSlopeDegree, ECollisionChannel gridTraceChannel,
-		const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, FDeliveryBotGridCellInfo& outCellInfo) const;
+		const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, const TArray<const AActor*>& staticObstacleActorsIgnoredByGrid, FDeliveryBotGridCellInfo& outCellInfo) const;
 
 	// Applies scenario corridor semantic lane data before procedural mesh collision details affect grid cells.
 	bool TryApplyScenarioCorridorSurfaceCell(
@@ -107,6 +107,7 @@ private:
 		const FVector& robotBoxExtent,
 		ECollisionChannel gridTraceChannel,
 		const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules,
+		const TArray<const AActor*>& staticObstacleActorsIgnoredByGrid,
 		FDeliveryBotGridCellInfo& outCellInfo) const;
 
 	// Tests the robot footprint against corridor semantic surfaces instead of generated mesh bodies.
@@ -116,8 +117,8 @@ private:
 		const FVector& robotBoxExtent,
 		FName& outBlockingProfileName) const;
 
-	bool HasBlockingFootprintOverlap(const FVector& groundLocation,	const FVector& robotBoxExtent, ECollisionChannel gridTraceChannel, 
-		const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, const AActor* ignoredActor, FName& outBlockingProfileName) const;
+	bool HasBlockingFootprintOverlap(const FVector& groundLocation,	const FVector& robotBoxExtent, ECollisionChannel gridTraceChannel,
+		const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, const TArray<const AActor*>& staticObstacleActorsIgnoredByGrid, const AActor* ignoredActor, FName& outBlockingProfileName) const;
 	
 	FColor GetDebugColorByAreaType(EDeliveryBotGridAreaType areaType) const;
 	

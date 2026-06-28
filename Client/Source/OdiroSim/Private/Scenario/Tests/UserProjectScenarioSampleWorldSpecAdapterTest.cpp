@@ -53,7 +53,7 @@ namespace
 				TEXT("\"description\":\"Adapter profile\",")
 				TEXT("\"robot\":{")
 				TEXT("\"body\":{\"length_m\":1.0,\"width_m\":0.44,\"height_m\":0.64,\"wheel_base_m\":0.7,\"turning_radius_m\":1.2},")
-				TEXT("\"drive\":{\"max_speed_kmh\":7.0,\"max_reverse_kmh\":2.0,\"slowdown_range_kmh\":5.0,\"speed_tolerance_kmh\":0.5,\"stop_brake\":0.18,\"throttle_rate_per_s\":0.28,\"brake_rate_per_s\":0.35,\"steering_rate_per_s\":3.2,\"accel_kmh_per_s\":1.2,\"decel_kmh_per_s\":0.9,\"reverse_accel_kmh_per_s\":0.8,\"gear_switch_stop_kmh\":0.1,\"gear_switch_brake\":0.2,\"use_handbrake\":false,\"max_torque\":220.0,\"max_rpm\":4000.0,\"idle_rpm\":600.0,\"engine_brake\":0.04,\"rev_up_moi\":5.0,\"rev_down_rate\":600.0},")
+				TEXT("\"drive\":{\"max_speed_kmh\":7.0,\"max_reverse_kmh\":2.0,\"mass_kg\":48.0,\"slowdown_range_kmh\":5.0,\"speed_tolerance_kmh\":0.5,\"stop_brake\":0.18,\"throttle_rate_per_s\":0.28,\"brake_rate_per_s\":0.35,\"steering_rate_per_s\":3.2,\"accel_kmh_per_s\":1.2,\"decel_kmh_per_s\":0.9,\"reverse_accel_kmh_per_s\":0.8,\"gear_switch_stop_kmh\":0.1,\"gear_switch_brake\":0.2,\"use_handbrake\":false,\"max_torque\":220.0,\"max_rpm\":4000.0,\"idle_rpm\":600.0,\"engine_brake\":0.04,\"rev_up_moi\":5.0,\"rev_down_rate\":600.0},")
 				TEXT("\"lidar\":{\"mode\":\"TwoD\",\"range_m\":6.0,\"angle_step_degree\":5.0,\"height_m\":0.07,\"store_missed_rays\":false}")
 				TEXT("}")
 				TEXT("}"))
@@ -203,6 +203,8 @@ bool FUserProjectScenarioSampleWorldSpecAdapterTest::RunTest(const FString& para
 	TestEqual(TEXT("profile turning radius"), profileResult.SetupInfo.BodyConfigInfo.TurningRadiusM, 1.2f);
 	TestEqual(TEXT("profile drive alias"), profileResult.SetupInfo.ChaosDriveConfigInfo.SlowdownSpeedRangeKmh, 5.0f);
 	TestEqual(TEXT("profile drive reverse speed"), profileResult.SetupInfo.ChaosDriveConfigInfo.MaxReverseSpeedKmh, 2.0f);
+	TestTrue(TEXT("profile drive mass configured"), profileResult.SetupInfo.ChaosDriveConfigInfo.bHasMassKg);
+	TestEqual(TEXT("profile drive mass"), profileResult.SetupInfo.ChaosDriveConfigInfo.MassKg, 48.0f);
 	TestEqual(TEXT("profile drive reverse acceleration"), profileResult.SetupInfo.ChaosDriveConfigInfo.ReverseAccelerationRateKmhPerSecond, 0.8f);
 	TestEqual(TEXT("profile drive gear switch stop"), profileResult.SetupInfo.ChaosDriveConfigInfo.GearSwitchStopSpeedKmh, 0.1f);
 	TestEqual(TEXT("profile drive gear switch brake"), profileResult.SetupInfo.ChaosDriveConfigInfo.GearSwitchBrakeInput, 0.2f);

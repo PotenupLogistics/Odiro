@@ -49,7 +49,7 @@ namespace
 		WalkwayLane.LaneId = TEXT("walkway");
 		WalkwayLane.OffsetRangeMeters.MinMeters = -1.0;
 		WalkwayLane.OffsetRangeMeters.MaxMeters = 1.0;
-		WalkwayLane.SurfaceId = TEXT("sidewalk");
+		WalkwayLane.SurfaceId = TEXT("walkway");
 		WalkwayLane.Type = EScenarioSampleLaneType::Walkable;
 
 		FScenarioSampleLayoutLane CurbLane;
@@ -105,6 +105,18 @@ namespace
 					&& Diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error;
 			});
 	}
+
+	// Finds one generated city GroundRegion by its deterministic adapter id.
+	const FScenarioGroundRegionSpec* FindGeneratedCityRegion(
+		const FScenarioCompileResult& Result,
+		const FString& RegionId)
+	{
+		return Result.WorldSpec.GroundRegions.FindByPredicate(
+			[&RegionId](const FScenarioGroundRegionSpec& Region)
+			{
+				return Region.RegionId == RegionId;
+			});
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -127,14 +139,40 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	{
 		return false;
 	}
-	TestEqual(TEXT("generated ground region count"), Result.WorldSpec.GroundRegions.Num(), 0);
+	TestEqual(TEXT("generated ground region count"), Result.WorldSpec.GroundRegions.Num(), 2);
+	const FScenarioGroundRegionSpec* GeneratedCurbRegion =
+		FindGeneratedCityRegion(Result, TEXT("generated_city_main_upper_curb_00_00"));
+	TestNotNull(TEXT("generated curb region"), GeneratedCurbRegion);
+	if (GeneratedCurbRegion)
+	{
+		TestEqual(
+			TEXT("generated curb region type"),
+			static_cast<int32>(GeneratedCurbRegion->RegionType),
+			static_cast<int32>(EScenarioGroundRegionType::Blocked));
+		TestEqual(TEXT("generated curb surface"), GeneratedCurbRegion->SurfaceId, FString(TEXT("road")));
+		TestEqual(TEXT("generated curb collision tag"), GeneratedCurbRegion->CollisionTag, FString(TEXT("curb")));
+		TestEqual(TEXT("generated curb width cm"), GeneratedCurbRegion->Size.Y, 50.0);
+	}
+	const FScenarioGroundRegionSpec* GeneratedRoadRegion =
+		FindGeneratedCityRegion(Result, TEXT("generated_city_main_upper_road_2lane_00_00"));
+	TestNotNull(TEXT("generated road region"), GeneratedRoadRegion);
+	if (GeneratedRoadRegion)
+	{
+		TestEqual(
+			TEXT("generated road region type"),
+			static_cast<int32>(GeneratedRoadRegion->RegionType),
+			static_cast<int32>(EScenarioGroundRegionType::Penalty));
+		TestEqual(TEXT("generated road surface"), GeneratedRoadRegion->SurfaceId, FString(TEXT("road")));
+		TestEqual(TEXT("generated road penalty kind"), GeneratedRoadRegion->PenaltyKind, FString(TEXT("road")));
+		TestEqual(TEXT("generated road width cm"), GeneratedRoadRegion->Size.Y, 640.0);
+	}
 	const FScenarioRuntimeCorridorSpec& RuntimeCorridor = Result.WorldSpec.Corridors[0];
 	TestEqual(TEXT("runtime corridor layout count"), RuntimeCorridor.Layout.Num(), 1);
 	if (RuntimeCorridor.Layout.IsEmpty() || RuntimeCorridor.Layout[0].Lanes.IsEmpty())
 	{
 		return false;
 	}
-	TestEqual(TEXT("runtime corridor lane surface"), RuntimeCorridor.Layout[0].Lanes[0].SurfaceId, FString(TEXT("sidewalk")));
+	TestEqual(TEXT("runtime corridor lane surface"), RuntimeCorridor.Layout[0].Lanes[0].SurfaceId, FString(TEXT("walkway")));
 	const FScenarioRuntimeCorridorLaneSpec* CurbRuntimeLane = RuntimeCorridor.Layout[0].Lanes.FindByPredicate(
 		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
 		{

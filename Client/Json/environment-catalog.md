@@ -26,19 +26,13 @@ LLM이 project `scenario.json`을 작성할 때 사용할 수 있는 환경 어�
 
 ## Surface
 
-Surface는 corridor lane이나 segment surface의 의미 id다.
-
-`DA_ScenarioCorridorSurfaceCatalog` asset entry는 `sidewalk`, `grass`, `road`, `wall`, `building`을 포함한다. Runtime fallback은 `crosswalk_stripe`, `driveway`도 지원한다.
+Surface는 corridor lane이나 segment surface의 의미 id다. 현재는 LLM 작성 테스트를 단순화하기 위해 `walkway`, `road`, `building`만 사용한다.
 
 | surface_id | Lane type | 의미 | 사용 기준 |
 | --- | --- | --- | --- |
-| `sidewalk` | `walkable` | 기본 보행로 | Robot이 이동할 주 통로. |
-| `crosswalk_stripe` | `walkable` | 횡단보도 stripe | `crosswalk` segment에서 보행 가능한 표시가 필요할 때. |
-| `grass` | `penalty` | 잔디, 화단, 녹지 | 통로 폭을 줄이거나 회피 비용을 만들 때. |
+| `walkway` | `walkable` | 기본 보행로 | Robot이 이동할 주 통로. |
 | `road` | `penalty` | 차도 | 보도-차도 경계, 횡단 상황, 위험 영역. |
-| `driveway` | `penalty` | 진출입로 | 건물 또는 연석 쪽 출입 구간. |
-| `wall` | `blocked` | 벽, 물리 경계 | 건물측 통과 불가 경계. |
-| `building` | `blocked` | 건물 영역 | 통과 불가 영역. |
+| `building` | `blocked` | 건물 또는 벽 영역 | 통과 불가 영역. |
 
 ## Prop Classes
 

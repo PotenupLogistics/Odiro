@@ -115,7 +115,7 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 	scenarioTemplate.Corridor.WalkwayWidthMeters =
 		UScenarioTemplateSidebarViewModel::MakeRangeTemplateNumberValue(1.2, 2.4);
 	FScenarioTemplateLaneRule buildingLane;
-	buildingLane.SurfaceId = TEXT("sidewalk");
+	buildingLane.SurfaceId = TEXT("walkway");
 	buildingLane.WidthMeters = UScenarioTemplateSidebarViewModel::MakeFixedTemplateNumberValue(0.75);
 	scenarioTemplate.Corridor.BuildingSide = { buildingLane };
 	FScenarioTemplateSegment narrowSegment;
@@ -183,7 +183,7 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 		EScenarioEditorSidebarFieldInputType::Number);
 	TestFalse(TEXT("Corridor point x hides row array controls"), pointItems.IsValidIndex(0) && pointItems[0]->HasArrayControls());
 
-	const TArray<FString> surfaceOptions = { TEXT("sidewalk"), TEXT("tile") };
+	const TArray<FString> surfaceOptions = { TEXT("walkway"), TEXT("tile") };
 	TArray<UScenarioTemplateFieldRowViewModel*> laneItems =
 		viewModel->CreateCorridorLaneFieldItems(
 			EScenarioEditorCorridorSide::Building,
@@ -191,7 +191,7 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 			buildingLane,
 			surfaceOptions);
 	TestEqual(TEXT("Corridor lane field items are created"), laneItems.Num(), 2);
-	TestEqual(TEXT("Corridor lane surface is formatted"), laneItems.IsValidIndex(0) ? laneItems[0]->GetValueText() : FString(), FString(TEXT("sidewalk")));
+	TestEqual(TEXT("Corridor lane surface is formatted"), laneItems.IsValidIndex(0) ? laneItems[0]->GetValueText() : FString(), FString(TEXT("walkway")));
 	TestTrue(TEXT("Corridor lane surface has combo option"), laneItems.IsValidIndex(0) && laneItems[0]->GetComboOptions().Contains(TEXT("tile")));
 	TestFalse(TEXT("Corridor lane surface hides row array controls"), laneItems.IsValidIndex(0) && laneItems[0]->HasArrayControls());
 	TestEqual(TEXT("Corridor lane width is formatted"), laneItems.IsValidIndex(1) ? laneItems[1]->GetValueText() : FString(), FString(TEXT("0.75")));

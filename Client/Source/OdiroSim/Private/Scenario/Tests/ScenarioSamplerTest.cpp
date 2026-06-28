@@ -166,11 +166,32 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 	}
 
 	TestEqual(TEXT("runtime corridor lane count"), RuntimeCorridor.Layout[0].Lanes.Num(), 3);
-	TestEqual(TEXT("generated ground regions"), CompileResult.WorldSpec.GroundRegions.Num(), 0);
-	TestTrue(TEXT("runtime sidewalk surface preserved"), RuntimeCorridor.Layout[0].Lanes.ContainsByPredicate(
+	TestEqual(TEXT("generated ground regions"), CompileResult.WorldSpec.GroundRegions.Num(), 4);
+	TestTrue(TEXT("generated walkway extension"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& Region)
+		{
+			return Region.RegionId.Contains(TEXT("walkway_extension"))
+				&& Region.SurfaceId == TEXT("walkway")
+				&& Region.RegionType == EScenarioGroundRegionType::Walkable;
+		}));
+	TestTrue(TEXT("generated building footprint"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& Region)
+		{
+			return Region.RegionId.Contains(TEXT("building"))
+				&& Region.SurfaceId == TEXT("building")
+				&& Region.RegionType == EScenarioGroundRegionType::Blocked;
+		}));
+	TestTrue(TEXT("generated road band"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& Region)
+		{
+			return Region.RegionId.Contains(TEXT("road_2lane"))
+				&& Region.SurfaceId == TEXT("road")
+				&& Region.RegionType == EScenarioGroundRegionType::Penalty;
+		}));
+	TestTrue(TEXT("runtime walkway surface preserved"), RuntimeCorridor.Layout[0].Lanes.ContainsByPredicate(
 		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
 		{
-			return Lane.SurfaceId == TEXT("sidewalk");
+			return Lane.SurfaceId == TEXT("walkway");
 		}));
 	TestTrue(TEXT("runtime road surface preserved"), RuntimeCorridor.Layout[0].Lanes.ContainsByPredicate(
 		[](const FScenarioRuntimeCorridorLaneSpec& Lane)

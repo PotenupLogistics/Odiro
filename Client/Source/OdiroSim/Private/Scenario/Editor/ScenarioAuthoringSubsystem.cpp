@@ -264,12 +264,8 @@ void UScenarioAuthoringSubsystem::GetCorridorSurfaceEntries(TArray<FScenarioCorr
 				if (surfaceCatalog->FindSurfaceEntryById(entry.SurfaceId, resolvedEntry))
 				{
 					outEntries.Add(resolvedEntry);
+					seenSurfaceIds.Add(entry.SurfaceId);
 				}
-				else
-				{
-					outEntries.Add(entry);
-				}
-				seenSurfaceIds.Add(entry.SurfaceId);
 			}
 		}
 	}

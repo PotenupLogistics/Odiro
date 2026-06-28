@@ -1,8 +1,8 @@
 {
 	"schema": "scenario",
 	"version": 1,
-	"scenario_id": "straight_sidewalk_offset_obstacle",
-	"intent": "Validate baseline static obstacle avoidance on a straight sidewalk without pedestrian interactions.",
+	"scenario_id": "straight_walkway_offset_obstacle",
+	"intent": "Validate baseline static obstacle avoidance on a straight walkway without pedestrian interactions.",
 	"corridor":
 	{
 		"axis":

@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Episode/EpisodeLidarRayReplayRecorder.h"
 #include "Episode/EpisodeReplayRecorder.h"
 #include "HAL/FileManager.h"
 #include "Scenario/ScenarioEvaluationSubsystem.h"
@@ -359,7 +360,8 @@ bool UEpisodeMeasurementLogSubsystem::IsLogging() const
 
 bool UEpisodeMeasurementLogSubsystem::IsProjectReplayRecording() const
 {
-	return ReplayRecorder && ReplayRecorder->IsOpen();
+	return (ReplayRecorder && ReplayRecorder->IsOpen())
+		|| (LidarRayReplayRecorder && LidarRayReplayRecorder->IsOpen());
 }
 
 FString UEpisodeMeasurementLogSubsystem::GetCurrentLogPath() const
@@ -553,6 +555,11 @@ bool UEpisodeMeasurementLogSubsystem::StartProjectReplayRecording(
 		ReplayRecorder = MakeUnique<FEpisodeReplayRecorder>();
 	}
 
+	if (!LidarRayReplayRecorder)
+	{
+		LidarRayReplayRecorder = MakeUnique<FEpisodeLidarRayReplayRecorder>();
+	}
+
 	TArray<FString> ReplayDiagnostics;
 	const bool bStarted = ReplayRecorder->Open(
 		EpisodeDirectory,
@@ -567,24 +574,62 @@ bool UEpisodeMeasurementLogSubsystem::StartProjectReplayRecording(
 			Diagnostic);
 	}
 
+	if (bStarted)
+	{
+		TArray<FString> LidarRayReplayDiagnostics;
+		const bool bLidarRayStarted = LidarRayReplayRecorder->Open(
+			EpisodeDirectory,
+			LidarRayReplayDiagnostics);
+		for (const FString& Diagnostic : LidarRayReplayDiagnostics)
+		{
+			AddDiagnostic(
+				EEpisodeMeasurementLogSeverity::Warning,
+				TEXT("project_lidar_ray_replay_start_warning"),
+				Diagnostic);
+		}
+
+		if (!bLidarRayStarted)
+		{
+			LidarRayReplayRecorder->Abort();
+		}
+	}
+
 	return bStarted;
 }
 
 void UEpisodeMeasurementLogSubsystem::StopProjectReplayRecording()
 {
-	if (!ReplayRecorder || !ReplayRecorder->IsOpen())
+	const bool bReplayOpen = ReplayRecorder && ReplayRecorder->IsOpen();
+	const bool bLidarRayReplayOpen = LidarRayReplayRecorder && LidarRayReplayRecorder->IsOpen();
+	if (!bReplayOpen && !bLidarRayReplayOpen)
 	{
 		return;
 	}
 
-	TArray<FString> ReplayDiagnostics;
-	ReplayRecorder->Close(ReplayDiagnostics);
-	for (const FString& Diagnostic : ReplayDiagnostics)
+	if (bReplayOpen)
 	{
-		AddDiagnostic(
-			EEpisodeMeasurementLogSeverity::Warning,
-			TEXT("project_replay_stop_warning"),
-			Diagnostic);
+		TArray<FString> ReplayDiagnostics;
+		ReplayRecorder->Close(ReplayDiagnostics);
+		for (const FString& Diagnostic : ReplayDiagnostics)
+		{
+			AddDiagnostic(
+				EEpisodeMeasurementLogSeverity::Warning,
+				TEXT("project_replay_stop_warning"),
+				Diagnostic);
+		}
+	}
+
+	if (bLidarRayReplayOpen)
+	{
+		TArray<FString> LidarRayReplayDiagnostics;
+		LidarRayReplayRecorder->Close(LidarRayReplayDiagnostics);
+		for (const FString& Diagnostic : LidarRayReplayDiagnostics)
+		{
+			AddDiagnostic(
+				EEpisodeMeasurementLogSeverity::Warning,
+				TEXT("project_lidar_ray_replay_stop_warning"),
+				Diagnostic);
+		}
 	}
 }
 
@@ -683,10 +728,12 @@ bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
 	}
 
 	const FEpisodeMeasurementLogTickRecord TickRecord = BuildTickRecord(DeltaTime);
-	if (ReplayRecorder && ReplayRecorder->IsOpen())
+	const bool bReplayOpen = ReplayRecorder && ReplayRecorder->IsOpen();
+	const bool bLidarRayReplayOpen = LidarRayReplayRecorder && LidarRayReplayRecorder->IsOpen();
+	ADeliveryBot* RobotActor = (bReplayOpen || bLidarRayReplayOpen) ? FindRobotActor() : nullptr;
+	if (bReplayOpen)
 	{
 		TArray<FString> ReplayDiagnostics;
-		ADeliveryBot* RobotActor = FindRobotActor();
 		ReplayRecorder->RecordSample(
 			TickRecord.WorldTimeSeconds,
 			BuildReplayFrame(TickRecord, RobotActor),
@@ -696,6 +743,25 @@ bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
 			AddDiagnostic(
 				EEpisodeMeasurementLogSeverity::Warning,
 				TEXT("project_replay_write_warning"),
+				Diagnostic,
+				TickRecord.WorldTimeSeconds);
+		}
+	}
+
+	if (bLidarRayReplayOpen && IsValid(RobotActor))
+	{
+		TArray<FString> LidarRayReplayDiagnostics;
+		const FDeliveryBotObservationInfo Observation = RobotActor->BuildObservation();
+		LidarRayReplayRecorder->RecordSensorSnapshot(
+			TickRecord.WorldTimeSeconds,
+			Observation.SensorSequence,
+			Observation.LidarScanInfo,
+			LidarRayReplayDiagnostics);
+		for (const FString& Diagnostic : LidarRayReplayDiagnostics)
+		{
+			AddDiagnostic(
+				EEpisodeMeasurementLogSeverity::Warning,
+				TEXT("project_lidar_ray_replay_write_warning"),
 				Diagnostic,
 				TickRecord.WorldTimeSeconds);
 		}

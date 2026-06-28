@@ -1,0 +1,1236 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Odiro Robot Config Editor Mockup</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111213;
+      --top: #131313;
+      --viewport: #1a1d22;
+      --viewport-deep: #111419;
+      --panel: #20201f;
+      --panel-2: #282827;
+      --panel-3: #171717;
+      --line: #343434;
+      --line-soft: #2a2a2a;
+      --text: #d7dbe2;
+      --muted: #9097a3;
+      --dim: #6f7783;
+      --green: #72c78a;
+      --blue: #5d8eea;
+      --amber: #d6a84c;
+      --red: #de6b64;
+      --input: #0d0d0e;
+      --shadow: rgba(0, 0, 0, 0.35);
+      font-family: Inter, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    .app {
+      width: 100vw;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 38px 1fr;
+      background: var(--bg);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: stretch;
+      background: var(--top);
+      border-bottom: 1px solid #070707;
+      box-shadow: 0 1px 0 #232323 inset;
+    }
+
+    .window-icons {
+      width: 88px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding-left: 17px;
+      color: #b8c0ce;
+      border-right: 1px solid #070707;
+    }
+
+    .dot-logo {
+      width: 9px;
+      height: 9px;
+      border: 3px solid #b8c0ce;
+      border-radius: 50%;
+    }
+
+    .home-icon {
+      position: relative;
+      width: 15px;
+      height: 15px;
+    }
+
+    .home-icon::before,
+    .home-icon::after {
+      content: "";
+      position: absolute;
+      background: #b8c0ce;
+    }
+
+    .home-icon::before {
+      width: 12px;
+      height: 12px;
+      left: 1px;
+      top: 3px;
+      clip-path: polygon(50% 0, 100% 36%, 100% 100%, 0 100%, 0 36%);
+      opacity: 0.95;
+    }
+
+    .home-icon::after {
+      width: 8px;
+      height: 8px;
+      left: 3px;
+      top: 5px;
+      background: var(--top);
+      clip-path: polygon(50% 0, 100% 36%, 100% 100%, 0 100%, 0 36%);
+    }
+
+    .main-tabs {
+      display: flex;
+      align-items: stretch;
+    }
+
+    .main-tab {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 20px;
+      min-width: 124px;
+      border-right: 1px solid #070707;
+      color: #c1c6d0;
+      font-size: 13px;
+      font-weight: 650;
+      background: #161616;
+    }
+
+    .main-tab.active {
+      background: #252525;
+      color: #f1f3f6;
+    }
+
+    .tab-mark {
+      width: 12px;
+      height: 12px;
+      border-radius: 1px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset;
+    }
+
+    .mark-amber { background: var(--amber); }
+    .mark-green { background: var(--green); }
+    .mark-blue { background: var(--blue); }
+
+    .chrome-spacer {
+      flex: 1;
+    }
+
+    .window-controls {
+      width: 132px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 22px;
+      padding-right: 19px;
+      color: #666;
+      font-size: 16px;
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(700px, 1fr) 414px;
+      background: #0f1012;
+    }
+
+    .viewport-shell {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      background:
+        linear-gradient(rgba(255,255,255,0.024) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.024) 1px, transparent 1px),
+        radial-gradient(circle at center 44%, rgba(92, 112, 133, 0.18), transparent 34%),
+        linear-gradient(180deg, var(--viewport) 0%, var(--viewport-deep) 100%);
+      background-size: 51px 51px, 51px 51px, 100% 100%, 100% 100%;
+      border-right: 1px solid #090909;
+    }
+
+    .viewport-status {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      padding: 0 15px;
+      border-bottom: 1px solid rgba(255,255,255,0.035);
+      color: #9299a5;
+      font-size: 12px;
+      background: rgba(18,19,22,0.35);
+    }
+
+    .preview-tools {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .pipe {
+      color: #4e5661;
+    }
+
+    .preview-stage {
+      position: absolute;
+      inset: 32px 0 45px 0;
+      display: grid;
+      place-items: center;
+    }
+
+    .robot-preview {
+      position: relative;
+      width: min(38vw, 560px);
+      min-width: 380px;
+      aspect-ratio: 1 / 1;
+      display: grid;
+      place-items: center;
+      transform: translateY(10px);
+    }
+
+    .lidar-fan {
+      position: absolute;
+      width: 450px;
+      height: 340px;
+      top: 42px;
+      left: calc(50% - 225px);
+      background: conic-gradient(from -54deg at 50% 72%, rgba(93, 142, 234, 0.28), rgba(93, 142, 234, 0.05) 104deg, transparent 104deg);
+      mask-image: radial-gradient(circle at 50% 72%, #000 0 68%, transparent 69%);
+      opacity: 0.92;
+      filter: blur(0.2px);
+    }
+
+    .camera-frustum {
+      position: absolute;
+      top: 106px;
+      left: calc(50% + 33px);
+      width: 150px;
+      height: 128px;
+      border-left: 2px solid rgba(214, 168, 76, 0.55);
+      border-top: 2px solid rgba(214, 168, 76, 0.55);
+      border-bottom: 2px solid rgba(214, 168, 76, 0.55);
+      transform: skewY(-12deg);
+      opacity: 0.8;
+    }
+
+    .robot-shadow {
+      position: absolute;
+      width: 310px;
+      height: 34px;
+      bottom: 78px;
+      left: calc(50% - 155px);
+      background: radial-gradient(ellipse, rgba(0,0,0,0.42), transparent 68%);
+    }
+
+    .robot-body {
+      position: relative;
+      width: 300px;
+      height: 426px;
+      transform: perspective(850px) rotateX(2deg);
+    }
+
+    .robot-top {
+      position: absolute;
+      top: 0;
+      left: 70px;
+      width: 160px;
+      height: 72px;
+      border-radius: 8px 8px 0 0;
+      background: linear-gradient(180deg, #f7fafc 0%, #dde3e8 100%);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.7) inset, 0 12px 18px rgba(0,0,0,0.18);
+    }
+
+    .flag-pole {
+      position: absolute;
+      left: 258px;
+      top: -72px;
+      width: 5px;
+      height: 116px;
+      background: #9ba4ad;
+      box-shadow: 1px 0 0 rgba(0,0,0,0.22);
+    }
+
+    .flag {
+      position: absolute;
+      left: 263px;
+      top: -69px;
+      width: 56px;
+      height: 44px;
+      background: var(--amber);
+      clip-path: polygon(0 0, 100% 50%, 0 100%);
+      filter: drop-shadow(0 2px 2px rgba(0,0,0,0.25));
+    }
+
+    .robot-main {
+      position: absolute;
+      top: 52px;
+      left: 0;
+      width: 300px;
+      height: 340px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #ffffff 0%, #f1f4f7 58%, #dde3e8 100%);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.82) inset,
+        0 -18px 40px rgba(0,0,0,0.13) inset,
+        0 22px 30px rgba(0,0,0,0.23);
+      overflow: hidden;
+    }
+
+    .robot-face {
+      position: absolute;
+      top: 72px;
+      left: 40px;
+      width: 220px;
+      height: 108px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #20242a, #111419);
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.32), 0 1px 0 rgba(255,255,255,0.08) inset;
+    }
+
+    .eye {
+      position: absolute;
+      top: 31px;
+      width: 54px;
+      height: 70px;
+      border-radius: 50%;
+      background: #eff4f8;
+      box-shadow: 0 -5px 9px rgba(0,0,0,0.15) inset;
+    }
+
+    .eye.left { left: 51px; }
+    .eye.right { right: 51px; }
+
+    .eye::before {
+      content: "";
+      position: absolute;
+      left: 19px;
+      top: 23px;
+      width: 24px;
+      height: 34px;
+      border-radius: 50%;
+      background: #090b0f;
+      box-shadow: 4px -9px 0 -5px #fff;
+    }
+
+    .stripe {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 222px;
+      height: 63px;
+      background: linear-gradient(180deg, #77c58a, #5ea36f);
+    }
+
+    .wheel {
+      position: absolute;
+      bottom: 0;
+      width: 82px;
+      height: 108px;
+      border-radius: 26px;
+      background: linear-gradient(180deg, #252a30, #15191e);
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.45), 0 16px 24px rgba(0,0,0,0.24);
+    }
+
+    .wheel.left { left: -15px; }
+    .wheel.right { right: -15px; }
+
+    .sensor-pin {
+      position: absolute;
+      top: 58px;
+      left: 50%;
+      width: 14px;
+      height: 14px;
+      transform: translateX(-50%);
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 0 5px rgba(93,142,234,0.18), 0 0 20px rgba(93,142,234,0.45);
+    }
+
+    .dimension-tag {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 26px;
+      padding: 0 8px;
+      background: rgba(17, 19, 22, 0.88);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 5px;
+      color: #dbe2ea;
+      font-size: 12px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.22);
+      white-space: nowrap;
+    }
+
+    .dimension-tag::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .tag-size {
+      left: calc(50% - 250px);
+      top: 142px;
+    }
+
+    .tag-lidar {
+      right: calc(50% - 270px);
+      top: 124px;
+    }
+
+    .tag-camera {
+      right: calc(50% - 300px);
+      top: 262px;
+    }
+
+    .tag-camera::before {
+      background: var(--amber);
+    }
+
+    .tag-lidar::before {
+      background: var(--blue);
+    }
+
+    .viewport-footer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 45px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      background: #101010;
+      border-top: 1px solid #070707;
+    }
+
+    .preset-tabs {
+      display: flex;
+      align-items: center;
+      height: 28px;
+      border: 1px solid #292929;
+      background: #151515;
+    }
+
+    .preset-tab {
+      min-width: 55px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-right: 1px solid #292929;
+      color: #c3c8d1;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .preset-tab.active {
+      background: #555;
+      color: #fff;
+    }
+
+    .preset-tab:last-child {
+      border-right: 0;
+    }
+
+    .apply-chip {
+      height: 26px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      color: #77a0ff;
+      font-size: 12px;
+      background: rgba(54, 92, 175, 0.12);
+      border: 1px solid rgba(93, 142, 234, 0.18);
+      border-radius: 5px;
+    }
+
+    .details-panel {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 36px 1fr 58px;
+      background: var(--panel);
+      border-left: 1px solid #303030;
+      color: var(--text);
+    }
+
+    .panel-titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      background: #171717;
+      border-bottom: 1px solid #090909;
+      font-size: 13px;
+    }
+
+    .title-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 750;
+    }
+
+    .title-left span:last-child {
+      color: #9ea5af;
+      font-weight: 550;
+    }
+
+    .dirty-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 12px rgba(214,168,76,0.4);
+    }
+
+    .panel-scroll {
+      min-height: 0;
+      overflow: auto;
+      scrollbar-color: #555 #1b1b1b;
+    }
+
+    .profile-strip {
+      display: grid;
+      gap: 10px;
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .profile-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .profile-name {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .profile-name strong {
+      font-size: 14px;
+      color: #f0f2f5;
+    }
+
+    .profile-name span {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .profile-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .icon-button {
+      width: 28px;
+      height: 28px;
+      border: 1px solid #3a3a3a;
+      background: #151515;
+      color: #cfd5dd;
+      border-radius: 5px;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .icon-button:hover {
+      border-color: #5a5a5a;
+      background: #1e1e1e;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      height: 30px;
+      background: #151515;
+      border: 1px solid #353535;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .segmented button {
+      border: 0;
+      border-right: 1px solid #353535;
+      background: transparent;
+      color: #aab0ba;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    .segmented button:last-child {
+      border-right: 0;
+    }
+
+    .segmented button.active {
+      background: #444;
+      color: #fff;
+    }
+
+    .section {
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .section-head {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 14px;
+      background: #2b2b2a;
+      color: #d5d9df;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .section-head::before {
+      content: "";
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 7px solid #9ca3ad;
+    }
+
+    .section-body {
+      padding: 7px 0;
+      background: var(--panel);
+    }
+
+    .field {
+      min-height: 51px;
+      display: grid;
+      grid-template-columns: 128px 1fr 42px;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.035);
+    }
+
+    .field:last-child {
+      border-bottom: 0;
+    }
+
+    .field-label {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .field-label strong {
+      color: #b9bec7;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .field-label span {
+      color: #6f7783;
+      font-size: 10px;
+      line-height: 1.2;
+    }
+
+    .control {
+      display: grid;
+      grid-template-columns: 1fr 72px;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    input[type="range"] {
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      background: #3a3a3a;
+      border-radius: 999px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #dfe5ed;
+      border: 2px solid var(--blue);
+      box-shadow: 0 0 0 4px rgba(93,142,234,0.12);
+      cursor: pointer;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #dfe5ed;
+      border: 2px solid var(--blue);
+      box-shadow: 0 0 0 4px rgba(93,142,234,0.12);
+      cursor: pointer;
+    }
+
+    .number-input,
+    .select-input {
+      width: 72px;
+      height: 30px;
+      border: 1px solid #333;
+      background: var(--input);
+      border-radius: 4px;
+      color: #cfd7e2;
+      padding: 0 9px;
+      font: inherit;
+      font-size: 12px;
+      outline: none;
+    }
+
+    .select-input {
+      width: 100%;
+      min-width: 0;
+      color: #d6dbe2;
+    }
+
+    .unit {
+      color: #7e858e;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .mode-field {
+      grid-template-columns: 128px 1fr 42px;
+    }
+
+    .mode-field .control {
+      grid-template-columns: 1fr;
+    }
+
+    .toggle-row {
+      min-height: 42px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 8px 14px;
+      border-top: 1px solid rgba(255,255,255,0.035);
+    }
+
+    .toggle-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .toggle-copy strong {
+      font-size: 12px;
+      color: #bfc5ce;
+    }
+
+    .toggle-copy span {
+      font-size: 10px;
+      color: #707781;
+    }
+
+    .switch {
+      position: relative;
+      width: 42px;
+      height: 22px;
+    }
+
+    .switch input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .switch span {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      background: #383838;
+      border: 1px solid #4d4d4d;
+    }
+
+    .switch span::after {
+      content: "";
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      left: 2px;
+      top: 2px;
+      border-radius: 50%;
+      background: #bfc6cf;
+      transition: transform 140ms ease;
+    }
+
+    .switch input:checked + span {
+      background: rgba(114,199,138,0.32);
+      border-color: rgba(114,199,138,0.65);
+    }
+
+    .switch input:checked + span::after {
+      transform: translateX(19px);
+      background: var(--green);
+    }
+
+    .hint-band {
+      display: grid;
+      gap: 6px;
+      padding: 12px 14px;
+      background: rgba(93, 142, 234, 0.08);
+      border-top: 1px solid rgba(93,142,234,0.16);
+      color: #b7c8ef;
+      font-size: 11px;
+      line-height: 1.42;
+    }
+
+    .hint-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #d8e4ff;
+      font-weight: 750;
+    }
+
+    .hint-title::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 12px rgba(93,142,234,0.45);
+    }
+
+    .panel-footer {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 14px;
+      background: #171717;
+      border-top: 1px solid #090909;
+    }
+
+    .secondary-button,
+    .primary-button {
+      height: 36px;
+      border-radius: 5px;
+      border: 1px solid #3b3b3b;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    .secondary-button {
+      background: #222;
+      color: #c3c8d0;
+    }
+
+    .primary-button {
+      border-color: #4c78df;
+      background: #4c78df;
+      color: white;
+    }
+
+    .primary-button:hover {
+      background: #5a86ee;
+    }
+
+    @media (max-width: 1100px) {
+      .workspace {
+        grid-template-columns: 1fr 380px;
+      }
+
+      .robot-preview {
+        width: 440px;
+        min-width: 360px;
+      }
+
+      .dimension-tag {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="window-icons" aria-label="Application navigation">
+        <div class="dot-logo"></div>
+        <div class="home-icon"></div>
+      </div>
+      <nav class="main-tabs" aria-label="Workspace tabs">
+        <div class="main-tab"><span class="tab-mark mark-amber"></span><span>시나리오 편집</span></div>
+        <div class="main-tab active"><span class="tab-mark mark-green"></span><span>로봇 구성</span></div>
+        <div class="main-tab"><span class="tab-mark mark-blue"></span><span>시뮬레이션 실행</span></div>
+      </nav>
+      <div class="chrome-spacer"></div>
+      <div class="window-controls" aria-hidden="true"><span>−</span><span>□</span><span>×</span></div>
+    </header>
+
+    <main class="workspace">
+      <section class="viewport-shell" aria-label="Robot preview">
+        <div class="viewport-status">
+          <div class="preview-tools">
+            <strong>로봇 프리뷰</strong>
+            <span class="pipe">|</span>
+            <span>Lit</span>
+            <span class="pipe">|</span>
+            <span>Perspective</span>
+          </div>
+        </div>
+
+        <div class="preview-stage">
+          <div class="robot-preview">
+            <div class="lidar-fan"></div>
+            <div class="camera-frustum"></div>
+            <div class="robot-shadow"></div>
+            <div class="dimension-tag tag-size">1.00m × 0.44m × 0.64m</div>
+            <div class="dimension-tag tag-lidar">LiDAR 15m / 3D</div>
+            <div class="dimension-tag tag-camera">Replay Front 85°</div>
+            <div class="robot-body" aria-hidden="true">
+              <div class="robot-top"></div>
+              <div class="flag-pole"></div>
+              <div class="flag"></div>
+              <div class="wheel left"></div>
+              <div class="wheel right"></div>
+              <div class="robot-main">
+                <div class="sensor-pin"></div>
+                <div class="robot-face">
+                  <div class="eye left"></div>
+                  <div class="eye right"></div>
+                </div>
+                <div class="stripe"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="viewport-footer">
+          <div class="preset-tabs" aria-label="Robot size presets">
+            <div class="preset-tab active">Basic</div>
+            <div class="preset-tab">Mini</div>
+            <div class="preset-tab">Jumbo</div>
+          </div>
+          <div class="apply-chip">실시간 미리보기 적용됨</div>
+        </div>
+      </section>
+
+      <aside class="details-panel" aria-label="Robot configuration details">
+        <div class="panel-titlebar">
+          <div class="title-left"><strong>디테일</strong><span>Basic</span></div>
+      <div class="dirty-dot" title="저장되지 않은 변경"></div>
+        </div>
+
+        <div class="panel-scroll">
+          <div class="profile-strip">
+            <div class="profile-row">
+              <div class="profile-name">
+                <strong>Blank DeliveryBot</strong>
+                <span>profile.json · 사용자 프로젝트</span>
+              </div>
+              <div class="profile-actions" aria-label="Profile actions">
+                <button class="icon-button" title="복제">⧉</button>
+                <button class="icon-button" title="되돌리기">↺</button>
+              </div>
+            </div>
+            <div class="segmented" role="tablist" aria-label="Profile presets">
+              <button class="active" type="button">Basic</button>
+              <button type="button">Mini</button>
+              <button type="button">Jumbo</button>
+            </div>
+          </div>
+
+          <section class="section">
+            <div class="section-head">크기</div>
+            <div class="section-body">
+              <div class="field">
+                <div class="field-label"><strong>길이</strong><span>전후 방향 차체 크기</span></div>
+                <div class="control"><input type="range" min="0.4" max="2.0" step="0.01" value="1.0"><input class="number-input" value="1.00"></div>
+                <div class="unit">m</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>폭</strong><span>통로 통과 가능성 기준</span></div>
+                <div class="control"><input type="range" min="0.3" max="1.2" step="0.01" value="0.44"><input class="number-input" value="0.44"></div>
+                <div class="unit">m</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>높이</strong><span>모델과 센서 기준 높이</span></div>
+                <div class="control"><input type="range" min="0.25" max="1.4" step="0.01" value="0.64"><input class="number-input" value="0.64"></div>
+                <div class="unit">m</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>휠베이스</strong><span>앞뒤 바퀴 축 간격</span></div>
+                <div class="control"><input type="range" min="0.2" max="1.4" step="0.01" value="0.70"><input class="number-input" value="0.70"></div>
+                <div class="unit">m</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>회전 반경</strong><span>최소 회전 공간</span></div>
+                <div class="control"><input type="range" min="0.5" max="5.0" step="0.05" value="1.2"><input class="number-input" value="1.20"></div>
+                <div class="unit">m</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">주행</div>
+            <div class="section-body">
+              <div class="field">
+                <div class="field-label"><strong>최고 속도</strong><span>전진 주행 제한</span></div>
+                <div class="control"><input type="range" min="1" max="12" step="0.1" value="7"><input class="number-input" value="7.0"></div>
+                <div class="unit">km/h</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>후진 속도</strong><span>후진 주행 제한</span></div>
+                <div class="control"><input type="range" min="0" max="5" step="0.1" value="2"><input class="number-input" value="2.0"></div>
+                <div class="unit">km/h</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>가속</strong><span>목표 속도 도달 속도</span></div>
+                <div class="control"><input type="range" min="0.2" max="4" step="0.1" value="1.2"><input class="number-input" value="1.2"></div>
+                <div class="unit">km/h/s</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>감속</strong><span>속도를 줄이는 반응</span></div>
+                <div class="control"><input type="range" min="0.2" max="4" step="0.1" value="0.9"><input class="number-input" value="0.9"></div>
+                <div class="unit">km/h/s</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>조향 반응</strong><span>회전 입력 변화 속도</span></div>
+                <div class="control"><input type="range" min="0.5" max="8" step="0.1" value="3.2"><input class="number-input" value="3.2"></div>
+                <div class="unit">/s</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">센서</div>
+            <div class="section-body">
+              <div class="field mode-field">
+                <div class="field-label"><strong>LiDAR 모드</strong><span>레이 생성 방식</span></div>
+                <div class="control">
+                  <select class="select-input">
+                    <option>3D</option>
+                    <option>2D</option>
+                    <option>1D + 2D</option>
+                  </select>
+                </div>
+                <div class="unit"></div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>센서 거리</strong><span>장애물 탐지 최대 거리</span></div>
+                <div class="control"><input type="range" min="1" max="30" step="0.5" value="15"><input class="number-input" value="15.0"></div>
+                <div class="unit">m</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>스캔 주기</strong><span>초당 센서 갱신 횟수</span></div>
+                <div class="control"><input type="range" min="1" max="20" step="1" value="5"><input class="number-input" value="5"></div>
+                <div class="unit">Hz</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>수평 해상도</strong><span>작을수록 정밀함</span></div>
+                <div class="control"><input type="range" min="1" max="15" step="1" value="3"><input class="number-input" value="3"></div>
+                <div class="unit">deg</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>센서 높이</strong><span>바닥 기준 LiDAR 위치</span></div>
+                <div class="control"><input type="range" min="0.02" max="1.2" step="0.01" value="0.07"><input class="number-input" value="0.07"></div>
+                <div class="unit">m</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>정지 거리</strong><span>전방 장애물 정지 기준</span></div>
+                <div class="control"><input type="range" min="0.2" max="6" step="0.1" value="2"><input class="number-input" value="2.0"></div>
+                <div class="unit">m</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>감속 거리</strong><span>속도 조절 시작 기준</span></div>
+                <div class="control"><input type="range" min="1" max="15" step="0.1" value="8"><input class="number-input" value="8.0"></div>
+                <div class="unit">m</div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-copy"><strong>센서 Debug 표시</strong><span>프리뷰에 LiDAR ray와 안전 범위를 표시합니다.</span></div>
+                <label class="switch"><input type="checkbox" checked><span></span></label>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">Replay 카메라</div>
+            <div class="section-body">
+              <div class="field">
+                <div class="field-label"><strong>전방 거리</strong><span>로봇 기준 카메라 앞 위치</span></div>
+                <div class="control"><input type="range" min="40" max="260" step="5" value="140"><input class="number-input" value="140"></div>
+                <div class="unit">cm</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>카메라 높이</strong><span>바닥 기준 시점 높이</span></div>
+                <div class="control"><input type="range" min="20" max="180" step="5" value="90"><input class="number-input" value="90"></div>
+                <div class="unit">cm</div>
+              </div>
+              <div class="field">
+                <div class="field-label"><strong>FOV</strong><span>전방 시야각</span></div>
+                <div class="control"><input type="range" min="40" max="120" step="1" value="85"><input class="number-input" value="85"></div>
+                <div class="unit">deg</div>
+              </div>
+            </div>
+          </section>
+
+          <div class="hint-band">
+            <div class="hint-title">UX 원칙</div>
+            <div>Basic에서는 주행 결과가 바로 달라지는 값만 노출합니다. 엔진 토크, RPM, 기어 전환 브레이크 같은 Chaos 세부값은 전문가 모드로 분리하는 편이 안전합니다.</div>
+          </div>
+        </div>
+
+        <div class="panel-footer">
+          <button class="secondary-button" type="button" data-action="reset">기본값 복원</button>
+          <button class="primary-button" type="button" data-action="save">저장</button>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const applyChip = document.querySelector(".apply-chip");
+    const dirtyDot = document.querySelector(".dirty-dot");
+    const dimensionTag = document.querySelector(".tag-size");
+    const saveButton = document.querySelector('[data-action="save"]');
+    const resetButton = document.querySelector('[data-action="reset"]');
+
+    const markDirty = () => {
+      if (dirtyDot) {
+        dirtyDot.style.visibility = "visible";
+        dirtyDot.title = "저장되지 않은 변경";
+      }
+      if (applyChip) {
+        applyChip.textContent = "실시간 미리보기 적용됨 · 저장 필요";
+      }
+    };
+
+    const getFieldValue = (labelText) => {
+      const fields = [...document.querySelectorAll(".field")];
+      const target = fields.find((field) => {
+        const label = field.querySelector(".field-label strong");
+        return label && label.textContent.trim() === labelText;
+      });
+      const input = target ? target.querySelector(".number-input") : null;
+      return input ? input.value : "";
+    };
+
+    const refreshDimensionTag = () => {
+      if (!dimensionTag) {
+        return;
+      }
+      const length = getFieldValue("길이") || "1.00";
+      const width = getFieldValue("폭") || "0.44";
+      const height = getFieldValue("높이") || "0.64";
+      dimensionTag.textContent = `${length}m × ${width}m × ${height}m`;
+    };
+
+    document.querySelectorAll(".field").forEach((field) => {
+      const range = field.querySelector('input[type="range"]');
+      const number = field.querySelector(".number-input");
+      if (!range || !number) {
+        return;
+      }
+
+      const original = number.value;
+      number.dataset.originalValue = original;
+      range.dataset.originalValue = range.value;
+
+      range.addEventListener("input", () => {
+        number.value = Number(range.value).toFixed(range.step && Number(range.step) < 1 ? 2 : 0).replace(/\.00$/, ".0");
+        refreshDimensionTag();
+        markDirty();
+      });
+
+      number.addEventListener("change", () => {
+        const nextValue = Number(number.value);
+        if (Number.isFinite(nextValue)) {
+          range.value = String(nextValue);
+        }
+        refreshDimensionTag();
+        markDirty();
+      });
+    });
+
+    document.querySelectorAll(".segmented button, .preset-tab").forEach((button) => {
+      button.addEventListener("click", () => {
+        const group = button.parentElement;
+        if (!group) {
+          return;
+        }
+        group.querySelectorAll("button, .preset-tab").forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        markDirty();
+      });
+    });
+
+    document.querySelectorAll(".switch input, .select-input").forEach((control) => {
+      control.addEventListener("change", markDirty);
+    });
+
+    if (saveButton) {
+      saveButton.addEventListener("click", () => {
+        if (dirtyDot) {
+          dirtyDot.style.visibility = "hidden";
+          dirtyDot.title = "저장됨";
+        }
+        if (applyChip) {
+          applyChip.textContent = "저장됨 · 실시간 미리보기 적용됨";
+        }
+      });
+    }
+
+    if (resetButton) {
+      resetButton.addEventListener("click", () => {
+        document.querySelectorAll(".field").forEach((field) => {
+          const range = field.querySelector('input[type="range"]');
+          const number = field.querySelector(".number-input");
+          if (range && range.dataset.originalValue) {
+            range.value = range.dataset.originalValue;
+          }
+          if (number && number.dataset.originalValue) {
+            number.value = number.dataset.originalValue;
+          }
+        });
+        refreshDimensionTag();
+        markDirty();
+      });
+    }
+  </script>
+</body>
+</html>

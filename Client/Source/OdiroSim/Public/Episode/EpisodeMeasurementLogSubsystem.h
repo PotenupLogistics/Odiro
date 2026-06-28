@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Episode/EpisodeLidarRayReplayRecorder.h"
 #include "Episode/EpisodeReplayRecorder.h"
 #include "Shared/EpisodeResultTypes.h"
 #include "Shared/EpisodeJsonlMeasurementWriter.h"
@@ -125,6 +126,8 @@ private:
 	FTimerHandle ProjectTraceTimerHandle;
 	float ProjectTraceIntervalSeconds = 1.0f / 60.0f;
 	TUniquePtr<FEpisodeReplayRecorder> ReplayRecorder;
+	/// Optional replay-only LiDAR ray recorder that shares the project replay lifecycle.
+	TUniquePtr<FEpisodeLidarRayReplayRecorder> LidarRayReplayRecorder;
 
 	UFUNCTION()
 	void HandleEvaluationEvent(FEpisodeEvaluationEvent Event);

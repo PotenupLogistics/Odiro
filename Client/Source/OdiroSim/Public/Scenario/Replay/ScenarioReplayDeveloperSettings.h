@@ -50,6 +50,62 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Free Camera", meta = (ClampMin = "0.001", UIMin = "0.01", UIMax = "1.0"))
 	double FreeCameraLookSensitivity = 0.12;
 
+	// Robot-local backward distance used when the free camera focuses on the replay robot.
+	UPROPERTY(EditAnywhere, Config, Category = "Free Camera", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	double FreeCameraFocusBackDistanceCm = 1200.0;
+
+	// Robot-local side offset used when the free camera focuses on the replay robot.
+	UPROPERTY(EditAnywhere, Config, Category = "Free Camera", meta = (UIMin = "-1000.0", UIMax = "1000.0"))
+	double FreeCameraFocusSideOffsetCm = 350.0;
+
+	// Vertical lift used when the free camera focuses on the replay robot.
+	UPROPERTY(EditAnywhere, Config, Category = "Free Camera", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	double FreeCameraFocusHeightCm = 900.0;
+
+	// Height above the replay robot that the free camera looks at when focusing.
+	UPROPERTY(EditAnywhere, Config, Category = "Free Camera", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	double FreeCameraFocusTargetHeightCm = 120.0;
+
+	// Perspective field of view used by the robot-centered orbit camera.
+	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "5.0", ClampMax = "170.0", UIMin = "30.0", UIMax = "120.0"))
+	double OrbitCameraFovDegrees = 70.0;
+
+	// Initial distance from the replay robot target to the orbit camera.
+	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "1.0", UIMin = "100.0"))
+	double OrbitCameraDistanceCm = 1400.0;
+
+	// Minimum distance allowed by orbit camera zoom controls.
+	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "1.0", UIMin = "100.0"))
+	double MinOrbitCameraDistanceCm = 300.0;
+
+	// Maximum distance allowed by orbit camera zoom controls.
+	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "1.0", UIMin = "100.0"))
+	double MaxOrbitCameraDistanceCm = 6000.0;
+
+	// Distance delta applied for one orbit zoom input step.
+	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "1.0", UIMin = "1.0"))
+	double OrbitCameraZoomStepCm = 180.0;
+
+	// Initial pitch used by the orbit camera when first configured.
+	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "-89.0", ClampMax = "89.0", UIMin = "-89.0", UIMax = "0.0"))
+	double OrbitCameraPitchDegrees = -35.0;
+
+	// Minimum pitch allowed by orbit camera mouse look.
+	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "-89.0", ClampMax = "89.0", UIMin = "-89.0", UIMax = "0.0"))
+	double MinOrbitCameraPitchDegrees = -85.0;
+
+	// Maximum pitch allowed by orbit camera mouse look.
+	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "-89.0", ClampMax = "89.0", UIMin = "0.0", UIMax = "89.0"))
+	double MaxOrbitCameraPitchDegrees = -5.0;
+
+	// Mouse-look sensitivity used by the replay orbit camera.
+	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "0.001", UIMin = "0.01", UIMax = "1.0"))
+	double OrbitCameraLookSensitivity = 0.12;
+
+	// Height above the replay robot that the orbit camera looks at.
+	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	double OrbitCameraTargetHeightCm = 120.0;
+
 	// Minimum pitch allowed for replay free camera look.
 	UPROPERTY(EditAnywhere, Config, Category = "Free Camera", meta = (ClampMin = "-89.0", ClampMax = "89.0", UIMin = "-89.0", UIMax = "0.0"))
 	double MinFreeCameraPitchDegrees = -85.0;

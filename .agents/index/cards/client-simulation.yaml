@@ -103,6 +103,7 @@ guardrails:
   - ScenarioSimulationSubsystem owns runtime grid rebuild after scenario surfaces spawn.
   - ScenarioSampleWorldSpecAdapter may derive generated city GroundRegions from sampled Corridor layout; authored Corridor surfaces remain the source of truth where they overlap generated padding.
   - ScenarioCityBlockCatalog owns CityBuildings visual block metadata only; generated GroundRegions remain the evaluation and runtime-grid source of truth.
+  - ScenarioCityBlockMaterializer owns shared generated CityBuildings visual placement for ScenarioEditorMap and ScenarioSimulationMap; visual blocks stay out of authoring selection, runtime actor id lookup, and evaluation context.
   - DeliveryBot runtime grid classifies generated Corridor surfaces through ScenarioCorridorRuntimeActor semantic lane lookup before applying procedural mesh collision overlap.
   - DeliveryBot runtime grid treats ScenarioStaticObstacle-owned collision components as blocking cells independently of collision profile names.
   - ScenarioRunnerSubsystem owns project episode lifecycle, policy start/end coordination, cancellation, late callbacks, and cleanup.

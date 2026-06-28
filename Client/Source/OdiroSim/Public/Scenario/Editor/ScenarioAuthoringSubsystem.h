@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Scenario/Data/ScenarioCityBlockCatalog.h"
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Scenario/Data/ScenarioStaticObstaclePropCatalog.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
@@ -73,6 +74,10 @@ public:
 	// Catalog that resolves Corridor surface ids into editor-preview and semantic surface metadata.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Catalog")
 	TSoftObjectPtr<UScenarioCorridorSurfaceCatalog> CorridorSurfaceCatalog;
+
+	// Catalog of visual CityBuildings blocks spawned from generated city GroundRegions for editor preview parity.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Catalog")
+	TSoftObjectPtr<UScenarioCityBlockCatalog> CityBlockCatalog;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "0.0"))
 	double StaticObstacleGroundZToleranceCm = 5.0;
@@ -655,6 +660,10 @@ private:
 
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AScenarioGroundRegion>> GroundRegionActors;
+
+	// Visual CityBuildings actors generated for the editor preview but excluded from authoring selection state.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AActor>> CityBlockPreviewActors;
 
 	// Editor-only spline preview for Corridor lane surfaces.
 	UPROPERTY(Transient)

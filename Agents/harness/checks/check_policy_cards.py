@@ -11,10 +11,20 @@ POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 MANUAL_CONFIRMATION_PATH = (
     ROOT / "data" / "sources" / "review" / "confirmed" / "manual_confirmation_results.json"
 )
+PROMOTED_CANDIDATE_PATHS = (
+    ROOT / "data" / "sources" / "review" / "candidates" / "korea" / "KOR-004_speed_policy_candidate.json",
+    ROOT / "data" / "sources" / "review" / "candidates" / "korea" / "KOR-004_crosswalk_operation_candidate.json",
+)
 REGISTRY_PATH = ROOT / "data" / "sources" / "policy_source_registry.json"
 REQUIRED_CAUTION = (
     "이 카드는 원본 문서의 수동 확인 내용을 바탕으로 만든 프로젝트 내부 정책 기준이며, "
     "공식 인증 준수를 의미하지 않는다."
+)
+KOR_004_PROMOTED_CAUTION_FRAGMENTS = (
+    "KOR-004",
+    "confirmed",
+    "runtime 보강 근거",
+    "전체 내용을 포괄하지 않는다",
 )
 PROHIBITED_CLAIMS = ["공식 인증 준수", "인증을 보장", "ISO 준수", "법적 준수 보장"]
 REQUIRED_FIELDS = {
@@ -85,6 +95,24 @@ def _manual_status_map(payload: Any) -> dict[str, str]:
     }
 
 
+def _promoted_candidate_status_map(paths: tuple[Path, ...]) -> dict[str, str]:
+    statuses: dict[str, str] = {}
+    for path in paths:
+        payload = _read_json(path)
+        if not isinstance(payload, dict):
+            continue
+        candidate_id = payload.get("candidate_id")
+        promotion_decision = payload.get("promotionDecision")
+        if (
+            isinstance(candidate_id, str)
+            and payload.get("review_status") == "confirmed"
+            and isinstance(promotion_decision, dict)
+            and promotion_decision.get("can_promote_to_runtime") is True
+        ):
+            statuses[candidate_id] = "confirmed"
+    return statuses
+
+
 def _read_jsonl(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
     cards: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -121,20 +149,33 @@ def _has_prohibited_claim(card: dict[str, Any]) -> bool:
     return False
 
 
+def _has_required_caution(card: dict[str, Any]) -> bool:
+    caution = str(card.get("caution", ""))
+    if REQUIRED_CAUTION in caution:
+        return True
+    source_ids = card.get("sourceIds")
+    if isinstance(source_ids, list) and "KOR-004" in source_ids:
+        return all(fragment in caution for fragment in KOR_004_PROMOTED_CAUTION_FRAGMENTS)
+    return False
+
+
 def run_check(
     policy_cards_path: Path = POLICY_CARDS_PATH,
     manual_confirmation_path: Path = MANUAL_CONFIRMATION_PATH,
     registry_path: Path = REGISTRY_PATH,
+    promoted_candidate_paths: tuple[Path, ...] = PROMOTED_CANDIDATE_PATHS,
 ) -> dict[str, Any]:
     result = _base_result()
 
     try:
         source_ids = _registry_source_ids(_read_json(registry_path))
         manual_statuses = _manual_status_map(_read_json(manual_confirmation_path))
+        promoted_statuses = _promoted_candidate_status_map(promoted_candidate_paths)
     except (OSError, json.JSONDecodeError) as exc:
         result["errors"].append(f"required input parse failed: {exc}")
         return result
 
+    manual_statuses.update(promoted_statuses)
     confirmed_ids = {
         candidate_id for candidate_id, status in manual_statuses.items() if status == "confirmed"
     }
@@ -178,7 +219,7 @@ def run_check(
             if unknown:
                 result["unknownSourceIds"].append({"cardId": card_id, "sourceIds": unknown})
 
-        if REQUIRED_CAUTION not in str(card.get("caution", "")):
+        if not _has_required_caution(card):
             result["missingCautionCards"].append(card_id)
 
         if _has_prohibited_claim(card):

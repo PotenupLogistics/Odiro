@@ -1,18 +1,25 @@
 {
-  "totalCards": 9,
+  "totalCards": 11,
+  "totalChunks": 17,
+  "cardsBySource": {
+    "KOR-003": 9,
+    "KOR-004": 2
+  },
   "cardsByCategory": {
+    "crosswalk_operation": 1,
     "emergency_stop": 2,
     "operator_control": 1,
     "perception_requirement": 1,
     "sidewalk_operation": 1,
-    "speed_policy": 2,
+    "speed_policy": 3,
     "terrain_or_dynamic_safety": 2
   },
   "mvpSituationCoverage": {
     "PedestrianAhead": {
       "cardIds": [
         "CARD-KOR-003-perception_requirement-001",
-        "CARD-KOR-003-sidewalk_operation-001"
+        "CARD-KOR-003-sidewalk_operation-001",
+        "CARD-KOR-004-crosswalk_operation-001"
       ],
       "status": "ready"
     },
@@ -45,7 +52,8 @@
     },
     "CrosswalkApproach": {
       "cardIds": [
-        "CARD-KOR-003-sidewalk_operation-001"
+        "CARD-KOR-003-sidewalk_operation-001",
+        "CARD-KOR-004-crosswalk_operation-001"
       ],
       "status": "ready"
     },
@@ -66,17 +74,22 @@
   },
   "actionCoverage": {
     "Continue": [
-      "CARD-KOR-003-sidewalk_operation-001"
+      "CARD-KOR-003-sidewalk_operation-001",
+      "CARD-KOR-004-crosswalk_operation-001"
     ],
     "SlowDown": [
       "CARD-KOR-003-speed_policy-001",
       "CARD-KOR-003-speed_policy-002",
-      "CARD-KOR-003-perception_requirement-001"
+      "CARD-KOR-003-perception_requirement-001",
+      "CARD-KOR-004-speed_policy-001",
+      "CARD-KOR-004-crosswalk_operation-001"
     ],
     "Stop": [
       "CARD-KOR-003-emergency_stop-001",
       "CARD-KOR-003-sidewalk_operation-001",
-      "CARD-KOR-003-terrain_or_dynamic_safety-002"
+      "CARD-KOR-003-terrain_or_dynamic_safety-002",
+      "CARD-KOR-004-speed_policy-001",
+      "CARD-KOR-004-crosswalk_operation-001"
     ],
     "EmergencyStop": [
       "CARD-KOR-003-emergency_stop-001",
@@ -91,7 +104,8 @@
       "CARD-KOR-003-perception_requirement-001"
     ],
     "YieldWait": [
-      "CARD-KOR-003-sidewalk_operation-001"
+      "CARD-KOR-003-sidewalk_operation-001",
+      "CARD-KOR-004-crosswalk_operation-001"
     ],
     "RequestOperator": [
       "CARD-KOR-003-operator_control-001",

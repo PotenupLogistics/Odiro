@@ -13,7 +13,7 @@ ACTION_DOC = ROOT / "docs" / "policy" / "DECISION_ACTION_MAPPING.md"
 REQUEST_FIELD_DOC = ROOT / "docs" / "policy" / "DECISION_REQUEST_FIELD_MAPPING.md"
 COVERAGE_REPORT_JSON = ROOT / "data" / "rag" / "policy_card_coverage_report.json"
 COVERAGE_REPORT_MD = ROOT / "data" / "rag" / "policy_card_coverage_report.md"
-EXPECTED_CARD_COUNT = 9
+EXPECTED_CARD_COUNT = 11
 
 
 def _base_result() -> dict[str, Any]:

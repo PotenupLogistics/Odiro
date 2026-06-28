@@ -21,8 +21,8 @@
 ## Policy RAG
 
 - 한국 법/인증/운행 기준 및 연구 자료 기반 policy source registry
-- KOR-003 수동 검토 기반 confirmed policy knowledge card 9개
-- confirmed policy card 기반 policy RAG chunk 9개
+- KOR-003 수동 검토 기반 confirmed policy knowledge card 9개와 KOR-004 promoted candidate 기반 runtime 보강 card 2개
+- confirmed policy card 기반 policy RAG chunk 17개
 - keyword/category/action/parameter/source 기반 deterministic policy RAG retrieval
 
 ## Contracts And Models

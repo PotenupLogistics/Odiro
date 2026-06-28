@@ -13,8 +13,8 @@ GENERATION_MODEL_PATH = ROOT / "app" / "models" / "generation.py"
 DOC_PATH = ROOT / "docs" / "architecture" / "SCENARIO_POST_PROCESSING.md"
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 RAG_CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
-EXPECTED_POLICY_CARD_COUNT = 9
-EXPECTED_RAG_CHUNK_COUNT = 15
+EXPECTED_POLICY_CARD_COUNT = 11
+EXPECTED_RAG_CHUNK_COUNT = 17
 
 
 def _detect_forbidden_artifacts() -> list[str]:

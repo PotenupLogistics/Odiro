@@ -10,8 +10,8 @@ from app.main import app
 ROOT = Path(__file__).resolve().parents[2]
 CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
-EXPECTED_POLICY_CARD_COUNT = 9
-EXPECTED_RAG_CHUNK_COUNT = 15
+EXPECTED_POLICY_CARD_COUNT = 11
+EXPECTED_RAG_CHUNK_COUNT = 17
 REQUIRED_ROUTES = {
     "/api/v1/analysis/run",
     "/api/v1/scenarios/generate",

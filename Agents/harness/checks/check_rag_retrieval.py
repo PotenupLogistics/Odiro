@@ -10,7 +10,7 @@ from app.services.policy_rag_retriever import load_chunks, search_policy_chunks
 
 ROOT = Path(__file__).resolve().parents[2]
 CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
-EXPECTED_RAG_CHUNK_COUNT = 15
+EXPECTED_RAG_CHUNK_COUNT = 17
 REQUIRED_FILES = {
     "app/services/policy_rag_retriever.py",
     "app/models/rag.py",

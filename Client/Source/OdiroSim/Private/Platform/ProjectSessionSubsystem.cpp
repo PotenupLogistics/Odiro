@@ -6,6 +6,7 @@ namespace
 {
 	const TCHAR* ProjectSessionScenarioFileName = TEXT("scenario.json");
 	const TCHAR* ProjectSessionSettingFileName = TEXT("setting.json");
+	const TCHAR* ProjectSessionProfileFileName = TEXT("profile.json");
 }
 
 void UProjectSessionSubsystem::SetActiveProjectPath(const FString& projectPath)
@@ -26,6 +27,11 @@ FString UProjectSessionSubsystem::GetActiveProjectScenarioPath() const
 FString UProjectSessionSubsystem::GetActiveProjectSettingPath() const
 {
 	return BuildProjectFilePath(ActiveProjectPath, ProjectSessionSettingFileName);
+}
+
+FString UProjectSessionSubsystem::GetActiveProjectProfilePath() const
+{
+	return BuildProjectFilePath(ActiveProjectPath, ProjectSessionProfileFileName);
 }
 
 FString UProjectSessionSubsystem::NormalizeProjectPath(const FString& projectPath)

@@ -3,6 +3,7 @@
 #include "Platform/ViewModel/ExperimentConfigViewModel.h"
 #include "Platform/ViewModel/ExperimentResultViewModel.h"
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
+#include "Platform/ViewModel/RobotProfileViewModel.h"
 #include "Platform/ViewModel/StartupMenuViewModel.h"
 #include "Platform/PlatformUiDeveloperSettings.h"
 #include "Platform/Widget/MainMenuWidget.h"
@@ -276,6 +277,88 @@ bool FPlatformUiViewModelExperimentConfigTest::RunTest(const FString& parameters
 	TestEqual(TEXT("fixed fps round trip"), viewModel->GetFixedFps(), 30);
 	TestEqual(TEXT("episode count round trip"), viewModel->GetEpisodeCount(), 4);
 	TestEqual(TEXT("base seed round trip"), viewModel->GetBaseSeed(), static_cast<int64>(12345));
+
+	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlatformUiViewModelRobotProfileTest,
+	"OdiroSim.PlatformUi.ViewModel.RobotProfile",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPlatformUiViewModelRobotProfileTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UGameInstance* gameInstance = NewObject<UGameInstance>();
+	USimulatorLaunchSubsystem* simulatorLaunchSubsystem = NewObject<USimulatorLaunchSubsystem>(gameInstance);
+	UProjectSessionSubsystem* projectSessionSubsystem = NewObject<UProjectSessionSubsystem>(gameInstance);
+	URobotProfileViewModel* viewModel = NewObject<URobotProfileViewModel>();
+	TestNotNull(TEXT("game instance created"), gameInstance);
+	TestNotNull(TEXT("simulator launch subsystem created"), simulatorLaunchSubsystem);
+	TestNotNull(TEXT("project session subsystem created"), projectSessionSubsystem);
+	TestNotNull(TEXT("robot profile viewmodel created"), viewModel);
+	if (!gameInstance || !simulatorLaunchSubsystem || !projectSessionSubsystem || !viewModel)
+	{
+		return false;
+	}
+
+	const FString testRoot = MakePlatformUiVmTestRoot();
+	const FString projectPath = FPaths::Combine(testRoot, TEXT("RobotProfileVmProject"));
+	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
+
+	TArray<FString> diagnostics;
+	TestTrue(
+		TEXT("create project fixture"),
+		CreatePlatformUiVmTestProject(simulatorLaunchSubsystem, projectPath, diagnostics));
+	if (!diagnostics.IsEmpty())
+	{
+		AddInfo(FString::Printf(TEXT("fixture diagnostics: %s"), *FString::Join(diagnostics, TEXT("\n"))));
+	}
+
+	projectSessionSubsystem->SetActiveProjectPath(projectPath);
+	viewModel->SetSubsystemOverride(projectSessionSubsystem);
+	viewModel->InitializeForGameInstance(gameInstance);
+	viewModel->SetBodyLengthM(0.75f);
+	viewModel->SetBodyWidthM(0.95f);
+	viewModel->SetBodyHeightM(0.55f);
+	viewModel->SetBodyWheelBaseM(0.50f);
+	viewModel->SetBodyTurningRadiusM(2.40f);
+	viewModel->SetDriveMaxSpeedKmh(8.50f);
+	viewModel->SetDriveSteeringRatePerS(4.10f);
+	viewModel->SetDriveMassKg(52.00f);
+	viewModel->SetLidarScanRangeM(18.00f);
+	viewModel->SetLidarFrontHalfAngleDegree(65.00f);
+	viewModel->SetLidarAngleStepDegree(4.00f);
+	viewModel->SetLidarScanRateHz(7.50f);
+	TestTrue(TEXT("save robot profile through viewmodel"), viewModel->SaveRobotProfile());
+
+	viewModel->SetBodyLengthM(1.0f);
+	viewModel->SetBodyWidthM(1.0f);
+	viewModel->SetBodyHeightM(1.0f);
+	viewModel->SetBodyWheelBaseM(1.0f);
+	viewModel->SetBodyTurningRadiusM(1.0f);
+	viewModel->SetDriveMaxSpeedKmh(1.0f);
+	viewModel->SetDriveSteeringRatePerS(1.0f);
+	viewModel->SetDriveMassKg(1.0f);
+	viewModel->SetLidarScanRangeM(1.0f);
+	viewModel->SetLidarFrontHalfAngleDegree(1.0f);
+	viewModel->SetLidarAngleStepDegree(1.0f);
+	viewModel->SetLidarScanRateHz(1.0f);
+	TestTrue(TEXT("reload robot profile through viewmodel"), viewModel->LoadFromActiveProject());
+	TestTrue(TEXT("body length round trip"), FMath::IsNearlyEqual(viewModel->GetBodyLengthM(), 0.75f));
+	TestTrue(TEXT("body width round trip"), FMath::IsNearlyEqual(viewModel->GetBodyWidthM(), 0.95f));
+	TestTrue(TEXT("body height round trip"), FMath::IsNearlyEqual(viewModel->GetBodyHeightM(), 0.55f));
+	TestTrue(TEXT("wheel base round trip"), FMath::IsNearlyEqual(viewModel->GetBodyWheelBaseM(), 0.50f));
+	TestTrue(TEXT("turning radius round trip"), FMath::IsNearlyEqual(viewModel->GetBodyTurningRadiusM(), 2.40f));
+	TestTrue(TEXT("drive max speed round trip"), FMath::IsNearlyEqual(viewModel->GetDriveMaxSpeedKmh(), 8.50f));
+	TestTrue(TEXT("drive steering rate round trip"), FMath::IsNearlyEqual(viewModel->GetDriveSteeringRatePerS(), 4.10f));
+	TestTrue(TEXT("drive mass round trip"), FMath::IsNearlyEqual(viewModel->GetDriveMassKg(), 52.00f));
+	TestTrue(TEXT("lidar scan range round trip"), FMath::IsNearlyEqual(viewModel->GetLidarScanRangeM(), 18.00f));
+	TestTrue(TEXT("lidar front angle round trip"), FMath::IsNearlyEqual(viewModel->GetLidarFrontHalfAngleDegree(), 65.00f));
+	TestTrue(TEXT("lidar angle step round trip"), FMath::IsNearlyEqual(viewModel->GetLidarAngleStepDegree(), 4.00f));
+	TestTrue(TEXT("lidar scan rate round trip"), FMath::IsNearlyEqual(viewModel->GetLidarScanRateHz(), 7.50f));
 
 	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
 	return true;

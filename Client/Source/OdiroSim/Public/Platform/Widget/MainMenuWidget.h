@@ -191,6 +191,7 @@ private:
 	enum class EProjectWorkspaceTabType : uint8
 	{
 		ScenarioEdit,
+		RobotConfig,
 		ExperimentStatus,
 		ExperimentConfig,
 		ExperimentResultDetail,
@@ -514,6 +515,10 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UProjectWorkspaceTabWidget> ScenarioEditTab;
 
+	// Project workspace 로봇 구성 tab widget.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UProjectWorkspaceTabWidget> RobotConfigTab;
+
 	// Project workspace 실험 현황 tab widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UProjectWorkspaceTabWidget> ExperimentStatusTab;
@@ -537,6 +542,10 @@ private:
 	// Project experiment run 현황 switcher page. UI layout은 WBP_MainMenu가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> ProjectExperimentStatusPanel;
+
+	// Project 로봇 구성 switcher page. UI layout은 WBP_MainMenu가 소유한다.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ProjectRobotConfigPanel;
 
 	// Project experiment 설정 editor panel. UI layout은 WBP_MainMenu가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

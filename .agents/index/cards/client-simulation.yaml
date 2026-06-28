@@ -21,6 +21,7 @@ paths:
   - Client/Content/Input/**
   - Client/Content/Maps/ScenarioEditorMap.umap
   - Client/Content/Maps/ScenarioSimulationMap.umap
+  - Client/Content/Templates/CityBuildings/**
   - Client/Json/**
   - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Docs/PreviewAgent.local.md
@@ -101,6 +102,7 @@ guardrails:
   - ScenarioDocument and ScenarioSample surfaces remain internal editor/materialization shapes unless the task targets them.
   - ScenarioSimulationSubsystem owns runtime grid rebuild after scenario surfaces spawn.
   - ScenarioSampleWorldSpecAdapter may derive generated city GroundRegions from sampled Corridor layout; authored Corridor surfaces remain the source of truth where they overlap generated padding.
+  - ScenarioCityBlockCatalog owns CityBuildings visual block metadata only; generated GroundRegions remain the evaluation and runtime-grid source of truth.
   - DeliveryBot runtime grid classifies generated Corridor surfaces through ScenarioCorridorRuntimeActor semantic lane lookup before applying procedural mesh collision overlap.
   - DeliveryBot runtime grid treats ScenarioStaticObstacle-owned collision components as blocking cells independently of collision profile names.
   - ScenarioRunnerSubsystem owns project episode lifecycle, policy start/end coordination, cancellation, late callbacks, and cleanup.

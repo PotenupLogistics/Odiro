@@ -29,6 +29,9 @@ bool FScenarioCityBlockCatalogLookupTest::RunTest(const FString& Parameters)
 	walkwayRoadBlock.BoundsMeters.LengthMeters = 10.0;
 	walkwayRoadBlock.BoundsMeters.WidthMeters = 8.0;
 	walkwayRoadBlock.BoundsMeters.HeightMeters = 1.0;
+	walkwayRoadBlock.PlacementProfile.Priority = 10;
+	walkwayRoadBlock.PlacementProfile.LateralAnchor = EScenarioCityBlockLateralAnchor::RegionInnerEdge;
+	walkwayRoadBlock.PlacementProfile.LateralOffsetMeters = 0.25;
 	walkwayRoadBlock.SemanticProfile.ProfileId = TEXT("walkway_road");
 	walkwayRoadBlock.SemanticProfile.SurfaceIds = { TEXT("walkway"), TEXT("road") };
 	walkwayRoadBlock.SemanticProfile.PrimaryRegionType = EScenarioGroundRegionType::Walkable;
@@ -56,6 +59,11 @@ bool FScenarioCityBlockCatalogLookupTest::RunTest(const FString& Parameters)
 		TEXT("Found block keeps its placement role"),
 		foundBlock.Role == EScenarioCityBlockRole::WalkwayRoadStraight);
 	TestEqual(TEXT("Found block keeps authored length"), foundBlock.BoundsMeters.LengthMeters, 10.0);
+	TestEqual(TEXT("Found block keeps placement priority"), foundBlock.PlacementProfile.Priority, 10);
+	TestTrue(
+		TEXT("Found block keeps edge-anchor placement"),
+		foundBlock.PlacementProfile.LateralAnchor == EScenarioCityBlockLateralAnchor::RegionInnerEdge);
+	TestEqual(TEXT("Found block keeps lateral offset"), foundBlock.PlacementProfile.LateralOffsetMeters, 0.25);
 	TestEqual(TEXT("Found block keeps semantic surface count"), foundBlock.SemanticProfile.SurfaceIds.Num(), 2);
 	TestFalse(TEXT("Catalog rejects empty BlockId"), catalog->FindBlockEntryById(NAME_None, foundBlock));
 	TestFalse(

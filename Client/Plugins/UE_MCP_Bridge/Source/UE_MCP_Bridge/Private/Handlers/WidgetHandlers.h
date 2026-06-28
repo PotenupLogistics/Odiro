@@ -25,9 +25,11 @@ private:
 	static TSharedPtr<FJsonValue> RunEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RunEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddWidget(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetNamedSlotContent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RenameWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> MoveWidget(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RepairWidgetBlueprint(const TSharedPtr<FJsonObject>& Params);
 	// #365: root-widget swap + "Wrap With" container insertion. Required to
 	// reshape an existing WBP root without rebuilding the whole tree.
 	static TSharedPtr<FJsonValue> SetRoot(const TSharedPtr<FJsonObject>& Params);
@@ -42,6 +44,10 @@ private:
 	static TSharedPtr<FJsonValue> GetRuntimeWidget(const TSharedPtr<FJsonObject>& Params);
 	// Runtime widget geometry dump for screenshot/layout triage.
 	static TSharedPtr<FJsonValue> DumpRuntimeWidgetGeometry(const TSharedPtr<FJsonObject>& Params);
+	// Spawns a Widget Blueprint into the PIE viewport for interaction checks.
+	static TSharedPtr<FJsonValue> SpawnRuntimeWidgetPreview(const TSharedPtr<FJsonObject>& Params);
+	// Sends a simple pointer event to a PIE widget or named child.
+	static TSharedPtr<FJsonValue> DispatchRuntimeWidgetPointerEvent(const TSharedPtr<FJsonObject>& Params);
 	// #161: Runtime delegate inspection
 	static TSharedPtr<FJsonValue> GetRuntimeDelegates(const TSharedPtr<FJsonObject>& Params);
 

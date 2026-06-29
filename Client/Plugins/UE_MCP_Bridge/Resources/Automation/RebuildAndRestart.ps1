@@ -1,7 +1,9 @@
 # Detached helper that owns editor shutdown, rebuild, and relaunch.
 param(
     [Parameter(Mandatory = $true)][string] $ProjectRoot,
-    [Parameter(Mandatory = $true)][string] $JobId
+    [Parameter(Mandatory = $true)][string] $JobId,
+    [string] $EditorArgsJson = "[]",
+    [switch] $McpSafeLaunch
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,6 +12,17 @@ Set-StrictMode -Version Latest
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $projectRootPath = (Resolve-Path -LiteralPath $ProjectRoot).Path
 . (Join-Path $PSScriptRoot "UnrealProjectTools.ps1")
+. (Join-Path $PSScriptRoot "CrashReportTools.ps1")
+$script:EditorLaunchArgs = @()
+try {
+    $parsedEditorArgs = $EditorArgsJson | ConvertFrom-Json
+    if ($null -ne $parsedEditorArgs) {
+        $script:EditorLaunchArgs = @($parsedEditorArgs)
+    }
+}
+catch {
+    throw "Invalid EditorArgsJson: $($_.Exception.Message)"
+}
 
 # Returns the shared runtime state directory.
 function Get-ReloadStateDirectory {
@@ -59,13 +72,110 @@ function Get-ObjectProperty {
     return $DefaultValue
 }
 
+# Adds an editor launch argument once, preserving caller-provided ordering.
+function Add-EditorLaunchArg {
+    param([string] $Argument)
+    if (-not $Argument) {
+        return
+    }
+    if ($script:EditorLaunchArgs -notcontains $Argument) {
+        $script:EditorLaunchArgs += $Argument
+    }
+}
+
+# Returns the editor arguments used by reload-started editor processes.
+function Get-EditorLaunchArgs {
+    Add-EditorLaunchArg -Argument "-NoSplash"
+    if ($McpSafeLaunch) {
+        Add-EditorLaunchArg -Argument "-DDC=InstalledNoZenLocalFallback"
+        Add-EditorLaunchArg -Argument "-d3d11"
+        Add-EditorLaunchArg -Argument "-noraytracing"
+    }
+    return @($script:EditorLaunchArgs)
+}
+
+# Returns the newest editor log path available for restart diagnostics.
+function Get-LatestEditorLogPath {
+    $logsDir = Join-Path $projectRootPath "Saved\Logs"
+    if (-not (Test-Path -LiteralPath $logsDir -PathType Container)) {
+        return ""
+    }
+    $projectFile = Get-ReloadProjectFile -ProjectRoot $projectRootPath
+    $projectName = [System.IO.Path]::GetFileNameWithoutExtension($projectFile)
+    $logs = @(Get-ChildItem -LiteralPath $logsDir -File -Filter "$projectName*.log" | Sort-Object LastWriteTimeUtc -Descending)
+    if ($logs.Count -eq 0) {
+        return ""
+    }
+    return $logs[0].FullName
+}
+
+# Returns the tail of a log file without requiring exclusive access.
+function Get-LogExcerpt {
+    param(
+        [string] $Path,
+        [int] $TailLines = 80
+    )
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return ""
+    }
+    return ((Get-Content -LiteralPath $Path -Tail $TailLines -ErrorAction SilentlyContinue) -join "`n")
+}
+
+# Classifies editor startup failures during rebuild/restart.
+function Get-EditorStartupDiagnosis {
+    param(
+        [int] $EditorPid,
+        [string] $LatestLog = ""
+    )
+    if (-not $LatestLog) {
+        $LatestLog = Get-LatestEditorLogPath
+    }
+    $processAlive = $false
+    if ($EditorPid -gt 0) {
+        $processAlive = $null -ne (Get-Process -Id $EditorPid -ErrorAction SilentlyContinue)
+    }
+    $excerpt = Get-LogExcerpt -Path $LatestLog
+    $crashReportClients = @(Get-UnrealCrashReportClientStates)
+    $pendingCrashReports = @($crashReportClients | Where-Object { $_.blocksEditorLaunch })
+    $code = "port_timeout"
+    if ($pendingCrashReports.Count -gt 0 -and ($EditorPid -le 0 -or -not $processAlive)) {
+        $code = "crash_report_pending"
+    }
+    elseif ($EditorPid -le 0 -and -not $excerpt) {
+        $code = "no_editor_process"
+    }
+    elseif ($excerpt -match "Code not found for generated code \(package /Script/ChaosSolverEngine\)" -or
+        $excerpt -match "Shader compiler returned a non-zero error code" -or
+        $excerpt -match "AllowShaderCompiling") {
+        $code = "editor_crashed_before_bridge"
+    }
+    elseif ($excerpt -match "Waiting for ZenServer to be ready" -and
+        $excerpt -notmatch "ZenLocal: Using ZenServer") {
+        $code = "modal_blocked"
+    }
+    elseif ($EditorPid -gt 0 -and -not $processAlive) {
+        $code = "editor_crashed_before_bridge"
+    }
+
+    return [pscustomobject]@{
+        code = $code
+        editorPid = $EditorPid
+        processAlive = $processAlive
+        crashReportClients = $crashReportClients
+        pendingCrashReports = $pendingCrashReports
+        latestEditorLog = $LatestLog
+        logExcerpt = $excerpt
+    }
+}
+
 # Updates the current job file with a new phase or terminal status.
 function Update-ReloadJob {
     param(
         [string] $Status = "running",
         [string] $Phase,
         [string] $ErrorMessage = "",
-        [int] $ExitCode = 0
+        [int] $ExitCode = 0,
+        [hashtable] $Properties = @{}
     )
     $jobPath = Join-Path (Join-Path (Get-ReloadStateDirectory) "jobs") "$JobId.json"
     $job = Read-JsonFile -Path $jobPath
@@ -80,6 +190,9 @@ function Update-ReloadJob {
     }
     if ($ExitCode -ne 0) {
         $job | Add-Member -NotePropertyName exitCode -NotePropertyValue $ExitCode -Force
+    }
+    foreach ($key in $Properties.Keys) {
+        $job | Add-Member -NotePropertyName $key -NotePropertyValue $Properties[$key] -Force
     }
     Write-JsonFile -Path $jobPath -Value $job
 }
@@ -161,6 +274,14 @@ function Invoke-BridgeMethod {
         return ($script:Utf8NoBom.GetString($memory.ToArray()) | ConvertFrom-Json)
     }
     finally {
+        try {
+            if ($client.State -ne [System.Net.WebSockets.WebSocketState]::Closed -and
+                $client.State -ne [System.Net.WebSockets.WebSocketState]::Aborted) {
+                $client.Abort()
+            }
+        }
+        catch {
+        }
         $client.Dispose()
         $cts.Dispose()
     }
@@ -247,7 +368,13 @@ function Invoke-ClientEditorBuild {
     if ($exitCode -ne 0) {
         throw "Build failed with exit code $exitCode. Logs: $stdoutPath, $stderrPath"
     }
-    return [pscustomobject]@{ stdout = $stdoutPath; stderr = $stderrPath }
+    return [pscustomobject]@{
+        stdout = $stdoutPath
+        stderr = $stderrPath
+        buildPid = $process.Id
+        exitCode = $exitCode
+        completedAt = [DateTime]::UtcNow.ToString("o")
+    }
 }
 
 # Returns the editor target name from the project file name.
@@ -258,19 +385,29 @@ function Get-EditorTargetName {
 # Starts the editor and waits for the bridge port lockfile to advertise it.
 function Start-EditorAndWaitForBridge {
     param([int] $TimeoutSeconds = 180)
+    Assert-NoPendingUnrealCrashReportClients
     $projectFile = Get-ReloadProjectFile -ProjectRoot $projectRootPath
     $editor = Resolve-ReloadUnrealEditor -ProjectFile $projectFile
+    $editorArgs = Get-EditorLaunchArgs
     $portPath = Join-Path (Get-ReloadStateDirectory) "port.json"
     if (Test-Path -LiteralPath $portPath -PathType Leaf) {
         Remove-Item -LiteralPath $portPath -Force
     }
 
+    Update-ReloadJob -Phase "launching_editor" -Properties @{
+        editorExecutable = $editor
+        editorArgs = $editorArgs
+        mcpSafeLaunch = [bool] $McpSafeLaunch
+    }
+    Update-MaintenancePhase -Phase "launching_editor"
     $process = Start-Process `
         -FilePath $editor `
-        -ArgumentList (Join-ReloadProcessArguments -Arguments @($projectFile)) `
+        -ArgumentList (Join-ReloadProcessArguments -Arguments (@($projectFile) + $editorArgs)) `
         -WorkingDirectory $projectRootPath `
         -PassThru
 
+    Update-ReloadJob -Phase "waiting_for_bridge" -Properties @{ launchedEditorPid = $process.Id }
+    Update-MaintenancePhase -Phase "waiting_for_bridge"
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ($true) {
         $portState = Get-PortState
@@ -279,7 +416,24 @@ function Start-EditorAndWaitForBridge {
             return [pscustomobject]@{ editorPid = $process.Id; portState = $portState }
         }
         if ([DateTime]::UtcNow -ge $deadline) {
-            throw "Timed out waiting for UE_MCP_Bridge port.json after editor restart."
+            $diagnosis = Get-EditorStartupDiagnosis -EditorPid $process.Id
+            $code = [string] (Get-ObjectProperty -Object $diagnosis -Name "code" -DefaultValue "port_timeout")
+            $phase = "port_timeout"
+            if ($code -eq "editor_crashed_before_bridge") {
+                $phase = "editor_crashed"
+            }
+            elseif ($code -eq "modal_blocked") {
+                $phase = "modal_blocked"
+            }
+            elseif ($code -eq "crash_report_pending") {
+                $phase = "crash_report_pending"
+            }
+            Update-ReloadJob -Status "failed" -Phase $phase -ErrorMessage "Timed out waiting for UE_MCP_Bridge port.json after editor restart." -Properties @{
+                launchedEditorPid = $process.Id
+                editorStartupDiagnosis = $diagnosis
+            }
+            Update-MaintenancePhase -Phase $phase
+            throw "${code}: Timed out waiting for UE_MCP_Bridge port.json after editor restart."
         }
         Start-Sleep -Seconds 2
     }
@@ -289,7 +443,7 @@ $editorLock = $null
 try {
     $editorLock = Enter-EditorLock
 
-    Update-ReloadJob -Phase "draining"
+    Update-ReloadJob -Phase "draining" -Properties @{ helperPid = [System.Diagnostics.Process]::GetCurrentProcess().Id }
     Update-MaintenancePhase -Phase "draining"
     $status = Wait-BridgeDrain
 
@@ -307,8 +461,8 @@ try {
     Update-MaintenancePhase -Phase "building"
     $logs = Invoke-ClientEditorBuild
 
-    Update-ReloadJob -Phase "restarting"
-    Update-MaintenancePhase -Phase "restarting"
+    Update-ReloadJob -Phase "building_done" -Properties @{ logs = $logs }
+    Update-MaintenancePhase -Phase "building_done"
     $restart = Start-EditorAndWaitForBridge
 
     Update-ReloadJob -Status "completed" -Phase "completed"
@@ -326,8 +480,21 @@ try {
     }
 }
 catch {
-    Update-MaintenancePhase -Phase "failed"
-    Update-ReloadJob -Status "failed" -Phase "failed" -ErrorMessage $_.Exception.Message
+    $jobPath = Join-Path (Join-Path (Get-ReloadStateDirectory) "jobs") "$JobId.json"
+    $job = Read-JsonFile -Path $jobPath
+    $currentPhase = [string] (Get-ObjectProperty -Object $job -Name "phase" -DefaultValue "")
+    $failedPhase = "failed"
+    if ($_.Exception.Message -match "crash_report_pending") {
+        $failedPhase = "crash_report_pending"
+    }
+    elseif (@("port_timeout", "editor_crashed", "modal_blocked", "crash_report_pending") -contains $currentPhase) {
+        $failedPhase = $currentPhase
+    }
+    elseif ($currentPhase -eq "waiting_for_bridge" -or $currentPhase -eq "launching_editor" -or $currentPhase -eq "building_done") {
+        $failedPhase = "restart_failed"
+    }
+    Update-MaintenancePhase -Phase $failedPhase
+    Update-ReloadJob -Status "failed" -Phase $failedPhase -ErrorMessage $_.Exception.Message
 }
 finally {
     if ($null -ne $editorLock) {

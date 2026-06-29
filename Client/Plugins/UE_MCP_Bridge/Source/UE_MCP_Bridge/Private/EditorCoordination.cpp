@@ -45,6 +45,18 @@ namespace
 		}
 		return FFileHelper::SaveStringToFile(Serialized, *FilePath);
 	}
+
+	/** Return whether a persisted maintenance phase represents a terminal reload state. */
+	bool IsTerminalMaintenancePhase(const FString& Phase)
+	{
+		return Phase.Equals(TEXT("completed"), ESearchCase::IgnoreCase)
+			|| Phase.Equals(TEXT("failed"), ESearchCase::IgnoreCase)
+			|| Phase.Equals(TEXT("restart_failed"), ESearchCase::IgnoreCase)
+			|| Phase.Equals(TEXT("port_timeout"), ESearchCase::IgnoreCase)
+			|| Phase.Equals(TEXT("editor_crashed"), ESearchCase::IgnoreCase)
+			|| Phase.Equals(TEXT("modal_blocked"), ESearchCase::IgnoreCase)
+			|| Phase.Equals(TEXT("crash_report_pending"), ESearchCase::IgnoreCase);
+	}
 }
 
 FString FMCPBridgeCoordination::GetStateDirectory()
@@ -59,7 +71,18 @@ FString FMCPBridgeCoordination::GetMaintenanceFilePath()
 
 bool FMCPBridgeCoordination::IsMaintenanceActive()
 {
-	return FPaths::FileExists(GetMaintenanceFilePath());
+	TSharedPtr<FJsonObject> Maintenance = LoadJsonObject(GetMaintenanceFilePath());
+	if (!Maintenance.IsValid())
+	{
+		return FPaths::FileExists(GetMaintenanceFilePath());
+	}
+
+	FString Phase;
+	if (Maintenance->TryGetStringField(TEXT("phase"), Phase) && IsTerminalMaintenancePhase(Phase))
+	{
+		return false;
+	}
+	return true;
 }
 
 bool FMCPBridgeCoordination::IsCoordinationMethod(const FString& MethodName)
@@ -111,6 +134,11 @@ TSharedPtr<FJsonValue> FMCPBridgeCoordination::BuildStatusResult()
 	if (TSharedPtr<FJsonObject> Maintenance = LoadJsonObject(GetMaintenanceFilePath()))
 	{
 		Result->SetObjectField(TEXT("maintenanceState"), Maintenance);
+		FString Phase;
+		if (Maintenance->TryGetStringField(TEXT("phase"), Phase))
+		{
+			Result->SetBoolField(TEXT("maintenanceTerminal"), IsTerminalMaintenancePhase(Phase));
+		}
 	}
 
 	const FString PortFilePath = FPaths::Combine(GetStateDirectory(), TEXT("port.json"));

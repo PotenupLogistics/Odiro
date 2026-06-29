@@ -11,6 +11,7 @@ trap {
 }
 
 $clientDir = Get-ClientRoot
+. (Join-Path $clientDir "Plugins\UE_MCP_Bridge\Resources\Automation\CrashReportTools.ps1")
 $projectFile = Get-ClientProjectFile
 $unrealEditor = Resolve-UnrealEditor -ProjectFile $projectFile
 $noWait = $false
@@ -27,6 +28,7 @@ $arguments = @($projectFile) + $editorArgs
 Write-Step "UnrealEditor: $unrealEditor"
 Write-Step "Project: $projectFile"
 Write-Step "Editor args: $($editorArgs -join ' ')"
+Assert-NoPendingUnrealCrashReportClients
 
 if ($noWait) {
     $process = Start-Process `

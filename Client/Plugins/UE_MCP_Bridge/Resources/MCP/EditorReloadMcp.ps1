@@ -20,6 +20,7 @@ function Get-PluginRoot {
 }
 
 . (Join-Path (Get-PluginRoot) "Resources\Automation\UnrealProjectTools.ps1")
+. (Join-Path (Get-PluginRoot) "Resources\Automation\CrashReportTools.ps1")
 
 # Returns the Unreal project root that owns the plugin and .uproject file.
 function Get-ProjectRootFromPlugin {
@@ -75,6 +76,105 @@ function Get-ObjectProperty {
     return $DefaultValue
 }
 
+# Returns whether a maintenance/job phase is terminal and should not gate bridge calls.
+function Test-TerminalPhase {
+    param([string] $Phase)
+    return @("completed", "failed", "restart_failed", "port_timeout", "editor_crashed", "modal_blocked", "crash_report_pending") -contains $Phase
+}
+
+# Returns whether a persisted maintenance sentinel is terminal and recoverable.
+function Test-TerminalMaintenanceState {
+    param([object] $Maintenance)
+    if ($null -eq $Maintenance) {
+        return $false
+    }
+    $phase = [string] (Get-ObjectProperty -Object $Maintenance -Name "phase" -DefaultValue "")
+    if (Test-TerminalPhase -Phase $phase) {
+        return $true
+    }
+    $jobId = [string] (Get-ObjectProperty -Object $Maintenance -Name "jobId" -DefaultValue "")
+    if (-not $jobId) {
+        return $false
+    }
+    $job = Read-JsonFile -Path (Join-Path (Join-Path (Get-ReloadStateDirectory) "jobs") "$jobId.json")
+    $status = [string] (Get-ObjectProperty -Object $job -Name "status" -DefaultValue "")
+    return @("completed", "failed") -contains $status
+}
+
+# Returns the newest editor log path available for restart diagnostics.
+function Get-LatestEditorLogPath {
+    $logsDir = Join-Path (Get-ProjectRootFromPlugin) "Saved\Logs"
+    if (-not (Test-Path -LiteralPath $logsDir -PathType Container)) {
+        return ""
+    }
+    $projectFile = Get-ReloadProjectFile -ProjectRoot (Get-ProjectRootFromPlugin)
+    $projectName = [System.IO.Path]::GetFileNameWithoutExtension($projectFile)
+    $logs = @(Get-ChildItem -LiteralPath $logsDir -File -Filter "$projectName*.log" | Sort-Object LastWriteTimeUtc -Descending)
+    if ($logs.Count -eq 0) {
+        return ""
+    }
+    return $logs[0].FullName
+}
+
+# Returns the tail of a log file without assuming exclusive access.
+function Get-LogExcerpt {
+    param(
+        [string] $Path,
+        [int] $TailLines = 80
+    )
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return ""
+    }
+    return ((Get-Content -LiteralPath $Path -Tail $TailLines -ErrorAction SilentlyContinue) -join "`n")
+}
+
+# Classifies startup failures from process state and the latest editor log.
+function Get-EditorStartupDiagnosis {
+    param(
+        [int] $EditorPid = 0,
+        [string] $LatestLog = ""
+    )
+    $processAlive = $false
+    if ($EditorPid -gt 0) {
+        $processAlive = $null -ne (Get-Process -Id $EditorPid -ErrorAction SilentlyContinue)
+    }
+    if (-not $LatestLog) {
+        $LatestLog = Get-LatestEditorLogPath
+    }
+    $excerpt = Get-LogExcerpt -Path $LatestLog
+    $crashReportClients = @(Get-UnrealCrashReportClientStates)
+    $pendingCrashReports = @($crashReportClients | Where-Object { $_.blocksEditorLaunch })
+    $code = "port_timeout"
+    if ($pendingCrashReports.Count -gt 0 -and ($EditorPid -le 0 -or -not $processAlive)) {
+        $code = "crash_report_pending"
+    }
+    elseif ($EditorPid -le 0 -and -not $excerpt) {
+        $code = "no_editor_process"
+    }
+    elseif ($excerpt -match "Code not found for generated code \(package /Script/ChaosSolverEngine\)" -or
+        $excerpt -match "Shader compiler returned a non-zero error code" -or
+        $excerpt -match "AllowShaderCompiling") {
+        $code = "editor_crashed_before_bridge"
+    }
+    elseif ($excerpt -match "Waiting for ZenServer to be ready" -and
+        $excerpt -notmatch "ZenLocal: Using ZenServer") {
+        $code = "modal_blocked"
+    }
+    elseif ($EditorPid -gt 0 -and -not $processAlive) {
+        $code = "editor_crashed_before_bridge"
+    }
+
+    return [pscustomobject]@{
+        code = $code
+        editorPid = $EditorPid
+        processAlive = $processAlive
+        crashReportClients = $crashReportClients
+        pendingCrashReports = $pendingCrashReports
+        latestEditorLog = $LatestLog
+        logExcerpt = $excerpt
+    }
+}
+
 # Acquires an exclusive file lock used to coordinate per-session MCP processes.
 function Enter-ReloadFileLock {
     param(
@@ -109,16 +209,24 @@ function Get-PortState {
     $path = Join-Path (Get-ReloadStateDirectory) "port.json"
     $state = Read-JsonFile -Path $path
     if ($null -eq $state) {
-        return [pscustomobject]@{ path = $path; exists = $false }
+        return [pscustomobject]@{ path = $path; exists = $false; processAlive = $false; classification = "missing" }
     }
     $alive = $false
     $pidValue = Get-ObjectProperty -Object $state -Name "pid"
     if ($pidValue) {
         $alive = $null -ne (Get-Process -Id ([int] $pidValue) -ErrorAction SilentlyContinue)
     }
+    $classification = "missing_pid"
+    if ($pidValue -and -not $alive) {
+        $classification = "stale_pid"
+    }
+    elseif ($pidValue -and $alive) {
+        $classification = "process_alive"
+    }
     $state | Add-Member -NotePropertyName path -NotePropertyValue $path -Force
     $state | Add-Member -NotePropertyName exists -NotePropertyValue $true -Force
     $state | Add-Member -NotePropertyName processAlive -NotePropertyValue $alive -Force
+    $state | Add-Member -NotePropertyName classification -NotePropertyValue $classification -Force
     return $state
 }
 
@@ -164,6 +272,15 @@ function Invoke-BridgeMethod {
         return ($script:Utf8NoBom.GetString($memory.ToArray()) | ConvertFrom-Json)
     }
     finally {
+        try {
+            if ($client.State -ne [System.Net.WebSockets.WebSocketState]::Closed -and
+                $client.State -ne [System.Net.WebSockets.WebSocketState]::Aborted) {
+                $client.Abort()
+            }
+        }
+        catch {
+            Write-ReloadLog "Failed to abort bridge WebSocket: $($_.Exception.Message)"
+        }
         $client.Dispose()
         $cts.Dispose()
     }
@@ -192,6 +309,12 @@ function Get-ReloadStatus {
     $stateDir = Get-ReloadStateDirectory
     $maintenancePath = Join-Path $stateDir "maintenance.json"
     $maintenance = Read-JsonFile -Path $maintenancePath
+    $maintenanceTerminal = Test-TerminalMaintenanceState -Maintenance $maintenance
+    $currentJob = $null
+    $jobId = [string] (Get-ObjectProperty -Object $maintenance -Name "jobId" -DefaultValue "")
+    if ($jobId) {
+        $currentJob = Read-JsonFile -Path (Join-Path (Join-Path $stateDir "jobs") "$jobId.json")
+    }
     $port = Get-PortState
     $bridge = $null
     $bridgeError = $null
@@ -202,16 +325,34 @@ function Get-ReloadStatus {
     catch {
         $bridgeError = $_.Exception.Message
     }
+    if ($bridge) {
+        $port | Add-Member -NotePropertyName classification -NotePropertyValue "ready" -Force
+    }
+    elseif ((Get-ObjectProperty -Object $port -Name "exists" -DefaultValue $false) -and
+        (Get-ObjectProperty -Object $port -Name "processAlive" -DefaultValue $false)) {
+        $port | Add-Member -NotePropertyName classification -NotePropertyValue "process_alive_but_bridge_down" -Force
+    }
+
+    $latestEditorLog = Get-LatestEditorLogPath
+    $portPid = [int] (Get-ObjectProperty -Object $port -Name "pid" -DefaultValue 0)
+    $crashReportClients = @(Get-UnrealCrashReportClientStates)
+    $pendingCrashReports = @($crashReportClients | Where-Object { $_.blocksEditorLaunch })
 
     return [pscustomobject]@{
         success = $true
         stateDirectory = $stateDir
         maintenancePath = $maintenancePath
         maintenance = ($null -ne $maintenance)
+        maintenanceTerminal = $maintenanceTerminal
         maintenanceState = $maintenance
+        currentJob = $currentJob
         portState = $port
         bridgeStatus = $bridge
         bridgeError = $bridgeError
+        crashReportClients = $crashReportClients
+        pendingCrashReports = $pendingCrashReports
+        latestEditorLog = $latestEditorLog
+        editorStartupDiagnosis = (Get-EditorStartupDiagnosis -EditorPid $portPid -LatestLog $latestEditorLog)
     }
 }
 
@@ -576,11 +717,24 @@ function Start-RebuildAndRestart {
         [string] $Reason = "rebuild requested",
         [bool] $Wait = $false,
         [int] $TimeoutMs = 60000,
-        [bool] $Force = $false
+        [bool] $Force = $false,
+        [string[]] $EditorArgs = @(),
+        [bool] $McpSafeLaunch = $false
     )
     $stateDir = Get-ReloadStateDirectory
     $maintenancePath = Join-Path $stateDir "maintenance.json"
     $lockTimeoutMs = [Math]::Max($TimeoutMs, 10000)
+    $pendingCrashReports = @(Get-PendingUnrealCrashReportClients)
+    if ($pendingCrashReports.Count -gt 0) {
+        return [pscustomobject]@{
+            success = $false
+            accepted = $false
+            code = "crash_report_pending"
+            error = "Close the Unreal Crash Report window before starting or restarting another editor."
+            pendingCrashReports = $pendingCrashReports
+            recoveryTool = "editor_reload_recover"
+        }
+    }
 
     while ($true) {
         $lock = Enter-ReloadFileLock -Name "state.lock" -TimeoutMs $lockTimeoutMs
@@ -590,6 +744,16 @@ function Start-RebuildAndRestart {
         $jobPath = ""
         try {
             $existing = Read-JsonFile -Path $maintenancePath
+            if (Test-TerminalMaintenanceState -Maintenance $existing) {
+                return [pscustomobject]@{
+                    success = $false
+                    accepted = $false
+                    code = "terminal_maintenance_requires_recover"
+                    maintenancePath = $maintenancePath
+                    maintenanceState = $existing
+                    recoveryTool = "editor_reload_recover"
+                }
+            }
             $existingJobId = [string] (Get-ObjectProperty -Object $existing -Name "jobId" -DefaultValue "")
             if ($null -ne $existing -and $existingJobId) {
                 $existingOperation = [string] (Get-ObjectProperty -Object $existing -Name "operation" -DefaultValue "unknown")
@@ -680,6 +844,8 @@ function Start-RebuildAndRestart {
                     requestedAt = $now
                     updatedAt = $now
                     force = $Force
+                    editorArgs = $EditorArgs
+                    mcpSafeLaunch = $McpSafeLaunch
                     sourceFingerprintAtStart = $sourceFingerprint
                     upToDateCheck = $upToDateCheck
                 }
@@ -694,13 +860,21 @@ function Start-RebuildAndRestart {
                 }
 
                 $helper = Join-Path (Get-PluginRoot) "Resources\Automation\RebuildAndRestart.ps1"
+                $editorArgsJson = "[]"
+                if ($EditorArgs.Count -gt 0) {
+                    $editorArgsJson = ($EditorArgs | ConvertTo-Json -Compress)
+                }
                 $arguments = @(
                     "-NoProfile",
                     "-ExecutionPolicy", "Bypass",
                     "-File", $helper,
                     "-ProjectRoot", (Get-ProjectRootFromPlugin),
-                    "-JobId", $jobId
+                    "-JobId", $jobId,
+                    "-EditorArgsJson", $editorArgsJson
                 )
+                if ($McpSafeLaunch) {
+                    $arguments += "-McpSafeLaunch"
+                }
                 try {
                     Start-Process -FilePath (Get-PowerShellExe) -ArgumentList (Join-ReloadProcessArguments -Arguments $arguments) -WindowStyle Hidden | Out-Null
                 }
@@ -766,6 +940,16 @@ function Start-HotReload {
         $existingJobId = ""
         try {
             $existing = Read-JsonFile -Path $maintenancePath
+            if (Test-TerminalMaintenanceState -Maintenance $existing) {
+                return [pscustomobject]@{
+                    success = $false
+                    accepted = $false
+                    code = "terminal_maintenance_requires_recover"
+                    maintenancePath = $maintenancePath
+                    maintenanceState = $existing
+                    recoveryTool = "editor_reload_recover"
+                }
+            }
             $existingJobId = [string] (Get-ObjectProperty -Object $existing -Name "jobId" -DefaultValue "")
             if ($null -ne $existing -and $existingJobId) {
                 # Release the state lock before waiting on a long-running owner job.
@@ -909,7 +1093,7 @@ function Start-HotReload {
 # Returns the PowerShell executable used to start helper scripts.
 function Get-PowerShellExe {
     if ($PSVersionTable.PSEdition -eq "Core") {
-        return (Get-Process -Id $PID).Path
+        return [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     }
     return "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 }
@@ -947,10 +1131,55 @@ function Invoke-ReloadRecover {
         [bool] $AllowUnsafeRestart = $false
     )
     $status = Get-ReloadStatus
+    $actions = New-Object System.Collections.Generic.List[string]
+    $pendingCrashReports = @(Get-ObjectProperty -Object $status -Name "pendingCrashReports" -DefaultValue @())
+    if ($pendingCrashReports.Count -gt 0) {
+        return [pscustomobject]@{
+            success = $false
+            code = "crash_report_pending"
+            reason = $Reason
+            error = "Close the Unreal Crash Report window before launching another editor."
+            allowUnsafeRestart = $AllowUnsafeRestart
+            manualAction = "Close CrashReportClientEditor or submit/dismiss the Crash Reporter dialog, then retry editor_reload_recover."
+            status = $status
+        }
+    }
+
+    $maintenancePath = Get-ObjectProperty -Object $status -Name "maintenancePath"
+    $maintenanceState = Get-ObjectProperty -Object $status -Name "maintenanceState"
     if (Get-ObjectProperty -Object $status -Name "maintenance" -DefaultValue $false) {
-        return $status
+        if (Test-TerminalMaintenanceState -Maintenance $maintenanceState) {
+            Remove-Item -LiteralPath $maintenancePath -Force
+            $actions.Add("cleared_terminal_maintenance")
+        }
+        else {
+            return [pscustomobject]@{
+                success = $false
+                code = "maintenance_in_progress"
+                reason = $Reason
+                status = $status
+            }
+        }
     }
     $portState = Get-ObjectProperty -Object $status -Name "portState"
+    $portPath = Get-ObjectProperty -Object $portState -Name "path"
+    if ((Get-ObjectProperty -Object $portState -Name "exists" -DefaultValue $false) -and
+        -not (Get-ObjectProperty -Object $portState -Name "processAlive" -DefaultValue $false)) {
+        Remove-Item -LiteralPath $portPath -Force
+        $actions.Add("cleared_stale_port")
+    }
+
+    if ($actions.Count -gt 0) {
+        return [pscustomobject]@{
+            success = $true
+            code = "recovered"
+            reason = $Reason
+            actions = @($actions)
+            before = $status
+            after = (Get-ReloadStatus)
+        }
+    }
+
     $bridgeError = Get-ObjectProperty -Object $status -Name "bridgeError"
     if ((Get-ObjectProperty -Object $portState -Name "exists" -DefaultValue $false) -and
         (Get-ObjectProperty -Object $portState -Name "processAlive" -DefaultValue $false) -and
@@ -1017,6 +1246,8 @@ function Get-ToolList {
                     wait = @{ type = "boolean" }
                     timeoutMs = @{ type = "number" }
                     force = @{ type = "boolean" }
+                    editorArgs = @{ type = "array"; items = @{ type = "string" } }
+                    mcpSafeLaunch = @{ type = "boolean" }
                 }
             }
         },
@@ -1082,7 +1313,9 @@ function Invoke-ToolCall {
                 -Reason ([string] (Get-ObjectProperty -Object $Arguments -Name "reason" -DefaultValue "rebuild requested")) `
                 -Wait ([bool] (Get-ObjectProperty -Object $Arguments -Name "wait" -DefaultValue $false)) `
                 -TimeoutMs ([int] (Get-ObjectProperty -Object $Arguments -Name "timeoutMs" -DefaultValue 60000)) `
-                -Force ([bool] (Get-ObjectProperty -Object $Arguments -Name "force" -DefaultValue $false)))
+                -Force ([bool] (Get-ObjectProperty -Object $Arguments -Name "force" -DefaultValue $false)) `
+                -EditorArgs @((Get-ObjectProperty -Object $Arguments -Name "editorArgs" -DefaultValue @())) `
+                -McpSafeLaunch ([bool] (Get-ObjectProperty -Object $Arguments -Name "mcpSafeLaunch" -DefaultValue $false)))
         }
         "editor_reload_hot_reload" {
             return New-ToolResult -Data (Start-HotReload `

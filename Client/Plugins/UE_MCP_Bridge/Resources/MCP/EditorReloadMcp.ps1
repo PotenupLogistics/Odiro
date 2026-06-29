@@ -567,6 +567,108 @@ function New-SkippedReloadResult {
     }
 }
 
+# Returns a normalized Live Coding status without starting a compile.
+function Get-LiveCodingStatus {
+    try {
+        $bridgeStatus = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_get_status" -TimeoutMs 3000)
+        $liveCoding = Get-ObjectProperty -Object $bridgeStatus -Name "liveCoding"
+        if ($null -ne $liveCoding) {
+            return [pscustomobject]@{
+                success = $true
+                source = "coordination_get_status"
+                liveCoding = $liveCoding
+                bridgeStatus = $bridgeStatus
+            }
+        }
+        return [pscustomobject]@{
+            success = $false
+            code = "live_coding_status_unavailable"
+            error = "coordination_get_status did not include liveCoding state."
+            bridgeStatus = $bridgeStatus
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            success = $false
+            code = "live_coding_status_unavailable"
+            error = $_.Exception.Message
+        }
+    }
+}
+
+# Returns whether a normalized Live Coding status reports an active compile.
+function Test-LiveCodingCompiling {
+    param([object] $Status)
+    $liveCoding = Get-ObjectProperty -Object $Status -Name "liveCoding" -DefaultValue $Status
+    return [bool] (Get-ObjectProperty -Object $liveCoding -Name "compiling" -DefaultValue $false)
+}
+
+# Waits for an already-started Live Coding compile to finish without starting another one.
+function Wait-LiveCodingIdle {
+    param([int] $TimeoutMs = 300000)
+    $startedAt = [DateTime]::UtcNow
+    $deadline = $startedAt.AddMilliseconds($TimeoutMs)
+    $lastStatus = $null
+    while ($true) {
+        $lastStatus = Get-LiveCodingStatus
+        if (-not (Get-ObjectProperty -Object $lastStatus -Name "success" -DefaultValue $false)) {
+            return $lastStatus
+        }
+        if (-not (Test-LiveCodingCompiling -Status $lastStatus)) {
+            return [pscustomobject]@{
+                success = $true
+                code = "live_coding_idle"
+                waitedMs = [int] ([DateTime]::UtcNow - $startedAt).TotalMilliseconds
+                liveCodingStatus = $lastStatus
+            }
+        }
+        if ([DateTime]::UtcNow -ge $deadline) {
+            return [pscustomobject]@{
+                success = $false
+                code = "live_coding_wait_timeout"
+                status = "timeout"
+                error = "Timed out waiting for the active Live Coding compile after $TimeoutMs ms."
+                liveCodingStatus = $lastStatus
+            }
+        }
+        Start-Sleep -Milliseconds 1000
+    }
+}
+
+# Joins an active Live Coding compile, then reruns the source freshness check.
+function Wait-LiveCodingJoinAndCheck {
+    param(
+        [string] $Operation = "live_coding_join_recheck",
+        [int] $TimeoutMs = 300000
+    )
+    $sourceFingerprintBeforeJoin = Get-SourceStateFingerprint
+    $wait = Wait-LiveCodingIdle -TimeoutMs $TimeoutMs
+    if (-not (Get-ObjectProperty -Object $wait -Name "success" -DefaultValue $false)) {
+        return [pscustomobject]@{
+            success = $false
+            code = (Get-ObjectProperty -Object $wait -Name "code" -DefaultValue "live_coding_wait_failed")
+            wait = $wait
+            sourceFingerprintBeforeJoin = $sourceFingerprintBeforeJoin
+        }
+    }
+
+    $sourceFingerprintAfterJoin = Get-SourceStateFingerprint
+    $upToDateCheck = Test-SourceBuildUpToDate -Operation $Operation -RequestId ([guid]::NewGuid().ToString("N")) -TimeoutMs $TimeoutMs
+    $sourceFingerprintAfterCheck = Get-SourceStateFingerprint
+    $checkSucceeded = Get-ObjectProperty -Object $upToDateCheck -Name "success" -DefaultValue $false
+    $checkUpToDate = Get-ObjectProperty -Object $upToDateCheck -Name "upToDate" -DefaultValue $false
+    return [pscustomobject]@{
+        success = $true
+        code = "live_coding_join_checked"
+        wait = $wait
+        sourceFingerprintBeforeJoin = $sourceFingerprintBeforeJoin
+        sourceFingerprintAfterJoin = $sourceFingerprintAfterJoin
+        sourceFingerprintAfterCheck = $sourceFingerprintAfterCheck
+        upToDateCheck = $upToDateCheck
+        upToDate = ($checkSucceeded -and $checkUpToDate -and (Test-SourceFingerprintEqual -Left $sourceFingerprintAfterJoin -Right $sourceFingerprintAfterCheck))
+    }
+}
+
 # Returns the editor target name from the project file name.
 function Get-EditorTargetName {
     return Get-ReloadEditorTargetName -ProjectFile (Get-ReloadProjectFile -ProjectRoot (Get-ProjectRootFromPlugin))
@@ -938,6 +1040,9 @@ function Start-HotReload {
     while ($true) {
         $lock = Enter-ReloadFileLock -Name "state.lock" -TimeoutMs $lockTimeoutMs
         $existingJobId = ""
+        $liveCodingJoin = $false
+        $liveCodingJoinReason = ""
+        $liveCodingActiveFromCheck = $false
         try {
             $existing = Read-JsonFile -Path $maintenancePath
             if (Test-TerminalMaintenanceState -Maintenance $existing) {
@@ -985,53 +1090,72 @@ function Start-HotReload {
                         return New-SkippedReloadResult -Operation "live_coding" -Code "source_up_to_date" -Reason "UBT reported no outdated editor-target actions." -SourceFingerprint $sourceFingerprintAfterCheck -UpToDateCheck $upToDateCheck
                     }
                     $sourceFingerprint = $sourceFingerprintAfterCheck
+                    if ((Get-ObjectProperty -Object $upToDateCheck -Name "code" -DefaultValue "") -eq "live_coding_active") {
+                        $liveCodingActiveFromCheck = $true
+                    }
                 }
                 else {
                     $sourceFingerprint = $sourceFingerprintBeforeCheck
                 }
 
-                try {
-                    $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_get_status" -TimeoutMs 5000)
-                }
-                catch {
-                    return [pscustomobject]@{
-                        success = $false
-                        accepted = $false
-                        code = "coordination_unavailable"
-                        error = $_.Exception.Message
-                        maintenancePath = $maintenancePath
-                        sourceFingerprint = $sourceFingerprint
-                        upToDateCheck = $upToDateCheck
+                if (-not $liveCodingJoin) {
+                    try {
+                        $coordinationStatus = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_get_status" -TimeoutMs 5000)
+                        $liveCodingStatus = Get-ObjectProperty -Object $coordinationStatus -Name "liveCoding"
+                        if ($null -ne $liveCodingStatus -and (Get-ObjectProperty -Object $liveCodingStatus -Name "compiling" -DefaultValue $false)) {
+                            $liveCodingJoin = $true
+                            if ($liveCodingActiveFromCheck) {
+                                $liveCodingJoinReason = "live_coding_active"
+                            }
+                            else {
+                                $liveCodingJoinReason = "already_compiling"
+                            }
+                        }
+                    }
+                    catch {
+                        return [pscustomobject]@{
+                            success = $false
+                            accepted = $false
+                            code = "coordination_unavailable"
+                            error = $_.Exception.Message
+                            maintenancePath = $maintenancePath
+                            sourceFingerprint = $sourceFingerprint
+                            upToDateCheck = $upToDateCheck
+                        }
                     }
                 }
 
-                $jobId = [guid]::NewGuid().ToString("N")
-                $jobsDir = Join-Path $stateDir "jobs"
-                $jobPath = Join-Path $jobsDir "$jobId.json"
-                $now = [DateTime]::UtcNow.ToString("o")
-                $maintenance = [pscustomobject]@{
-                    jobId = $jobId
-                    reason = $Reason
-                    operation = "live_coding"
-                    phase = "queued"
-                    requestedAt = $now
-                    updatedAt = $now
-                    source = "EditorReloadMcp"
+                if (-not $liveCodingJoin) {
+                    $jobId = [guid]::NewGuid().ToString("N")
+                    $jobsDir = Join-Path $stateDir "jobs"
+                    $jobPath = Join-Path $jobsDir "$jobId.json"
+                    $now = [DateTime]::UtcNow.ToString("o")
+                    $maintenance = [pscustomobject]@{
+                        jobId = $jobId
+                        reason = $Reason
+                        operation = "live_coding"
+                        phase = "queued"
+                        requestedAt = $now
+                        updatedAt = $now
+                        source = "EditorReloadMcp"
+                        singleFlight = $true
+                    }
+                    $job = [pscustomobject]@{
+                        jobId = $jobId
+                        status = "running"
+                        phase = "queued"
+                        operation = "live_coding"
+                        reason = $Reason
+                        requestedAt = $now
+                        updatedAt = $now
+                        force = $Force
+                        singleFlight = $true
+                        sourceFingerprintAtStart = $sourceFingerprint
+                        upToDateCheck = $upToDateCheck
+                    }
+                    Write-JsonFile -Path $maintenancePath -Value $maintenance
+                    Write-JsonFile -Path $jobPath -Value $job
                 }
-                $job = [pscustomobject]@{
-                    jobId = $jobId
-                    status = "running"
-                    phase = "queued"
-                    operation = "live_coding"
-                    reason = $Reason
-                    requestedAt = $now
-                    updatedAt = $now
-                    force = $Force
-                    sourceFingerprintAtStart = $sourceFingerprint
-                    upToDateCheck = $upToDateCheck
-                }
-                Write-JsonFile -Path $maintenancePath -Value $maintenance
-                Write-JsonFile -Path $jobPath -Value $job
             }
         }
         finally {
@@ -1055,6 +1179,27 @@ function Start-HotReload {
             continue
         }
 
+        if ($liveCodingJoin) {
+            $joinCheck = Wait-LiveCodingJoinAndCheck -Operation "live_coding_join_recheck" -TimeoutMs $TimeoutMs
+            if (-not (Get-ObjectProperty -Object $joinCheck -Name "success" -DefaultValue $false)) {
+                return [pscustomobject]@{
+                    success = $false
+                    accepted = $false
+                    code = (Get-ObjectProperty -Object $joinCheck -Name "code" -DefaultValue "live_coding_wait_failed")
+                    status = (Get-ObjectProperty -Object $joinCheck -Name "status" -DefaultValue "failed")
+                    reason = "Timed out or failed while joining an existing Live Coding compile."
+                    joinReason = $liveCodingJoinReason
+                    joinCheck = $joinCheck
+                }
+            }
+
+            $currentFingerprint = Get-ObjectProperty -Object $joinCheck -Name "sourceFingerprintAfterCheck"
+            if (Get-ObjectProperty -Object $joinCheck -Name "upToDate" -DefaultValue $false) {
+                return New-SkippedReloadResult -Operation "live_coding" -Code "already_included_by_existing_compile" -Reason "The active Live Coding compile finished and UBT reported the current source up to date." -SourceFingerprint $currentFingerprint -UpToDateCheck (Get-ObjectProperty -Object $joinCheck -Name "upToDateCheck") -IncludedByJob $joinCheck
+            }
+            continue
+        }
+
         break
     }
 
@@ -1063,16 +1208,61 @@ function Start-HotReload {
         Update-MaintenanceFile -JobId $jobId -Reason $Reason -Operation "live_coding" -Phase "live_coding"
         $null = Update-ReloadJobFile -JobId $jobId -Status "running" -Phase "live_coding"
 
-        $compile = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_live_coding_compile" -Params @{ wait = $true } -TimeoutMs $TimeoutMs)
-        $compileResult = [string] (Get-ObjectProperty -Object $compile -Name "result" -DefaultValue "unknown")
-        if ($compileResult -ne "success" -and $compileResult -ne "no_changes") {
+        $compileJoinAttempts = 0
+        while ($true) {
+            if ($compileJoinAttempts -gt 0) {
+                Update-MaintenanceFile -JobId $jobId -Reason $Reason -Operation "live_coding" -Phase "live_coding"
+                $null = Update-ReloadJobFile -JobId $jobId -Status "running" -Phase "live_coding"
+            }
+            $compile = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_live_coding_compile" -Params @{ wait = $true } -TimeoutMs $TimeoutMs)
+            $compileResult = [string] (Get-ObjectProperty -Object $compile -Name "result" -DefaultValue "unknown")
+            if ($compileResult -eq "success" -or $compileResult -eq "no_changes") {
+                $completed = Update-ReloadJobFile -JobId $jobId -Status "completed" -Phase "completed" -Properties @{ compile = $compile; sourceFingerprintAtCompletion = (Get-SourceStateFingerprint) }
+                Set-LastSuccessfulReload -JobId $jobId -Operation "live_coding" -SourceFingerprint $sourceFingerprint
+                Clear-MaintenanceFile -JobId $jobId
+                return $completed
+            }
+
+            if ($compileResult -eq "already_compiling" -or $compileResult -eq "in_progress") {
+                $compileJoinAttempts++
+                if ($compileJoinAttempts -gt 3) {
+                    throw "Live Coding remained active after $compileJoinAttempts join attempts."
+                }
+
+                Update-MaintenanceFile -JobId $jobId -Reason $Reason -Operation "live_coding" -Phase "joining_live_coding"
+                $null = Update-ReloadJobFile -JobId $jobId -Status "running" -Phase "joining_live_coding" -Properties @{
+                    compile = $compile
+                    joinReason = $compileResult
+                    sourceFingerprintBeforeJoin = (Get-SourceStateFingerprint)
+                }
+                $joinCheck = Wait-LiveCodingJoinAndCheck -Operation "live_coding_compile_join_recheck" -TimeoutMs $TimeoutMs
+                $null = Update-ReloadJobFile -JobId $jobId -Status "running" -Phase "joining_live_coding" -Properties @{
+                    compile = $compile
+                    joinReason = $compileResult
+                    sourceFingerprintBeforeJoin = (Get-ObjectProperty -Object $joinCheck -Name "sourceFingerprintBeforeJoin")
+                    sourceFingerprintAfterJoin = (Get-ObjectProperty -Object $joinCheck -Name "sourceFingerprintAfterJoin")
+                    upToDateCheckAfterJoin = (Get-ObjectProperty -Object $joinCheck -Name "upToDateCheck")
+                }
+                if (-not (Get-ObjectProperty -Object $joinCheck -Name "success" -DefaultValue $false)) {
+                    throw "Live Coding join failed with $([string] (Get-ObjectProperty -Object $joinCheck -Name "code" -DefaultValue "unknown"))."
+                }
+                if (Get-ObjectProperty -Object $joinCheck -Name "upToDate" -DefaultValue $false) {
+                    $sourceFingerprintAfterCheck = Get-ObjectProperty -Object $joinCheck -Name "sourceFingerprintAfterCheck"
+                    $completed = Update-ReloadJobFile -JobId $jobId -Status "completed" -Phase "completed" -Properties @{
+                        compile = $compile
+                        joinCheck = $joinCheck
+                        joinReason = $compileResult
+                        sourceFingerprintAtCompletion = $sourceFingerprintAfterCheck
+                    }
+                    Set-LastSuccessfulReload -JobId $jobId -Operation "live_coding" -SourceFingerprint $sourceFingerprintAfterCheck
+                    Clear-MaintenanceFile -JobId $jobId
+                    return $completed
+                }
+                continue
+            }
+
             throw "Live Coding result was $compileResult."
         }
-
-        $completed = Update-ReloadJobFile -JobId $jobId -Status "completed" -Phase "completed" -Properties @{ compile = $compile; sourceFingerprintAtCompletion = (Get-SourceStateFingerprint) }
-        Set-LastSuccessfulReload -JobId $jobId -Operation "live_coding" -SourceFingerprint $sourceFingerprint
-        Clear-MaintenanceFile -JobId $jobId
-        return $completed
     }
     catch {
         if ($jobId) {

@@ -5,9 +5,13 @@
 #include "Misc/DateTime.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#if PLATFORM_WINDOWS
+#include "ILiveCodingModule.h"
+#endif
 
 namespace
 {
@@ -56,6 +60,41 @@ namespace
 			|| Phase.Equals(TEXT("editor_crashed"), ESearchCase::IgnoreCase)
 			|| Phase.Equals(TEXT("modal_blocked"), ESearchCase::IgnoreCase)
 			|| Phase.Equals(TEXT("crash_report_pending"), ESearchCase::IgnoreCase);
+	}
+
+	/** Build the Live Coding status payload shared by reload coordination status. */
+	TSharedRef<FJsonObject> BuildLiveCodingStatusObject()
+	{
+		TSharedRef<FJsonObject> LiveCoding = MakeShared<FJsonObject>();
+#if PLATFORM_WINDOWS
+		ILiveCodingModule* Live = FModuleManager::GetModulePtr<ILiveCodingModule>(TEXT("LiveCoding"));
+		LiveCoding->SetBoolField(TEXT("available"), Live != nullptr);
+		LiveCoding->SetBoolField(TEXT("enabledByDefault"), false);
+		LiveCoding->SetBoolField(TEXT("enabledForSession"), false);
+		LiveCoding->SetBoolField(TEXT("canEnableForSession"), false);
+		LiveCoding->SetBoolField(TEXT("started"), false);
+		LiveCoding->SetBoolField(TEXT("compiling"), false);
+		LiveCoding->SetStringField(TEXT("enableError"), TEXT(""));
+		if (Live)
+		{
+			LiveCoding->SetBoolField(TEXT("enabledByDefault"), Live->IsEnabledByDefault());
+			LiveCoding->SetBoolField(TEXT("enabledForSession"), Live->IsEnabledForSession());
+			LiveCoding->SetBoolField(TEXT("canEnableForSession"), Live->CanEnableForSession());
+			LiveCoding->SetBoolField(TEXT("started"), Live->HasStarted());
+			LiveCoding->SetBoolField(TEXT("compiling"), Live->IsCompiling());
+			LiveCoding->SetStringField(TEXT("enableError"), Live->GetEnableErrorText().ToString());
+		}
+#else
+		LiveCoding->SetBoolField(TEXT("available"), false);
+		LiveCoding->SetBoolField(TEXT("enabledByDefault"), false);
+		LiveCoding->SetBoolField(TEXT("enabledForSession"), false);
+		LiveCoding->SetBoolField(TEXT("canEnableForSession"), false);
+		LiveCoding->SetBoolField(TEXT("started"), false);
+		LiveCoding->SetBoolField(TEXT("compiling"), false);
+		LiveCoding->SetStringField(TEXT("enableError"), TEXT(""));
+		LiveCoding->SetStringField(TEXT("note"), TEXT("Live Coding is Windows-only."));
+#endif
+		return LiveCoding;
 	}
 }
 
@@ -130,6 +169,7 @@ TSharedPtr<FJsonValue> FMCPBridgeCoordination::BuildStatusResult()
 	Result->SetNumberField(TEXT("activeRequests"), GetActiveRequestCount());
 	Result->SetNumberField(TEXT("editorPid"), static_cast<double>(FPlatformProcess::GetCurrentProcessId()));
 	Result->SetStringField(TEXT("timestamp"), FDateTime::UtcNow().ToIso8601());
+	Result->SetObjectField(TEXT("liveCoding"), BuildLiveCodingStatusObject());
 
 	if (TSharedPtr<FJsonObject> Maintenance = LoadJsonObject(GetMaintenanceFilePath()))
 	{

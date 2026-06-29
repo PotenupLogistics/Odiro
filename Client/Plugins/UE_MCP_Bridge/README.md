@@ -30,8 +30,8 @@ Use `task-setup.bat -SkipAgentMcp` when only the repository setup is needed. Sta
 Shared state lives in `Client/Saved/UE_MCP_Bridge`.
 
 - `port.json`: written by the editor bridge. Reload tools use it to locate the active editor bridge.
-- `maintenance.json`: sentinel written before maintenance. Normal bridge calls return `maintenance_pending` while it exists; `coordination_*` bridge calls remain available.
-- `jobs/<jobId>.json`: reload job progress and terminal state.
+- `maintenance.json`: sentinel written before maintenance. Normal bridge calls return `maintenance_pending` while it exists; `coordination_*` bridge calls remain available. Live Coding jobs include `singleFlight=true`.
+- `jobs/<jobId>.json`: reload job progress and terminal state. Live Coding join paths may include `joinReason`, `sourceFingerprintBeforeJoin`, `sourceFingerprintAfterJoin`, and `upToDateCheckAfterJoin`.
 - `last-success.json`: latest completed reload/build source fingerprint used to skip duplicate requests.
 - `checks/*-outdated-actions.json`: UBT check-only action exports used to decide whether C++ work is already up to date.
 - `editor.lock` and `state.lock`: file locks used by per-session reload MCP processes.
@@ -64,16 +64,16 @@ Exposed tools:
 
 - `editor_reload_get_status`: reports sentinel, bridge, editor pid, and job state.
 - `editor_reload_check_up_to_date`: runs UBT `-WriteOutdatedActions` and reports whether the editor target has stale actions without compiling.
-- `editor_reload_hot_reload`: waits for an existing reload job, rechecks source state, skips if already covered or up to date, otherwise writes the sentinel, runs Live Coding through a coordination handler, then removes the sentinel.
+- `editor_reload_hot_reload`: waits for an existing reload job or active Live Coding compile, rechecks source state, skips if already covered or up to date, otherwise writes the sentinel, runs Live Coding through a coordination handler, then removes the sentinel.
 - `editor_reload_rebuild_and_restart`: with `wait=true`, waits for an existing reload job, rechecks source state, skips if already covered or up to date, otherwise writes the sentinel, waits for active bridge work to drain, saves dirty packages, asks the editor to exit, rebuilds, restarts, then removes the sentinel.
 - `editor_reload_wait_for_job`: waits for an accepted job to complete or fail.
 - `editor_reload_recover`: inspects recovery state without killing a live editor.
 
-`editor_reload_hot_reload` and `editor_reload_rebuild_and_restart` accept `force=true` to bypass duplicate/up-to-date skipping when a lifecycle restart is required even without source changes. Skipped requests return `success=true`, `accepted=false`, `skipped=true`, and a stable `code` such as `already_included_by_existing_job`, `already_loaded`, `already_built`, or `source_up_to_date`.
+`editor_reload_hot_reload` and `editor_reload_rebuild_and_restart` accept `force=true` to bypass duplicate/up-to-date skipping when a lifecycle restart is required even without source changes. Skipped requests return `success=true`, `accepted=false`, `skipped=true`, and a stable `code` such as `already_included_by_existing_job`, `already_included_by_existing_compile`, `already_loaded`, `already_built`, or `source_up_to_date`.
 
 `editor_reload_rebuild_and_restart` also accepts `editorArgs` and `mcpSafeLaunch`. The safe launch profile adds `-DDC=InstalledNoZenLocalFallback -d3d11 -noraytracing` on top of the default `-NoSplash`; use it for MCP validation when the normal DX12/SM6/ray tracing editor path crashes before the bridge starts.
 
-If UBT check-only is blocked because Live Coding is active, the check result uses `upToDateCheck.code = live_coding_active`. Reload tools treat that as inconclusive and continue with the requested coordinated Live Coding or rebuild/restart instead of skipping.
+If UBT check-only is blocked because Live Coding is active, the check result uses `upToDateCheck.code = live_coding_active`. `editor_reload_hot_reload` checks `liveCoding.compiling`: when a compile is active it waits, reruns the freshness check, and can skip with `already_included_by_existing_compile`; when Live Coding is merely enabled but idle, it proceeds with the coordinated compile. It does not start another Live Coding compile while `liveCoding.compiling=true`.
 
 If a previous editor crash left Crash Report Client open, reload status and recover return `code = crash_report_pending`. Rebuild/restart and direct `Client/Tools/Dev.ps1` launch refuse to start another editor until the pending Crash Report window is closed. The tools do not kill Crash Report Client automatically.
 
@@ -91,6 +91,10 @@ The editor bridge keeps a small coordination surface available during maintenanc
 
 All non-coordination bridge requests are counted while executing. Once nonterminal `maintenance.json` exists, new non-coordination requests fail fast with `code = maintenance_pending`, allowing active sessions to stop issuing editor work instead of racing Live Coding or shutdown.
 
+`coordination_get_status` includes additive `liveCoding` fields: `available`, `enabledByDefault`, `enabledForSession`, `canEnableForSession`, `started`, `compiling`, and `enableError`. `coordination_live_coding_compile` can return `result=already_compiling`; Reload MCP treats that as a join/wait/recheck state, not as permission to start a duplicate compile.
+
 `maintenance.json` includes `operation`, currently `live_coding` or `rebuild_restart`.
+
+Direct bridge handlers such as `hot_reload` and `live_coding_compile` remain available for manual diagnostics, but agent C++ verification should use `editor_reload_hot_reload` so source fingerprint coverage and duplicate suppression stay centralized.
 
 Known diagnostic non-failures: WBP_BaseIcon can capture blank when no default icon content is configured, WBP_BaseSwitch.SwitchRoot may keep fixed internal overrides, XGE license warnings indicate standalone build mode, and XAudio2 device warnings are unrelated unless audio behavior is under test.

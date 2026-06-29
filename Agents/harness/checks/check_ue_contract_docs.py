@@ -107,7 +107,7 @@ def run_check() -> dict[str, Any]:
         "legacyDocsArchived": (DOCS / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md").exists(),
         "readmesLinkPlans": all(
             term in readme_text
-            for term in ["simulation-interface.md", "user-project-data.md", "environment/environment-catalog.md"]
+            for term in ["simulation-interface.md", "user-project-data.md", "Client/Json/environment-catalog.md"]
         ),
         "noLiveProviderCallsInHarness": not _imports_live_http_client(Path(__file__)),
         "forbiddenArtifacts": forbidden_artifacts,

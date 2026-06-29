@@ -10,7 +10,7 @@ from app.models.scenario_generation_v2 import ScenarioGenerateV2Request
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ENVIRONMENT_CATALOG = ROOT / "docs" / "environment" / "environment-catalog.md"
+ENVIRONMENT_CATALOG = ROOT.parent / "Client" / "Json" / "environment-catalog.md"
 
 
 class _FakeSpecContextLoader:
@@ -25,6 +25,8 @@ class _FakeSpecContextLoader:
                 "<SPEC_CONTEXT>",
                 "# SPEC FILE: docs/specs/simulation-interface.md",
                 "scenario context",
+                "# SPEC FILE: Client/Json/environment-catalog.md",
+                "Prop Bounding Boxes",
                 "</SPEC_CONTEXT>",
             ]
         )
@@ -52,6 +54,8 @@ def test_scenario_template_prompt_includes_spec_context() -> None:
     assert "공식 문서 우선 적용 안내" in prompt
     assert "<SPEC_CONTEXT>" in prompt
     assert "# SPEC FILE: docs/specs/simulation-interface.md" in prompt
+    assert "# SPEC FILE: Client/Json/environment-catalog.md" in prompt
+    assert "Prop Bounding Boxes" in prompt
     assert "</SPEC_CONTEXT>" in prompt
     assert "사용자 prompt:\n좁은 보도에서 대향 보행자" in prompt
     assert loader.calls == 1
@@ -85,6 +89,8 @@ def test_scenario_repair_prompt_includes_spec_context() -> None:
 
     assert "<SPEC_CONTEXT>" in prompt
     assert "# SPEC FILE: docs/specs/simulation-interface.md" in prompt
+    assert "# SPEC FILE: Client/Json/environment-catalog.md" in prompt
+    assert "Prop Bounding Boxes" in prompt
     assert "검증 결과:" in prompt
     assert "수정 대상 JSON:" in prompt
     assert loader.calls == 1
@@ -114,6 +120,8 @@ def test_result_analysis_prompt_includes_spec_context() -> None:
     assert "공식 문서 우선 적용 안내" in prompt
     assert "<SPEC_CONTEXT>" in prompt
     assert "# SPEC FILE: docs/specs/simulation-interface.md" in prompt
+    assert "# SPEC FILE: Client/Json/environment-catalog.md" in prompt
+    assert "Prop Bounding Boxes" in prompt
     assert "</SPEC_CONTEXT>" in prompt
     assert '"overall_judgement": "change_recommended"' in prompt
     assert loader.calls == 1

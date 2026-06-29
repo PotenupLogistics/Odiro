@@ -31,7 +31,8 @@ def test_spec_context_loader_reads_allowlisted_docs() -> None:
         assert f"# SPEC FILE: {relative_path}" in context
     assert "# SPEC FILE: docs/specs/simulation-interface.md" in context
     assert "# SPEC FILE: contracts/specs/user-project-data.md" in context
-    assert "# SPEC FILE: Agents/docs/environment/environment-catalog.md" in context
+    assert "# SPEC FILE: Client/Json/environment-catalog.md" in context
+    assert "Prop Bounding Boxes" in context
 
 
 def test_spec_context_loader_raises_clear_error_for_missing_allowlisted_file(tmp_path: Path) -> None:
@@ -42,7 +43,7 @@ def test_spec_context_loader_raises_clear_error_for_missing_allowlisted_file(tmp
         loader.build_prompt_block()
 
 
-def test_spec_context_allowlist_excludes_archive_legacy_and_client_catalog() -> None:
+def test_spec_context_allowlist_excludes_archive_legacy_and_agent_environment_copy() -> None:
     module = _loader_module()
     allowlist = tuple(module.SPEC_CONTEXT_ALLOWLIST)
 
@@ -50,7 +51,7 @@ def test_spec_context_allowlist_excludes_archive_legacy_and_client_catalog() -> 
         "Agents/docs/archive",
         "archive/deprecated",
         "archive/previous_episode_spec",
-        "Client/Json/environment-catalog.md",
+        "Agents/docs/environment/environment-catalog.md",
         "EpisodeSetup.json.md",
         "DeliveryBotSetup.json.md",
         "RunQueue.json.md",
@@ -58,4 +59,4 @@ def test_spec_context_allowlist_excludes_archive_legacy_and_client_catalog() -> 
     )
     for fragment in disallowed_fragments:
         assert not any(fragment in relative_path for relative_path in allowlist)
-    assert "Agents/docs/environment/environment-catalog.md" in allowlist
+    assert "Client/Json/environment-catalog.md" in allowlist

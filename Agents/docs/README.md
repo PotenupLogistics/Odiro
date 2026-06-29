@@ -22,10 +22,9 @@
 ## 환경 문서
 
 * [User project data contract](../../contracts/specs/user-project-data.md): 현재 user project 파일 형식 및 기본 환경 어휘 계약이다.
-* `Client/Json/environment-catalog.md`: UE/Client 쪽 원본 catalog이다.
-* [Environment catalog](environment/environment-catalog.md): `Client/Json/environment-catalog.md`를 v2 Agent LLM context에서 참고하기 위해 둔 임시 사본이다. surface id, prop id, prop category, prop class, persona id, encounter type, behavior override field를 참고한다.
+* [Environment catalog](../../Client/Json/environment-catalog.md): UE/Client 쪽 원본 catalog이며 v2 Agent LLM context source다. surface id, prop id, prop class, sensor profile, static obstacle bounding box, lane hint, persona id, encounter type, behavior override field를 참고한다.
 
-`Agents/docs/environment/environment-catalog.md`만 LLM context allowlist에 넣는다. `Client/Json/environment-catalog.md`는 원본 위치이지만 Agent allowlist에 직접 넣지 않는다. 추후 `contracts/specs/environment-catalog.md` 또는 `contracts/specs/scenario-environment-catalog.md`가 canonical contract로 생기면 Agents 사본은 제거하고 contracts 쪽 문서를 참조한다.
+Agents 쪽 임시 environment catalog 사본은 제거되었으며 LLM context allowlist에 넣지 않는다. 추후 `contracts/specs/environment-catalog.md` 또는 `contracts/specs/scenario-environment-catalog.md`가 canonical contract로 생기면 Client catalog 대신 contracts 쪽 문서를 참조한다.
 
 ## LLM Context Allowlist
 
@@ -37,10 +36,10 @@ contracts/specs/user-project-data.md
 Agents/docs/api/V2_AGENT_APIS.md
 Agents/docs/agents/V2_AGENT_ARCHITECTURE.md
 Agents/docs/agents/V2_LANGGRAPH_DESIGN.md
-Agents/docs/environment/environment-catalog.md
+Client/Json/environment-catalog.md
 ```
 
-`Agents/docs/environment/environment-catalog.md`는 임시 AI-side catalog이다. contracts 하위 canonical environment catalog가 추가되면 allowlist에서 제거한다.
+`Client/Json/environment-catalog.md`는 Client 원본 catalog이며 static obstacle bounding box 정보를 포함한다. 현재 공통 SpecContextLoader가 이 문서를 scenario generation과 result analysis LLM context에 함께 넣는다.
 
 ## LLM Context Exclusions
 

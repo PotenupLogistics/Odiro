@@ -11,7 +11,11 @@
 - Reuse an open editor when possible; launch it only when MCP needs an editor-backed server
 - If the agent launched an editor only for MCP, close or reuse it before C++ edits, builds, or another editor launch unless the user wants it open
 - Treat early `connection refused` as editor/MCP startup state
-- After MCP plugin source changes, rebuild/restart the editor before runtime verification
+- Use the Editor Reload MCP, when exposed, for coordinated Live Coding, editor build locks, `maintenance_pending`, bridge disconnect during C++ work, or required MCP plugin reload. Try `editor_reload_hot_reload` before rebuild/restart when the change is Live Coding-compatible.
+- For concurrent C++ reload/build requests, let Editor Reload MCP do the wait/recheck/skip flow. Treat `success=true`, `skipped=true` results such as `already_included_by_existing_job` or `source_up_to_date` as covered; pass `force=true` only when a lifecycle restart is required even without source changes.
+- If a normal `UE_MCP_Bridge` call returns `maintenance_pending`, stop editor-backed work and use Editor Reload MCP status/job wait tools instead of retrying the gated call.
+- If `UE_MCP_Bridge` is unreachable but the editor process is still alive, use Editor Reload MCP `editor_reload_get_status` or `editor_reload_recover`; do not force-kill or restart unless the user explicitly approves unsafe recovery.
+- After MCP plugin source changes or changes that Live Coding cannot apply, rebuild/restart the editor through Editor Reload MCP before runtime verification when that MCP is available
 
 ## Implementation
 - Prefer Component/Interface composition; separate Actor, Component, and Subsystem concerns

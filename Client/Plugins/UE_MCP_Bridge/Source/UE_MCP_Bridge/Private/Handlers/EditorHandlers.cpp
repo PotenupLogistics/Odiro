@@ -1,4 +1,5 @@
 #include "EditorHandlers.h"
+#include "EditorCoordination.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "Engine/World.h"
@@ -37,6 +38,7 @@
 #include "Settings/LevelEditorPlaySettings.h"
 #include "Misc/DateTime.h"
 #include "HAL/FileManager.h"
+#include "Modules/ModuleManager.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "EditorValidatorSubsystem.h"
@@ -64,6 +66,7 @@
 #include "ImageUtils.h"
 #include "Widgets/SViewport.h"
 #include "Widgets/SWindow.h"
+#include "Async/Async.h"
 
 namespace
 {
@@ -230,6 +233,11 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("reload_handlers"), &ReloadHandlers);
 	Registry.RegisterHandler(TEXT("save_asset"), &SaveAsset);
 	Registry.RegisterHandler(TEXT("save_dirty"), &SaveDirty);
+	Registry.RegisterHandler(TEXT("coordination_get_status"), &CoordinationGetStatus);
+	Registry.RegisterHandler(TEXT("coordination_prepare_maintenance"), &CoordinationPrepareMaintenance);
+	Registry.RegisterHandler(TEXT("coordination_save_dirty"), &CoordinationSaveDirty);
+	Registry.RegisterHandlerWithTimeout(TEXT("coordination_live_coding_compile"), &CoordinationLiveCodingCompile, 300.0f);
+	Registry.RegisterHandler(TEXT("coordination_request_exit"), &CoordinationRequestExit);
 	Registry.RegisterHandler(TEXT("list_dirty_packages"), &ListDirtyPackages);
 	Registry.RegisterHandler(TEXT("build_lighting"), &BuildLighting);
 	Registry.RegisterHandler(TEXT("build_all"), &BuildAll);
@@ -1310,6 +1318,119 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveDirty(const TSharedPtr<FJsonObject>&
 		Result->SetArrayField(TEXT("failed"), Failed);
 		Result->SetBoolField(TEXT("success"), false);
 	}
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::CoordinationGetStatus(const TSharedPtr<FJsonObject>& /*Params*/)
+{
+	return FMCPBridgeCoordination::BuildStatusResult();
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::CoordinationPrepareMaintenance(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString JobId = OptionalString(Params, TEXT("jobId"), TEXT(""));
+	const FString Reason = OptionalString(Params, TEXT("reason"), TEXT("editor maintenance requested"));
+	const FString Operation = OptionalString(Params, TEXT("operation"), TEXT("rebuild_restart"));
+	const FString Phase = OptionalString(Params, TEXT("phase"), TEXT("preparing"));
+	if (JobId.IsEmpty())
+	{
+		return MCPError(TEXT("jobId is required for editor maintenance coordination"));
+	}
+
+	FString Error;
+	if (!FMCPBridgeCoordination::WriteMaintenanceFile(JobId, Reason, Operation, Phase, Error))
+	{
+		return MCPError(Error);
+	}
+
+	return FMCPBridgeCoordination::BuildStatusResult();
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::CoordinationSaveDirty(const TSharedPtr<FJsonObject>& Params)
+{
+	return SaveDirty(Params);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::CoordinationLiveCodingCompile(const TSharedPtr<FJsonObject>& Params)
+{
+#if PLATFORM_WINDOWS
+	if (!FMCPBridgeCoordination::IsMaintenanceActive())
+	{
+		return MCPError(TEXT("maintenance sentinel is required before Live Coding coordination"));
+	}
+
+	ILiveCodingModule* Live = FModuleManager::GetModulePtr<ILiveCodingModule>(TEXT("LiveCoding"));
+	if (!Live)
+	{
+		return MCPError(TEXT("LiveCoding module not loaded. Enable Live Coding in Editor Preferences or run rebuild/restart instead."));
+	}
+
+	if (!Live->IsEnabledByDefault() && !Live->IsEnabledForSession())
+	{
+		Live->EnableForSession(true);
+	}
+
+	if (!Live->CanEnableForSession())
+	{
+		return MCPError(FString::Printf(
+			TEXT("Live Coding cannot be enabled: %s"), *Live->GetEnableErrorText().ToString()));
+	}
+
+	const bool bWait = OptionalBool(Params, TEXT("wait"), true);
+	const ELiveCodingCompileFlags Flags =
+		bWait ? ELiveCodingCompileFlags::WaitForCompletion : ELiveCodingCompileFlags::None;
+
+	ELiveCodingCompileResult CompileResult = ELiveCodingCompileResult::NotStarted;
+	const bool bAccepted = Live->Compile(Flags, &CompileResult);
+
+	auto CompileResultString = [](ELiveCodingCompileResult R) -> FString
+	{
+		switch (R)
+		{
+			case ELiveCodingCompileResult::Success:            return TEXT("success");
+			case ELiveCodingCompileResult::NoChanges:          return TEXT("no_changes");
+			case ELiveCodingCompileResult::InProgress:         return TEXT("in_progress");
+			case ELiveCodingCompileResult::CompileStillActive: return TEXT("already_compiling");
+			case ELiveCodingCompileResult::NotStarted:         return TEXT("not_started");
+			case ELiveCodingCompileResult::Failure:            return TEXT("failure");
+			case ELiveCodingCompileResult::Cancelled:          return TEXT("cancelled");
+			default:                                           return TEXT("unknown");
+		}
+	};
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("accepted"), bAccepted);
+	Result->SetBoolField(TEXT("waited"), bWait);
+	Result->SetStringField(TEXT("result"), CompileResultString(CompileResult));
+	return MCPResult(Result);
+#else
+	return MCPError(TEXT("Live Coding is only available on Windows. Use rebuild/restart on other platforms."));
+#endif
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::CoordinationRequestExit(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!FMCPBridgeCoordination::IsMaintenanceActive())
+	{
+		return MCPError(TEXT("maintenance sentinel is required before requesting editor exit"));
+	}
+
+	const double DelaySeconds = OptionalNumber(Params, TEXT("delaySeconds"), 0.5);
+	const bool bForce = OptionalBool(Params, TEXT("force"), false);
+
+	Async(EAsyncExecution::Thread, [DelaySeconds, bForce]()
+	{
+		FPlatformProcess::Sleep(FMath::Max(0.0, DelaySeconds));
+		AsyncTask(ENamedThreads::GameThread, [bForce]()
+		{
+			FPlatformMisc::RequestExit(bForce);
+		});
+	});
+
+	auto Result = MCPSuccess();
+	Result->SetNumberField(TEXT("delaySeconds"), DelaySeconds);
+	Result->SetBoolField(TEXT("force"), bForce);
+	Result->SetStringField(TEXT("message"), TEXT("Editor exit requested"));
 	return MCPResult(Result);
 }
 

@@ -12,6 +12,7 @@
 - Dead code: confirm removal; reflection, scripting, assets, config, or external integrations may call code with no static callers
 - Runtime: prefer event/callback/timer-driven flow over polling loops when practical
 - Lifecycle: document ownership and cleanup when runtime relationships change
+- Unreal editor lifecycle: for Client MCP work, follow `Client/AGENTS.md` Editor Reload MCP coordination before closing, rebuilding, or restarting a shared editor.
 - Code shape: avoid all-public types; expose only the surface other modules need
 - Boundary validation: validate objects, pointers, handles, paths, and external payloads at trust boundaries
 

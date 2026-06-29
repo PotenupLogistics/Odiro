@@ -13,6 +13,7 @@ paths:
   - Client/Config/**
   - Client/Content/**
   - Client/Plugins/UEGitPlugin/**
+  - Client/Plugins/LfsLockPoller/**
 entry:
   - id: project-config
     description: Unreal project, targets, modules, and config.
@@ -30,6 +31,7 @@ entry:
       - Client/Content/Widgets
       - Client/Content/Data
       - Client/Plugins/UEGitPlugin
+      - Client/Plugins/LfsLockPoller
   - id: base-widgets
     description: Independent base widget token types, component view adapters, DPI rules, and WBP assets.
     read:
@@ -44,11 +46,13 @@ guardrails:
   - Base widget assets are independent common component surfaces; do not wire them into existing screens during foundation work.
   - Scenario editor widget class references are catalog-owned through Client Content data assets.
   - UEGitPlugin is for editor checkout/lock flow; do not add `filter=lfs` attributes from the plugin UI.
+  - LfsLockPoller is an editor-only guard that reconciles local asset writable state from Git LFS locks without locking or unlocking assets.
 verify:
   - when: Unreal module or config changes
     run:
       - smallest affected Unreal target build
       - source control provider loads as Git LFS 2 when source-control config changes
+      - LfsLockPoller module loads when plugin enablement or lock polling code changes
   - when: UMG assets or BindWidget contracts change
     run:
       - UE_MCP_Bridge widget tree readback for touched assets

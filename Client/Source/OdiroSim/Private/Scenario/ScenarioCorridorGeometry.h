@@ -64,11 +64,23 @@ public:
 	// Surface query tolerance in meters, matching scenario_sample precision.
 	static constexpr double SurfaceQueryToleranceMeters = 0.001;
 
-	// Shared top Z for editor/runtime walkable Corridor surfaces, matched to CityBuildings curb height.
-	static constexpr double DefaultSurfaceTopZCm = 17.0;
+	// Shared top Z for authored walkable Corridor surfaces and object placement.
+	static constexpr double DefaultSurfaceTopZCm = 0.0;
 
-	// Shared vertical offset that drops curb-side road surfaces from walkway top height to road height.
-	static constexpr double DefaultCurbSideSurfaceZOffsetCm = -DefaultSurfaceTopZCm;
+	// Shared vertical offset for semantic curb-side lanes; visual road drops live inside CityBuildings assets.
+	static constexpr double DefaultCurbSideSurfaceZOffsetCm = 0.0;
+
+	// Width of the generated building-side walkable extension in meters.
+	static constexpr double GeneratedCityWalkwayExtensionWidthMeters = 5.0;
+
+	// Width of the generated curb band between walkway and road in meters.
+	static constexpr double GeneratedCityCurbWidthMeters = 0.5;
+
+	// Width of the generated fixed two-lane road band in meters.
+	static constexpr double GeneratedCityTwoLaneRoadWidthMeters = 6.4;
+
+	// Depth of the generated blocked building footprint beyond the walkable extension in meters.
+	static constexpr double GeneratedCityBuildingDepthMeters = 10.0;
 
 	// Rotates a 2D point around the origin by a scenario heading in degrees.
 	static FVector2D RotatePointMeters(const FVector2D& pointMeters, double headingDegrees);

@@ -101,8 +101,9 @@ guardrails:
   - Corridor authoring surface ids are intentionally limited to `walkway`, `road`, and `building`; update Client/Json/environment-catalog.md and ScenarioCorridorSurfaceCatalog defaults together when adding one.
   - ScenarioDocument and ScenarioSample surfaces remain internal editor/materialization shapes unless the task targets them.
   - ScenarioSimulationSubsystem owns runtime grid rebuild after scenario surfaces spawn.
-  - ScenarioSampleWorldSpecAdapter may derive generated city GroundRegions from sampled Corridor layout; authored Corridor surfaces remain the source of truth where they overlap generated padding.
-  - ScenarioCityBlockCatalog owns CityBuildings visual block metadata plus catalog-authored anchor/priority placement hints; generated GroundRegions remain the evaluation and runtime-grid source of truth.
+  - ScenarioSampler accepts corridor side-lane width_m values as resolved params, but generated city semantics use fixed building-extension, curb, and 2-lane road widths for editor/runtime parity.
+  - ScenarioSampleWorldSpecAdapter may derive generated city GroundRegions from sampled Corridor layout; generated side bands remain fixed-width even when authored side-lane width_m values differ.
+  - ScenarioCityBlockCatalog owns CityBuildings visual block metadata plus catalog-authored anchor/priority placement hints; generated GroundRegions remain the evaluation/preview backing geometry while runtime grid classification comes from ScenarioCorridorRuntimeActor semantic lanes.
   - ScenarioCityBlockMaterializer owns shared generated CityBuildings visual placement for ScenarioEditorMap and ScenarioSimulationMap, including center/edge anchor interpretation, surface-height snapping, and curb-triggered road-side composite coverage; visual blocks stay out of authoring selection, runtime actor id lookup, and evaluation context.
   - DeliveryBot runtime grid classifies generated Corridor surfaces through ScenarioCorridorRuntimeActor semantic lane lookup before applying procedural mesh collision overlap.
   - DeliveryBot runtime grid treats ScenarioStaticObstacle-owned collision components as blocking cells independently of collision profile names.

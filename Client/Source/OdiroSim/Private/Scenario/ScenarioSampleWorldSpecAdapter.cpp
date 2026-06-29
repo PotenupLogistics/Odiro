@@ -10,16 +10,8 @@ namespace
 {
 	const double MetersToCentimeters = 100.0;
 	const double RobotEndpointInsetMeters = 1.0;
-	// Road surfaces are the generated city baseline height.
+	// Generated city surfaces share the scenario base plane; CityBuildings assets own visual road drops.
 	const FName GeneratedCityRoadSurfaceId(TEXT("road"));
-	// Width of the generated walkable walkway band added on a building-facing side.
-	const double GeneratedCityWalkwayExtensionWidthMeters = 5.0;
-	// Width of the generated blocking curb band added on a road-facing side.
-	const double GeneratedCityCurbWidthMeters = 0.5;
-	// Width of the generated two-lane road band added on a road-facing side.
-	const double GeneratedCityTwoLaneRoadWidthMeters = 6.4;
-	// Depth of the generated blocked building footprint beyond the walkway extension.
-	const double GeneratedCityBuildingDepthMeters = 10.0;
 
 	// Side of the sampled walkway used when deriving generated city padding bands.
 	enum class EGeneratedCitySide : uint8
@@ -661,9 +653,15 @@ namespace
 		WalkwayBand.SurfaceId = TEXT("walkway");
 		WalkwayBand.RegionType = EScenarioGroundRegionType::Walkable;
 		WalkwayBand.OffsetRangeMeters.MinMeters =
-			FMath::Min(WalkwayEdgeMeters, WalkwayEdgeMeters + (SideSign * GeneratedCityWalkwayExtensionWidthMeters));
+			FMath::Min(
+				WalkwayEdgeMeters,
+				WalkwayEdgeMeters
+					+ (SideSign * FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters));
 		WalkwayBand.OffsetRangeMeters.MaxMeters =
-			FMath::Max(WalkwayEdgeMeters, WalkwayEdgeMeters + (SideSign * GeneratedCityWalkwayExtensionWidthMeters));
+			FMath::Max(
+				WalkwayEdgeMeters,
+				WalkwayEdgeMeters
+					+ (SideSign * FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters));
 		AddGeneratedCityBandGroundRegions(Axis, LayoutEntry, LayoutIndex, WalkwayBand, WorldSpec);
 
 		FGeneratedCityBandSpec BuildingBand;
@@ -674,9 +672,11 @@ namespace
 		BuildingBand.RegionType = EScenarioGroundRegionType::Blocked;
 		BuildingBand.CollisionTag = TEXT("building");
 		const double BuildingNearEdgeMeters =
-			WalkwayEdgeMeters + (SideSign * GeneratedCityWalkwayExtensionWidthMeters);
+			WalkwayEdgeMeters
+			+ (SideSign * FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters);
 		const double BuildingFarEdgeMeters =
-			BuildingNearEdgeMeters + (SideSign * GeneratedCityBuildingDepthMeters);
+			BuildingNearEdgeMeters
+			+ (SideSign * FScenarioCorridorGeometry::GeneratedCityBuildingDepthMeters);
 		BuildingBand.OffsetRangeMeters.MinMeters = FMath::Min(BuildingNearEdgeMeters, BuildingFarEdgeMeters);
 		BuildingBand.OffsetRangeMeters.MaxMeters = FMath::Max(BuildingNearEdgeMeters, BuildingFarEdgeMeters);
 		AddGeneratedCityBandGroundRegions(Axis, LayoutEntry, LayoutIndex, BuildingBand, WorldSpec);
@@ -702,9 +702,13 @@ namespace
 		CurbBand.RegionType = EScenarioGroundRegionType::Blocked;
 		CurbBand.CollisionTag = TEXT("curb");
 		CurbBand.OffsetRangeMeters.MinMeters =
-			FMath::Min(WalkwayEdgeMeters, WalkwayEdgeMeters + (SideSign * GeneratedCityCurbWidthMeters));
+			FMath::Min(
+				WalkwayEdgeMeters,
+				WalkwayEdgeMeters + (SideSign * FScenarioCorridorGeometry::GeneratedCityCurbWidthMeters));
 		CurbBand.OffsetRangeMeters.MaxMeters =
-			FMath::Max(WalkwayEdgeMeters, WalkwayEdgeMeters + (SideSign * GeneratedCityCurbWidthMeters));
+			FMath::Max(
+				WalkwayEdgeMeters,
+				WalkwayEdgeMeters + (SideSign * FScenarioCorridorGeometry::GeneratedCityCurbWidthMeters));
 		AddGeneratedCityBandGroundRegions(Axis, LayoutEntry, LayoutIndex, CurbBand, WorldSpec);
 
 		FGeneratedCityBandSpec RoadBand;
@@ -713,8 +717,11 @@ namespace
 		RoadBand.RegionType = EScenarioGroundRegionType::Penalty;
 		RoadBand.PenaltyKind = TEXT("road");
 		RoadBand.PenaltyCost = 1.0;
-		const double RoadNearEdgeMeters = WalkwayEdgeMeters + (SideSign * GeneratedCityCurbWidthMeters);
-		const double RoadFarEdgeMeters = RoadNearEdgeMeters + (SideSign * GeneratedCityTwoLaneRoadWidthMeters);
+		const double RoadNearEdgeMeters =
+			WalkwayEdgeMeters + (SideSign * FScenarioCorridorGeometry::GeneratedCityCurbWidthMeters);
+		const double RoadFarEdgeMeters =
+			RoadNearEdgeMeters
+			+ (SideSign * FScenarioCorridorGeometry::GeneratedCityTwoLaneRoadWidthMeters);
 		RoadBand.OffsetRangeMeters.MinMeters = FMath::Min(RoadNearEdgeMeters, RoadFarEdgeMeters);
 		RoadBand.OffsetRangeMeters.MaxMeters = FMath::Max(RoadNearEdgeMeters, RoadFarEdgeMeters);
 		AddGeneratedCityBandGroundRegions(Axis, LayoutEntry, LayoutIndex, RoadBand, WorldSpec);

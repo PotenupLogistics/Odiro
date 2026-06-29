@@ -10,7 +10,7 @@
 
 namespace
 {
-	// Preview corridor surface top follows the shared editor/runtime curb alignment height.
+	// Preview corridor surface top follows the shared scenario base plane.
 	const double PreviewSurfaceTopZCm = FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
 	// Non-blocking surfaces are thick enough to overlap curb-side height offsets without vertical holes.
 	const double MinimumSurfacePreviewHeightCm = 20.0;
@@ -152,50 +152,6 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 				-halfWalkwayWidthMeters,
 				halfWalkwayWidthMeters,
 				0.0 });
-
-		double buildingMaxOffsetMeters = -halfWalkwayWidthMeters;
-		for (int32 index = 0; index < corridor.BuildingSide.Num(); ++index)
-		{
-			const FScenarioTemplateLaneRule& laneRule = corridor.BuildingSide[index];
-			const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
-			if (widthMeters <= KINDA_SMALL_NUMBER)
-			{
-				continue;
-			}
-
-			AddOrMergePreviewVisualLane(
-				visualLaneSpecs,
-				FPreviewCorridorVisualLaneSpec{
-					segment.AlongRangeMeters,
-					index == 0 ? FString(TEXT("building_edge")) : FString::Printf(TEXT("building_%d"), index),
-					laneRule.SurfaceId,
-					buildingMaxOffsetMeters - widthMeters,
-					buildingMaxOffsetMeters,
-					0.0 });
-			buildingMaxOffsetMeters -= widthMeters;
-		}
-
-		double curbMinOffsetMeters = halfWalkwayWidthMeters;
-		for (int32 index = 0; index < corridor.CurbSide.Num(); ++index)
-		{
-			const FScenarioTemplateLaneRule& laneRule = corridor.CurbSide[index];
-			const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
-			if (widthMeters <= KINDA_SMALL_NUMBER)
-			{
-				continue;
-			}
-
-			AddOrMergePreviewVisualLane(
-				visualLaneSpecs,
-				FPreviewCorridorVisualLaneSpec{
-					segment.AlongRangeMeters,
-					index == 0 ? FString(TEXT("curb_edge")) : FString::Printf(TEXT("curb_%d"), index),
-					laneRule.SurfaceId,
-					curbMinOffsetMeters,
-					curbMinOffsetMeters + widthMeters,
-					FScenarioCorridorGeometry::DefaultCurbSideSurfaceZOffsetCm });
-			curbMinOffsetMeters += widthMeters;
-		}
 	}
 
 	double cornerFilletRadiusMeters = 0.0;

@@ -2,6 +2,7 @@
 
 #include "Misc/Crc.h"
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
+#include "Scenario/ScenarioCorridorGeometry.h"
 #include "Shared/ScenarioSampleJson.h"
 #include "Shared/ScenarioDocumentJson.h"
 
@@ -116,7 +117,7 @@ namespace
 		return Value.FixedValue;
 	}
 
-	// Matches editor preview projection for corridor geometry so simulation surfaces use the same lane widths.
+	// Resolves geometry params deterministically before fixed generated-city rules consume them as hints.
 	double ScenarioSamplerResolveGeometryNumber(
 		const FScenarioTemplateNumberValue& Value,
 		double DefaultValue,
@@ -315,6 +316,57 @@ namespace
 			});
 	}
 
+	// Adds one semantic lane to both the sampled layout and sampler-only lookup table.
+	void ScenarioSamplerAddLayoutLane(
+		FScenarioSampleLayoutEntry& LayoutEntry,
+		TArray<FScenarioSamplerResolvedLane>& OutLanes,
+		const FScenarioTemplateSegment& Segment,
+		const FString& LaneId,
+		const FString& SurfaceId,
+		double MinOffsetMeters,
+		double MaxOffsetMeters,
+		EScenarioSampleLaneType LaneType)
+	{
+		FScenarioSampleLayoutLane Lane;
+		Lane.LaneId = LaneId;
+		Lane.OffsetRangeMeters.MinMeters = MinOffsetMeters;
+		Lane.OffsetRangeMeters.MaxMeters = MaxOffsetMeters;
+		Lane.SurfaceId = SurfaceId;
+		Lane.Type = LaneType;
+		LayoutEntry.Lanes.Add(Lane);
+
+		FScenarioSamplerResolvedLane Region;
+		Region.SegmentId = Segment.SegmentId;
+		Region.LaneId = Lane.LaneId;
+		Region.SurfaceId = Lane.SurfaceId;
+		Region.AlongRangeMeters = Segment.AlongRangeMeters;
+		Region.OffsetRangeMeters = Lane.OffsetRangeMeters;
+		Region.Type = Lane.Type;
+		OutLanes.Add(Region);
+	}
+
+	// Resolves side-lane width params for repeatability while leaving generated city geometry fixed.
+	bool ScenarioSamplerResolveIgnoredSideWidths(
+		const TArray<FScenarioTemplateLaneRule>& LaneRules,
+		const FString& ParamPath,
+		TMap<FString, FScenarioSampleParamValue>& Params,
+		FString& OutPrimarySurfaceId)
+	{
+		OutPrimarySurfaceId.Reset();
+		for (int32 Index = 0; Index < LaneRules.Num(); ++Index)
+		{
+			const FScenarioTemplateLaneRule& LaneRule = LaneRules[Index];
+			const FString ParamKey = FString::Printf(TEXT("%s[%d].width_m"), *ParamPath, Index);
+			ScenarioSamplerResolveGeometryNumber(LaneRule.WidthMeters, 0.0, ParamKey, Params);
+			if (OutPrimarySurfaceId.IsEmpty() && !LaneRule.SurfaceId.IsEmpty())
+			{
+				OutPrimarySurfaceId = LaneRule.SurfaceId;
+			}
+		}
+
+		return !OutPrimarySurfaceId.IsEmpty();
+	}
+
 	bool ScenarioSamplerResolveLaneOffset(
 		const TArray<FScenarioSamplerResolvedLane>& Lanes,
 		const FString& SegmentId,
@@ -335,10 +387,19 @@ namespace
 			OutAxisOffsetMeters = LocalOffsetMeters;
 			return true;
 		}
-		if (WalkwayLane && NormalizedLane == TEXT("building_edge"))
+		if (NormalizedLane == TEXT("building_edge"))
 		{
-			OutAxisOffsetMeters = WalkwayLane->OffsetRangeMeters.MinMeters + LocalOffsetMeters;
-			return true;
+			if (const FScenarioSamplerResolvedLane* BuildingLane =
+				ScenarioSamplerFindLane(Lanes, SegmentId, TEXT("building_edge")))
+			{
+				OutAxisOffsetMeters = BuildingLane->OffsetRangeMeters.MaxMeters + LocalOffsetMeters;
+				return true;
+			}
+			if (WalkwayLane)
+			{
+				OutAxisOffsetMeters = WalkwayLane->OffsetRangeMeters.MinMeters + LocalOffsetMeters;
+				return true;
+			}
 		}
 		if (WalkwayLane && NormalizedLane == TEXT("curb_edge"))
 		{
@@ -379,86 +440,85 @@ namespace
 			LayoutEntry.SegmentId = Segment.SegmentId;
 			LayoutEntry.AlongRangeMeters = Segment.AlongRangeMeters;
 
-			FScenarioSampleLayoutLane WalkwayLane;
-			WalkwayLane.LaneId = TEXT("walkway");
-			WalkwayLane.OffsetRangeMeters.MinMeters = -HalfWalkwayWidthMeters;
-			WalkwayLane.OffsetRangeMeters.MaxMeters = HalfWalkwayWidthMeters;
-			WalkwayLane.SurfaceId = ScenarioSamplerResolveString(
+			const FString WalkwaySurfaceId = ScenarioSamplerResolveString(
 				Segment.ReplacedBySurfaceId,
 				TEXT("walkway"),
 				FString::Printf(TEXT("corridor.segments.%s.replaced_by"), *Segment.SegmentId),
 				Seed,
 				Params);
-			WalkwayLane.Type = ScenarioSamplerSurfaceToLaneType(WalkwayLane.SurfaceId);
-			LayoutEntry.Lanes.Add(WalkwayLane);
+			ScenarioSamplerAddLayoutLane(
+				LayoutEntry,
+				OutLanes,
+				Segment,
+				TEXT("walkway"),
+				WalkwaySurfaceId,
+				-HalfWalkwayWidthMeters,
+				HalfWalkwayWidthMeters,
+				ScenarioSamplerSurfaceToLaneType(WalkwaySurfaceId));
 
-			FScenarioSamplerResolvedLane WalkwayRegion;
-			WalkwayRegion.SegmentId = Segment.SegmentId;
-			WalkwayRegion.LaneId = WalkwayLane.LaneId;
-			WalkwayRegion.SurfaceId = WalkwayLane.SurfaceId;
-			WalkwayRegion.AlongRangeMeters = Segment.AlongRangeMeters;
-			WalkwayRegion.OffsetRangeMeters = WalkwayLane.OffsetRangeMeters;
-			WalkwayRegion.Type = WalkwayLane.Type;
-			OutLanes.Add(WalkwayRegion);
-
-			double BuildingMaxOffset = -HalfWalkwayWidthMeters;
-			for (int32 Index = 0; Index < ScenarioDocument.Corridor.BuildingSide.Num(); ++Index)
+			FString BuildingSurfaceId;
+			if (ScenarioSamplerResolveIgnoredSideWidths(
+				ScenarioDocument.Corridor.BuildingSide,
+				TEXT("corridor.building_side"),
+				Params,
+				BuildingSurfaceId))
 			{
-				const FScenarioTemplateLaneRule& LaneRule = ScenarioDocument.Corridor.BuildingSide[Index];
-				const FString ParamKey = FString::Printf(TEXT("corridor.building_side[%d].width_m"), Index);
-				const double WidthMeters = ScenarioSamplerResolveGeometryNumber(LaneRule.WidthMeters, 0.0, ParamKey, Params);
-				if (WidthMeters <= KINDA_SMALL_NUMBER)
-				{
-					continue;
-				}
-
-				FScenarioSampleLayoutLane Lane;
-				Lane.LaneId = Index == 0 ? TEXT("building_edge") : FString::Printf(TEXT("building_%d"), Index);
-				Lane.OffsetRangeMeters.MinMeters = BuildingMaxOffset - WidthMeters;
-				Lane.OffsetRangeMeters.MaxMeters = BuildingMaxOffset;
-				Lane.SurfaceId = LaneRule.SurfaceId;
-				Lane.Type = ScenarioSamplerSurfaceToLaneType(Lane.SurfaceId);
-				LayoutEntry.Lanes.Add(Lane);
-				BuildingMaxOffset -= WidthMeters;
-
-				FScenarioSamplerResolvedLane Region;
-				Region.SegmentId = Segment.SegmentId;
-				Region.LaneId = Lane.LaneId;
-				Region.SurfaceId = Lane.SurfaceId;
-				Region.AlongRangeMeters = Segment.AlongRangeMeters;
-				Region.OffsetRangeMeters = Lane.OffsetRangeMeters;
-				Region.Type = Lane.Type;
-				OutLanes.Add(Region);
+				const double ExtensionInnerEdgeMeters = -HalfWalkwayWidthMeters;
+				const double ExtensionOuterEdgeMeters =
+					ExtensionInnerEdgeMeters
+					- FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters;
+				const double BuildingOuterEdgeMeters =
+					ExtensionOuterEdgeMeters - FScenarioCorridorGeometry::GeneratedCityBuildingDepthMeters;
+				ScenarioSamplerAddLayoutLane(
+					LayoutEntry,
+					OutLanes,
+					Segment,
+					TEXT("building_walkway_extension"),
+					TEXT("walkway"),
+					ExtensionOuterEdgeMeters,
+					ExtensionInnerEdgeMeters,
+					EScenarioSampleLaneType::Walkable);
+				ScenarioSamplerAddLayoutLane(
+					LayoutEntry,
+					OutLanes,
+					Segment,
+					TEXT("building_edge"),
+					BuildingSurfaceId,
+					BuildingOuterEdgeMeters,
+					ExtensionOuterEdgeMeters,
+					ScenarioSamplerSurfaceToLaneType(BuildingSurfaceId));
 			}
 
-			double CurbMinOffset = HalfWalkwayWidthMeters;
-			for (int32 Index = 0; Index < ScenarioDocument.Corridor.CurbSide.Num(); ++Index)
+			FString RoadSurfaceId;
+			if (ScenarioSamplerResolveIgnoredSideWidths(
+				ScenarioDocument.Corridor.CurbSide,
+				TEXT("corridor.curb_side"),
+				Params,
+				RoadSurfaceId))
 			{
-				const FScenarioTemplateLaneRule& LaneRule = ScenarioDocument.Corridor.CurbSide[Index];
-				const FString ParamKey = FString::Printf(TEXT("corridor.curb_side[%d].width_m"), Index);
-				const double WidthMeters = ScenarioSamplerResolveGeometryNumber(LaneRule.WidthMeters, 0.0, ParamKey, Params);
-				if (WidthMeters <= KINDA_SMALL_NUMBER)
-				{
-					continue;
-				}
-
-				FScenarioSampleLayoutLane Lane;
-				Lane.LaneId = Index == 0 ? TEXT("curb_edge") : FString::Printf(TEXT("curb_%d"), Index);
-				Lane.OffsetRangeMeters.MinMeters = CurbMinOffset;
-				Lane.OffsetRangeMeters.MaxMeters = CurbMinOffset + WidthMeters;
-				Lane.SurfaceId = LaneRule.SurfaceId;
-				Lane.Type = ScenarioSamplerSurfaceToLaneType(Lane.SurfaceId);
-				LayoutEntry.Lanes.Add(Lane);
-				CurbMinOffset += WidthMeters;
-
-				FScenarioSamplerResolvedLane Region;
-				Region.SegmentId = Segment.SegmentId;
-				Region.LaneId = Lane.LaneId;
-				Region.SurfaceId = Lane.SurfaceId;
-				Region.AlongRangeMeters = Segment.AlongRangeMeters;
-				Region.OffsetRangeMeters = Lane.OffsetRangeMeters;
-				Region.Type = Lane.Type;
-				OutLanes.Add(Region);
+				const double CurbInnerEdgeMeters = HalfWalkwayWidthMeters;
+				const double CurbOuterEdgeMeters =
+					CurbInnerEdgeMeters + FScenarioCorridorGeometry::GeneratedCityCurbWidthMeters;
+				const double RoadOuterEdgeMeters =
+					CurbOuterEdgeMeters + FScenarioCorridorGeometry::GeneratedCityTwoLaneRoadWidthMeters;
+				ScenarioSamplerAddLayoutLane(
+					LayoutEntry,
+					OutLanes,
+					Segment,
+					TEXT("curb_edge"),
+					RoadSurfaceId,
+					CurbInnerEdgeMeters,
+					CurbOuterEdgeMeters,
+					EScenarioSampleLaneType::Blocked);
+				ScenarioSamplerAddLayoutLane(
+					LayoutEntry,
+					OutLanes,
+					Segment,
+					TEXT("road_2lane"),
+					RoadSurfaceId,
+					CurbOuterEdgeMeters,
+					RoadOuterEdgeMeters,
+					EScenarioSampleLaneType::Penalty);
 			}
 
 			OutLayout.Add(LayoutEntry);

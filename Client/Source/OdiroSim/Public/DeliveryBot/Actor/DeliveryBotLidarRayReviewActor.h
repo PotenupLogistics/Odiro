@@ -57,7 +57,7 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	// Instanced beam component that owns replay LiDAR rays with a hit result.
+	// Instanced beam component that owns replay LiDAR rays with a hit result. 
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
 	TObjectPtr<UInstancedStaticMeshComponent> HitRayInstances;
 

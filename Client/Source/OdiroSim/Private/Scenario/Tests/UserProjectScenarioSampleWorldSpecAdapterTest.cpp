@@ -176,16 +176,16 @@ bool FUserProjectScenarioSampleWorldSpecAdapterTest::RunTest(const FString& para
 	}
 
 	const FScenarioRuntimeCorridorSpec& runtimeCorridor = compileResult.WorldSpec.Corridors[0];
-	TestEqual(TEXT("generated ground region count"), compileResult.WorldSpec.GroundRegions.Num(), 4);
+	TestEqual(TEXT("generated ground region count"), compileResult.WorldSpec.GroundRegions.Num(), 3);
 	TestTrue(
-		TEXT("generated walkway extension"),
+		TEXT("generated building-side expansion"),
 		HasGeneratedGroundRegion(
 			compileResult.WorldSpec.GroundRegions,
-			TEXT("walkway_extension"),
+			TEXT("building_expansion"),
 			TEXT("walkway"),
 			EScenarioGroundRegionType::Walkable));
-	TestTrue(
-		TEXT("generated building footprint"),
+	TestFalse(
+		TEXT("generated building footprint is not a GroundRegion"),
 		HasGeneratedGroundRegion(
 			compileResult.WorldSpec.GroundRegions,
 			TEXT("building"),

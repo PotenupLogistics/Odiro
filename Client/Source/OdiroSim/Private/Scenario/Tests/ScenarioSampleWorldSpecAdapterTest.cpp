@@ -101,6 +101,92 @@ namespace
 		return Document;
 	}
 
+	// Creates a two-segment right-angle sample whose building side encloses one rectangular city block.
+	FScenarioSampleDocument MakeRightAngleBuildingExpansionSampleDocument()
+	{
+		FScenarioSampleDocument Document;
+		Document.Sample.SampleId = TEXT("000043");
+		Document.Sample.ScenarioId = TEXT("right_angle_building_expansion_sample_000043");
+		Document.Sample.Source.TemplateRef = TEXT("templates/right_angle_building_expansion.template.json");
+		Document.Sample.Source.TemplateHash = TEXT("sha256:templatehash0043");
+		Document.Sample.Source.ProfileRef = TEXT("experiments/right_angle/profile.json");
+		Document.Sample.Source.ProfileHash = TEXT("sha256:profilehash0043");
+		Document.Sample.Source.SettingRef = TEXT("experiments/right_angle/setting.json");
+		Document.Sample.Source.SettingHash = TEXT("sha256:settinghash0043");
+		Document.Sample.Source.Seed = 4343;
+		Document.Sample.Source.GeneratorVersion = TEXT("0.1.0");
+
+		FScenarioSampleParamValue TimeLimit;
+		TimeLimit.Type = EScenarioSampleParamValueType::Float;
+		TimeLimit.FloatValue = 45.0;
+		Document.Scenario.Params.Add(TEXT("max_duration_s"), TimeLimit);
+
+		FScenarioSampleSemantic& Semantic = Document.Scenario.Semantic;
+		Semantic.RouteAxis.OriginXYMeters = FVector2D::ZeroVector;
+		Semantic.RouteAxis.HeadingDegrees = 0.0;
+		Semantic.RouteAxis.PointsMeters = {
+			FVector2D(0.0, 40.0),
+			FVector2D(60.0, 40.0),
+			FVector2D(60.0, 0.0)
+		};
+		Semantic.RouteAxis.LengthMeters = 100.0;
+
+		Semantic.Robot.Start.SegmentId = TEXT("east_straight");
+		Semantic.Robot.Start.AlongMeters = 1.0;
+		Semantic.Robot.Start.OffsetMeters = 0.0;
+		Semantic.Robot.Start.LaneId = TEXT("walkway");
+		Semantic.Robot.Start.HeadingDegrees = 0.0;
+		Semantic.Robot.Start.SourceAnchorType = EScenarioTemplateRobotAnchorType::Entry;
+		Semantic.Robot.Goal.SegmentId = TEXT("south_straight");
+		Semantic.Robot.Goal.AlongMeters = 99.0;
+		Semantic.Robot.Goal.OffsetMeters = 0.0;
+		Semantic.Robot.Goal.LaneId = TEXT("walkway");
+		Semantic.Robot.Goal.HeadingDegrees = -90.0;
+		Semantic.Robot.Goal.SourceAnchorType = EScenarioTemplateRobotAnchorType::Exit;
+
+		FScenarioSampleLayoutLane WalkwayLane;
+		WalkwayLane.LaneId = TEXT("walkway");
+		WalkwayLane.OffsetRangeMeters.MinMeters = -1.5;
+		WalkwayLane.OffsetRangeMeters.MaxMeters = 1.5;
+		WalkwayLane.SurfaceId = TEXT("walkway");
+		WalkwayLane.Type = EScenarioSampleLaneType::Walkable;
+
+		FScenarioSampleLayoutLane BuildingExpansionLane;
+		BuildingExpansionLane.LaneId = TEXT("building_walkway_extension");
+		BuildingExpansionLane.OffsetRangeMeters.MinMeters = -6.5;
+		BuildingExpansionLane.OffsetRangeMeters.MaxMeters = -1.5;
+		BuildingExpansionLane.SurfaceId = TEXT("walkway");
+		BuildingExpansionLane.Type = EScenarioSampleLaneType::Walkable;
+
+		FScenarioSampleLayoutLane BuildingLane;
+		BuildingLane.LaneId = TEXT("building_edge");
+		BuildingLane.OffsetRangeMeters.MinMeters = -16.5;
+		BuildingLane.OffsetRangeMeters.MaxMeters = -6.5;
+		BuildingLane.SurfaceId = TEXT("building");
+		BuildingLane.Type = EScenarioSampleLaneType::Blocked;
+
+		FScenarioSampleLayoutEntry EastLayoutEntry;
+		EastLayoutEntry.AlongRangeMeters.StartMeters = 0.0;
+		EastLayoutEntry.AlongRangeMeters.EndMeters = 60.0;
+		EastLayoutEntry.SegmentId = TEXT("east_straight");
+		EastLayoutEntry.Lanes.Add(WalkwayLane);
+		EastLayoutEntry.Lanes.Add(BuildingExpansionLane);
+		EastLayoutEntry.Lanes.Add(BuildingLane);
+		Semantic.Layout.Add(EastLayoutEntry);
+
+		FScenarioSampleLayoutEntry SouthLayoutEntry;
+		SouthLayoutEntry.AlongRangeMeters.StartMeters = 60.0;
+		SouthLayoutEntry.AlongRangeMeters.EndMeters = 100.0;
+		SouthLayoutEntry.SegmentId = TEXT("south_straight");
+		SouthLayoutEntry.Lanes.Add(WalkwayLane);
+		SouthLayoutEntry.Lanes.Add(BuildingExpansionLane);
+		SouthLayoutEntry.Lanes.Add(BuildingLane);
+		Semantic.Layout.Add(SouthLayoutEntry);
+
+		Semantic.Summary.TotalLengthMeters = 100.0;
+		return Document;
+	}
+
 	// Checks whether adapter validation emitted the expected diagnostic code.
 	bool HasAdapterDiagnostic(
 		const FScenarioCompileResult& Result,
@@ -247,6 +333,42 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	}
 
 	TestFalse(TEXT("spec hash populated"), Result.WorldSpec.SpecHash.IsEmpty());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSampleWorldSpecAdapterRightAngleBuildingExpansionTest,
+	"OdiroSim.ScenarioSample.WorldSpecAdapter.RightAngleBuildingExpansion",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSampleWorldSpecAdapterRightAngleBuildingExpansionTest::RunTest(const FString& Parameters)
+{
+	const FScenarioSampleDocument Document = MakeRightAngleBuildingExpansionSampleDocument();
+	const FScenarioCompileResult Result =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);
+
+	TestTrue(TEXT("right-angle sample adapts"), Result.bSuccess);
+	TestEqual(TEXT("one generated building-side expansion"), Result.WorldSpec.GroundRegions.Num(), 1);
+	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	{
+		return false;
+	}
+
+	const FScenarioGroundRegionSpec& ExpansionRegion = Result.WorldSpec.GroundRegions[0];
+	TestEqual(
+		TEXT("building-side expansion id"),
+		ExpansionRegion.RegionId,
+		FString(TEXT("generated_city_lower_building_expansion_00_00")));
+	TestEqual(TEXT("building-side expansion surface"), ExpansionRegion.SurfaceId, FString(TEXT("walkway")));
+	TestEqual(
+		TEXT("building-side expansion region type"),
+		static_cast<int32>(ExpansionRegion.RegionType),
+		static_cast<int32>(EScenarioGroundRegionType::Walkable));
+	TestEqual(TEXT("building-side expansion center x cm"), ExpansionRegion.Center.X, 3000.0);
+	TestEqual(TEXT("building-side expansion center y cm"), ExpansionRegion.Center.Y, 2000.0);
+	TestEqual(TEXT("building-side expansion length cm"), ExpansionRegion.Size.X, 6000.0);
+	TestEqual(TEXT("building-side expansion width cm"), ExpansionRegion.Size.Y, 4000.0);
+	TestEqual(TEXT("building-side expansion yaw"), ExpansionRegion.YawDegrees, 0.0);
 	return true;
 }
 

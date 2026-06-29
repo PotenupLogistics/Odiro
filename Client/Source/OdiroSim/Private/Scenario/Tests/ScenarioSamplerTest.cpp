@@ -166,15 +166,15 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 	}
 
 	TestEqual(TEXT("runtime corridor lane count"), RuntimeCorridor.Layout[0].Lanes.Num(), 5);
-	TestEqual(TEXT("generated ground regions"), CompileResult.WorldSpec.GroundRegions.Num(), 4);
-	TestTrue(TEXT("generated walkway extension"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+	TestEqual(TEXT("generated ground regions"), CompileResult.WorldSpec.GroundRegions.Num(), 3);
+	TestTrue(TEXT("generated building-side expansion"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
 		[](const FScenarioGroundRegionSpec& Region)
 		{
-			return Region.RegionId.Contains(TEXT("walkway_extension"))
+			return Region.RegionId.Contains(TEXT("building_expansion"))
 				&& Region.SurfaceId == TEXT("walkway")
 				&& Region.RegionType == EScenarioGroundRegionType::Walkable;
 		}));
-	TestTrue(TEXT("generated building footprint"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+	TestFalse(TEXT("generated building footprint is not a GroundRegion"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
 		[](const FScenarioGroundRegionSpec& Region)
 		{
 			return Region.RegionId.Contains(TEXT("building"))

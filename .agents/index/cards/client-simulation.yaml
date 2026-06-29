@@ -114,7 +114,7 @@ guardrails:
   - Scenario editor viewport navigation input is owned by ScenarioEditorController with Enhanced Input assets under Client/Content/Input; keep mouse capture, selection, and cancel bindings explicit.
   - ScenarioEditorLaunchSubsystem owns ScenarioEditorMap travel gating for shared visual asset preload before the viewport becomes visible.
   - SimulatorProcessSubsystem gates project-run ScenarioSimulationMap travel behind the same shared visual asset preload when launching from StartupMap.
-  - ScenarioViewportPresentation owns shared scenario map preload assets and grey background post-process application for editor cameras, runtime unbound post-process volumes, and preview SceneCapture components.
+  - ScenarioViewportPresentation owns shared scenario map preload assets, the global grey-background enable switch, and grey background post-process application for editor cameras, runtime unbound post-process volumes, and preview SceneCapture components.
   - Scenario editor robot Start/Goal markers use authoring-subsystem proxy actors for selection and a ScenarioEditorController-owned viewport overlay below WBP_MainMenu for visible markers.
   - Scenario editor Corridor vertex/segment handles use invisible proxy actors for selection and transform gizmo ownership, with ScenarioEditorRouteMarkerOverlayWidget painting and hit-testing the visible screen-space grips.
   - Scenario simulation robot Start/Goal markers are runtime overlay items owned by ScenarioSimulationSubsystem; simulation no longer spawns visible BP_StartPoint/BP_GoalPoint marker actors.

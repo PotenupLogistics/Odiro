@@ -1858,7 +1858,8 @@ ASceneCapture2D* UScenarioReplaySubsystem::SpawnReplayCaptureActor()
 	CaptureComponent->bAlwaysPersistRenderingState = false;
 	CaptureComponent->bExcludeFromSceneTextureExtents = true;
 	CaptureComponent->bUseRayTracingIfEnabled = false;
-	if (!FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(CaptureComponent, 1.0f))
+	if (FScenarioViewportPresentation::bUseGreyBackgroundPostProcess
+		&& !FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(CaptureComponent, 1.0f))
 	{
 		UE_LOG(
 			LogScenarioReplay,

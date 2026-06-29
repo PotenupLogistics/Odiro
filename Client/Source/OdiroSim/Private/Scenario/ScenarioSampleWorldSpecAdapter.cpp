@@ -11,7 +11,7 @@ namespace
 	const double MetersToCentimeters = 100.0;
 	const double RobotEndpointInsetMeters = 1.0;
 	// Road surfaces are the generated city baseline height.
-	const FName RoadSurfaceId(TEXT("road"));
+	const FName GeneratedCityRoadSurfaceId(TEXT("road"));
 	// Width of the generated walkable walkway band added on a building-facing side.
 	const double GeneratedCityWalkwayExtensionWidthMeters = 5.0;
 	// Width of the generated blocking curb band added on a road-facing side.
@@ -88,7 +88,7 @@ namespace
 	// Resolves generated city GroundRegion top height from its surface vocabulary.
 	double ResolveGeneratedCitySurfaceTopZCm(const FString& SurfaceId)
 	{
-		return FName(*SurfaceId) == RoadSurfaceId
+		return FName(*SurfaceId) == GeneratedCityRoadSurfaceId
 			? 0.0
 			: FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
 	}

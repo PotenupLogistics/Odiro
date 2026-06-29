@@ -14,18 +14,18 @@ class TemplateJsonWriter:
         """Return a deterministic scenario object for the selected alpha pattern."""
         corridor = self._corridor(plan)
         obstacle_count = self._obstacle_count(plan)
-        obstacle_prop = self._obstacle_prop(plan)
+        obstacle_props = self._obstacle_props(plan, obstacle_count)
         placements = []
         target_segments = self._target_obstacle_segments(corridor, plan)
         segment_id, segment_range = target_segments[0]
-        if obstacle_count == 2 and len(target_segments) == 1:
-            placements.extend(self._gate_pair_placements(segment_id, segment_range, prop=obstacle_prop))
+        if plan.requested_gate_obstacle_count == 2 and obstacle_count == 2 and len(target_segments) == 1:
+            placements.extend(self._gate_pair_placements(segment_id, segment_range, props=obstacle_props))
         elif obstacle_count > 0:
             placements.extend(
                 self._fixed_obstacle_placements_across_segments(
                     obstacle_count,
                     target_segments,
-                    prop=obstacle_prop,
+                    props=obstacle_props,
                     explicit_blocking=plan.explicit_blocking,
                     requested_counts=plan.requested_obstacle_counts,
                 )
@@ -261,6 +261,8 @@ class TemplateJsonWriter:
             return 0
         if requested_count is not None:
             return requested_count
+        if plan.requested_props:
+            return len(plan.requested_props)
         return 1 if plan.include_obstacle else 0
 
     def _requested_obstacle_count(self, plan: TemplatePlan) -> int | None:
@@ -271,12 +273,29 @@ class TemplateJsonWriter:
             return max(0, int(plan.requested_gate_obstacle_count))
         return None
 
-    def _obstacle_prop(self, plan: TemplatePlan) -> str:
-        """Return a catalog-owned fallback obstacle prop for generated placements."""
+    def _obstacle_props(self, plan: TemplatePlan, count: int) -> list[str]:
+        """Return catalog-owned obstacle props for generated placements."""
+        if count <= 0:
+            return []
+        valid_props = self._requested_valid_props(plan)
+        if not valid_props:
+            valid_props = ["obstacle.road_cone_01"]
+        return [valid_props[index % len(valid_props)] for index in range(count)]
+
+    def _requested_valid_props(self, plan: TemplatePlan) -> list[str]:
+        """Return requested props that are present in the static obstacle catalog."""
+        allowed_props = get_allowed_static_obstacle_prop_ids()
+        valid_props = [
+            requested
+            for requested in (normalize_legacy_static_obstacle_prop_id(prop) for prop in plan.requested_props)
+            if isinstance(requested, str) and requested in allowed_props
+        ]
+        if valid_props:
+            return valid_props
         requested = normalize_legacy_static_obstacle_prop_id(plan.requested_prop)
-        if isinstance(requested, str) and requested in get_allowed_static_obstacle_prop_ids():
-            return requested
-        return "obstacle.road_cone_01"
+        if isinstance(requested, str) and requested in allowed_props:
+            return [requested]
+        return []
 
     def _fixed_obstacle_placements(
         self,
@@ -284,7 +303,7 @@ class TemplateJsonWriter:
         segment_id: str,
         segment_range: tuple[float, float],
         *,
-        prop: str,
+        props: list[str],
         explicit_blocking: bool,
         start_index: int = 0,
     ) -> list[dict[str, Any]]:
@@ -294,6 +313,7 @@ class TemplateJsonWriter:
         for index in range(count):
             global_index = start_index + index
             offset_center = offset_centers[global_index % len(offset_centers)]
+            prop = self._prop_at(props, global_index)
             placement: dict[str, Any] = {
                 "kind": "fixed",
                 "id": self._obstacle_id(prop, global_index),
@@ -316,7 +336,7 @@ class TemplateJsonWriter:
         count: int,
         target_segments: list[tuple[str, tuple[float, float]]],
         *,
-        prop: str,
+        props: list[str],
         explicit_blocking: bool,
         requested_counts: list[int],
     ) -> list[dict[str, Any]]:
@@ -332,7 +352,7 @@ class TemplateJsonWriter:
                     segment_count,
                     segment_id,
                     segment_range,
-                    prop=prop,
+                    props=props,
                     explicit_blocking=explicit_blocking,
                     start_index=start_index,
                 )
@@ -358,15 +378,17 @@ class TemplateJsonWriter:
         segment_id: str,
         segment_range: tuple[float, float],
         *,
-        prop: str,
+        props: list[str],
     ) -> list[dict[str, Any]]:
         """Return exactly one left/right gate pair for prompts that request two obstacles."""
         along_range = self._obstacle_along_range(segment_range, width_m=0.4)
+        left_prop = self._prop_at(props, 0)
+        right_prop = self._prop_at(props, 1)
         return [
             {
                 "kind": "fixed",
                 "id": "gate_panel_left",
-                "prop": prop,
+                "prop": left_prop,
                 "at": {
                     "segment": segment_id,
                     "along_m": along_range,
@@ -379,7 +401,7 @@ class TemplateJsonWriter:
             {
                 "kind": "fixed",
                 "id": "gate_panel_right",
-                "prop": prop,
+                "prop": right_prop,
                 "at": {
                     "segment": segment_id,
                     "along_m": along_range,
@@ -390,6 +412,12 @@ class TemplateJsonWriter:
                 "allow_blocking": False,
             },
         ]
+
+    def _prop_at(self, props: list[str], index: int) -> str:
+        """Return the requested prop at index or a catalog-safe fallback."""
+        if props:
+            return props[index % len(props)]
+        return "obstacle.road_cone_01"
 
     def _target_obstacle_segment(self, corridor: dict[str, Any]) -> tuple[str, tuple[float, float]]:
         """Return a valid segment anchor for generated fallback obstacles."""

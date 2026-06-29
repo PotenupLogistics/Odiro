@@ -10,7 +10,7 @@ SPEC_CONTEXT_ALLOWLIST: tuple[str, ...] = (
     "Agents/docs/api/V2_AGENT_APIS.md",
     "Agents/docs/agents/V2_AGENT_ARCHITECTURE.md",
     "Agents/docs/agents/V2_LANGGRAPH_DESIGN.md",
-    "Agents/docs/environment/environment-catalog.md",
+    "Client/Json/environment-catalog.md",
 )
 
 # Prompt-level precedence notice injected before the loaded spec bundle.

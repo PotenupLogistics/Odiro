@@ -75,7 +75,7 @@ def test_provider_research_handoff_and_architecture_docs_are_in_expected_locatio
     assert (DOCS / "handoff" / "UE_SETUP_PAIR_HANDOFF_PACKAGE.md").exists()
     assert (DOCS / "architecture" / "UE_CONTRACT_MIGRATION_PLAN.md").exists()
     assert (DOCS / "environment" / "ENVIRONMENT_PARAMETER_SPEC.md").exists()
-    assert (DOCS / "environment" / "environment-catalog.md").exists()
+    assert not (DOCS / "environment" / "environment-catalog.md").exists()
     assert (DOCS / "policy" / "POLICY_SOURCE_REGISTRY.md").exists()
     assert (DOCS / "rag" / "RAG_RETRIEVAL_STRATEGY.md").exists()
     assert (DOCS / "tooling" / "HARNESS_GUIDE.md").exists()
@@ -92,7 +92,7 @@ def test_docs_readme_links_current_v2_agent_documents() -> None:
         "api/V2_AGENT_APIS.md",
         "agents/V2_AGENT_ARCHITECTURE.md",
         "agents/V2_LANGGRAPH_DESIGN.md",
-        "environment/environment-catalog.md",
+        "../../Client/Json/environment-catalog.md",
     ]:
         assert term in text
 
@@ -101,13 +101,12 @@ def test_docs_readme_links_current_v2_agent_documents() -> None:
     assert ("Scenario / " + "Episode Terminology") not in text
 
 
-def test_environment_catalog_is_marked_temporary_ai_side_catalog() -> None:
-    text = _read(DOCS / "environment" / "environment-catalog.md")
+def test_environment_catalog_temporary_agent_copy_is_removed() -> None:
+    docs_readme = _read(DOCS / "README.md")
 
-    assert "Temporary AI-side catalog" in text
-    assert "contracts/specs/" in text
-    assert "surface id" in text
-    assert "persona id" in text
+    assert not (DOCS / "environment" / "environment-catalog.md").exists()
+    assert "Temporary AI-side catalog" not in docs_readme
+    assert "Agents/docs/environment/environment-catalog.md" not in docs_readme
 
 
 def test_docs_inventory_tests_do_not_import_live_provider_sdks() -> None:

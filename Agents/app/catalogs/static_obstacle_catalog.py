@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -10,9 +11,26 @@ from typing import Any
 CATALOG_PATH = Path(__file__).with_name("static_obstacle_catalog.json")
 
 
+@dataclass(frozen=True)
+class StaticObstaclePropMention:
+    """A static obstacle catalog mention found in normalized prompt text."""
+
+    prop_id: str
+    term: str
+    start: int
+    end: int
+
+
 def _normalize_key(value: str) -> str:
     lowered = value.strip().lower()
     return re.sub(r"[\s\-.]+", "_", lowered)
+
+
+def static_obstacle_search_text(value: str) -> str:
+    """Return a prompt search key that keeps catalog aliases comparable."""
+    normalized = _normalize_key(value)
+    searchable = re.sub(r"[^0-9a-z_가-힣]+", "_", normalized)
+    return re.sub(r"_+", "_", searchable).strip("_")
 
 
 @lru_cache(maxsize=1)
@@ -60,6 +78,54 @@ def resolve_static_obstacle_prop_id(value: Any, *, default: str | None = None) -
         if compact == alias.replace("_", ""):
             return prop_id
     return default
+
+
+@lru_cache(maxsize=1)
+def _search_terms() -> tuple[tuple[str, str], ...]:
+    """Return normalized alias search terms mapped to canonical prop ids."""
+    terms: dict[str, str] = {}
+    for alias, prop_id in _alias_index().items():
+        term = static_obstacle_search_text(alias)
+        if len(term.replace("_", "")) < 2:
+            continue
+        terms[term] = prop_id
+    return tuple(sorted(terms.items(), key=lambda item: len(item[0]), reverse=True))
+
+
+def _term_spans(search_text: str, term: str) -> list[tuple[int, int]]:
+    """Return non-empty spans for one normalized alias term."""
+    if not term:
+        return []
+    if re.search(r"[가-힣]", term):
+        spans: list[tuple[int, int]] = []
+        start = search_text.find(term)
+        while start >= 0:
+            spans.append((start, start + len(term)))
+            start = search_text.find(term, start + 1)
+        return spans
+    pattern = re.compile(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])")
+    return [match.span() for match in pattern.finditer(search_text)]
+
+
+def _overlaps_selected(span: tuple[int, int], selected: list[StaticObstaclePropMention]) -> bool:
+    """Return whether a candidate span overlaps a previously selected mention."""
+    return any(span[0] < mention.end and mention.start < span[1] for mention in selected)
+
+
+def find_static_obstacle_prop_mentions(text: str) -> list[StaticObstaclePropMention]:
+    """Return catalog prop mentions in the order they appear in prompt text."""
+    search_text = static_obstacle_search_text(text)
+    candidates: list[StaticObstaclePropMention] = []
+    for term, prop_id in _search_terms():
+        for start, end in _term_spans(search_text, term):
+            candidates.append(StaticObstaclePropMention(prop_id=prop_id, term=term, start=start, end=end))
+    candidates.sort(key=lambda mention: (mention.start, -(mention.end - mention.start), mention.term))
+    selected: list[StaticObstaclePropMention] = []
+    for mention in candidates:
+        if _overlaps_selected((mention.start, mention.end), selected):
+            continue
+        selected.append(mention)
+    return selected
 
 
 def static_obstacle_catalog_prompt_section() -> str:

@@ -10,6 +10,8 @@ namespace
 {
 	const double MetersToCentimeters = 100.0;
 	const double RobotEndpointInsetMeters = 1.0;
+	// Road surfaces are the generated city baseline height.
+	const FName RoadSurfaceId(TEXT("road"));
 	// Width of the generated walkable walkway band added on a building-facing side.
 	const double GeneratedCityWalkwayExtensionWidthMeters = 5.0;
 	// Width of the generated blocking curb band added on a road-facing side.
@@ -81,6 +83,14 @@ namespace
 		Diagnostic.Code = Code;
 		Diagnostic.Message = Message;
 		Result.Diagnostics.Add(Diagnostic);
+	}
+
+	// Resolves generated city GroundRegion top height from its surface vocabulary.
+	double ResolveGeneratedCitySurfaceTopZCm(const FString& SurfaceId)
+	{
+		return FName(*SurfaceId) == RoadSurfaceId
+			? 0.0
+			: FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
 	}
 
 	EScenarioCompileDiagnosticSeverity ToCompileSeverity(EScenarioSchemaDiagnosticSeverity Severity)
@@ -232,8 +242,8 @@ namespace
 		return false;
 	}
 
-	// Resolves the surface height at a sampled pose so actors spawn on the matching lane surface.
-	double ResolveRuntimeSurfaceZOffsetCm(
+	// Resolves the surface top height at a sampled pose so actors spawn on the matching lane surface.
+	double ResolveRuntimeSurfaceTopZCm(
 		const FScenarioSampleSemantic& Semantic,
 		double AlongMeters,
 		double OffsetMeters)
@@ -250,8 +260,8 @@ namespace
 				LaneType,
 				LaneId,
 				SurfaceId)
-			? SurfaceZOffsetCm
-			: 0.0;
+			? FScenarioCorridorGeometry::DefaultSurfaceTopZCm + SurfaceZOffsetCm
+			: FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
 	}
 
 	bool ResolveSampleAxisPose(
@@ -617,7 +627,7 @@ namespace
 			RegionSpec.Center = FVector(
 				CenterMeters.X * MetersToCentimeters,
 				CenterMeters.Y * MetersToCentimeters,
-				0.0);
+				ResolveGeneratedCitySurfaceTopZCm(BandSpec.SurfaceId));
 			RegionSpec.Size = FVector2D(
 				LengthMeters * MetersToCentimeters,
 				WidthMeters * MetersToCentimeters);
@@ -985,11 +995,11 @@ namespace
 			return;
 		}
 
-		StartPose.LocationCm.Z = ResolveRuntimeSurfaceZOffsetCm(
+		StartPose.LocationCm.Z = ResolveRuntimeSurfaceTopZCm(
 			Semantic,
 			RuntimeStartAlongMeters,
 			Semantic.Robot.Start.OffsetMeters);
-		GoalPose.LocationCm.Z = ResolveRuntimeSurfaceZOffsetCm(
+		GoalPose.LocationCm.Z = ResolveRuntimeSurfaceTopZCm(
 			Semantic,
 			RuntimeGoalAlongMeters,
 			Semantic.Robot.Goal.OffsetMeters);
@@ -1070,7 +1080,7 @@ namespace
 				continue;
 			}
 
-			Pose.LocationCm.Z = SurfaceZOffsetCm;
+			Pose.LocationCm.Z = FScenarioCorridorGeometry::DefaultSurfaceTopZCm + SurfaceZOffsetCm;
 
 			FScenarioPlaceableInstanceSpec ObstacleSpec;
 			ObstacleSpec.InstanceId = Obstacle.ObstacleId;
@@ -1093,10 +1103,14 @@ namespace
 		}
 	}
 
-	FVector TransformSamplePointMetersToCm(const FScenarioSampleRouteAxis& Axis, const FVector2D& PointMeters)
+	FVector TransformSamplePointMetersToCm(const FScenarioSampleSemantic& Semantic, const FVector2D& PointMeters)
 	{
-		const FVector2D WorldPointMeters = Axis.OriginXYMeters + RotateSamplePoint(PointMeters, Axis.HeadingDegrees);
-		return FVector(WorldPointMeters.X * MetersToCentimeters, WorldPointMeters.Y * MetersToCentimeters, 0.0);
+		const FVector2D WorldPointMeters =
+			Semantic.RouteAxis.OriginXYMeters + RotateSamplePoint(PointMeters, Semantic.RouteAxis.HeadingDegrees);
+		return FVector(
+			WorldPointMeters.X * MetersToCentimeters,
+			WorldPointMeters.Y * MetersToCentimeters,
+			ResolveRuntimeSurfaceTopZCm(Semantic, PointMeters.X, PointMeters.Y));
 	}
 
 	void AddPedestriansFromSample(
@@ -1120,6 +1134,11 @@ namespace
 					FString::Printf(TEXT("Failed to resolve pedestrian '%s' start pose."), *Pedestrian.PedestrianId));
 				continue;
 			}
+
+			StartPose.LocationCm.Z = ResolveRuntimeSurfaceTopZCm(
+				Semantic,
+				Pedestrian.Baseline.StartAlongMeters,
+				Pedestrian.Baseline.StartOffsetMeters);
 
 			FScenarioDynamicActorSpec ActorSpec;
 			ActorSpec.InstanceId = Pedestrian.PedestrianId;
@@ -1152,7 +1171,7 @@ namespace
 			{
 				for (const FVector2D& PointMeters : Pedestrian.Baseline.PointsMeters)
 				{
-					PathSpec.Points.Add(TransformSamplePointMetersToCm(Semantic.RouteAxis, PointMeters));
+					PathSpec.Points.Add(TransformSamplePointMetersToCm(Semantic, PointMeters));
 				}
 			}
 			else
@@ -1165,6 +1184,10 @@ namespace
 						Pedestrian.Baseline.GoalOffsetMeters,
 						GoalPose))
 				{
+					GoalPose.LocationCm.Z = ResolveRuntimeSurfaceTopZCm(
+						Semantic,
+						Pedestrian.Baseline.GoalAlongMeters,
+						Pedestrian.Baseline.GoalOffsetMeters);
 					PathSpec.Points.Add(GoalPose.LocationCm);
 				}
 			}

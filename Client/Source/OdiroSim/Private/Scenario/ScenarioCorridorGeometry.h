@@ -64,8 +64,11 @@ public:
 	// Surface query tolerance in meters, matching scenario_sample precision.
 	static constexpr double SurfaceQueryToleranceMeters = 0.001;
 
-	// Shared vertical offset for curb-side Corridor lane surfaces.
-	static constexpr double DefaultCurbSideSurfaceZOffsetCm = -15.0;
+	// Shared top Z for editor/runtime walkable Corridor surfaces, matched to CityBuildings curb height.
+	static constexpr double DefaultSurfaceTopZCm = 17.0;
+
+	// Shared vertical offset that drops curb-side road surfaces from walkway top height to road height.
+	static constexpr double DefaultCurbSideSurfaceZOffsetCm = -DefaultSurfaceTopZCm;
 
 	// Rotates a 2D point around the origin by a scenario heading in degrees.
 	static FVector2D RotatePointMeters(const FVector2D& pointMeters, double headingDegrees);

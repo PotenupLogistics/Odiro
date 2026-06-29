@@ -21,6 +21,9 @@ struct ODIROSIM_API FScenarioCityBlockMaterializationResult
 
 	// Candidate GroundRegions skipped because their matching catalog entry could not spawn a valid actor.
 	int32 SkippedSpawnFailureCount = 0;
+
+	// Candidate GroundRegions skipped because a composite visual block already covers the same generated side strip.
+	int32 SkippedCoveredByCompositeCount = 0;
 };
 
 // Caller-supplied labels used to keep shared materializer diagnostics readable.

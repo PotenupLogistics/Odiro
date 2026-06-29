@@ -882,7 +882,7 @@ FTransform UScenarioAuthoringSubsystem::ResolveEditorGroundActorPlacementTransfo
 			locationCm.X = pointMeters.X / CentimetersToMeters;
 			locationCm.Y = pointMeters.Y / CentimetersToMeters;
 		}
-		locationCm.Z = ResolveCorridorSurfaceZOffsetCm(offsetMeters);
+		locationCm.Z = ResolveCorridorSurfaceTopZCm(offsetMeters);
 		resolvedTransform.SetLocation(locationCm);
 	}
 	return resolvedTransform;
@@ -895,18 +895,22 @@ bool UScenarioAuthoringSubsystem::CanPlaceEditorGroundActor(
 	outFailureReason.Reset();
 
 	const double locationZ = transform.GetLocation().Z;
-	if (locationZ < -KINDA_SMALL_NUMBER)
+	double surfaceTopZCm = 0.0;
+	const bool bHasCorridorSurface =
+		TryResolveCorridorSurfaceTopZCm(transform.GetLocation(), surfaceTopZCm);
+	const double minAllowedZCm = bHasCorridorSurface
+		? surfaceTopZCm - StaticObstacleGroundZToleranceCm
+		: 0.0;
+	const double maxAllowedZCm = bHasCorridorSurface
+		? surfaceTopZCm + StaticObstacleGroundZToleranceCm
+		: StaticObstacleGroundZToleranceCm;
+	if (locationZ < minAllowedZCm - KINDA_SMALL_NUMBER
+		|| locationZ > maxAllowedZCm + KINDA_SMALL_NUMBER)
 	{
 		outFailureReason = FString::Printf(
-			TEXT("Placement location Z must be 0.00 cm or higher. Current Z: %.2f."),
-			locationZ);
-		return false;
-	}
-	if (locationZ > StaticObstacleGroundZToleranceCm)
-	{
-		outFailureReason = FString::Printf(
-			TEXT("Placement location Z must be %.2f cm or lower. Current Z: %.2f."),
-			StaticObstacleGroundZToleranceCm,
+			TEXT("Placement location Z must be between %.2f cm and %.2f cm. Current Z: %.2f."),
+			minAllowedZCm,
+			maxAllowedZCm,
 			locationZ);
 		return false;
 	}
@@ -968,8 +972,8 @@ bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacleInternal(
 	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp);
 	const FTransform candidateTransform = ResolveStaticObstaclePlacementTransform(transform);
 	const FVector candidateLocation = candidateTransform.GetLocation();
-	double surfaceZOffsetCm = 0.0;
-	if (!TryResolveCorridorSurfaceZOffsetCm(transform.GetLocation(), surfaceZOffsetCm)
+	double surfaceTopZCm = 0.0;
+	if (!TryResolveCorridorSurfaceTopZCm(transform.GetLocation(), surfaceTopZCm)
 		&& (candidateLocation.Z < -KINDA_SMALL_NUMBER || candidateLocation.Z > StaticObstacleGroundZToleranceCm))
 	{
 		outFailureReason = FString::Printf(
@@ -1017,7 +1021,8 @@ bool UScenarioAuthoringSubsystem::AddPedestrian(
 	outActor = nullptr;
 	outFailureReason.Reset();
 
-	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	const FTransform resolvedTransform = ResolveEditorGroundActorPlacementTransform(transform);
+	if (!CanPlaceEditorGroundActor(resolvedTransform, outFailureReason))
 	{
 		return false;
 	}
@@ -1028,7 +1033,7 @@ bool UScenarioAuthoringSubsystem::AddPedestrian(
 	}
 
 	const FString instanceId = GeneratePedestrianInstanceId();
-	outSpec = MakePedestrianSpec(instanceId, archetypeId, transform);
+	outSpec = MakePedestrianSpec(instanceId, archetypeId, resolvedTransform);
 
 	if (!SpawnEditorPedestrianActor(outSpec, outActor, outFailureReason))
 	{
@@ -1045,7 +1050,7 @@ bool UScenarioAuthoringSubsystem::AddPedestrian(
 		TEXT("Added pedestrian | InstanceId: %s | AssetId: %s | Location: %s"),
 		*outSpec.InstanceId,
 		*outSpec.AssetId,
-		*transform.GetLocation().ToCompactString());
+		*resolvedTransform.GetLocation().ToCompactString());
 
 	return true;
 }
@@ -3120,13 +3125,13 @@ bool UScenarioAuthoringSubsystem::TryResolveCorridorPoseMeters(
 	return true;
 }
 
-double UScenarioAuthoringSubsystem::ResolveCorridorSurfaceZOffsetCm(double offsetMeters) const
+double UScenarioAuthoringSubsystem::ResolveCorridorSurfaceTopZCm(double offsetMeters) const
 {
 	const double walkwayWidthMeters = GetFixedTemplateNumber(DraftScenario.Corridor.WalkwayWidthMeters, 3.0);
 	const double halfWalkwayWidthMeters = FMath::Max(walkwayWidthMeters, 0.0) * 0.5;
 	if (offsetMeters <= halfWalkwayWidthMeters + KINDA_SMALL_NUMBER)
 	{
-		return 0.0;
+		return FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
 	}
 
 	double curbSideWidthMeters = 0.0;
@@ -3135,17 +3140,18 @@ double UScenarioAuthoringSubsystem::ResolveCorridorSurfaceZOffsetCm(double offse
 		curbSideWidthMeters += FMath::Max(GetFixedTemplateNumber(laneRule.WidthMeters, 0.0), 0.0);
 	}
 
-	return FScenarioCorridorGeometry::ResolveSurfaceZOffsetForOffsetMeters(
-		offsetMeters,
-		halfWalkwayWidthMeters,
-		curbSideWidthMeters);
+	return FScenarioCorridorGeometry::DefaultSurfaceTopZCm
+		+ FScenarioCorridorGeometry::ResolveSurfaceZOffsetForOffsetMeters(
+			offsetMeters,
+			halfWalkwayWidthMeters,
+			curbSideWidthMeters);
 }
 
-bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceZOffsetCm(
+bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceTopZCm(
 	const FVector& locationCm,
-	double& outSurfaceZOffsetCm) const
+	double& outSurfaceTopZCm) const
 {
-	outSurfaceZOffsetCm = 0.0;
+	outSurfaceTopZCm = 0.0;
 
 	double alongMeters = 0.0;
 	double offsetMeters = 0.0;
@@ -3155,7 +3161,7 @@ bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceZOffsetCm(
 		return false;
 	}
 
-	outSurfaceZOffsetCm = ResolveCorridorSurfaceZOffsetCm(offsetMeters);
+	outSurfaceTopZCm = ResolveCorridorSurfaceTopZCm(offsetMeters);
 	return true;
 }
 
@@ -3542,18 +3548,18 @@ FVector UScenarioAuthoringSubsystem::ResolveRobotAnchorLocationCm(
 		const double offsetMeters = GetFixedTemplateNumber(
 			anchor.OffsetMeters,
 			bGoalAnchor ? DefaultRobotGoalLocationCm.Y * CentimetersToMeters : DefaultRobotStartLocationCm.Y * CentimetersToMeters);
-		const double surfaceZOffsetCm = ResolveCorridorSurfaceZOffsetCm(offsetMeters);
+		const double surfaceTopZCm = ResolveCorridorSurfaceTopZCm(offsetMeters);
 		FVector2D pointMeters;
 		double yawDegrees = 0.0;
 		if (TryResolveCorridorPoseMeters(alongMeters, offsetMeters, pointMeters, yawDegrees))
 		{
-			return FVector(pointMeters.X / CentimetersToMeters, pointMeters.Y / CentimetersToMeters, surfaceZOffsetCm);
+			return FVector(pointMeters.X / CentimetersToMeters, pointMeters.Y / CentimetersToMeters, surfaceTopZCm);
 		}
 
 		return FVector(
 			alongMeters / CentimetersToMeters,
 			offsetMeters / CentimetersToMeters,
-			surfaceZOffsetCm);
+			surfaceTopZCm);
 	}
 
 	if (DraftScenario.Corridor.Axis.PointsMeters.Num() >= 2)
@@ -3614,7 +3620,7 @@ FScenarioPlaceableInstanceSpec UScenarioAuthoringSubsystem::MakeStaticObstacleSp
 		locationCm = FVector(
 			pointMeters.X / CentimetersToMeters,
 			pointMeters.Y / CentimetersToMeters,
-			ResolveCorridorSurfaceZOffsetCm(offsetMeters));
+			ResolveCorridorSurfaceTopZCm(offsetMeters));
 	}
 	spec.Transform = FTransform(FRotator(0.0, FRotator::ClampAxis(axisYawDegrees + localYawDegrees), 0.0), locationCm);
 	return spec;

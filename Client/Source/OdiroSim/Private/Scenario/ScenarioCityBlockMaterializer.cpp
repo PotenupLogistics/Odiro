@@ -2,6 +2,7 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
+#include "Scenario/ScenarioCorridorGeometry.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioCityBlockMaterializer, Log, All);
 
@@ -13,6 +14,10 @@ namespace
 	const FName BuildingSurfaceId(TEXT("building"));
 	const FName RoadSurfaceId(TEXT("road"));
 	const FName WalkwaySurfaceId(TEXT("walkway"));
+	// Generated curb GroundRegions use this collision tag while remaining road-surface metadata.
+	const FString CurbCollisionTag(TEXT("curb"));
+	// Generated road GroundRegions use this penalty kind for the two-lane road band.
+	const FString RoadPenaltyKind(TEXT("road"));
 
 	// Generated city band markers encode the side needed for corridor-relative edge anchoring.
 	const TCHAR* GeneratedLowerSideMarkers[] =
@@ -39,6 +44,28 @@ namespace
 			&& regionSpec.RegionId.StartsWith(GeneratedCityRegionIdPrefix);
 	}
 
+	// Detects the generated curb band used as the road-side composite placement trigger.
+	bool IsGeneratedRoadCurbRegion(const FScenarioGroundRegionSpec& regionSpec)
+	{
+		const FName surfaceId(*regionSpec.SurfaceId);
+		return IsGeneratedCityVisualRegion(regionSpec)
+			&& surfaceId == RoadSurfaceId
+			&& regionSpec.RegionType == EScenarioGroundRegionType::Blocked
+			&& (regionSpec.CollisionTag.Equals(CurbCollisionTag, ESearchCase::IgnoreCase)
+				|| regionSpec.RegionId.Contains(TEXT("_curb_")));
+	}
+
+	// Detects the generated road band that should be covered by a curb-triggered composite block.
+	bool IsGeneratedRoadPenaltyRegion(const FScenarioGroundRegionSpec& regionSpec)
+	{
+		const FName surfaceId(*regionSpec.SurfaceId);
+		return IsGeneratedCityVisualRegion(regionSpec)
+			&& surfaceId == RoadSurfaceId
+			&& regionSpec.RegionType == EScenarioGroundRegionType::Penalty
+			&& (regionSpec.PenaltyKind.Equals(RoadPenaltyKind, ESearchCase::IgnoreCase)
+				|| regionSpec.RegionId.Contains(TEXT("_road_2lane_")));
+	}
+
 	// Maps source-of-truth GroundRegion semantics to the straight block roles supported by the catalog.
 	void ResolveCityBlockRolesForRegion(
 		const FScenarioGroundRegionSpec& regionSpec,
@@ -46,6 +73,12 @@ namespace
 	{
 		outRoles.Reset();
 		const FName surfaceId(*regionSpec.SurfaceId);
+		if (IsGeneratedRoadCurbRegion(regionSpec))
+		{
+			outRoles.Add(EScenarioCityBlockRole::WalkwayRoadStraight);
+			return;
+		}
+
 		if (surfaceId == WalkwaySurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Walkable)
 		{
 			outRoles.Add(EScenarioCityBlockRole::WalkwayRoadStraight);
@@ -56,7 +89,6 @@ namespace
 		if (surfaceId == RoadSurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Penalty)
 		{
 			outRoles.Add(EScenarioCityBlockRole::RoadStraight);
-			outRoles.Add(EScenarioCityBlockRole::WalkwayRoadStraight);
 			return;
 		}
 
@@ -72,6 +104,113 @@ namespace
 		FName surfaceId)
 	{
 		return !surfaceId.IsNone() && blockEntry.SemanticProfile.SurfaceIds.Contains(surfaceId);
+	}
+
+	// Checks whether a catalog entry is allowed to represent the source GroundRegion surface.
+	bool IsCityBlockEntrySurfaceCompatible(
+		const FScenarioCityBlockCatalogEntry& blockEntry,
+		FName surfaceId)
+	{
+		return blockEntry.SemanticProfile.SurfaceIds.IsEmpty()
+			|| DoesCityBlockEntryNameSurface(blockEntry, surfaceId);
+	}
+
+	// Checks optional semantic detail fields only when they are relevant to the source GroundRegion type.
+	bool IsCityBlockEntryDetailCompatible(
+		const FScenarioCityBlockCatalogEntry& blockEntry,
+		const FScenarioGroundRegionSpec& regionSpec)
+	{
+		if (regionSpec.RegionType == EScenarioGroundRegionType::Blocked
+			&& !blockEntry.SemanticProfile.CollisionTag.IsEmpty())
+		{
+			return blockEntry.SemanticProfile.CollisionTag.Equals(
+				regionSpec.CollisionTag,
+				ESearchCase::IgnoreCase);
+		}
+
+		if (regionSpec.RegionType == EScenarioGroundRegionType::Penalty
+			&& !blockEntry.SemanticProfile.PenaltyKind.IsEmpty())
+		{
+			return blockEntry.SemanticProfile.PenaltyKind.Equals(
+				regionSpec.PenaltyKind,
+				ESearchCase::IgnoreCase);
+		}
+
+		return true;
+	}
+
+	// Checks whether optional semantic detail fields explicitly match the source GroundRegion.
+	bool DoesCityBlockEntryDetailMatch(
+		const FScenarioCityBlockCatalogEntry& blockEntry,
+		const FScenarioGroundRegionSpec& regionSpec)
+	{
+		if (regionSpec.RegionType == EScenarioGroundRegionType::Blocked)
+		{
+			return !blockEntry.SemanticProfile.CollisionTag.IsEmpty()
+				&& blockEntry.SemanticProfile.CollisionTag.Equals(
+					regionSpec.CollisionTag,
+					ESearchCase::IgnoreCase);
+		}
+
+		if (regionSpec.RegionType == EScenarioGroundRegionType::Penalty)
+		{
+			return !blockEntry.SemanticProfile.PenaltyKind.IsEmpty()
+				&& blockEntry.SemanticProfile.PenaltyKind.Equals(
+					regionSpec.PenaltyKind,
+					ESearchCase::IgnoreCase);
+		}
+
+		return false;
+	}
+
+	// Builds a side-strip key shared by the curb and road bands in one generated layout chunk.
+	bool TryMakeGeneratedRoadSideCompositeKey(
+		const FString& regionId,
+		FString& outCompositeKey)
+	{
+		struct FGeneratedSideMarker
+		{
+			// Stable id fragment embedded between generated segment id and layout/chunk suffix.
+			const TCHAR* Marker = TEXT("");
+
+			// Normalized lower/upper side label used in coverage keys.
+			const TCHAR* Side = TEXT("");
+		};
+
+		const FGeneratedSideMarker sideMarkers[] =
+		{
+			{ TEXT("_lower_curb_"), TEXT("lower") },
+			{ TEXT("_lower_road_2lane_"), TEXT("lower") },
+			{ TEXT("_upper_curb_"), TEXT("upper") },
+			{ TEXT("_upper_road_2lane_"), TEXT("upper") }
+		};
+
+		for (const FGeneratedSideMarker& sideMarker : sideMarkers)
+		{
+			const FString marker(sideMarker.Marker);
+			const int32 markerIndex = regionId.Find(marker, ESearchCase::CaseSensitive);
+			if (markerIndex == INDEX_NONE)
+			{
+				continue;
+			}
+
+			const FString segmentPrefix = regionId.Left(markerIndex);
+			const FString layoutChunkSuffix = regionId.Mid(markerIndex + marker.Len());
+			if (segmentPrefix.IsEmpty() || layoutChunkSuffix.IsEmpty())
+			{
+				continue;
+			}
+
+			outCompositeKey = FString::Printf(
+				TEXT("%s|%s|%s"),
+				*segmentPrefix,
+				sideMarker.Side,
+				*layoutChunkSuffix);
+			return true;
+		}
+
+		outCompositeKey.Reset();
+		return false;
 	}
 
 	// Resolves generated lower/upper side into a sign along the region's local right vector.
@@ -112,6 +251,10 @@ namespace
 			if (blockEntry.SemanticProfile.PrimaryRegionType == regionSpec.RegionType)
 			{
 				matchTier = 3;
+				if (DoesCityBlockEntryDetailMatch(blockEntry, regionSpec))
+				{
+					matchTier = 4;
+				}
 			}
 		}
 
@@ -142,6 +285,18 @@ namespace
 				continue;
 			}
 
+			if (!IsCityBlockEntrySurfaceCompatible(blockEntry, surfaceId)
+				|| !IsCityBlockEntryDetailCompatible(blockEntry, regionSpec))
+			{
+				continue;
+			}
+
+			if (IsGeneratedRoadCurbRegion(regionSpec)
+				&& blockEntry.SemanticProfile.PrimaryRegionType != regionSpec.RegionType)
+			{
+				continue;
+			}
+
 			const int32 score = ScoreCityBlockEntryForRegion(blockEntry, regionSpec, surfaceId);
 			if (!bestEntry || score > bestScore)
 			{
@@ -159,6 +314,67 @@ namespace
 		return false;
 	}
 
+	// Finds road-side chunks whose curb band will spawn a composite visual block.
+	void BuildRoadSideCompositeCoverageKeys(
+		const UScenarioCityBlockCatalog& catalog,
+		const TArray<FScenarioGroundRegionSpec>& groundRegions,
+		TSet<FString>& outCompositeKeys)
+	{
+		outCompositeKeys.Reset();
+		for (const FScenarioGroundRegionSpec& regionSpec : groundRegions)
+		{
+			if (!IsGeneratedRoadCurbRegion(regionSpec))
+			{
+				continue;
+			}
+
+			FScenarioCityBlockCatalogEntry blockEntry;
+			if (!FindCityBlockEntryForRegion(catalog, regionSpec, blockEntry)
+				|| blockEntry.Role != EScenarioCityBlockRole::WalkwayRoadStraight)
+			{
+				continue;
+			}
+
+			FString compositeKey;
+			if (TryMakeGeneratedRoadSideCompositeKey(regionSpec.RegionId, compositeKey))
+			{
+				outCompositeKeys.Add(compositeKey);
+			}
+		}
+	}
+
+	// Checks whether a road band should be skipped because its curb band owns the composite visual.
+	bool IsRoadBandCoveredByComposite(
+		const FScenarioGroundRegionSpec& regionSpec,
+		const TSet<FString>& compositeKeys)
+	{
+		if (!IsGeneratedRoadPenaltyRegion(regionSpec))
+		{
+			return false;
+		}
+
+		FString compositeKey;
+		return TryMakeGeneratedRoadSideCompositeKey(regionSpec.RegionId, compositeKey)
+			&& compositeKeys.Contains(compositeKey);
+	}
+
+	// Resolves the authored surface height that should receive the visual block origin.
+	double ResolveCityBlockSurfaceTopZCm(const FScenarioGroundRegionSpec& regionSpec)
+	{
+		const FName surfaceId(*regionSpec.SurfaceId);
+		if (surfaceId == RoadSurfaceId)
+		{
+			return 0.0;
+		}
+
+		if (surfaceId == WalkwaySurfaceId || surfaceId == BuildingSurfaceId)
+		{
+			return FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
+		}
+
+		return regionSpec.Center.Z;
+	}
+
 	// Computes the desired authored bounds center for center- and edge-anchored visual blocks.
 	FVector ResolveDesiredBlockBoundsCenter(
 		const FScenarioGroundRegionSpec& regionSpec,
@@ -167,7 +383,8 @@ namespace
 		const FVector& forward,
 		double alongOffsetCm)
 	{
-		const FVector baseRegionCenter = regionSpec.Center + (forward * alongOffsetCm);
+		FVector baseRegionCenter = regionSpec.Center + (forward * alongOffsetCm);
+		baseRegionCenter.Z = ResolveCityBlockSurfaceTopZCm(regionSpec);
 		const EScenarioCityBlockLateralAnchor lateralAnchor =
 			blockEntry.PlacementProfile.LateralAnchor;
 		if (lateralAnchor == EScenarioCityBlockLateralAnchor::RegionCenter)
@@ -347,6 +564,9 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 		return result;
 	}
 
+	TSet<FString> roadSideCompositeKeys;
+	BuildRoadSideCompositeCoverageKeys(*catalog, groundRegions, roadSideCompositeKeys);
+
 	for (const FScenarioGroundRegionSpec& regionSpec : groundRegions)
 	{
 		TArray<EScenarioCityBlockRole> roles;
@@ -357,6 +577,12 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 		}
 
 		++result.CandidateRegionCount;
+		if (IsRoadBandCoveredByComposite(regionSpec, roadSideCompositeKeys))
+		{
+			++result.SkippedCoveredByCompositeCount;
+			continue;
+		}
+
 		FScenarioCityBlockCatalogEntry blockEntry;
 		if (!FindCityBlockEntryForRegion(*catalog, regionSpec, blockEntry))
 		{
@@ -380,19 +606,22 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 	if (result.CandidateRegionCount > 0
 		|| result.SpawnedActorCount > 0
 		|| result.SkippedNoEntryCount > 0
-		|| result.SkippedSpawnFailureCount > 0)
+		|| result.SkippedSpawnFailureCount > 0
+		|| result.SkippedCoveredByCompositeCount > 0)
 	{
 		UE_LOG(
 			LogScenarioCityBlockMaterializer,
 			Log,
 			TEXT(
 				"%s generated city block visuals complete | "
-				"CandidateRegions: %d, SpawnedActors: %d, SkippedNoEntry: %d, SkippedSpawnFailure: %d"),
+				"CandidateRegions: %d, SpawnedActors: %d, SkippedNoEntry: %d, "
+				"SkippedSpawnFailure: %d, SkippedCoveredByComposite: %d"),
 			*options.LogContext,
 			result.CandidateRegionCount,
 			result.SpawnedActorCount,
 			result.SkippedNoEntryCount,
-			result.SkippedSpawnFailureCount);
+			result.SkippedSpawnFailureCount,
+			result.SkippedCoveredByCompositeCount);
 	}
 
 	return result;

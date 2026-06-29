@@ -551,10 +551,10 @@ private:
 		double offsetMeters,
 		FVector2D& outPointMeters,
 		double& outYawDegrees) const;
-	// Corridor offset이 속한 surface band의 Z offset을 계산.
-	double ResolveCorridorSurfaceZOffsetCm(double offsetMeters) const;
-	// World 위치가 놓일 Corridor surface의 Z offset을 계산.
-	bool TryResolveCorridorSurfaceZOffsetCm(const FVector& locationCm, double& outSurfaceZOffsetCm) const;
+	// Resolves the world Z height of the Corridor surface at an offset from the route axis.
+	double ResolveCorridorSurfaceTopZCm(double offsetMeters) const;
+	// Resolves the world Z height of the Corridor surface under a world location.
+	bool TryResolveCorridorSurfaceTopZCm(const FVector& locationCm, double& outSurfaceTopZCm) const;
 	// Draft template을 editor preview용 world spec으로 투영함.
 	FScenarioWorldSpec BuildDraftWorldSpecForPreview(TArray<FString>* outDiagnostics = nullptr) const;
 	// Editor preview projection이 사용하는 run config와 seed 값을 draft state로 맞춤.

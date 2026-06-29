@@ -11,7 +11,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogScenarioCorridorRuntime, Log, All);
 
 namespace
 {
-	// Runtime corridor surface top follows the shared editor/runtime curb alignment height.
+	// Runtime corridor surface top is the scenario base plane used for object and grid placement.
 	const double RuntimeSurfaceTopZCm = FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
 	// Non-blocking surfaces are thick enough to overlap curb-side height offsets without vertical holes.
 	const double RuntimeSurfaceHeightCm = 20.0;
@@ -23,6 +23,12 @@ namespace
 		FScenarioRuntimeCorridorLayoutEntry LayoutEntry;
 		FScenarioRuntimeCorridorLaneSpec LaneSpec;
 	};
+
+	// Runtime visuals render only the authored Corridor strip; generated city blocks visualize side bands.
+	bool ShouldRenderRuntimeCorridorLane(const FScenarioRuntimeCorridorLaneSpec& laneSpec)
+	{
+		return laneSpec.LaneId.Equals(TEXT("walkway"), ESearchCase::IgnoreCase);
+	}
 
 	bool AreOffsetRangesEquivalent(
 		const FScenarioOffsetRangeMeters& left,
@@ -139,6 +145,11 @@ void AScenarioCorridorRuntimeActor::ConfigureCorridor(const FScenarioRuntimeCorr
 	{
 		for (const FScenarioRuntimeCorridorLaneSpec& laneSpec : layoutEntry.Lanes)
 		{
+			if (!ShouldRenderRuntimeCorridorLane(laneSpec))
+			{
+				continue;
+			}
+
 			AddOrMergeRuntimeVisualLane(visualLaneSpecs, layoutEntry, laneSpec);
 		}
 	}

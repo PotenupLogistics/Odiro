@@ -3127,24 +3127,8 @@ bool UScenarioAuthoringSubsystem::TryResolveCorridorPoseMeters(
 
 double UScenarioAuthoringSubsystem::ResolveCorridorSurfaceTopZCm(double offsetMeters) const
 {
-	const double walkwayWidthMeters = GetFixedTemplateNumber(DraftScenario.Corridor.WalkwayWidthMeters, 3.0);
-	const double halfWalkwayWidthMeters = FMath::Max(walkwayWidthMeters, 0.0) * 0.5;
-	if (offsetMeters <= halfWalkwayWidthMeters + KINDA_SMALL_NUMBER)
-	{
-		return FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
-	}
-
-	double curbSideWidthMeters = 0.0;
-	for (const FScenarioTemplateLaneRule& laneRule : DraftScenario.Corridor.CurbSide)
-	{
-		curbSideWidthMeters += FMath::Max(GetFixedTemplateNumber(laneRule.WidthMeters, 0.0), 0.0);
-	}
-
-	return FScenarioCorridorGeometry::DefaultSurfaceTopZCm
-		+ FScenarioCorridorGeometry::ResolveSurfaceZOffsetForOffsetMeters(
-			offsetMeters,
-			halfWalkwayWidthMeters,
-			curbSideWidthMeters);
+	(void)offsetMeters;
+	return FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
 }
 
 bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceTopZCm(

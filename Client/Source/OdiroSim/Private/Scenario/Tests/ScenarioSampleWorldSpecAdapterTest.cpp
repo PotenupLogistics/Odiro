@@ -55,9 +55,16 @@ namespace
 		FScenarioSampleLayoutLane CurbLane;
 		CurbLane.LaneId = TEXT("curb_edge");
 		CurbLane.OffsetRangeMeters.MinMeters = 1.0;
-		CurbLane.OffsetRangeMeters.MaxMeters = 2.0;
+		CurbLane.OffsetRangeMeters.MaxMeters = 1.5;
 		CurbLane.SurfaceId = TEXT("road");
-		CurbLane.Type = EScenarioSampleLaneType::Penalty;
+		CurbLane.Type = EScenarioSampleLaneType::Blocked;
+
+		FScenarioSampleLayoutLane RoadLane;
+		RoadLane.LaneId = TEXT("road_2lane");
+		RoadLane.OffsetRangeMeters.MinMeters = 1.5;
+		RoadLane.OffsetRangeMeters.MaxMeters = 7.9;
+		RoadLane.SurfaceId = TEXT("road");
+		RoadLane.Type = EScenarioSampleLaneType::Penalty;
 
 		FScenarioSampleLayoutEntry LayoutEntry;
 		LayoutEntry.AlongRangeMeters.StartMeters = 0.0;
@@ -65,6 +72,7 @@ namespace
 		LayoutEntry.SegmentId = TEXT("main");
 		LayoutEntry.Lanes.Add(WalkwayLane);
 		LayoutEntry.Lanes.Add(CurbLane);
+		LayoutEntry.Lanes.Add(RoadLane);
 		Semantic.Layout.Add(LayoutEntry);
 
 		FScenarioSampleStaticObstacle Obstacle;
@@ -74,7 +82,7 @@ namespace
 		Obstacle.ObstacleClass = EScenarioSampleObstacleClass::Blocking;
 		Obstacle.SensorProfile = TEXT("solid");
 		Obstacle.AlongMeters = 4.0;
-		Obstacle.OffsetMeters = 1.5;
+		Obstacle.OffsetMeters = 1.75;
 		Obstacle.YawDegrees = 15.0;
 		Obstacle.FootprintMeters = FVector2D(0.5, 0.5);
 		Obstacle.PlacedBy = TEXT("crate_fixed");
@@ -183,11 +191,11 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestNotNull(TEXT("runtime curb lane"), CurbRuntimeLane);
 	if (CurbRuntimeLane)
 	{
-		TestEqual(TEXT("runtime curb lane z offset"), CurbRuntimeLane->SurfaceZOffsetCm, -17.0);
+		TestEqual(TEXT("runtime curb lane z offset"), CurbRuntimeLane->SurfaceZOffsetCm, 0.0);
 		TestEqual(
 			TEXT("runtime curb lane region type"),
 			static_cast<int32>(CurbRuntimeLane->RegionType),
-			static_cast<int32>(EScenarioGroundRegionType::Penalty));
+			static_cast<int32>(EScenarioGroundRegionType::Blocked));
 	}
 	TestEqual(TEXT("placeable count"), Result.WorldSpec.Placeables.Num(), 2);
 	TestEqual(TEXT("static obstacle count"), Result.WorldSpec.Placeables.FilterByPredicate(
@@ -216,8 +224,8 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	{
 		TestEqual(TEXT("robot start x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 100.0);
 		TestEqual(TEXT("robot goal x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 900.0);
-		TestEqual(TEXT("robot start surface z"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.Z, 17.0);
-		TestEqual(TEXT("robot goal surface z"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.Z, 17.0);
+		TestEqual(TEXT("robot start surface z"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.Z, 0.0);
+		TestEqual(TEXT("robot goal surface z"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.Z, 0.0);
 		TestTrue(TEXT("robot has route"), RobotSpec->DeliveryBot.bHasStartLocation && RobotSpec->DeliveryBot.bHasGoalLocation);
 		TestTrue(TEXT("robot setup has goal"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal);
 

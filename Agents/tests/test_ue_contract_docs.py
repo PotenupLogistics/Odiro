@@ -105,7 +105,7 @@ def test_readmes_link_current_simulation_and_user_project_contracts() -> None:
 
     assert "simulation-interface.md" in text
     assert "user-project-data.md" in text
-    assert "environment/environment-catalog.md" in text
+    assert "Client/Json/environment-catalog.md" in text
     assert LEGACY_TERMINOLOGY_NAME not in text
     assert MISSING_EVALUATION_REPORT_NAME not in text
 

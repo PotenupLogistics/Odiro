@@ -16,6 +16,7 @@ paths:
   - Agents/docs/api/**
   - Agents/docs/providers/**
   - Agents/docs/environment/**
+  - Client/Json/environment-catalog.md
   - contracts/specs/user-project-data.md
 entry:
   - id: api-and-models
@@ -50,6 +51,7 @@ guardrails:
   - Legacy WorldConfig tooling must call only the provider explicitly selected by the caller; Ollama remains a direct local/manual provider, not an automatic retry target.
   - Final user project contracts write project/run/episode artifacts under `contracts/specs/user-project-data.md`.
   - V2 LLM prompt context is loaded only through the SpecContextLoader allowlist.
+  - V2 LLM prompt context reads the Client environment catalog at Client/Json/environment-catalog.md for scenario vocabulary and static obstacle bounding boxes.
   - `/api/v2/analysis/run` always executes `ResultAnalysisGraphRunnerV2`; do not add runtime settings that switch it to another analysis path.
   - Review artifacts are stored under `<UserProject>/runs/<RunId>/review/<ReviewId>/`.
   - API display text such as `analysis_text` should not be treated as canonical review artifact data.
@@ -81,7 +83,7 @@ verify:
 links:
   - Agents/README.md
   - Agents/docs/api/V2_AGENT_APIS.md
-  - Agents/docs/environment/environment-catalog.md
+  - Client/Json/environment-catalog.md
   - contracts/specs/user-project-data.md
 related:
   - agents-policy-rag-data

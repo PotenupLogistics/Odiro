@@ -73,7 +73,7 @@ ollama pull llama3.1:8b
 - [JSON Contracts](docs/json_contracts/JSON_CONTRACTS.md)
 - [Policy Decision Contract](docs/policy_server/POLICY_DECISION_JSON_GUIDE.md)
 - [Environment Parameter Spec](docs/environment/ENVIRONMENT_PARAMETER_SPEC.md)
-- [Environment Catalog](docs/environment/environment-catalog.md)
+- [Environment Catalog](../Client/Json/environment-catalog.md)
 - [UE Handoff Delivery Manifest](docs/handoff/UE_HANDOFF_DELIVERY_MANIFEST.md)
 - [Legacy EpisodeSpec Archive](docs/archive/previous_episode_spec/)
 - [UE EpisodeSpec JSON Guide](docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md)

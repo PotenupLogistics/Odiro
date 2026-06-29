@@ -830,6 +830,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("run_editor_utility_widget"), &RunEditorUtilityWidget);
 	Registry.RegisterHandler(TEXT("run_editor_utility_blueprint"), &RunEditorUtilityBlueprint);
 	Registry.RegisterHandler(TEXT("add_widget"), &AddWidget);
+	Registry.RegisterHandler(TEXT("replace_widget_classes"), &ReplaceWidgetClasses);
 	Registry.RegisterHandler(TEXT("set_named_slot_content"), &SetNamedSlotContent);
 	Registry.RegisterHandler(TEXT("remove_widget"), &RemoveWidget);
 	Registry.RegisterHandler(TEXT("rename_widget"), &RenameWidget);
@@ -2039,6 +2040,586 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	Payload->SetStringField(TEXT("widgetName"), NewWidget->GetName());
 	MCPSetRollback(Result, TEXT("remove_widget"), Payload);
 
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::ReplaceWidgetClasses(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	const TArray<TSharedPtr<FJsonValue>>* ReplacementValues = nullptr;
+	if (!Params->TryGetArrayField(TEXT("replacements"), ReplacementValues) || !ReplacementValues)
+	{
+		return MCPError(TEXT("Missing required array: replacements"));
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	if (!WidgetBP || !WidgetBP->WidgetTree)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+	}
+
+	auto FindWidgetByName = [&](const FString& Name) -> UWidget*
+	{
+		if (Name.IsEmpty())
+		{
+			return nullptr;
+		}
+		return WidgetBP->WidgetTree->FindWidget(FName(*Name));
+	};
+
+	auto CopyMatchingProperty = [](UObject* Source, UObject* Target, const FName PropertyName)
+	{
+		if (!Source || !Target)
+		{
+			return;
+		}
+		FProperty* SourceProperty = Source->GetClass()->FindPropertyByName(PropertyName);
+		FProperty* TargetProperty = Target->GetClass()->FindPropertyByName(PropertyName);
+		if (!SourceProperty || !TargetProperty)
+		{
+			return;
+		}
+
+		FString ExportedValue;
+		const void* SourceValue = SourceProperty->ContainerPtrToValuePtr<void>(Source);
+		SourceProperty->ExportText_Direct(ExportedValue, SourceValue, SourceValue, Source, PPF_None);
+		TargetProperty->ImportText_Direct(
+			*ExportedValue,
+			TargetProperty->ContainerPtrToValuePtr<void>(Target),
+			Target,
+			PPF_None);
+	};
+
+	auto CopyCommonWidgetProperties = [&](UWidget* Source, UWidget* Target)
+	{
+		static const FName CommonProperties[] = {
+			TEXT("Visibility"),
+			TEXT("RenderTransform"),
+			TEXT("RenderTransformPivot"),
+			TEXT("RenderOpacity"),
+			TEXT("Clipping"),
+			TEXT("Cursor"),
+			TEXT("ToolTipText"),
+			TEXT("FlowDirectionPreference"),
+		};
+		for (const FName PropertyName : CommonProperties)
+		{
+			CopyMatchingProperty(Source, Target, PropertyName);
+		}
+		if (Source && Target)
+		{
+			Target->SetIsEnabled(Source->GetIsEnabled());
+		}
+	};
+
+	struct FSlotSnapshot
+	{
+		UClass* SlotClass = nullptr;
+		FMargin Padding;
+		EHorizontalAlignment HorizontalAlignment = HAlign_Fill;
+		EVerticalAlignment VerticalAlignment = VAlign_Fill;
+		FSlateChildSize ChildSize;
+		FAnchors Anchors;
+		FMargin Offsets;
+		FVector2D Alignment = FVector2D::ZeroVector;
+		bool bAutoSize = false;
+		int32 ZOrder = 0;
+		bool bHasPadding = false;
+		bool bHasAlignment = false;
+		bool bHasChildSize = false;
+		bool bHasCanvas = false;
+	};
+
+	auto CaptureSlot = [](UPanelSlot* Slot)
+	{
+		FSlotSnapshot Snapshot;
+		if (!Slot)
+		{
+			return Snapshot;
+		}
+		Snapshot.SlotClass = Slot->GetClass();
+
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+		{
+			Snapshot.Anchors = CanvasSlot->GetAnchors();
+			Snapshot.Offsets = CanvasSlot->GetOffsets();
+			Snapshot.Alignment = CanvasSlot->GetAlignment();
+			Snapshot.bAutoSize = CanvasSlot->GetAutoSize();
+			Snapshot.ZOrder = CanvasSlot->GetZOrder();
+			Snapshot.bHasCanvas = true;
+			return Snapshot;
+		}
+
+		if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+		{
+			Snapshot.Padding = HorizontalSlot->GetPadding();
+			Snapshot.HorizontalAlignment = HorizontalSlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = HorizontalSlot->GetVerticalAlignment();
+			Snapshot.ChildSize = HorizontalSlot->GetSize();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+			Snapshot.bHasChildSize = true;
+			return Snapshot;
+		}
+
+		if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+		{
+			Snapshot.Padding = VerticalSlot->GetPadding();
+			Snapshot.HorizontalAlignment = VerticalSlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = VerticalSlot->GetVerticalAlignment();
+			Snapshot.ChildSize = VerticalSlot->GetSize();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+			Snapshot.bHasChildSize = true;
+			return Snapshot;
+		}
+
+		if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(Slot))
+		{
+			Snapshot.Padding = OverlaySlot->GetPadding();
+			Snapshot.HorizontalAlignment = OverlaySlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = OverlaySlot->GetVerticalAlignment();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+			return Snapshot;
+		}
+
+		if (UButtonSlot* ButtonSlot = Cast<UButtonSlot>(Slot))
+		{
+			Snapshot.Padding = ButtonSlot->GetPadding();
+			Snapshot.HorizontalAlignment = ButtonSlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = ButtonSlot->GetVerticalAlignment();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+			return Snapshot;
+		}
+
+		if (UScrollBoxSlot* ScrollBoxSlot = Cast<UScrollBoxSlot>(Slot))
+		{
+			Snapshot.Padding = ScrollBoxSlot->GetPadding();
+			Snapshot.HorizontalAlignment = ScrollBoxSlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = ScrollBoxSlot->GetVerticalAlignment();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+		}
+		return Snapshot;
+	};
+
+	auto ApplySlot = [](UPanelSlot* Slot, const FSlotSnapshot& Snapshot)
+	{
+		if (!Slot)
+		{
+			return;
+		}
+		if (Snapshot.bHasCanvas)
+		{
+			if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+			{
+				CanvasSlot->SetAnchors(Snapshot.Anchors);
+				CanvasSlot->SetOffsets(Snapshot.Offsets);
+				CanvasSlot->SetAlignment(Snapshot.Alignment);
+				CanvasSlot->SetAutoSize(Snapshot.bAutoSize);
+				CanvasSlot->SetZOrder(Snapshot.ZOrder);
+			}
+			return;
+		}
+
+		if (Snapshot.bHasPadding)
+		{
+			if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+			{
+				HorizontalSlot->SetPadding(Snapshot.Padding);
+			}
+			else if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+			{
+				VerticalSlot->SetPadding(Snapshot.Padding);
+			}
+			else if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(Slot))
+			{
+				OverlaySlot->SetPadding(Snapshot.Padding);
+			}
+			else if (UButtonSlot* ButtonSlot = Cast<UButtonSlot>(Slot))
+			{
+				ButtonSlot->SetPadding(Snapshot.Padding);
+			}
+			else if (UScrollBoxSlot* ScrollBoxSlot = Cast<UScrollBoxSlot>(Slot))
+			{
+				ScrollBoxSlot->SetPadding(Snapshot.Padding);
+			}
+		}
+
+		if (Snapshot.bHasAlignment)
+		{
+			if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+			{
+				HorizontalSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				HorizontalSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+			else if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+			{
+				VerticalSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				VerticalSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+			else if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(Slot))
+			{
+				OverlaySlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				OverlaySlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+			else if (UButtonSlot* ButtonSlot = Cast<UButtonSlot>(Slot))
+			{
+				ButtonSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				ButtonSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+			else if (UScrollBoxSlot* ScrollBoxSlot = Cast<UScrollBoxSlot>(Slot))
+			{
+				ScrollBoxSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				ScrollBoxSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+		}
+
+		if (Snapshot.bHasChildSize)
+		{
+			if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+			{
+				HorizontalSlot->SetSize(Snapshot.ChildSize);
+			}
+			else if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+			{
+				VerticalSlot->SetSize(Snapshot.ChildSize);
+			}
+		}
+	};
+
+	TFunction<FText(UWidget*)> ExtractFirstText = [&](UWidget* Widget) -> FText
+	{
+		if (!Widget)
+		{
+			return FText::GetEmpty();
+		}
+		if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+		{
+			return TextBlock->GetText();
+		}
+		if (UEditableTextBox* TextBox = Cast<UEditableTextBox>(Widget))
+		{
+			return TextBox->GetText();
+		}
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
+		{
+			for (int32 ChildIndex = 0; ChildIndex < Panel->GetChildrenCount(); ++ChildIndex)
+			{
+				const FText Text = ExtractFirstText(Panel->GetChildAt(ChildIndex));
+				if (!Text.IsEmpty())
+				{
+					return Text;
+				}
+			}
+		}
+		if (UContentWidget* ContentWidget = Cast<UContentWidget>(Widget))
+		{
+			const FText Text = ExtractFirstText(ContentWidget->GetContent());
+			if (!Text.IsEmpty())
+			{
+				return Text;
+			}
+		}
+		return FText::GetEmpty();
+	};
+
+	auto SetFTextProperty = [](UObject* Target, const FName PropertyName, const FText& Value)
+	{
+		if (!Target || Value.IsEmpty())
+		{
+			return false;
+		}
+		if (FTextProperty* TextProperty = FindFProperty<FTextProperty>(Target->GetClass(), PropertyName))
+		{
+			TextProperty->SetPropertyValue_InContainer(Target, Value);
+			return true;
+		}
+		return false;
+	};
+
+	auto ApplyDefaultTextTransfer = [&](UWidget* Source, UWidget* Target)
+	{
+		if (!Source || !Target)
+		{
+			return;
+		}
+		if (UEditableTextBox* TextBox = Cast<UEditableTextBox>(Source))
+		{
+			SetFTextProperty(Target, TEXT("Text"), TextBox->GetText());
+			SetFTextProperty(Target, TEXT("PlaceholderText"), TextBox->GetHintText());
+			return;
+		}
+
+		const FText PrimaryText = ExtractFirstText(Source);
+		if (PrimaryText.IsEmpty())
+		{
+			return;
+		}
+		SetFTextProperty(Target, TEXT("Label"), PrimaryText);
+		SetFTextProperty(Target, TEXT("Text"), PrimaryText);
+		SetFTextProperty(Target, TEXT("ValueText"), PrimaryText);
+	};
+
+	auto ApplyJsonProperties = [&](UObject* Target, const TSharedPtr<FJsonObject>& Properties, TArray<FString>& Errors)
+	{
+		if (!Target || !Properties.IsValid())
+		{
+			return 0;
+		}
+
+		int32 PropertiesSet = 0;
+		for (const auto& Pair : Properties->Values)
+		{
+			FProperty* Property = Target->GetClass()->FindPropertyByName(FName(*Pair.Key));
+			if (!Property)
+			{
+				Errors.Add(FString::Printf(TEXT("%s: property not found on %s"), *Pair.Key, *Target->GetClass()->GetName()));
+				continue;
+			}
+
+			if (FTextProperty* TextProperty = CastField<FTextProperty>(Property))
+			{
+				FString StringValue;
+				if (Pair.Value->TryGetString(StringValue))
+				{
+					TextProperty->SetPropertyValue_InContainer(Target, FText::FromString(StringValue));
+					PropertiesSet++;
+					continue;
+				}
+			}
+
+			FString SetError;
+			if (MCPJsonProperty::SetJsonOnProperty(Property, Property->ContainerPtrToValuePtr<void>(Target), Pair.Value, SetError))
+			{
+				PropertiesSet++;
+			}
+			else
+			{
+				Errors.Add(FString::Printf(TEXT("%s.%s: %s"), *Target->GetName(), *Pair.Key, *SetError));
+			}
+		}
+		return PropertiesSet;
+	};
+
+	int32 ReplacedCount = 0;
+	int32 ReusedCount = 0;
+	int32 RemovedCount = 0;
+	int32 PropertiesSetCount = 0;
+	TArray<FString> Errors;
+
+	for (const TSharedPtr<FJsonValue>& ReplacementValue : *ReplacementValues)
+	{
+		const TSharedPtr<FJsonObject>* ReplacementPtr = nullptr;
+		if (!ReplacementValue.IsValid() || !ReplacementValue->TryGetObject(ReplacementPtr) || !ReplacementPtr || !(*ReplacementPtr).IsValid())
+		{
+			Errors.Add(TEXT("Replacement entry is not an object."));
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject>& Replacement = *ReplacementPtr;
+		FString WidgetName;
+		FString WidgetClassName;
+		if (!Replacement->TryGetStringField(TEXT("widgetName"), WidgetName) || WidgetName.IsEmpty())
+		{
+			Errors.Add(TEXT("Replacement entry missing widgetName."));
+			continue;
+		}
+		if (!Replacement->TryGetStringField(TEXT("widgetClass"), WidgetClassName) || WidgetClassName.IsEmpty())
+		{
+			if (!Replacement->TryGetStringField(TEXT("class"), WidgetClassName) || WidgetClassName.IsEmpty())
+			{
+				Errors.Add(FString::Printf(TEXT("%s: replacement missing widgetClass."), *WidgetName));
+				continue;
+			}
+		}
+
+		const FString ReplacementName = OptionalString(Replacement, TEXT("replacementName"), WidgetName);
+		const bool bOptional = OptionalBool(Replacement, TEXT("optional"), false);
+		UClass* ReplacementClass = ResolveWidgetClass(WidgetClassName);
+		if (!ReplacementClass)
+		{
+			Errors.Add(FString::Printf(TEXT("%s: widget class not found: %s"), *WidgetName, *WidgetClassName));
+			continue;
+		}
+
+		UWidget* ExistingWidget = FindWidgetByName(WidgetName);
+		if (!ExistingWidget && ReplacementName != WidgetName)
+		{
+			ExistingWidget = FindWidgetByName(ReplacementName);
+		}
+		if (!ExistingWidget)
+		{
+			if (!bOptional)
+			{
+				Errors.Add(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+			}
+			continue;
+		}
+
+		const bool bAlreadyMigrated =
+			ExistingWidget->GetName() == ReplacementName &&
+			ExistingWidget->GetClass()->IsChildOf(ReplacementClass);
+		if (bAlreadyMigrated)
+		{
+			const TSharedPtr<FJsonObject>* PropertiesPtr = nullptr;
+			if (Replacement->TryGetObjectField(TEXT("properties"), PropertiesPtr) && PropertiesPtr && (*PropertiesPtr).IsValid())
+			{
+				PropertiesSetCount += ApplyJsonProperties(ExistingWidget, *PropertiesPtr, Errors);
+			}
+			ReusedCount++;
+			continue;
+		}
+
+		UPanelWidget* Parent = ExistingWidget->GetParent();
+		const bool bWasRoot = WidgetBP->WidgetTree->RootWidget == ExistingWidget;
+		int32 ChildIndex = INDEX_NONE;
+		if (Parent)
+		{
+			for (int32 Index = 0; Index < Parent->GetChildrenCount(); ++Index)
+			{
+				if (Parent->GetChildAt(Index) == ExistingWidget)
+				{
+					ChildIndex = Index;
+					break;
+				}
+			}
+		}
+
+		FSlotSnapshot SlotSnapshot = CaptureSlot(ExistingWidget->Slot);
+		const bool bOldWasVariable = ExistingWidget->bIsVariable;
+		FName OldName = ExistingWidget->GetFName();
+		const FName TemporaryOldName = MakeUniqueObjectName(
+			WidgetBP->WidgetTree,
+			ExistingWidget->GetClass(),
+			FName(*(WidgetName + TEXT("_Old"))));
+		ExistingWidget->Rename(*TemporaryOldName.ToString(), WidgetBP->WidgetTree, REN_DontCreateRedirectors | REN_NonTransactional);
+
+		UWidget* ReplacementWidget = WidgetBP->WidgetTree->ConstructWidget<UWidget>(ReplacementClass, FName(*ReplacementName));
+		if (!ReplacementWidget)
+		{
+			ExistingWidget->Rename(*OldName.ToString(), WidgetBP->WidgetTree, REN_DontCreateRedirectors | REN_NonTransactional);
+			Errors.Add(FString::Printf(TEXT("%s: failed to construct replacement widget."), *WidgetName));
+			continue;
+		}
+
+		ReplacementWidget->bIsVariable = true;
+		CopyCommonWidgetProperties(ExistingWidget, ReplacementWidget);
+		ApplyDefaultTextTransfer(ExistingWidget, ReplacementWidget);
+
+		const TSharedPtr<FJsonObject>* PropertiesPtr = nullptr;
+		if (Replacement->TryGetObjectField(TEXT("properties"), PropertiesPtr) && PropertiesPtr && (*PropertiesPtr).IsValid())
+		{
+			PropertiesSetCount += ApplyJsonProperties(ReplacementWidget, *PropertiesPtr, Errors);
+		}
+
+		FGuid ExistingGuid;
+		const bool bHadGuid = WidgetBP->WidgetVariableNameToGuidMap.RemoveAndCopyValue(OldName, ExistingGuid);
+
+		if (Parent)
+		{
+			Parent->RemoveChild(ExistingWidget);
+		}
+		if (bWasRoot)
+		{
+			WidgetBP->WidgetTree->RootWidget = nullptr;
+		}
+		WidgetBP->WidgetTree->RemoveWidget(ExistingWidget);
+
+		UPanelSlot* NewSlot = nullptr;
+		if (Parent)
+		{
+			if (ChildIndex != INDEX_NONE)
+			{
+				NewSlot = Parent->InsertChildAt(ChildIndex, ReplacementWidget);
+			}
+			else
+			{
+				NewSlot = Parent->AddChild(ReplacementWidget);
+			}
+		}
+		else if (bWasRoot)
+		{
+			WidgetBP->WidgetTree->RootWidget = ReplacementWidget;
+		}
+		else
+		{
+			Errors.Add(FString::Printf(TEXT("%s: replacement widget has no parent and is not root."), *WidgetName));
+			continue;
+		}
+
+		ApplySlot(NewSlot, SlotSnapshot);
+
+		WidgetBP->WidgetVariableNameToGuidMap.Add(
+			ReplacementWidget->GetFName(),
+			bHadGuid ? ExistingGuid : FGuid::NewGuid());
+		ReplacementWidget->bIsVariable = bOldWasVariable || ReplacementWidget->bIsVariable;
+		ReplacedCount++;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* RemoveValues = nullptr;
+	if (Params->TryGetArrayField(TEXT("removeWidgetNames"), RemoveValues) && RemoveValues)
+	{
+		for (const TSharedPtr<FJsonValue>& RemoveValue : *RemoveValues)
+		{
+			FString WidgetName;
+			if (!RemoveValue.IsValid() || !RemoveValue->TryGetString(WidgetName) || WidgetName.IsEmpty())
+			{
+				continue;
+			}
+
+			UWidget* Widget = FindWidgetByName(WidgetName);
+			if (!Widget)
+			{
+				continue;
+			}
+			if (UPanelWidget* Parent = Widget->GetParent())
+			{
+				Parent->RemoveChild(Widget);
+			}
+			if (WidgetBP->WidgetTree->RootWidget == Widget)
+			{
+				WidgetBP->WidgetTree->RootWidget = nullptr;
+			}
+			WidgetBP->WidgetVariableNameToGuidMap.Remove(Widget->GetFName());
+			WidgetBP->WidgetTree->RemoveWidget(Widget);
+			RemovedCount++;
+		}
+	}
+
+	WidgetBP->MarkPackageDirty();
+	McpSynchronizeWidgetBlueprintCompilerState(WidgetBP);
+	FCompilerResultsLog CompileLog;
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::None, &CompileLog);
+	if (OptionalBool(Params, TEXT("save"), true))
+	{
+		UEditorAssetLibrary::SaveAsset(AssetPath);
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("replacedWidgets"), ReplacedCount);
+	Result->SetNumberField(TEXT("reusedWidgets"), ReusedCount);
+	Result->SetNumberField(TEXT("removedWidgets"), RemovedCount);
+	Result->SetNumberField(TEXT("propertiesSet"), PropertiesSetCount);
+	Result->SetNumberField(TEXT("compileErrors"), CompileLog.NumErrors);
+	Result->SetNumberField(TEXT("compileWarnings"), CompileLog.NumWarnings);
+	if (!Errors.IsEmpty())
+	{
+		TArray<TSharedPtr<FJsonValue>> ErrorValues;
+		for (const FString& Error : Errors)
+		{
+			ErrorValues.Add(MakeShared<FJsonValueString>(Error));
+		}
+		Result->SetArrayField(TEXT("errors"), ErrorValues);
+		Result->SetBoolField(TEXT("success"), false);
+	}
 	return MCPResult(Result);
 }
 

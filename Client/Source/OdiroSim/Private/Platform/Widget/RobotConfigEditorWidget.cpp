@@ -6,6 +6,7 @@
 #include "Components/Widget.h"
 #include "Platform/PlatformUiSubsystem.h"
 #include "Platform/ViewModel/RobotProfileViewModel.h"
+#include "UI/BaseSliderWidget.h"
 
 void URobotConfigEditorWidget::NativeConstruct()
 {
@@ -26,24 +27,21 @@ void URobotConfigEditorWidget::NativeConstruct()
 		SaveProfileButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleSaveProfileClicked);
 		SaveProfileButton->OnClicked.AddDynamic(this, &URobotConfigEditorWidget::HandleSaveProfileClicked);
 	}
-	if (BodyTabButton)
-	{
-		BodyTabButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleBodyTabClicked);
-		BodyTabButton->OnClicked.AddDynamic(this, &URobotConfigEditorWidget::HandleBodyTabClicked);
-	}
-	if (DriveTabButton)
-	{
-		DriveTabButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleDriveTabClicked);
-		DriveTabButton->OnClicked.AddDynamic(this, &URobotConfigEditorWidget::HandleDriveTabClicked);
-	}
-	if (LidarTabButton)
-	{
-		LidarTabButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleLidarTabClicked);
-		LidarTabButton->OnClicked.AddDynamic(this, &URobotConfigEditorWidget::HandleLidarTabClicked);
-	}
+	BindProfileSlider(BodyLengthSlider.Get(), this);
+	BindProfileSlider(BodyWidthSlider.Get(), this);
+	BindProfileSlider(BodyHeightSlider.Get(), this);
+	BindProfileSlider(BodyWheelBaseSlider.Get(), this);
+	BindProfileSlider(BodyTurningRadiusSlider.Get(), this);
+	BindProfileSlider(DriveMaxSpeedSlider.Get(), this);
+	BindProfileSlider(DriveSteeringGainSlider.Get(), this);
+	BindProfileSlider(DriveMassSlider.Get(), this);
+	BindProfileSlider(LidarRangeSlider.Get(), this);
+	BindProfileSlider(LidarFrontAngleSlider.Get(), this);
+	BindProfileSlider(LidarAngleStepSlider.Get(), this);
+	BindProfileSlider(LidarScanRateSlider.Get(), this);
 
 	LoadProfileFromViewModel();
-	ShowProfileSection(ERobotProfileSection::Body);
+	ShowAllProfileSections();
 }
 
 void URobotConfigEditorWidget::NativeDestruct()
@@ -60,18 +58,18 @@ void URobotConfigEditorWidget::NativeDestruct()
 	{
 		SaveProfileButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleSaveProfileClicked);
 	}
-	if (BodyTabButton)
-	{
-		BodyTabButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleBodyTabClicked);
-	}
-	if (DriveTabButton)
-	{
-		DriveTabButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleDriveTabClicked);
-	}
-	if (LidarTabButton)
-	{
-		LidarTabButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleLidarTabClicked);
-	}
+	UnbindProfileSlider(BodyLengthSlider.Get(), this);
+	UnbindProfileSlider(BodyWidthSlider.Get(), this);
+	UnbindProfileSlider(BodyHeightSlider.Get(), this);
+	UnbindProfileSlider(BodyWheelBaseSlider.Get(), this);
+	UnbindProfileSlider(BodyTurningRadiusSlider.Get(), this);
+	UnbindProfileSlider(DriveMaxSpeedSlider.Get(), this);
+	UnbindProfileSlider(DriveSteeringGainSlider.Get(), this);
+	UnbindProfileSlider(DriveMassSlider.Get(), this);
+	UnbindProfileSlider(LidarRangeSlider.Get(), this);
+	UnbindProfileSlider(LidarFrontAngleSlider.Get(), this);
+	UnbindProfileSlider(LidarAngleStepSlider.Get(), this);
+	UnbindProfileSlider(LidarScanRateSlider.Get(), this);
 
 	Super::NativeDestruct();
 }
@@ -117,22 +115,56 @@ void URobotConfigEditorWidget::HandleSaveProfileClicked()
 	SetProfileStatus(viewModel->GetDiagnosticsText());
 }
 
-void URobotConfigEditorWidget::HandleBodyTabClicked()
+void URobotConfigEditorWidget::HandleProfileSliderChanged(UWidget* widget, const float value)
 {
-	ShowProfileSection(ERobotProfileSection::Body);
-	SetProfileStatus(TEXT("Body profile fields are active."));
-}
-
-void URobotConfigEditorWidget::HandleDriveTabClicked()
-{
-	ShowProfileSection(ERobotProfileSection::Drive);
-	SetProfileStatus(TEXT("Drive profile fields are active."));
-}
-
-void URobotConfigEditorWidget::HandleLidarTabClicked()
-{
-	ShowProfileSection(ERobotProfileSection::Lidar);
-	SetProfileStatus(TEXT("LiDAR profile fields are active."));
+	if (widget == BodyLengthSlider.Get())
+	{
+		SetInputText(BodyLengthInput.Get(), value);
+	}
+	else if (widget == BodyWidthSlider.Get())
+	{
+		SetInputText(BodyWidthInput.Get(), value);
+	}
+	else if (widget == BodyHeightSlider.Get())
+	{
+		SetInputText(BodyHeightInput.Get(), value);
+	}
+	else if (widget == BodyWheelBaseSlider.Get())
+	{
+		SetInputText(BodyWheelBaseInput.Get(), value);
+	}
+	else if (widget == BodyTurningRadiusSlider.Get())
+	{
+		SetInputText(BodyTurningRadiusInput.Get(), value);
+	}
+	else if (widget == DriveMaxSpeedSlider.Get())
+	{
+		SetInputText(DriveMaxSpeedInput.Get(), value);
+	}
+	else if (widget == DriveSteeringGainSlider.Get())
+	{
+		SetInputText(DriveSteeringGainInput.Get(), value);
+	}
+	else if (widget == DriveMassSlider.Get())
+	{
+		SetInputText(DriveMassInput.Get(), value);
+	}
+	else if (widget == LidarRangeSlider.Get())
+	{
+		SetInputText(LidarRangeInput.Get(), value);
+	}
+	else if (widget == LidarFrontAngleSlider.Get())
+	{
+		SetInputText(LidarFrontAngleInput.Get(), value);
+	}
+	else if (widget == LidarAngleStepSlider.Get())
+	{
+		SetInputText(LidarAngleStepInput.Get(), value);
+	}
+	else if (widget == LidarScanRateSlider.Get())
+	{
+		SetInputText(LidarScanRateInput.Get(), value);
+	}
 }
 
 URobotProfileViewModel* URobotConfigEditorWidget::ResolveViewModel()
@@ -251,36 +283,62 @@ void URobotConfigEditorWidget::ApplyViewModelToFields()
 		return;
 	}
 
-	SetInputText(BodyLengthInput.Get(), viewModel->GetBodyLengthM());
-	SetInputText(BodyWidthInput.Get(), viewModel->GetBodyWidthM());
-	SetInputText(BodyHeightInput.Get(), viewModel->GetBodyHeightM());
-	SetInputText(BodyWheelBaseInput.Get(), viewModel->GetBodyWheelBaseM());
-	SetInputText(BodyTurningRadiusInput.Get(), viewModel->GetBodyTurningRadiusM());
-	SetInputText(DriveMaxSpeedInput.Get(), viewModel->GetDriveMaxSpeedKmh());
-	SetInputText(DriveSteeringGainInput.Get(), viewModel->GetDriveSteeringRatePerS());
-	SetInputText(DriveMassInput.Get(), viewModel->GetDriveMassKg());
-	SetInputText(LidarRangeInput.Get(), viewModel->GetLidarScanRangeM());
-	SetInputText(LidarFrontAngleInput.Get(), viewModel->GetLidarFrontHalfAngleDegree());
-	SetInputText(LidarAngleStepInput.Get(), viewModel->GetLidarAngleStepDegree());
-	SetInputText(LidarScanRateInput.Get(), viewModel->GetLidarScanRateHz());
+	SetLinkedSliderFieldValue(BodyLengthInput.Get(), BodyLengthSlider.Get(), viewModel->GetBodyLengthM());
+	SetLinkedSliderFieldValue(BodyWidthInput.Get(), BodyWidthSlider.Get(), viewModel->GetBodyWidthM());
+	SetLinkedSliderFieldValue(BodyHeightInput.Get(), BodyHeightSlider.Get(), viewModel->GetBodyHeightM());
+	SetLinkedSliderFieldValue(BodyWheelBaseInput.Get(), BodyWheelBaseSlider.Get(), viewModel->GetBodyWheelBaseM());
+	SetLinkedSliderFieldValue(
+		BodyTurningRadiusInput.Get(),
+		BodyTurningRadiusSlider.Get(),
+		viewModel->GetBodyTurningRadiusM());
+	SetLinkedSliderFieldValue(DriveMaxSpeedInput.Get(), DriveMaxSpeedSlider.Get(), viewModel->GetDriveMaxSpeedKmh());
+	SetLinkedSliderFieldValue(
+		DriveSteeringGainInput.Get(),
+		DriveSteeringGainSlider.Get(),
+		viewModel->GetDriveSteeringRatePerS());
+	SetLinkedSliderFieldValue(DriveMassInput.Get(), DriveMassSlider.Get(), viewModel->GetDriveMassKg());
+	SetLinkedSliderFieldValue(LidarRangeInput.Get(), LidarRangeSlider.Get(), viewModel->GetLidarScanRangeM());
+	SetLinkedSliderFieldValue(
+		LidarFrontAngleInput.Get(),
+		LidarFrontAngleSlider.Get(),
+		viewModel->GetLidarFrontHalfAngleDegree());
+	SetLinkedSliderFieldValue(
+		LidarAngleStepInput.Get(),
+		LidarAngleStepSlider.Get(),
+		viewModel->GetLidarAngleStepDegree());
+	SetLinkedSliderFieldValue(LidarScanRateInput.Get(), LidarScanRateSlider.Get(), viewModel->GetLidarScanRateHz());
 }
 
-void URobotConfigEditorWidget::ShowProfileSection(const ERobotProfileSection section) const
+void URobotConfigEditorWidget::BindProfileSlider(UBaseSliderWidget* slider, URobotConfigEditorWidget* owner)
+{
+	if (slider && owner)
+	{
+		slider->OnValueChanged.RemoveDynamic(owner, &URobotConfigEditorWidget::HandleProfileSliderChanged);
+		slider->OnValueChanged.AddDynamic(owner, &URobotConfigEditorWidget::HandleProfileSliderChanged);
+	}
+}
+
+void URobotConfigEditorWidget::UnbindProfileSlider(UBaseSliderWidget* slider, URobotConfigEditorWidget* owner)
+{
+	if (slider && owner)
+	{
+		slider->OnValueChanged.RemoveDynamic(owner, &URobotConfigEditorWidget::HandleProfileSliderChanged);
+	}
+}
+
+void URobotConfigEditorWidget::ShowAllProfileSections() const
 {
 	if (BodyFieldsBox)
 	{
-		BodyFieldsBox->SetVisibility(
-			section == ERobotProfileSection::Body ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		BodyFieldsBox->SetVisibility(ESlateVisibility::Visible);
 	}
 	if (DriveFieldsBox)
 	{
-		DriveFieldsBox->SetVisibility(
-			section == ERobotProfileSection::Drive ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		DriveFieldsBox->SetVisibility(ESlateVisibility::Visible);
 	}
 	if (LiDARFieldsBox)
 	{
-		LiDARFieldsBox->SetVisibility(
-			section == ERobotProfileSection::Lidar ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		LiDARFieldsBox->SetVisibility(ESlateVisibility::Visible);
 	}
 }
 
@@ -305,6 +363,18 @@ void URobotConfigEditorWidget::SetInputText(UEditableText* input, const float va
 	if (input)
 	{
 		input->SetText(FText::FromString(FormatProfileFloat(value)));
+	}
+}
+
+void URobotConfigEditorWidget::SetLinkedSliderFieldValue(
+	UEditableText* input,
+	UBaseSliderWidget* slider,
+	const float value)
+{
+	SetInputText(input, value);
+	if (slider)
+	{
+		slider->SetValue(value);
 	}
 }
 

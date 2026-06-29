@@ -139,6 +139,18 @@ namespace
 		{
 			diagnostics.Add(TEXT("Max Speed must be 0 km/h or greater."));
 		}
+		if (settings.MaxReverseSpeedKmh < 0.0f)
+		{
+			diagnostics.Add(TEXT("Max Reverse Speed must be 0 km/h or greater."));
+		}
+		if (settings.AccelerationRateKmhPerSecond < 0.0f)
+		{
+			diagnostics.Add(TEXT("Acceleration Rate must be 0 km/h/s or greater."));
+		}
+		if (settings.DecelerationRateKmhPerSecond < 0.0f)
+		{
+			diagnostics.Add(TEXT("Deceleration Rate must be 0 km/h/s or greater."));
+		}
 		if (settings.SteeringRatePerS < 0.0f)
 		{
 			diagnostics.Add(TEXT("Steering Rate must be 0 or greater."));
@@ -158,13 +170,46 @@ namespace
 		FString& outErrorText)
 	{
 		TArray<FString> diagnostics;
+		const FString normalizedMode = settings.LidarMode.TrimStartAndEnd()
+			.ToLower()
+			.Replace(TEXT("_"), TEXT(""))
+			.Replace(TEXT("-"), TEXT(""))
+			.Replace(TEXT("+"), TEXT("and"))
+			.Replace(TEXT(" "), TEXT(""));
+		if (normalizedMode != TEXT("1d")
+			&& normalizedMode != TEXT("oned")
+			&& normalizedMode != TEXT("2d")
+			&& normalizedMode != TEXT("twod")
+			&& normalizedMode != TEXT("front2d")
+			&& normalizedMode != TEXT("3d")
+			&& normalizedMode != TEXT("threed")
+			&& normalizedMode != TEXT("1dand2d")
+			&& normalizedMode != TEXT("onedandtwod")
+			&& normalizedMode != TEXT("2dand3d")
+			&& normalizedMode != TEXT("twodandthreed")
+			&& normalizedMode != TEXT("all"))
+		{
+			diagnostics.Add(TEXT("LiDAR Mode must be 1D, 2D, or 3D."));
+		}
 		if (settings.ScanRangeM < 0.0f)
 		{
 			diagnostics.Add(TEXT("LiDAR Scan Range must be 0 m or greater."));
 		}
+		if (settings.SensorHeightM < 0.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Sensor Height must be 0 m or greater."));
+		}
 		if (settings.FrontHalfAngleDegree < 0.0f || settings.FrontHalfAngleDegree > 180.0f)
 		{
 			diagnostics.Add(TEXT("LiDAR Front Angle must be between 0 and 180 degrees."));
+		}
+		if (settings.StopDistanceM < 0.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Stop Distance must be 0 m or greater."));
+		}
+		if (settings.SlowDownDistanceM < 0.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Slowdown Distance must be 0 m or greater."));
 		}
 		if (settings.AngleStepDegree < 1.0f)
 		{
@@ -218,6 +263,70 @@ namespace
 		{
 			targetValue = static_cast<float>(jsonValue);
 		}
+	}
+
+	// Applies a JSON string field to the target value when present.
+	void ReadOptionalRobotProfileStringField(
+		const FJsonObject& object,
+		const TCHAR* fieldName,
+		FString& targetValue)
+	{
+		FString jsonValue;
+		if (object.TryGetStringField(fieldName, jsonValue))
+		{
+			targetValue = jsonValue;
+		}
+	}
+
+	// Applies a JSON bool field to the target value when present.
+	void ReadOptionalRobotProfileBoolField(
+		const FJsonObject& object,
+		const TCHAR* fieldName,
+		bool& targetValue)
+	{
+		bool bJsonValue = false;
+		if (object.TryGetBoolField(fieldName, bJsonValue))
+		{
+			targetValue = bJsonValue;
+		}
+	}
+
+	// Writes LiDAR mode using the profile.json spelling consumed by runtime setup compilation.
+	FString NormalizePlatformUiRobotProfileLidarModeForSave(const FString& value)
+	{
+		const FString normalized = value.TrimStartAndEnd()
+			.ToLower()
+			.Replace(TEXT("_"), TEXT(""))
+			.Replace(TEXT("-"), TEXT(""))
+			.Replace(TEXT("+"), TEXT("and"))
+			.Replace(TEXT(" "), TEXT(""));
+
+		if (normalized == TEXT("1d") || normalized == TEXT("oned"))
+		{
+			return TEXT("1d");
+		}
+		if (normalized == TEXT("2d") || normalized == TEXT("twod") || normalized == TEXT("front2d"))
+		{
+			return TEXT("2d");
+		}
+		if (normalized == TEXT("3d") || normalized == TEXT("threed"))
+		{
+			return TEXT("3d");
+		}
+		if (normalized == TEXT("1dand2d") || normalized == TEXT("onedandtwod"))
+		{
+			return TEXT("1d_and_2d");
+		}
+		if (normalized == TEXT("2dand3d") || normalized == TEXT("twodandthreed"))
+		{
+			return TEXT("2d_and_3d");
+		}
+		if (normalized == TEXT("all"))
+		{
+			return TEXT("all");
+		}
+
+		return value.TrimStartAndEnd();
 	}
 
 	// Converts DeliveryBot compiler diagnostics into a profile editor status message.
@@ -876,6 +985,18 @@ bool UPlatformUiSubsystem::LoadRobotProfileForProject(
 
 		const TSharedPtr<FJsonObject> driveObject = driveValue->AsObject();
 		ReadOptionalRobotProfileNumberField(*driveObject, TEXT("max_speed_kmh"), outSettings.Drive.MaxSpeedKmh);
+		ReadOptionalRobotProfileNumberField(*driveObject, TEXT("max_reverse_speed_kmh"), outSettings.Drive.MaxReverseSpeedKmh);
+		ReadOptionalRobotProfileNumberField(*driveObject, TEXT("max_reverse_kmh"), outSettings.Drive.MaxReverseSpeedKmh);
+		ReadOptionalRobotProfileNumberField(
+			*driveObject,
+			TEXT("acceleration_rate_kmh_per_second"),
+			outSettings.Drive.AccelerationRateKmhPerSecond);
+		ReadOptionalRobotProfileNumberField(*driveObject, TEXT("accel_kmh_per_s"), outSettings.Drive.AccelerationRateKmhPerSecond);
+		ReadOptionalRobotProfileNumberField(
+			*driveObject,
+			TEXT("deceleration_rate_kmh_per_second"),
+			outSettings.Drive.DecelerationRateKmhPerSecond);
+		ReadOptionalRobotProfileNumberField(*driveObject, TEXT("decel_kmh_per_s"), outSettings.Drive.DecelerationRateKmhPerSecond);
 		ReadOptionalRobotProfileNumberField(*driveObject, TEXT("steering_rate_per_s"), outSettings.Drive.SteeringRatePerS);
 		ReadOptionalRobotProfileNumberField(*driveObject, TEXT("mass_kg"), outSettings.Drive.MassKg);
 	}
@@ -890,9 +1011,16 @@ bool UPlatformUiSubsystem::LoadRobotProfileForProject(
 		}
 
 		const TSharedPtr<FJsonObject> lidarObject = lidarValue->AsObject();
+		ReadOptionalRobotProfileStringField(*lidarObject, TEXT("lidar_mode"), outSettings.Lidar.LidarMode);
+		ReadOptionalRobotProfileStringField(*lidarObject, TEXT("mode"), outSettings.Lidar.LidarMode);
+		ReadOptionalRobotProfileBoolField(*lidarObject, TEXT("draw_debug"), outSettings.Lidar.bDrawDebug);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("scan_range_m"), outSettings.Lidar.ScanRangeM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("range_m"), outSettings.Lidar.ScanRangeM);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("sensor_height_m"), outSettings.Lidar.SensorHeightM);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("height_m"), outSettings.Lidar.SensorHeightM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("front_half_angle_degree"), outSettings.Lidar.FrontHalfAngleDegree);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("stop_distance_m"), outSettings.Lidar.StopDistanceM);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("slow_down_distance_m"), outSettings.Lidar.SlowDownDistanceM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("angle_step_degree"), outSettings.Lidar.AngleStepDegree);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("scan_rate_hz"), outSettings.Lidar.ScanRateHz);
 	}
@@ -937,17 +1065,50 @@ bool UPlatformUiSubsystem::SaveRobotProfileForProject(
 	const TSharedRef<FJsonObject> driveObject =
 		FindOrCreatePlatformUiObjectField(robotObject, TEXT("drive"));
 	driveObject->SetNumberField(TEXT("max_speed_kmh"), settings.Drive.MaxSpeedKmh);
+	driveObject->SetNumberField(TEXT("max_reverse_speed_kmh"), settings.Drive.MaxReverseSpeedKmh);
+	if (driveObject->HasField(TEXT("max_reverse_kmh")))
+	{
+		driveObject->SetNumberField(TEXT("max_reverse_kmh"), settings.Drive.MaxReverseSpeedKmh);
+	}
+	driveObject->SetNumberField(
+		TEXT("acceleration_rate_kmh_per_second"),
+		settings.Drive.AccelerationRateKmhPerSecond);
+	if (driveObject->HasField(TEXT("accel_kmh_per_s")))
+	{
+		driveObject->SetNumberField(TEXT("accel_kmh_per_s"), settings.Drive.AccelerationRateKmhPerSecond);
+	}
+	driveObject->SetNumberField(
+		TEXT("deceleration_rate_kmh_per_second"),
+		settings.Drive.DecelerationRateKmhPerSecond);
+	if (driveObject->HasField(TEXT("decel_kmh_per_s")))
+	{
+		driveObject->SetNumberField(TEXT("decel_kmh_per_s"), settings.Drive.DecelerationRateKmhPerSecond);
+	}
 	driveObject->SetNumberField(TEXT("steering_rate_per_s"), settings.Drive.SteeringRatePerS);
 	driveObject->SetNumberField(TEXT("mass_kg"), settings.Drive.MassKg);
 
 	const TSharedRef<FJsonObject> lidarObject =
 		FindOrCreatePlatformUiObjectField(robotObject, TEXT("lidar"));
+	const FString lidarMode = NormalizePlatformUiRobotProfileLidarModeForSave(settings.Lidar.LidarMode);
+	lidarObject->SetStringField(TEXT("lidar_mode"), lidarMode);
+	if (lidarObject->HasField(TEXT("mode")))
+	{
+		lidarObject->SetStringField(TEXT("mode"), lidarMode);
+	}
+	lidarObject->SetBoolField(TEXT("draw_debug"), settings.Lidar.bDrawDebug);
 	lidarObject->SetNumberField(TEXT("scan_range_m"), settings.Lidar.ScanRangeM);
 	if (lidarObject->HasField(TEXT("range_m")))
 	{
 		lidarObject->SetNumberField(TEXT("range_m"), settings.Lidar.ScanRangeM);
 	}
+	lidarObject->SetNumberField(TEXT("sensor_height_m"), settings.Lidar.SensorHeightM);
+	if (lidarObject->HasField(TEXT("height_m")))
+	{
+		lidarObject->SetNumberField(TEXT("height_m"), settings.Lidar.SensorHeightM);
+	}
 	lidarObject->SetNumberField(TEXT("front_half_angle_degree"), settings.Lidar.FrontHalfAngleDegree);
+	lidarObject->SetNumberField(TEXT("stop_distance_m"), settings.Lidar.StopDistanceM);
+	lidarObject->SetNumberField(TEXT("slow_down_distance_m"), settings.Lidar.SlowDownDistanceM);
 	lidarObject->SetNumberField(TEXT("angle_step_degree"), settings.Lidar.AngleStepDegree);
 	lidarObject->SetNumberField(TEXT("scan_rate_hz"), settings.Lidar.ScanRateHz);
 

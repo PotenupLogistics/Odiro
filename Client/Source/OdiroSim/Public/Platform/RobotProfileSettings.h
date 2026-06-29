@@ -40,6 +40,18 @@ struct ODIROSIM_API FRobotProfileDriveSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float MaxSpeedKmh = 7.00f;
 
+	// robot.drive.max_reverse_kmh value in kilometers per hour.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float MaxReverseSpeedKmh = 2.00f;
+
+	// robot.drive.accel_kmh_per_s acceleration rate in kilometers per hour per second.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float AccelerationRateKmhPerSecond = 1.20f;
+
+	// robot.drive.decel_kmh_per_s deceleration rate in kilometers per hour per second.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float DecelerationRateKmhPerSecond = 0.90f;
+
 	// robot.drive.steering_rate_per_s steering input interpolation rate.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float SteeringRatePerS = 3.20f;
@@ -55,13 +67,33 @@ struct ODIROSIM_API FRobotProfileLidarSettings
 {
 	GENERATED_BODY()
 
+	// robot.lidar.lidar_mode scan dimension mode.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	FString LidarMode = TEXT("3D");
+
+	// robot.lidar.draw_debug debug visualization flag.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	bool bDrawDebug = false;
+
 	// robot.lidar.scan_range_m value in meters.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float ScanRangeM = 15.00f;
 
+	// robot.lidar.sensor_height_m sensor origin height in meters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float SensorHeightM = 0.07f;
+
 	// robot.lidar.front_half_angle_degree front-facing half angle in degrees.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float FrontHalfAngleDegree = 50.00f;
+
+	// robot.lidar.stop_distance_m obstacle stop distance in meters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float StopDistanceM = 2.00f;
+
+	// robot.lidar.slow_down_distance_m obstacle slowdown distance in meters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float SlowDownDistanceM = 8.00f;
 
 	// robot.lidar.angle_step_degree horizontal ray spacing in degrees.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")

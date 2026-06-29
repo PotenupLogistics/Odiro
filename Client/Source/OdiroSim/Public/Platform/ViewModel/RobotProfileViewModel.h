@@ -86,6 +86,30 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
 	float GetDriveMaxSpeedKmh() const { return DriveMaxSpeedKmh; }
 
+	// Updates the max reverse speed input in kilometers per hour.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetDriveMaxReverseSpeedKmh(float value);
+
+	// Returns the max reverse speed input in kilometers per hour.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetDriveMaxReverseSpeedKmh() const { return DriveMaxReverseSpeedKmh; }
+
+	// Updates the acceleration rate input in kilometers per hour per second.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetDriveAccelerationRateKmhPerSecond(float value);
+
+	// Returns the acceleration rate input in kilometers per hour per second.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetDriveAccelerationRateKmhPerSecond() const { return DriveAccelerationRateKmhPerSecond; }
+
+	// Updates the deceleration rate input in kilometers per hour per second.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetDriveDecelerationRateKmhPerSecond(float value);
+
+	// Returns the deceleration rate input in kilometers per hour per second.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetDriveDecelerationRateKmhPerSecond() const { return DriveDecelerationRateKmhPerSecond; }
+
 	// Updates the steering input interpolation rate.
 	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
 	void SetDriveSteeringRatePerS(float value);
@@ -102,6 +126,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
 	float GetDriveMassKg() const { return DriveMassKg; }
 
+	// Updates the LiDAR mode input.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarMode(const FString& value);
+
+	// Returns the LiDAR mode input.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	FString GetLidarMode() const { return LidarMode; }
+
+	// Updates the LiDAR debug visualization input.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarDrawDebug(bool bValue);
+
+	// Returns the LiDAR debug visualization input.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	bool GetLidarDrawDebug() const { return bLidarDrawDebug; }
+
 	// Updates the LiDAR scan range input in meters.
 	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
 	void SetLidarScanRangeM(float value);
@@ -110,6 +150,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
 	float GetLidarScanRangeM() const { return LidarScanRangeM; }
 
+	// Updates the LiDAR sensor height input in meters.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarSensorHeightM(float value);
+
+	// Returns the LiDAR sensor height input in meters.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetLidarSensorHeightM() const { return LidarSensorHeightM; }
+
 	// Updates the LiDAR front half angle input in degrees.
 	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
 	void SetLidarFrontHalfAngleDegree(float value);
@@ -117,6 +165,22 @@ public:
 	// Returns the LiDAR front half angle input in degrees.
 	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
 	float GetLidarFrontHalfAngleDegree() const { return LidarFrontHalfAngleDegree; }
+
+	// Updates the LiDAR stop distance input in meters.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarStopDistanceM(float value);
+
+	// Returns the LiDAR stop distance input in meters.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetLidarStopDistanceM() const { return LidarStopDistanceM; }
+
+	// Updates the LiDAR slowdown distance input in meters.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarSlowDownDistanceM(float value);
+
+	// Returns the LiDAR slowdown distance input in meters.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetLidarSlowDownDistanceM() const { return LidarSlowDownDistanceM; }
 
 	// Updates the LiDAR horizontal angle step input in degrees.
 	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
@@ -186,6 +250,18 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
 	float DriveMaxSpeedKmh = 7.00f;
 
+	// robot.drive.max_reverse_kmh input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float DriveMaxReverseSpeedKmh = 2.00f;
+
+	// robot.drive.accel_kmh_per_s input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float DriveAccelerationRateKmhPerSecond = 1.20f;
+
+	// robot.drive.decel_kmh_per_s input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float DriveDecelerationRateKmhPerSecond = 0.90f;
+
 	// robot.drive.steering_rate_per_s input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
 	float DriveSteeringRatePerS = 3.20f;
@@ -194,13 +270,33 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
 	float DriveMassKg = 48.00f;
 
+	// robot.lidar.lidar_mode input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	FString LidarMode = TEXT("3D");
+
+	// robot.lidar.draw_debug input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	bool bLidarDrawDebug = false;
+
 	// robot.lidar.scan_range_m input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
 	float LidarScanRangeM = 15.00f;
 
+	// robot.lidar.sensor_height_m input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float LidarSensorHeightM = 0.07f;
+
 	// robot.lidar.front_half_angle_degree input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
 	float LidarFrontHalfAngleDegree = 50.00f;
+
+	// robot.lidar.stop_distance_m input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float LidarStopDistanceM = 2.00f;
+
+	// robot.lidar.slow_down_distance_m input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float LidarSlowDownDistanceM = 8.00f;
 
 	// robot.lidar.angle_step_degree input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))

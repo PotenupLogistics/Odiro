@@ -10,7 +10,13 @@ from app.agents.scenario_generation_v2.template_validator import ALLOWED_LANES
 
 
 ROBOT_ANCHOR_EXCLUSION_RADIUS_M = 1.0
-"""Default along-distance safety radius around robot start and goal anchors."""
+"""Legacy along-distance safety radius retained for compatibility imports."""
+
+ROBOT_START_EXCLUSION_RADIUS_M = 2.0
+"""Along-distance safety radius around the robot start anchor."""
+
+ROBOT_GOAL_EXCLUSION_RADIUS_M = 1.0
+"""Along-distance safety radius around the robot goal anchor."""
 
 DEFAULT_OBSTACLE_FOOTPRINT_WIDTH_M = 0.1
 """Conservative footprint width used for AI-side passable-width repair."""
@@ -557,7 +563,10 @@ class RepairHandler:
         forbidden: dict[str, list[tuple[float, float]]] = {}
         if not isinstance(robot, dict):
             return forbidden
-        for key in ("start", "goal"):
+        for key, radius_m in (
+            ("start", ROBOT_START_EXCLUSION_RADIUS_M),
+            ("goal", ROBOT_GOAL_EXCLUSION_RADIUS_M),
+        ):
             anchor = robot.get(key)
             if not isinstance(anchor, dict) or anchor.get("type") != "corridor_pose":
                 continue
@@ -568,8 +577,8 @@ class RepairHandler:
             anchor_center = (along_bounds[0] + along_bounds[1]) / 2.0
             forbidden.setdefault(segment, []).append(
                 (
-                    anchor_center - ROBOT_ANCHOR_EXCLUSION_RADIUS_M,
-                    anchor_center + ROBOT_ANCHOR_EXCLUSION_RADIUS_M,
+                    anchor_center - radius_m,
+                    anchor_center + radius_m,
                 )
             )
         return forbidden

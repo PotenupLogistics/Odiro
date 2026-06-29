@@ -33,7 +33,8 @@ if [ "$verify_status" -ne 0 ]; then
   exit "$verify_status"
 fi
 
-git-lfs pre-push "$remote_name" "$remote_url" < "$updates_file"
+# Lock ownership is verified above with the repository policy; Git LFS still uploads objects here.
+git -c lfs.locksverify=false lfs pre-push "$remote_name" "$remote_url" < "$updates_file"
 lfs_status=$?
 if [ "$lfs_status" -ne 0 ]; then
   exit "$lfs_status"

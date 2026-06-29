@@ -198,8 +198,8 @@ class ScenarioPresetPatcher:
         while len(placements) < desired_count:
             placements.append(self._default_obstacle_placement(scenario, preset_id=preset_id, index=len(placements), intent=intent))
         normalized = [
-            self._normalize_obstacle_placement(placement, scenario, preset_id=preset_id, intent=intent)
-            for placement in placements
+            self._normalize_obstacle_placement(placement, scenario, preset_id=preset_id, intent=intent, index=index)
+            for index, placement in enumerate(placements)
         ]
         normalized = self._redistribute_requested_obstacles(normalized, scenario, preset_id=preset_id, intent=intent)
         scenario["obstacles"] = {
@@ -328,6 +328,8 @@ class ScenarioPresetPatcher:
             return 0
         if intent.requested_obstacle_count is not None:
             return max(0, int(intent.requested_obstacle_count))
+        if intent.requested_props:
+            return len(intent.requested_props)
         if preset_id == "barricade":
             return len(preset_placements)
         if self._has_static_obstacle_intent(intent):
@@ -376,7 +378,7 @@ class ScenarioPresetPatcher:
         placement: dict[str, Any] = {
             "kind": "fixed",
             "id": f"{preset_id.replace('-', '_')}_obstacle_{index + 1}",
-            "prop": self._requested_catalog_prop(intent) or "obstacle.road_cone_01",
+            "prop": self._requested_catalog_prop(intent, index=index) or "obstacle.road_cone_01",
             "at": {
                 "segment": segment_id,
                 "along_m": self._default_along_range(segment_range, preset_id=preset_id),
@@ -395,13 +397,14 @@ class ScenarioPresetPatcher:
         *,
         preset_id: str,
         intent: ScenarioIntent,
+        index: int,
     ) -> dict[str, Any]:
         """Normalize placement anchors so patched presets validate against their corridor."""
         normalized = deepcopy(placement)
         kind = normalized.get("kind")
         if kind in {"fixed", "pattern"}:
             self._normalize_legacy_prop(normalized)
-            requested_prop = self._requested_catalog_prop(intent)
+            requested_prop = self._requested_catalog_prop(intent, index=index)
             if requested_prop is not None:
                 normalized["prop"] = requested_prop
             at = normalized.get("at")
@@ -430,12 +433,23 @@ class ScenarioPresetPatcher:
         if "prop" in placement:
             placement["prop"] = normalize_legacy_static_obstacle_prop_id(placement["prop"])
 
-    def _requested_catalog_prop(self, intent: ScenarioIntent) -> str | None:
-        """Return a requested prop only when it is present in the static obstacle catalog."""
+    def _requested_catalog_prop(self, intent: ScenarioIntent, *, index: int = 0) -> str | None:
+        """Return a requested prop sequence item only when it is in the catalog."""
+        props = self._requested_catalog_props(intent)
+        if props:
+            return props[index % len(props)]
         prop = normalize_legacy_static_obstacle_prop_id(intent.requested_prop)
         if isinstance(prop, str) and prop in ALLOWED_STATIC_OBSTACLE_PROPS:
             return prop
         return None
+
+    def _requested_catalog_props(self, intent: ScenarioIntent) -> list[str]:
+        """Return requested prop sequence items present in the static obstacle catalog."""
+        return [
+            prop
+            for prop in (normalize_legacy_static_obstacle_prop_id(item) for item in intent.requested_props)
+            if isinstance(prop, str) and prop in ALLOWED_STATIC_OBSTACLE_PROPS
+        ]
 
     def _redistribute_requested_obstacles(
         self,
@@ -452,7 +466,7 @@ class ScenarioPresetPatcher:
             return placements
         target_segments = self._target_segments(scenario, preset_id=preset_id, intent=intent)
         segment_counts = self._segment_obstacle_counts(len(placements), len(target_segments), intent.requested_obstacle_counts)
-        requested_prop = self._requested_catalog_prop(intent)
+        requested_props = self._requested_catalog_props(intent)
         redistributed: list[dict[str, Any]] = []
         segment_slots: list[tuple[str, tuple[float, float], int, int]] = []
         for segment_index, ((segment_id, segment_range), segment_count) in enumerate(
@@ -463,8 +477,8 @@ class ScenarioPresetPatcher:
         for index, placement in enumerate(placements):
             segment_id, segment_range, local_index, segment_count = segment_slots[min(index, len(segment_slots) - 1)]
             normalized = deepcopy(placement)
-            if requested_prop is not None:
-                normalized["prop"] = requested_prop
+            if requested_props:
+                normalized["prop"] = requested_props[index % len(requested_props)]
             normalized["id"] = self._placement_id(normalized, preset_id=preset_id, index=index)
             at = normalized.get("at") if isinstance(normalized.get("at"), dict) else {}
             at["segment"] = segment_id

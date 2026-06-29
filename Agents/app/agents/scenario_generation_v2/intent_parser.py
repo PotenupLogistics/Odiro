@@ -5,7 +5,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.agents.scenario_generation_v2.prop_normalizer import normalize_legacy_static_obstacle_prop_id
-from app.catalogs.static_obstacle_catalog import get_allowed_static_obstacle_prop_ids
+from app.catalogs.static_obstacle_catalog import (
+    StaticObstaclePropMention,
+    find_static_obstacle_prop_mentions,
+    get_allowed_static_obstacle_prop_ids,
+    resolve_static_obstacle_prop_id,
+    static_obstacle_search_text,
+)
 
 
 @dataclass(frozen=True)
@@ -30,6 +36,7 @@ class ScenarioIntent:
     requested_obstacle_count: int | None = None
     requested_obstacle_counts: list[int] = field(default_factory=list)
     requested_prop: str | None = None
+    requested_props: list[str] = field(default_factory=list)
     explicit_no_obstacles: bool = False
     start_goal_clearance: bool = False
     requested_conflict_segment_count: int | None = None
@@ -45,6 +52,24 @@ class ScenarioIntent:
 class IntentParser:
     """Extracts coarse scenario intent signals from the prompt without owning generation output."""
 
+    KOREAN_COUNT_WORDS = {
+        "한": 1,
+        "하나": 1,
+        "두": 2,
+        "둘": 2,
+        "세": 3,
+        "셋": 3,
+        "네": 4,
+        "넷": 4,
+        "다섯": 5,
+        "여섯": 6,
+        "일곱": 7,
+        "여덟": 8,
+        "아홉": 9,
+        "열": 10,
+    }
+    """Korean number words supported in alias-adjacent obstacle counts."""
+
     def parse(self, prompt: str) -> ScenarioIntent:
         lowered = prompt.lower()
         risk_factors: list[str] = []
@@ -54,11 +79,14 @@ class IntentParser:
         persona_hint = "vulnerable" if any(token in lowered for token in ("취약", "vulnerable")) else None
         explicit_blocking = self._is_explicit_blocking_prompt(prompt, lowered)
         requested_gate_obstacle_count = self._requested_gate_obstacle_count(prompt, lowered)
+        requested_props = self._requested_props(prompt)
         requested_obstacle_counts = self._requested_obstacle_counts(prompt, lowered)
         requested_obstacle_count = sum(requested_obstacle_counts) if requested_obstacle_counts else None
         if requested_obstacle_count is None and requested_gate_obstacle_count is not None:
             requested_obstacle_count = requested_gate_obstacle_count
-        requested_prop = self._requested_prop(prompt, lowered)
+        requested_prop = requested_props[0] if requested_props else self._requested_prop(prompt, lowered)
+        if requested_prop is not None and not requested_props and requested_prop in get_allowed_static_obstacle_prop_ids():
+            requested_props = [requested_prop]
         start_goal_clearance = self._is_start_goal_clearance_prompt(prompt, lowered)
         requested_conflict_segment_count = self._requested_conflict_segment_count(prompt, lowered)
         explicit_no_obstacles = self._is_explicit_no_obstacles_prompt(prompt, lowered, start_goal_clearance)
@@ -82,7 +110,8 @@ class IntentParser:
             risk_factors.append("narrow_sidewalk")
             difficulty = "medium_high"
         if not explicit_no_obstacles and (
-            any(token in prompt for token in ("장애물", "공사", "바리케이드", "차단막", "공사 콘", "콘", "꼬깔", "안내판"))
+            requested_props
+            or any(token in prompt for token in ("장애물", "공사", "바리케이드", "차단막", "공사 콘", "콘", "꼬깔", "안내판"))
             or any(token in lowered for token in ("obstacle", "cone", "sign", "panel"))
         ):
             risk_factors.append("static_obstacle_ahead")
@@ -118,6 +147,7 @@ class IntentParser:
             requested_obstacle_count=requested_obstacle_count,
             requested_obstacle_counts=requested_obstacle_counts,
             requested_prop=requested_prop,
+            requested_props=requested_props,
             explicit_no_obstacles=explicit_no_obstacles,
             start_goal_clearance=start_goal_clearance,
             requested_conflict_segment_count=requested_conflict_segment_count,
@@ -143,6 +173,7 @@ class IntentParser:
             for token in (
                 "통로가 막",
                 "길을 막",
+                "완전히 막",
                 "지나갈 수 없",
                 "통행 불가",
                 "일부러",
@@ -159,7 +190,7 @@ class IntentParser:
 
     def _requested_obstacle_counts(self, prompt: str, lowered: str) -> list[int]:
         """Return obstacle counts without confusing segment counts for placements."""
-        counts: list[tuple[int, tuple[int, int]]] = []
+        generic_counts: list[tuple[int, tuple[int, int]]] = []
         obstacle_terms = r"(?:장애물|콘|꼬깔|road\s*cone|obstacle\.[a-z0-9_]+)"
         patterns = (
             re.compile(rf"{obstacle_terms}\s*(\d+)\s*개", re.IGNORECASE),
@@ -169,16 +200,22 @@ class IntentParser:
             for match in pattern.finditer(lowered):
                 value = next((group for group in match.groups() if group), None)
                 if value is not None:
-                    counts.append((int(value), match.span()))
+                    generic_counts.append((int(value), match.span()))
         if any(token in prompt for token in ("장애물 두 개", "두 개의 장애물", "콘 두 개", "두 개의 콘")):
-            counts.append((2, (-1, -1)))
-        if not counts:
+            generic_counts.append((2, (-1, -1)))
+        if not generic_counts:
             english_match = re.search(r"(?:obstacle[s]?\D+(\d+)|(\d+)\D+obstacle[s]?)", lowered)
             if english_match:
                 value = english_match.group(1) or english_match.group(2)
-                counts.append((int(value), english_match.span()))
+                generic_counts.append((int(value), english_match.span()))
         if any(token in lowered for token in ("two obstacles", "two obstacle")):
-            counts.append((2, (-2, -2)))
+            generic_counts.append((2, (-2, -2)))
+        alias_counts = self._requested_catalog_alias_counts(prompt)
+        counts = list(alias_counts)
+        for count, span in generic_counts:
+            if alias_counts and (span[0] < 0 or any(self._spans_overlap(span, alias_span) for _, alias_span in alias_counts)):
+                continue
+            counts.append((count, span))
         deduped: list[int] = []
         seen_spans: set[tuple[int, int]] = set()
         for value, span in counts:
@@ -187,6 +224,67 @@ class IntentParser:
             seen_spans.add(span)
             deduped.append(value)
         return deduped
+
+    def _spans_overlap(self, left: tuple[int, int], right: tuple[int, int]) -> bool:
+        """Return whether two prompt spans overlap."""
+        return left[0] < right[1] and right[0] < left[1]
+
+    def _requested_catalog_alias_counts(self, prompt: str) -> list[tuple[int, tuple[int, int]]]:
+        """Return counts adjacent to catalog aliases such as manhole four."""
+        search_text = static_obstacle_search_text(prompt)
+        counts: list[tuple[int, tuple[int, int]]] = []
+        for mention in find_static_obstacle_prop_mentions(prompt):
+            adjacent_count = self._catalog_alias_count_for_mention(search_text, mention)
+            if adjacent_count is not None:
+                count, span = adjacent_count
+                counts.append((count, span))
+        return counts
+
+    def _catalog_alias_count_for_mention(
+        self,
+        search_text: str,
+        mention: StaticObstaclePropMention,
+    ) -> tuple[int, tuple[int, int]] | None:
+        """Return the count adjacent to one catalog mention when present."""
+        count_pattern = self._count_word_pattern()
+        after = search_text[mention.end : mention.end + 16]
+        after_match = re.match(rf"_*(?P<count>{count_pattern})_*개", after)
+        if after_match:
+            count = self._count_value(after_match.group("count"))
+            if count is not None:
+                return count, (mention.start, mention.end + after_match.end())
+        before = search_text[max(0, mention.start - 16) : mention.start]
+        before_match = re.search(rf"(?P<count>{count_pattern})_*개(?:의|만)?_*$", before)
+        if before_match:
+            count = self._count_value(before_match.group("count"))
+            if count is not None:
+                span = (mention.start - len(before) + before_match.start(), mention.end)
+                return count, span
+        return None
+
+    def _count_word_pattern(self) -> str:
+        """Return a regex alternation for supported digit and Korean counts."""
+        words = sorted(self.KOREAN_COUNT_WORDS, key=len, reverse=True)
+        return r"\d+|" + "|".join(re.escape(word) for word in words)
+
+    def _count_value(self, value: str) -> int | None:
+        """Return a positive integer for digit or Korean count words."""
+        if value.isdigit():
+            return int(value)
+        return self.KOREAN_COUNT_WORDS.get(value)
+
+    def _requested_props(self, prompt: str) -> list[str]:
+        """Return catalog prop ids mentioned by prompt aliases in mention order."""
+        search_text = static_obstacle_search_text(prompt)
+        props: list[str] = []
+        for mention in find_static_obstacle_prop_mentions(prompt):
+            adjacent_count = self._catalog_alias_count_for_mention(search_text, mention)
+            if adjacent_count is None:
+                props.append(mention.prop_id)
+                continue
+            count, _ = adjacent_count
+            props.extend(mention.prop_id for _ in range(count))
+        return props
 
     def _requested_prop(self, prompt: str, lowered: str) -> str | None:
         """Return a prompt-mentioned static obstacle prop id without inventing unknown aliases."""
@@ -199,6 +297,9 @@ class IntentParser:
             return None
         requested = match.group(0)
         normalized = normalize_legacy_static_obstacle_prop_id(requested)
+        resolved = resolve_static_obstacle_prop_id(normalized)
+        if isinstance(resolved, str) and resolved in allowed_props:
+            return resolved
         if isinstance(normalized, str) and normalized in allowed_props:
             return normalized
         if requested in allowed_props:
@@ -337,7 +438,11 @@ class IntentParser:
         """Return whether the prompt asks for obstacles, pedestrians, or risk interactions."""
         korean_tokens = ("장애물", "공사 콘", "콘", "꼬깔", "안내판", "보행자", "가로지르는", "마주 오는", "대향", "추월", "군중", "충돌", "위험")
         english_tokens = ("obstacle", "pedestrian", "crossing", "oncoming", "crowd", "collision", "near miss", "risk", "blocked", "blocking")
-        return any(token in prompt for token in korean_tokens) or any(token in lowered for token in english_tokens)
+        return (
+            bool(find_static_obstacle_prop_mentions(prompt))
+            or any(token in prompt for token in korean_tokens)
+            or any(token in lowered for token in english_tokens)
+        )
 
     def _corridor_pose_anchor(self, prompt: str, segment: str, *, default_along: float) -> dict[str, Any] | None:
         """Extract a corridor-local robot anchor for explicit start/goal pose prompts."""

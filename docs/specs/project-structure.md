@@ -70,11 +70,24 @@ Odiro/
 
   static/                         # --- 배포/초기화용 기본 리소스 ---
     agents/                       # Agents 런타임 데이터
-    templates/                    # project 생성용 scenario/profile/policy preset source
+    presets/                      # project 생성용 scenario/profile/policy preset source
       setting.json                # setting.json 기본값
-      scenario/                   # <preset-id>.json scenario preset
-      profile/                    # <preset-id>.json profile preset
+      scenario/                   # <preset-id>/ scenario preset
+        <preset-id>/
+          manifest.json           # project preset UI metadata
+          thumbnail.png           # project create card thumbnail
+          scenario.json           # user project scenario.json payload
+      profile/                    # <preset-id>/ profile preset
+        <preset-id>/
+          manifest.json
+          thumbnail.png
+          profile.json            # user project profile.json payload
       policy/                     # <preset-id>/ policy package preset
+        <preset-id>/
+          manifest.json
+          thumbnail.png
+          policy/
+            __init__.py           # user project policy/ payload entrypoint
     run-defaults/                 # run 생성 시 복사할 기본 폴더
 
   docs/                           # --- 리포지토리 전체 개발 문서 ---

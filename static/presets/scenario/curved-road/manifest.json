@@ -1,0 +1,10 @@
+{
+  "schema": "project_preset_manifest",
+  "version": 1,
+  "id": "curved-road",
+  "kind": "scenario",
+  "title": "커브 보도",
+  "subtitle": "완만한 곡선 · 기본 회피",
+  "description": "곡선 보도 주행을 검증하는 시나리오입니다.",
+  "sort_order": 40
+}

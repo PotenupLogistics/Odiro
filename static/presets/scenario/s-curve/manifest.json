@@ -1,0 +1,10 @@
+{
+  "schema": "project_preset_manifest",
+  "version": 1,
+  "id": "s-curve",
+  "kind": "scenario",
+  "title": "S 커브 통과",
+  "subtitle": "다중 커브 16m · 장애물",
+  "description": "S자형 경로와 장애물을 포함한 주행 시나리오입니다.",
+  "sort_order": 70
+}

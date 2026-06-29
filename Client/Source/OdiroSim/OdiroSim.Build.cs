@@ -10,13 +10,14 @@ public class OdiroSim : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "SlateCore",
 			"CommonUI", "ModelViewViewModel", "FieldNotification", "ChaosVehicles", "Json", "JsonUtilities", "HTTP", "DeveloperSettings",
-			"ProceduralMeshComponent", "LidarPointCloudRuntime" });
+			"ProceduralMeshComponent", "LidarPointCloudRuntime", "Paper2D" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "Sockets" });
 
 		if (Target.bBuildEditor)
 		{
 			PrivateDependencyModuleNames.Add("DesktopPlatform");
+			PrivateDependencyModuleNames.Add("UnrealEd");
 		}
 		
 		// Uncomment if you are using online features

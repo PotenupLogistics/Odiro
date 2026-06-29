@@ -7,6 +7,7 @@
 
 class UBorder;
 class UImage;
+class USizeBox;
 class UTextBlock;
 class UWidget;
 
@@ -17,6 +18,15 @@ namespace BaseWidgetPrivate
 
 	// Returns a text token through the shared base token resolution path.
 	FBaseTextStyleToken ResolveTextStyle(const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens, EBaseTextRole role);
+
+	// Maps a semantic role through the common Small/Medium/Large size preset.
+	EBaseTextRole ResolveSizedTextRole(EBaseTextRole role, EBaseWidgetSize size);
+
+	// Clamps negative desired-size constraints and keeps min/max pairs ordered.
+	FBaseWidgetSizeConstraints NormalizeSizeConstraints(FBaseWidgetSizeConstraints constraints);
+
+	// Applies optional desired-size constraints to a WBP-authored SizeBox wrapper.
+	void ApplySizeConstraints(USizeBox* sizeBox, const FBaseWidgetSizeConstraints& constraints);
 
 	// Returns a variant color through the shared base token resolution path.
 	FLinearColor ResolveVariantColor(const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens, EBaseWidgetVariant variant);
@@ -82,9 +92,8 @@ namespace BaseWidgetPrivate
 	// reliable screen-space derivatives for brush materials, so the SDF needs the
 	// size explicitly; call from NativePaint so it also runs under FWidgetRenderer
 	// capture. fallbackSize (the owning widget's geometry) covers the first paint
-	// before the surface has a cached geometry. (Overloads for the two host widgets.)
+	// before the surface has a cached geometry.
 	void UpdateRoundedSurfaceSize(UBorder* surfaceBorder, const FVector2D& fallbackSize);
-	void UpdateRoundedSurfaceSize(UImage* surfaceImage, const FVector2D& fallbackSize);
 
 	// Clears border drawing while keeping WBP-authored padding and child layout.
 	void MakeBorderVisualTransparent(UBorder* border);

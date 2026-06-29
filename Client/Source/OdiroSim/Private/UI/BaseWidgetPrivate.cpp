@@ -33,6 +33,101 @@ namespace BaseWidgetPrivate
 		return UBaseWidgetTokenCatalog::MakeDefaultTextStyle(role);
 	}
 
+	EBaseTextRole ResolveSizedTextRole(const EBaseTextRole role, const EBaseWidgetSize size)
+	{
+		if (size == EBaseWidgetSize::Small)
+		{
+			switch (role)
+			{
+			case EBaseTextRole::Title:
+				return EBaseTextRole::Label;
+			case EBaseTextRole::Label:
+			case EBaseTextRole::Body:
+			case EBaseTextRole::Value:
+				return EBaseTextRole::Caption;
+			default:
+				return role;
+			}
+		}
+
+		if (size == EBaseWidgetSize::Large)
+		{
+			switch (role)
+			{
+			case EBaseTextRole::Caption:
+				return EBaseTextRole::Label;
+			case EBaseTextRole::Label:
+				return EBaseTextRole::Body;
+			case EBaseTextRole::Body:
+			case EBaseTextRole::Value:
+				return EBaseTextRole::Title;
+			default:
+				return role;
+			}
+		}
+
+		return role;
+	}
+
+	FBaseWidgetSizeConstraints NormalizeSizeConstraints(FBaseWidgetSizeConstraints constraints)
+	{
+		constraints.MinWidth = FMath::Max(0.0f, constraints.MinWidth);
+		constraints.MinHeight = FMath::Max(0.0f, constraints.MinHeight);
+		constraints.MaxWidth = FMath::Max(0.0f, constraints.MaxWidth);
+		constraints.MaxHeight = FMath::Max(0.0f, constraints.MaxHeight);
+		if (constraints.MaxWidth > 0.0f && constraints.MinWidth > constraints.MaxWidth)
+		{
+			Swap(constraints.MinWidth, constraints.MaxWidth);
+		}
+		if (constraints.MaxHeight > 0.0f && constraints.MinHeight > constraints.MaxHeight)
+		{
+			Swap(constraints.MinHeight, constraints.MaxHeight);
+		}
+		return constraints;
+	}
+
+	void ApplySizeConstraints(USizeBox* sizeBox, const FBaseWidgetSizeConstraints& constraints)
+	{
+		if (!IsValid(sizeBox))
+		{
+			return;
+		}
+
+		const FBaseWidgetSizeConstraints normalized = NormalizeSizeConstraints(constraints);
+		if (normalized.MinWidth > 0.0f)
+		{
+			sizeBox->SetMinDesiredWidth(normalized.MinWidth);
+		}
+		else
+		{
+			sizeBox->ClearMinDesiredWidth();
+		}
+		if (normalized.MinHeight > 0.0f)
+		{
+			sizeBox->SetMinDesiredHeight(normalized.MinHeight);
+		}
+		else
+		{
+			sizeBox->ClearMinDesiredHeight();
+		}
+		if (normalized.MaxWidth > 0.0f)
+		{
+			sizeBox->SetMaxDesiredWidth(normalized.MaxWidth);
+		}
+		else
+		{
+			sizeBox->ClearMaxDesiredWidth();
+		}
+		if (normalized.MaxHeight > 0.0f)
+		{
+			sizeBox->SetMaxDesiredHeight(normalized.MaxHeight);
+		}
+		else
+		{
+			sizeBox->ClearMaxDesiredHeight();
+		}
+	}
+
 	FLinearColor ResolveVariantColor(
 		const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens,
 		const EBaseWidgetVariant variant)
@@ -197,6 +292,7 @@ namespace BaseWidgetPrivate
 				FSlateBrush brush = border->Background;
 				brush.DrawAs = ESlateBrushDrawType::Image;
 				brush.ImageSize = MaterialBrushPlaceholderSize;
+				brush.Margin = FMargin(0.25f);
 				brush.TintColor = FSlateColor(FLinearColor::White);
 				brush.SetResourceObject(material);
 				border->SetBrush(brush);
@@ -239,6 +335,7 @@ namespace BaseWidgetPrivate
 				material->SetScalarParameterValue(TEXT("BorderWidthPx"), FMath::Max(borderWidthPx, 0.0f));
 			}
 		}
+
 	}
 
 	void ApplyProgressSurface(
@@ -314,28 +411,12 @@ namespace BaseWidgetPrivate
 			size = fallbackSize;
 		}
 		material->SetVectorParameterValue(TEXT("ElementSize"), FLinearColor(size.X, size.Y, 0.0f, 0.0f));
-	}
-
-	void UpdateRoundedSurfaceSize(UImage* surfaceImage, const FVector2D& fallbackSize)
-	{
-		if (!IsValid(surfaceImage))
+		const float maxRadius = FMath::Max(0.0f, FMath::Min(size.X, size.Y) * 0.5f - 0.5f);
+		float radiusPx = 0.0f;
+		if (maxRadius > 0.0f && material->GetScalarParameterValue(TEXT("RadiusPx"), radiusPx))
 		{
-			return;
+			material->SetScalarParameterValue(TEXT("RadiusPx"), FMath::Min(radiusPx, maxRadius));
 		}
-
-		UMaterialInstanceDynamic* material =
-			Cast<UMaterialInstanceDynamic>(surfaceImage->GetBrush().GetResourceObject());
-		if (!material)
-		{
-			return;
-		}
-
-		FVector2D size = surfaceImage->GetCachedGeometry().GetLocalSize();
-		if (size.X < 1.0f || size.Y < 1.0f)
-		{
-			size = fallbackSize;
-		}
-		material->SetVectorParameterValue(TEXT("ElementSize"), FLinearColor(size.X, size.Y, 0.0f, 0.0f));
 	}
 
 	void MakeBorderVisualTransparent(UBorder* border)

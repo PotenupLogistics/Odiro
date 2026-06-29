@@ -12,6 +12,10 @@ namespace
 	const double RobotEndpointInsetMeters = 1.0;
 	// Generated city surfaces share the scenario base plane; CityBuildings assets own visual road drops.
 	const FName GeneratedCityRoadSurfaceId(TEXT("road"));
+	// Dot-product tolerance used to recognize a right-angle generated building-side rectangle.
+	const double GeneratedCityRightAngleDotTolerance = 0.01;
+	// Point tolerance for stitching adjacent generated city chunks in meters.
+	const double GeneratedCityPointToleranceMeters = 0.01;
 
 	// Side of the sampled walkway used when deriving generated city padding bands.
 	enum class EGeneratedCitySide : uint8
@@ -455,6 +459,33 @@ namespace
 		}
 	}
 
+	// Appends route-axis chunks while preserving a stable global chunk index for generated region ids.
+	void AppendGeneratedCityAxisChunks(
+		const FScenarioSampleRouteAxis& Axis,
+		const FScenarioSampleLayoutEntry& LayoutEntry,
+		TArray<FGeneratedCityAxisChunk>& OutChunks)
+	{
+		TArray<FGeneratedCityAxisChunk> LayoutChunks;
+		BuildGeneratedCityAxisChunks(Axis, LayoutEntry.AlongRangeMeters, LayoutChunks);
+		for (FGeneratedCityAxisChunk& LayoutChunk : LayoutChunks)
+		{
+			LayoutChunk.ChunkIndex = OutChunks.Num();
+			OutChunks.Add(LayoutChunk);
+		}
+	}
+
+	// Returns the signed offset direction for one generated city side.
+	double GeneratedCitySideSign(EGeneratedCitySide Side)
+	{
+		return Side == EGeneratedCitySide::Lower ? -1.0 : 1.0;
+	}
+
+	// Returns the deterministic region-id fragment for one generated city side.
+	FString GeneratedCitySideIdFragment(EGeneratedCitySide Side)
+	{
+		return Side == EGeneratedCitySide::Lower ? TEXT("lower") : TEXT("upper");
+	}
+
 	// Resolves the walkway lane offset bounds used as anchors for generated city padding.
 	bool TryResolveWalkwayOffsetRange(
 		const FScenarioSampleLayoutEntry& LayoutEntry,
@@ -568,6 +599,133 @@ namespace
 		}
 	}
 
+	// Creates the common metadata for a building-side walkable expansion GroundRegion.
+	FScenarioGroundRegionSpec MakeGeneratedCityBuildingExpansionRegion(
+		const FString& RegionId,
+		const FVector2D& CenterMeters,
+		double LengthMeters,
+		double WidthMeters,
+		double YawDegrees)
+	{
+		FScenarioGroundRegionSpec RegionSpec;
+		RegionSpec.RegionId = RegionId;
+		RegionSpec.RegionType = EScenarioGroundRegionType::Walkable;
+		RegionSpec.SurfaceId = TEXT("walkway");
+		RegionSpec.ShapeType = EScenarioGroundShapeType::Rectangle;
+		RegionSpec.Center = FVector(
+			CenterMeters.X * MetersToCentimeters,
+			CenterMeters.Y * MetersToCentimeters,
+			ResolveGeneratedCitySurfaceTopZCm(RegionSpec.SurfaceId));
+		RegionSpec.Size = FVector2D(
+			LengthMeters * MetersToCentimeters,
+			WidthMeters * MetersToCentimeters);
+		RegionSpec.YawDegrees = YawDegrees;
+		RegionSpec.TraversabilityScore = ToGeneratedCityTraversabilityScore(RegionSpec.RegionType);
+		return RegionSpec;
+	}
+
+	// Emits one rectangle when two orthogonal chunks enclose the building-side city block.
+	bool TryAddGeneratedCityRightAngleBuildingExpansionRegion(
+		const TArray<FGeneratedCityAxisChunk>& Chunks,
+		EGeneratedCitySide Side,
+		int32 LayoutIndex,
+		FScenarioWorldSpec& WorldSpec)
+	{
+		if (Chunks.Num() != 2)
+		{
+			return false;
+		}
+
+		const FVector2D FirstVector = Chunks[0].EndWorldMeters - Chunks[0].StartWorldMeters;
+		const FVector2D SecondVector = Chunks[1].EndWorldMeters - Chunks[1].StartWorldMeters;
+		const double FirstLengthMeters = FirstVector.Size();
+		const double SecondLengthMeters = SecondVector.Size();
+		if (FirstLengthMeters <= KINDA_SMALL_NUMBER || SecondLengthMeters <= KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+
+		if ((Chunks[0].EndWorldMeters - Chunks[1].StartWorldMeters).Size() > GeneratedCityPointToleranceMeters)
+		{
+			return false;
+		}
+
+		const FVector2D FirstForward = FirstVector / FirstLengthMeters;
+		const FVector2D SecondForward = SecondVector / SecondLengthMeters;
+		if (FMath::Abs(FVector2D::DotProduct(FirstForward, SecondForward)) > GeneratedCityRightAngleDotTolerance)
+		{
+			return false;
+		}
+
+		const double CrossZ = (FirstForward.X * SecondForward.Y) - (FirstForward.Y * SecondForward.X);
+		if (FMath::Abs(CrossZ) <= KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+
+		const double InteriorSideSign = CrossZ > 0.0 ? 1.0 : -1.0;
+		if (!FMath::IsNearlyEqual(InteriorSideSign, GeneratedCitySideSign(Side)))
+		{
+			return false;
+		}
+
+		const FString RegionId = FString::Printf(
+			TEXT("generated_city_%s_building_expansion_%02d_00"),
+			*GeneratedCitySideIdFragment(Side),
+			LayoutIndex);
+		const FVector2D CenterMeters = (Chunks[0].StartWorldMeters + Chunks[1].EndWorldMeters) * 0.5;
+		WorldSpec.GroundRegions.Add(MakeGeneratedCityBuildingExpansionRegion(
+			RegionId,
+			CenterMeters,
+			FirstLengthMeters,
+			SecondLengthMeters,
+			FMath::RadiansToDegrees(FMath::Atan2(FirstForward.Y, FirstForward.X))));
+		return true;
+	}
+
+	// Emits fixed-width walkable expansion strips when a single rectangle cannot represent the side area.
+	void AddGeneratedCityFixedWidthBuildingExpansionRegions(
+		const TArray<FGeneratedCityAxisChunk>& Chunks,
+		EGeneratedCitySide Side,
+		int32 LayoutIndex,
+		const FScenarioOffsetRangeMeters& WalkwayOffsetRangeMeters,
+		FScenarioWorldSpec& WorldSpec)
+	{
+		const double WidthMeters =
+			FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters
+			+ FScenarioCorridorGeometry::GeneratedCityBuildingDepthMeters;
+		const double WalkwayEdgeMeters = Side == EGeneratedCitySide::Lower
+			? WalkwayOffsetRangeMeters.MinMeters
+			: WalkwayOffsetRangeMeters.MaxMeters;
+		const double CenterOffsetMeters = WalkwayEdgeMeters + (GeneratedCitySideSign(Side) * WidthMeters * 0.5);
+
+		for (const FGeneratedCityAxisChunk& Chunk : Chunks)
+		{
+			const FVector2D SegmentVectorMeters = Chunk.EndWorldMeters - Chunk.StartWorldMeters;
+			const double LengthMeters = SegmentVectorMeters.Size();
+			if (LengthMeters <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+
+			const FVector2D Forward = SegmentVectorMeters / LengthMeters;
+			const FVector2D Right(-Forward.Y, Forward.X);
+			const FVector2D CenterMeters =
+				((Chunk.StartWorldMeters + Chunk.EndWorldMeters) * 0.5) + (Right * CenterOffsetMeters);
+			const FString RegionId = FString::Printf(
+				TEXT("generated_city_%s_building_expansion_%02d_%02d"),
+				*GeneratedCitySideIdFragment(Side),
+				LayoutIndex,
+				Chunk.ChunkIndex);
+			WorldSpec.GroundRegions.Add(MakeGeneratedCityBuildingExpansionRegion(
+				RegionId,
+				CenterMeters,
+				LengthMeters,
+				WidthMeters,
+				FMath::RadiansToDegrees(FMath::Atan2(Forward.Y, Forward.X))));
+		}
+	}
+
 	// Appends one generated GroundRegion band for every straight axis chunk in the layout range.
 	void AddGeneratedCityBandGroundRegions(
 		const FScenarioSampleRouteAxis& Axis,
@@ -632,54 +790,30 @@ namespace
 		}
 	}
 
-	// Creates a generated walkable walkway band and blocked building footprint on one side of the walkway.
+	// Creates generated walkable area that extends the building side of the Corridor.
 	void AddGeneratedCityBuildingSideGroundRegions(
-		const FScenarioSampleRouteAxis& Axis,
-		const FScenarioSampleLayoutEntry& LayoutEntry,
+		const TArray<FGeneratedCityAxisChunk>& Chunks,
 		int32 LayoutIndex,
 		EGeneratedCitySide Side,
 		const FScenarioOffsetRangeMeters& WalkwayOffsetRangeMeters,
 		FScenarioWorldSpec& WorldSpec)
 	{
-		const double WalkwayEdgeMeters = Side == EGeneratedCitySide::Lower
-			? WalkwayOffsetRangeMeters.MinMeters
-			: WalkwayOffsetRangeMeters.MaxMeters;
-		const double SideSign = Side == EGeneratedCitySide::Lower ? -1.0 : 1.0;
+		if (Chunks.IsEmpty())
+		{
+			return;
+		}
 
-		FGeneratedCityBandSpec WalkwayBand;
-		WalkwayBand.BandId = Side == EGeneratedCitySide::Lower
-			? TEXT("lower_walkway_extension")
-			: TEXT("upper_walkway_extension");
-		WalkwayBand.SurfaceId = TEXT("walkway");
-		WalkwayBand.RegionType = EScenarioGroundRegionType::Walkable;
-		WalkwayBand.OffsetRangeMeters.MinMeters =
-			FMath::Min(
-				WalkwayEdgeMeters,
-				WalkwayEdgeMeters
-					+ (SideSign * FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters));
-		WalkwayBand.OffsetRangeMeters.MaxMeters =
-			FMath::Max(
-				WalkwayEdgeMeters,
-				WalkwayEdgeMeters
-					+ (SideSign * FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters));
-		AddGeneratedCityBandGroundRegions(Axis, LayoutEntry, LayoutIndex, WalkwayBand, WorldSpec);
+		if (TryAddGeneratedCityRightAngleBuildingExpansionRegion(Chunks, Side, LayoutIndex, WorldSpec))
+		{
+			return;
+		}
 
-		FGeneratedCityBandSpec BuildingBand;
-		BuildingBand.BandId = Side == EGeneratedCitySide::Lower
-			? TEXT("lower_building")
-			: TEXT("upper_building");
-		BuildingBand.SurfaceId = TEXT("building");
-		BuildingBand.RegionType = EScenarioGroundRegionType::Blocked;
-		BuildingBand.CollisionTag = TEXT("building");
-		const double BuildingNearEdgeMeters =
-			WalkwayEdgeMeters
-			+ (SideSign * FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters);
-		const double BuildingFarEdgeMeters =
-			BuildingNearEdgeMeters
-			+ (SideSign * FScenarioCorridorGeometry::GeneratedCityBuildingDepthMeters);
-		BuildingBand.OffsetRangeMeters.MinMeters = FMath::Min(BuildingNearEdgeMeters, BuildingFarEdgeMeters);
-		BuildingBand.OffsetRangeMeters.MaxMeters = FMath::Max(BuildingNearEdgeMeters, BuildingFarEdgeMeters);
-		AddGeneratedCityBandGroundRegions(Axis, LayoutEntry, LayoutIndex, BuildingBand, WorldSpec);
+		AddGeneratedCityFixedWidthBuildingExpansionRegions(
+			Chunks,
+			Side,
+			LayoutIndex,
+			WalkwayOffsetRangeMeters,
+			WorldSpec);
 	}
 
 	// Creates a generated blocking curb band and penalty road band on one side of the walkway.
@@ -737,6 +871,13 @@ namespace
 			return;
 		}
 
+		TArray<FGeneratedCityAxisChunk> LowerBuildingSideChunks;
+		TArray<FGeneratedCityAxisChunk> UpperBuildingSideChunks;
+		FScenarioOffsetRangeMeters LowerBuildingSideWalkwayOffsetRange;
+		FScenarioOffsetRangeMeters UpperBuildingSideWalkwayOffsetRange;
+		int32 LowerBuildingSideFirstLayoutIndex = INDEX_NONE;
+		int32 UpperBuildingSideFirstLayoutIndex = INDEX_NONE;
+
 		for (int32 LayoutIndex = 0; LayoutIndex < Semantic.Layout.Num(); ++LayoutIndex)
 		{
 			const FScenarioSampleLayoutEntry& LayoutEntry = Semantic.Layout[LayoutIndex];
@@ -759,23 +900,27 @@ namespace
 
 			if (bLowerBuildingSide)
 			{
-				AddGeneratedCityBuildingSideGroundRegions(
+				if (LowerBuildingSideFirstLayoutIndex == INDEX_NONE)
+				{
+					LowerBuildingSideFirstLayoutIndex = LayoutIndex;
+					LowerBuildingSideWalkwayOffsetRange = WalkwayOffsetRangeMeters;
+				}
+				AppendGeneratedCityAxisChunks(
 					Semantic.RouteAxis,
 					LayoutEntry,
-					LayoutIndex,
-					EGeneratedCitySide::Lower,
-					WalkwayOffsetRangeMeters,
-					WorldSpec);
+					LowerBuildingSideChunks);
 			}
 			if (bUpperBuildingSide)
 			{
-				AddGeneratedCityBuildingSideGroundRegions(
+				if (UpperBuildingSideFirstLayoutIndex == INDEX_NONE)
+				{
+					UpperBuildingSideFirstLayoutIndex = LayoutIndex;
+					UpperBuildingSideWalkwayOffsetRange = WalkwayOffsetRangeMeters;
+				}
+				AppendGeneratedCityAxisChunks(
 					Semantic.RouteAxis,
 					LayoutEntry,
-					LayoutIndex,
-					EGeneratedCitySide::Upper,
-					WalkwayOffsetRangeMeters,
-					WorldSpec);
+					UpperBuildingSideChunks);
 			}
 			if (bLowerRoadSide)
 			{
@@ -797,6 +942,25 @@ namespace
 					WalkwayOffsetRangeMeters,
 					WorldSpec);
 			}
+		}
+
+		if (LowerBuildingSideFirstLayoutIndex != INDEX_NONE)
+		{
+			AddGeneratedCityBuildingSideGroundRegions(
+				LowerBuildingSideChunks,
+				LowerBuildingSideFirstLayoutIndex,
+				EGeneratedCitySide::Lower,
+				LowerBuildingSideWalkwayOffsetRange,
+				WorldSpec);
+		}
+		if (UpperBuildingSideFirstLayoutIndex != INDEX_NONE)
+		{
+			AddGeneratedCityBuildingSideGroundRegions(
+				UpperBuildingSideChunks,
+				UpperBuildingSideFirstLayoutIndex,
+				EGeneratedCitySide::Upper,
+				UpperBuildingSideWalkwayOffsetRange,
+				WorldSpec);
 		}
 	}
 

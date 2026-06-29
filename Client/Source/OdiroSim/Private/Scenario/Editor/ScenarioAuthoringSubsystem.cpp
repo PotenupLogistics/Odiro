@@ -49,6 +49,10 @@ namespace
 	const FVector DefaultRobotGoalLocationCm(600.0, 0.0, 0.0);
 	const FString CorridorVertexHandleIdPrefix(TEXT("corridor_vertex_"));
 	const FString CorridorSegmentHandleIdPrefix(TEXT("corridor_segment_"));
+	// Prefix reserved for side-band GroundRegions emitted by the scenario sample compiler.
+	const FString GeneratedCityRegionIdPrefix(TEXT("generated_city_"));
+	// Generated road visuals are delegated to CityBuildings meshes in editor preview.
+	const FString GeneratedRoadSurfaceId(TEXT("road"));
 	const double CorridorVertexHandleHeightCm = 0.0;
 	const double CorridorSegmentHandleHeightCm = CorridorVertexHandleHeightCm;
 	const double CorridorVertexHandleScale = 0.28;
@@ -67,6 +71,25 @@ namespace
 		paramValue.Type = EScenarioParamValueType::Bool;
 		paramValue.BoolValue = value;
 		return paramValue;
+	}
+
+	// Keeps generated city side bands visible while authored spline preview owns the core Corridor strip.
+	bool ShouldSpawnEditorPreviewGroundRegion(
+		const FScenarioGroundRegionSpec& regionSpec,
+		bool bHasSplineCorridorPreview,
+		bool bIsAuthoredGroundRegion)
+	{
+		if (!bHasSplineCorridorPreview || bIsAuthoredGroundRegion)
+		{
+			return true;
+		}
+
+		if (!regionSpec.RegionId.StartsWith(GeneratedCityRegionIdPrefix))
+		{
+			return false;
+		}
+
+		return !regionSpec.SurfaceId.Equals(GeneratedRoadSurfaceId, ESearchCase::IgnoreCase);
 	}
 }
 
@@ -3849,7 +3872,10 @@ bool UScenarioAuthoringSubsystem::RefreshGeneratedEditorPreviewActorsFromDraft(T
 
 	for (const FScenarioGroundRegionSpec& regionSpec : previewWorldSpec.GroundRegions)
 	{
-		if (bHasSplineCorridorPreview && !ContainsGroundRegionId(regionSpec.RegionId))
+		if (!ShouldSpawnEditorPreviewGroundRegion(
+				regionSpec,
+				bHasSplineCorridorPreview,
+				ContainsGroundRegionId(regionSpec.RegionId)))
 		{
 			continue;
 		}

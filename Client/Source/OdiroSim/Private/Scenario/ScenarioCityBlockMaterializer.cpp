@@ -1,7 +1,14 @@
 #include "Scenario/ScenarioCityBlockMaterializer.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Components/SceneComponent.h"
+#include "Components/SplineMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SCS_Node.h"
+#include "Engine/SimpleConstructionScript.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInterface.h"
 #include "Scenario/ScenarioCorridorGeometry.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioCityBlockMaterializer, Log, All);
@@ -24,6 +31,8 @@ namespace
 	const double GeneratedCornerJoinToleranceCm = 500.0;
 	// Fallback straight road-side span reserved when a corner asset has no authored length.
 	const double GeneratedCornerStraightReserveGapCm = 500.0;
+	// RoadStraight chunks whose endpoints are this close are treated as one continuous spline strip.
+	const double GeneratedRoadStraightSplineJoinToleranceCm = 750.0;
 
 	// Generated city band markers encode the side needed for corridor-relative edge anchoring.
 	const TCHAR* GeneratedLowerSideMarkers[] =
@@ -93,6 +102,98 @@ namespace
 		// Stable diagnostic key used to avoid duplicate corner spawns at the same seam intersection.
 		FString DebugKey;
 	};
+
+	// One stretched RoadStraight span that will be materialized as a spline mesh section.
+	struct FGeneratedRoadStraightSplinePiece
+	{
+		// Original road GroundRegion id used in diagnostics.
+		FString RegionId;
+
+		// Road visual group key, usually the generated lower/upper side plus selected block identity.
+		FString ChainKey;
+
+		// Selected catalog entry that supplies the RoadStraight visual template.
+		FScenarioCityBlockCatalogEntry BlockEntry;
+
+		// Loaded actor class used only as a static mesh/material template.
+		UClass* BlockClass = nullptr;
+
+		// Start of the road visual centerline in world centimeters.
+		FVector StartCm = FVector::ZeroVector;
+
+		// End of the road visual centerline in world centimeters.
+		FVector EndCm = FVector::ZeroVector;
+
+		// True when the start endpoint was trimmed to leave room for an authored corner/crossroad mesh.
+		bool bStartHasCornerGap = false;
+
+		// True when the end endpoint was trimmed to leave room for an authored corner/crossroad mesh.
+		bool bEndHasCornerGap = false;
+	};
+
+	// Ordered RoadStraight pieces owned by one visual actor.
+	struct FGeneratedRoadStraightSplineChain
+	{
+		// Shared side/block key for every piece in the chain.
+		FString ChainKey;
+
+		// Ordered road spans that become spline mesh components.
+		TArray<FGeneratedRoadStraightSplinePiece> Pieces;
+	};
+
+	// Static mesh template data copied from the selected RoadStraight BP class.
+	struct FRoadStraightSplineTemplate
+	{
+		// Static mesh deformed between generated road start/end points.
+		UStaticMesh* StaticMesh = nullptr;
+
+		// Materials copied from the source BP static mesh component.
+		TArray<UMaterialInterface*> Materials;
+	};
+
+	// Disables every collision path on visual-only CityBuildings actors.
+	void DisableCityBlockActorCollision(AActor& blockActor);
+
+	// Prevents generated visual blocks from receiving projected runtime/editor decals.
+	void SetActorReceivesDecals(AActor& blockActor, bool bReceivesDecals);
+
+	// Converts a catalog role to a stable diagnostic label.
+	const TCHAR* CityBlockRoleToString(EScenarioCityBlockRole role)
+	{
+		switch (role)
+		{
+		case EScenarioCityBlockRole::WalkwayRoadStraight:
+			return TEXT("WalkwayRoadStraight");
+		case EScenarioCityBlockRole::WalkwayBuildingStraight:
+			return TEXT("WalkwayBuildingStraight");
+		case EScenarioCityBlockRole::RoadStraight:
+			return TEXT("RoadStraight");
+		case EScenarioCityBlockRole::Corner:
+			return TEXT("Corner");
+		case EScenarioCityBlockRole::Crossroad:
+			return TEXT("Crossroad");
+		case EScenarioCityBlockRole::Building:
+			return TEXT("Building");
+		default:
+			return TEXT("Unknown");
+		}
+	}
+
+	// Converts a lateral anchor to a stable diagnostic label.
+	const TCHAR* CityBlockLateralAnchorToString(EScenarioCityBlockLateralAnchor lateralAnchor)
+	{
+		switch (lateralAnchor)
+		{
+		case EScenarioCityBlockLateralAnchor::RegionCenter:
+			return TEXT("RegionCenter");
+		case EScenarioCityBlockLateralAnchor::RegionInnerEdge:
+			return TEXT("RegionInnerEdge");
+		case EScenarioCityBlockLateralAnchor::RegionOuterEdge:
+			return TEXT("RegionOuterEdge");
+		default:
+			return TEXT("Unknown");
+		}
+	}
 
 	// Oriented 2D footprint used to keep generated building frontages from overlapping at corridor corners.
 	struct FGeneratedBuildingFootprint
@@ -986,6 +1087,24 @@ namespace
 			&& compositeKeys.Contains(compositeKey);
 	}
 
+	// Builds the grouping key for RoadStraight spline visuals that can share one owner actor.
+	FString MakeRoadStraightSplineChainKey(
+		const FScenarioGroundRegionSpec& regionSpec,
+		const FScenarioCityBlockCatalogEntry& blockEntry)
+	{
+		FString sideLabel;
+		if (!TryResolveGeneratedCitySideLabel(regionSpec.RegionId, sideLabel))
+		{
+			sideLabel = TEXT("unknown");
+		}
+
+		return FString::Printf(
+			TEXT("%s|%s|%s"),
+			*sideLabel,
+			*blockEntry.BlockId.ToString(),
+			*blockEntry.BPClass.ToSoftObjectPath().ToString());
+	}
+
 	// Resolves the authored surface height that should receive the visual block origin.
 	double ResolveCityBlockSurfaceTopZCm(const FScenarioGroundRegionSpec& regionSpec)
 	{
@@ -1110,6 +1229,508 @@ namespace
 		return blockClass;
 	}
 
+	// Reads the first static mesh component from a RoadStraight BP class so the mesh can be stretched as a spline.
+	bool TryCopyRoadStraightSplineTemplateFromComponent(
+		const UStaticMeshComponent& staticMeshComponent,
+		FRoadStraightSplineTemplate& outTemplate)
+	{
+		if (!staticMeshComponent.GetStaticMesh())
+		{
+			return false;
+		}
+
+		outTemplate.StaticMesh = staticMeshComponent.GetStaticMesh();
+		const int32 materialCount = staticMeshComponent.GetNumMaterials();
+		for (int32 materialIndex = 0; materialIndex < materialCount; ++materialIndex)
+		{
+			outTemplate.Materials.Add(staticMeshComponent.GetMaterial(materialIndex));
+		}
+		return true;
+	}
+
+	// Reads the first static mesh component from a RoadStraight BP class so the mesh can be stretched as a spline.
+	bool TryResolveRoadStraightSplineTemplateFromDefaultObject(
+		UClass& blockClass,
+		FRoadStraightSplineTemplate& outTemplate)
+	{
+		AActor* defaultActor = Cast<AActor>(blockClass.GetDefaultObject());
+		if (!defaultActor)
+		{
+			return false;
+		}
+
+		TArray<UStaticMeshComponent*> staticMeshComponents;
+		defaultActor->GetComponents<UStaticMeshComponent>(staticMeshComponents);
+		for (const UStaticMeshComponent* staticMeshComponent : staticMeshComponents)
+		{
+			if (!staticMeshComponent)
+			{
+				continue;
+			}
+
+			if (TryCopyRoadStraightSplineTemplateFromComponent(*staticMeshComponent, outTemplate))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Reads Blueprint-authored component templates that are not exposed through the class default actor's component list.
+	bool TryResolveRoadStraightSplineTemplateFromBlueprintSCS(
+		UClass& blockClass,
+		FRoadStraightSplineTemplate& outTemplate)
+	{
+		UBlueprintGeneratedClass* blueprintClass = Cast<UBlueprintGeneratedClass>(&blockClass);
+		if (!blueprintClass || !blueprintClass->SimpleConstructionScript)
+		{
+			return false;
+		}
+
+		for (USCS_Node* scsNode : blueprintClass->SimpleConstructionScript->GetAllNodes())
+		{
+			if (!scsNode)
+			{
+				continue;
+			}
+
+			const UStaticMeshComponent* staticMeshTemplate =
+				Cast<UStaticMeshComponent>(scsNode->GetActualComponentTemplate(blueprintClass));
+			if (!staticMeshTemplate)
+			{
+				continue;
+			}
+
+			if (TryCopyRoadStraightSplineTemplateFromComponent(*staticMeshTemplate, outTemplate))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Resolves RoadStraight mesh/material data from native or Blueprint-authored component templates.
+	bool TryResolveRoadStraightSplineTemplate(
+		UClass& blockClass,
+		FRoadStraightSplineTemplate& outTemplate)
+	{
+		outTemplate = FRoadStraightSplineTemplate();
+		return TryResolveRoadStraightSplineTemplateFromDefaultObject(blockClass, outTemplate)
+			|| TryResolveRoadStraightSplineTemplateFromBlueprintSCS(blockClass, outTemplate);
+	}
+
+	// Resolves one generated road GroundRegion into a RoadStraight spline span.
+	bool TryBuildRoadStraightSplinePiece(
+		const FScenarioGroundRegionSpec& regionSpec,
+		const FScenarioCityBlockCatalogEntry& blockEntry,
+		const FGeneratedRegionStraightGapCm* straightGapCm,
+		FGeneratedRoadStraightSplinePiece& outPiece,
+		const FScenarioCityBlockMaterializationOptions& options)
+	{
+		outPiece = FGeneratedRoadStraightSplinePiece();
+		UClass* blockClass = LoadCityBlockActorClass(blockEntry, regionSpec.RegionId, options);
+		if (!blockClass)
+		{
+			return false;
+		}
+
+		if (regionSpec.Size.X <= KINDA_SMALL_NUMBER)
+		{
+			UE_LOG(
+				LogScenarioCityBlockMaterializer,
+				Warning,
+				TEXT("%s RoadStraight spline skipped | Region: %s, BlockId: %s, RegionLengthCm: %.2f"),
+				*options.LogContext,
+				*regionSpec.RegionId,
+				*blockEntry.BlockId.ToString(),
+				regionSpec.Size.X);
+			return false;
+		}
+
+		const double reservedStartGapCm = straightGapCm && straightGapCm->bHasStartGap
+			? straightGapCm->StartGapCm
+			: 0.0;
+		const double reservedEndGapCm = straightGapCm && straightGapCm->bHasEndGap
+			? straightGapCm->EndGapCm
+			: 0.0;
+		const double usableStartCm = (-regionSpec.Size.X * 0.5) + reservedStartGapCm;
+		const double usableEndCm = (regionSpec.Size.X * 0.5) - reservedEndGapCm;
+		const double usableLengthCm = usableEndCm - usableStartCm;
+		if (usableLengthCm <= KINDA_SMALL_NUMBER)
+		{
+			UE_LOG(
+				LogScenarioCityBlockMaterializer,
+				Log,
+				TEXT(
+					"%s RoadStraight spline skipped | Region: %s, BlockId: %s, "
+					"StartGapCm: %.2f, EndGapCm: %.2f, UsableLengthCm: %.2f"),
+				*options.LogContext,
+				*regionSpec.RegionId,
+				*blockEntry.BlockId.ToString(),
+				reservedStartGapCm,
+				reservedEndGapCm,
+				usableLengthCm);
+			return false;
+		}
+
+		const FRotator blockRotation(0.0, regionSpec.YawDegrees, 0.0);
+		const FVector forward = blockRotation.RotateVector(FVector::ForwardVector);
+		const double alongOffsetCm = (usableStartCm + usableEndCm) * 0.5;
+		const FVector desiredBoundsCenter = ResolveDesiredBlockBoundsCenter(
+			regionSpec,
+			blockEntry,
+			blockRotation,
+			forward,
+			alongOffsetCm);
+		const FVector startCm = desiredBoundsCenter - (forward * usableLengthCm * 0.5);
+		const FVector endCm = desiredBoundsCenter + (forward * usableLengthCm * 0.5);
+
+		outPiece.RegionId = regionSpec.RegionId;
+		outPiece.ChainKey = MakeRoadStraightSplineChainKey(regionSpec, blockEntry);
+		outPiece.BlockEntry = blockEntry;
+		outPiece.BlockClass = blockClass;
+		outPiece.StartCm = startCm;
+		outPiece.EndCm = endCm;
+		outPiece.bStartHasCornerGap = straightGapCm && straightGapCm->bHasStartGap;
+		outPiece.bEndHasCornerGap = straightGapCm && straightGapCm->bHasEndGap;
+
+		UE_LOG(
+			LogScenarioCityBlockMaterializer,
+			Log,
+			TEXT(
+				"%s RoadStraight spline piece | Region: %s, BlockId: %s, BP: %s, "
+				"BoundsMeters(L=%.3f W=%.3f H=%.3f), CenterOffsetMeters=(%.3f, %.3f, %.3f), "
+				"LateralAnchor: %s, RegionLengthCm: %.2f, StartGapCm: %.2f, EndGapCm: %.2f, "
+				"UsableStartCm: %.2f, UsableEndCm: %.2f, UsableLengthCm: %.2f, "
+				"StartCm=(%.2f, %.2f, %.2f), EndCm=(%.2f, %.2f, %.2f), YawDeg: %.2f"),
+			*options.LogContext,
+			*regionSpec.RegionId,
+			*blockEntry.BlockId.ToString(),
+			*blockEntry.BPClass.ToSoftObjectPath().ToString(),
+			blockEntry.BoundsMeters.LengthMeters,
+			blockEntry.BoundsMeters.WidthMeters,
+			blockEntry.BoundsMeters.HeightMeters,
+			blockEntry.BoundsMeters.CenterOffsetMeters.X,
+			blockEntry.BoundsMeters.CenterOffsetMeters.Y,
+			blockEntry.BoundsMeters.CenterOffsetMeters.Z,
+			CityBlockLateralAnchorToString(blockEntry.PlacementProfile.LateralAnchor),
+			regionSpec.Size.X,
+			reservedStartGapCm,
+			reservedEndGapCm,
+			usableStartCm,
+			usableEndCm,
+			usableLengthCm,
+			startCm.X,
+			startCm.Y,
+			startCm.Z,
+			endCm.X,
+			endCm.Y,
+			endCm.Z,
+			regionSpec.YawDegrees);
+		return true;
+	}
+
+	// Returns a copy of a road spline piece with its direction reversed for chain construction.
+	FGeneratedRoadStraightSplinePiece ReverseRoadStraightSplinePiece(
+		const FGeneratedRoadStraightSplinePiece& piece)
+	{
+		FGeneratedRoadStraightSplinePiece reversedPiece = piece;
+		Swap(reversedPiece.StartCm, reversedPiece.EndCm);
+		Swap(reversedPiece.bStartHasCornerGap, reversedPiece.bEndHasCornerGap);
+		return reversedPiece;
+	}
+
+	// Checks whether two RoadStraight endpoints can be merged into one continuous spline chain.
+	bool CanJoinRoadStraightSplineEndpoints(
+		const FGeneratedRoadStraightSplinePiece& firstPiece,
+		bool bFirstUsesEnd,
+		const FGeneratedRoadStraightSplinePiece& secondPiece,
+		bool bSecondUsesStart)
+	{
+		if (firstPiece.ChainKey != secondPiece.ChainKey)
+		{
+			return false;
+		}
+
+		const bool bFirstHasCornerGap = bFirstUsesEnd
+			? firstPiece.bEndHasCornerGap
+			: firstPiece.bStartHasCornerGap;
+		const bool bSecondHasCornerGap = bSecondUsesStart
+			? secondPiece.bStartHasCornerGap
+			: secondPiece.bEndHasCornerGap;
+		if (bFirstHasCornerGap || bSecondHasCornerGap)
+		{
+			return false;
+		}
+
+		const FVector firstEndpoint = bFirstUsesEnd ? firstPiece.EndCm : firstPiece.StartCm;
+		const FVector secondEndpoint = bSecondUsesStart ? secondPiece.StartCm : secondPiece.EndCm;
+		return FVector::Dist2D(firstEndpoint, secondEndpoint) <= GeneratedRoadStraightSplineJoinToleranceCm;
+	}
+
+	// Snaps a chain join to one shared point so adjacent spline mesh sections do not leave a visual gap.
+	void MergeRoadStraightSplineJoin(
+		FGeneratedRoadStraightSplinePiece& firstPiece,
+		bool bFirstUsesEnd,
+		FGeneratedRoadStraightSplinePiece& secondPiece,
+		bool bSecondUsesStart)
+	{
+		const FVector firstEndpoint = bFirstUsesEnd ? firstPiece.EndCm : firstPiece.StartCm;
+		const FVector secondEndpoint = bSecondUsesStart ? secondPiece.StartCm : secondPiece.EndCm;
+		const FVector mergedEndpoint = (firstEndpoint + secondEndpoint) * 0.5;
+		if (bFirstUsesEnd)
+		{
+			firstPiece.EndCm = mergedEndpoint;
+		}
+		else
+		{
+			firstPiece.StartCm = mergedEndpoint;
+		}
+
+		if (bSecondUsesStart)
+		{
+			secondPiece.StartCm = mergedEndpoint;
+		}
+		else
+		{
+			secondPiece.EndCm = mergedEndpoint;
+		}
+	}
+
+	// Builds continuous RoadStraight chains from generated road spans.
+	void BuildRoadStraightSplineChains(
+		const TArray<FGeneratedRoadStraightSplinePiece>& pieces,
+		TArray<FGeneratedRoadStraightSplineChain>& outChains)
+	{
+		outChains.Reset();
+		TArray<bool> usedPieces;
+		usedPieces.Init(false, pieces.Num());
+
+		for (int32 seedIndex = 0; seedIndex < pieces.Num(); ++seedIndex)
+		{
+			if (usedPieces[seedIndex])
+			{
+				continue;
+			}
+
+			FGeneratedRoadStraightSplineChain chain;
+			chain.ChainKey = pieces[seedIndex].ChainKey;
+			chain.Pieces.Add(pieces[seedIndex]);
+			usedPieces[seedIndex] = true;
+
+			bool bExtended = true;
+			while (bExtended)
+			{
+				bExtended = false;
+				for (int32 candidateIndex = 0; candidateIndex < pieces.Num(); ++candidateIndex)
+				{
+					if (usedPieces[candidateIndex] || pieces[candidateIndex].ChainKey != chain.ChainKey)
+					{
+						continue;
+					}
+
+					FGeneratedRoadStraightSplinePiece appendCandidate = pieces[candidateIndex];
+					if (CanJoinRoadStraightSplineEndpoints(chain.Pieces.Last(), true, appendCandidate, true))
+					{
+						MergeRoadStraightSplineJoin(chain.Pieces.Last(), true, appendCandidate, true);
+						chain.Pieces.Add(appendCandidate);
+						usedPieces[candidateIndex] = true;
+						bExtended = true;
+						break;
+					}
+
+					appendCandidate = ReverseRoadStraightSplinePiece(pieces[candidateIndex]);
+					if (CanJoinRoadStraightSplineEndpoints(chain.Pieces.Last(), true, appendCandidate, true))
+					{
+						MergeRoadStraightSplineJoin(chain.Pieces.Last(), true, appendCandidate, true);
+						chain.Pieces.Add(appendCandidate);
+						usedPieces[candidateIndex] = true;
+						bExtended = true;
+						break;
+					}
+
+					FGeneratedRoadStraightSplinePiece prependCandidate = pieces[candidateIndex];
+					if (CanJoinRoadStraightSplineEndpoints(prependCandidate, true, chain.Pieces[0], true))
+					{
+						MergeRoadStraightSplineJoin(prependCandidate, true, chain.Pieces[0], true);
+						chain.Pieces.Insert(prependCandidate, 0);
+						usedPieces[candidateIndex] = true;
+						bExtended = true;
+						break;
+					}
+
+					prependCandidate = ReverseRoadStraightSplinePiece(pieces[candidateIndex]);
+					if (CanJoinRoadStraightSplineEndpoints(prependCandidate, true, chain.Pieces[0], true))
+					{
+						MergeRoadStraightSplineJoin(prependCandidate, true, chain.Pieces[0], true);
+						chain.Pieces.Insert(prependCandidate, 0);
+						usedPieces[candidateIndex] = true;
+						bExtended = true;
+						break;
+					}
+				}
+			}
+
+			outChains.Add(MoveTemp(chain));
+		}
+	}
+
+	// Resolves a spline tangent for an ordered RoadStraight chain point.
+	FVector ResolveRoadStraightSplineTangent(
+		const FGeneratedRoadStraightSplineChain& chain,
+		int32 pointIndex)
+	{
+		if (chain.Pieces.IsEmpty())
+		{
+			return FVector::ZeroVector;
+		}
+
+		if (pointIndex <= 0)
+		{
+			return chain.Pieces[0].EndCm - chain.Pieces[0].StartCm;
+		}
+
+		if (pointIndex >= chain.Pieces.Num())
+		{
+			const FGeneratedRoadStraightSplinePiece& lastPiece = chain.Pieces.Last();
+			return lastPiece.EndCm - lastPiece.StartCm;
+		}
+
+		const FVector previousDelta = chain.Pieces[pointIndex - 1].EndCm - chain.Pieces[pointIndex - 1].StartCm;
+		const FVector nextDelta = chain.Pieces[pointIndex].EndCm - chain.Pieces[pointIndex].StartCm;
+		const FVector previousDirection = previousDelta.GetSafeNormal2D();
+		const FVector nextDirection = nextDelta.GetSafeNormal2D();
+		FVector tangentDirection = (previousDirection + nextDirection).GetSafeNormal2D();
+		if (tangentDirection.IsNearlyZero())
+		{
+			tangentDirection = nextDirection.IsNearlyZero() ? previousDirection : nextDirection;
+		}
+
+		const double tangentLengthCm = FMath::Min(previousDelta.Size2D(), nextDelta.Size2D()) * 0.5;
+		return tangentDirection * tangentLengthCm;
+	}
+
+	// Spawns spline mesh owner actors for all generated RoadStraight visual chains.
+	int32 SpawnRoadStraightSplineVisuals(
+		UWorld& world,
+		const TArray<FGeneratedRoadStraightSplinePiece>& pieces,
+		TArray<TObjectPtr<AActor>>& outSpawnedActors,
+		int32& outSkippedSpawnFailureCount,
+		const FScenarioCityBlockMaterializationOptions& options)
+	{
+		outSkippedSpawnFailureCount = 0;
+		if (pieces.IsEmpty())
+		{
+			return 0;
+		}
+
+		TArray<FGeneratedRoadStraightSplineChain> chains;
+		BuildRoadStraightSplineChains(pieces, chains);
+
+		int32 spawnedActorCount = 0;
+		for (const FGeneratedRoadStraightSplineChain& chain : chains)
+		{
+			if (chain.Pieces.IsEmpty() || !chain.Pieces[0].BlockClass)
+			{
+				++outSkippedSpawnFailureCount;
+				continue;
+			}
+
+			FRoadStraightSplineTemplate splineTemplate;
+			if (!TryResolveRoadStraightSplineTemplate(*chain.Pieces[0].BlockClass, splineTemplate)
+				|| !splineTemplate.StaticMesh)
+			{
+				UE_LOG(
+					LogScenarioCityBlockMaterializer,
+					Warning,
+					TEXT("%s RoadStraight spline skipped | Chain: %s, BlockId: %s because BPClass has no static mesh component."),
+					*options.LogContext,
+					*chain.ChainKey,
+					*chain.Pieces[0].BlockEntry.BlockId.ToString());
+				++outSkippedSpawnFailureCount;
+				continue;
+			}
+
+			const FVector chainOriginCm = chain.Pieces[0].StartCm;
+			FActorSpawnParameters spawnParams;
+			spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			AActor* roadActor = world.SpawnActor<AActor>(
+				AActor::StaticClass(),
+				FTransform(FRotator::ZeroRotator, chainOriginCm),
+				spawnParams);
+			if (!roadActor)
+			{
+				UE_LOG(
+					LogScenarioCityBlockMaterializer,
+					Warning,
+					TEXT("%s RoadStraight spline actor failed to spawn | Chain: %s"),
+					*options.LogContext,
+					*chain.ChainKey);
+				++outSkippedSpawnFailureCount;
+				continue;
+			}
+
+			USceneComponent* sceneRoot = NewObject<USceneComponent>(roadActor, TEXT("RoadStraightSplineRoot"));
+			sceneRoot->SetMobility(EComponentMobility::Movable);
+			roadActor->SetRootComponent(sceneRoot);
+			roadActor->AddInstanceComponent(sceneRoot);
+			sceneRoot->RegisterComponent();
+			sceneRoot->SetWorldLocation(chainOriginCm);
+			roadActor->SetActorEnableCollision(false);
+
+			for (int32 pieceIndex = 0; pieceIndex < chain.Pieces.Num(); ++pieceIndex)
+			{
+				const FGeneratedRoadStraightSplinePiece& piece = chain.Pieces[pieceIndex];
+				const FName componentName(*FString::Printf(TEXT("RoadStraightSplineMesh_%02d"), pieceIndex));
+				USplineMeshComponent* splineMeshComponent = NewObject<USplineMeshComponent>(roadActor, componentName);
+				splineMeshComponent->SetMobility(EComponentMobility::Movable);
+				splineMeshComponent->SetupAttachment(sceneRoot);
+				splineMeshComponent->SetStaticMesh(splineTemplate.StaticMesh);
+				splineMeshComponent->SetForwardAxis(ESplineMeshAxis::X, false);
+				splineMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				splineMeshComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+				splineMeshComponent->SetGenerateOverlapEvents(false);
+				splineMeshComponent->SetCastShadow(false);
+				splineMeshComponent->SetReceivesDecals(false);
+				for (int32 materialIndex = 0; materialIndex < splineTemplate.Materials.Num(); ++materialIndex)
+				{
+					if (splineTemplate.Materials[materialIndex])
+					{
+						splineMeshComponent->SetMaterial(materialIndex, splineTemplate.Materials[materialIndex]);
+					}
+				}
+
+				const FVector startLocalCm = piece.StartCm - chainOriginCm;
+				const FVector endLocalCm = piece.EndCm - chainOriginCm;
+				const FVector startTangentCm = ResolveRoadStraightSplineTangent(chain, pieceIndex);
+				const FVector endTangentCm = ResolveRoadStraightSplineTangent(chain, pieceIndex + 1);
+				roadActor->AddInstanceComponent(splineMeshComponent);
+				splineMeshComponent->RegisterComponent();
+				splineMeshComponent->SetStartAndEnd(startLocalCm, startTangentCm, endLocalCm, endTangentCm, true);
+			}
+
+			DisableCityBlockActorCollision(*roadActor);
+			SetActorReceivesDecals(*roadActor, false);
+			outSpawnedActors.Add(roadActor);
+			++spawnedActorCount;
+
+			UE_LOG(
+				LogScenarioCityBlockMaterializer,
+				Log,
+				TEXT("%s RoadStraight spline chain spawned | Chain: %s, Pieces: %d, OriginCm=(%.2f, %.2f, %.2f)"),
+				*options.LogContext,
+				*chain.ChainKey,
+				chain.Pieces.Num(),
+				chainOriginCm.X,
+				chainOriginCm.Y,
+				chainOriginCm.Z);
+		}
+
+		return spawnedActorCount;
+	}
+
 	// Spawns one visual-only block actor at a resolved actor-origin transform.
 	AActor* SpawnCityBlockActorAtLocation(
 		UWorld& world,
@@ -1119,15 +1740,14 @@ namespace
 		const FVector& actorLocation,
 		const FString& debugSourceId,
 		TArray<TObjectPtr<AActor>>& outSpawnedActors,
-		const FScenarioCityBlockMaterializationOptions& options,
-		FVector actorScale = FVector::OneVector)
+		const FScenarioCityBlockMaterializationOptions& options)
 	{
 		FActorSpawnParameters spawnParams;
 		spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 		AActor* blockActor = world.SpawnActor<AActor>(
 			&blockClass,
-			FTransform(blockRotation, actorLocation, actorScale),
+			FTransform(blockRotation, actorLocation),
 			spawnParams);
 		if (!blockActor)
 		{
@@ -1156,16 +1776,11 @@ namespace
 		const FVector& desiredBoundsCenter,
 		const FString& debugSourceId,
 		TArray<TObjectPtr<AActor>>& outSpawnedActors,
-		const FScenarioCityBlockMaterializationOptions& options,
-		FVector actorScale = FVector::OneVector)
+		const FScenarioCityBlockMaterializationOptions& options)
 	{
 		const FVector boundsCenterOffsetCm = blockEntry.BoundsMeters.CenterOffsetMeters * 100.0;
-		const FVector scaledBoundsCenterOffsetCm(
-			boundsCenterOffsetCm.X * actorScale.X,
-			boundsCenterOffsetCm.Y * actorScale.Y,
-			boundsCenterOffsetCm.Z * actorScale.Z);
 		const FVector actorLocation =
-			desiredBoundsCenter - blockRotation.RotateVector(scaledBoundsCenterOffsetCm);
+			desiredBoundsCenter - blockRotation.RotateVector(boundsCenterOffsetCm);
 		return SpawnCityBlockActorAtLocation(
 			world,
 			blockClass,
@@ -1174,8 +1789,7 @@ namespace
 			actorLocation,
 			debugSourceId,
 			outSpawnedActors,
-			options,
-			actorScale);
+			options);
 	}
 
 	// Spawns building frontage blocks using authored bounds rather than fixed 10m modular spacing.
@@ -1372,49 +1986,17 @@ namespace
 			return 0;
 		}
 
-		const bool bStretchGeneratedRoadStraight =
-			IsGeneratedRoadPenaltyRegion(regionSpec) && blockEntry.Role == EScenarioCityBlockRole::RoadStraight;
 		const double reservedStartGapCm = straightGapCm && straightGapCm->bHasStartGap
-			? (bStretchGeneratedRoadStraight ? straightGapCm->StartGapCm : FMath::Max(0.0, straightGapCm->StartGapCm))
+			? FMath::Max(0.0, straightGapCm->StartGapCm)
 			: 0.0;
 		const double reservedEndGapCm = straightGapCm && straightGapCm->bHasEndGap
-			? (bStretchGeneratedRoadStraight ? straightGapCm->EndGapCm : FMath::Max(0.0, straightGapCm->EndGapCm))
+			? FMath::Max(0.0, straightGapCm->EndGapCm)
 			: 0.0;
 		const double usableStartCm = (-regionSpec.Size.X * 0.5) + reservedStartGapCm;
 		const double usableEndCm = (regionSpec.Size.X * 0.5) - reservedEndGapCm;
 		const double usableLengthCm = usableEndCm - usableStartCm;
 		const FRotator blockRotation(0.0, regionSpec.YawDegrees, 0.0);
 		const FVector forward = blockRotation.RotateVector(FVector::ForwardVector);
-
-		if (bStretchGeneratedRoadStraight)
-		{
-			if (usableLengthCm <= KINDA_SMALL_NUMBER)
-			{
-				return 0;
-			}
-
-			const double alongOffsetCm = (usableStartCm + usableEndCm) * 0.5;
-			const FVector desiredBoundsCenter = ResolveDesiredBlockBoundsCenter(
-				regionSpec,
-				blockEntry,
-				blockRotation,
-				forward,
-				alongOffsetCm);
-			const FVector actorScale(usableLengthCm / blockLengthCm, 1.0, 1.0);
-			const FVector startAnchorLocation = desiredBoundsCenter - (forward * usableLengthCm * 0.5);
-			return SpawnCityBlockActorAtLocation(
-				world,
-				*blockClass,
-				blockEntry,
-				blockRotation,
-				startAnchorLocation,
-				regionSpec.RegionId,
-				outSpawnedActors,
-				options,
-				actorScale)
-				? 1
-				: 0;
-		}
 
 		int32 blockCount = 0;
 		double firstAlongOffsetCm = 0.0;
@@ -1490,6 +2072,31 @@ namespace
 			const FVector desiredBoundsCenter =
 				cornerPlacement.AnchorLocationCm
 				+ blockRotation.RotateVector(blockEntry.BoundsMeters.CenterOffsetMeters * 100.0);
+			UE_LOG(
+				LogScenarioCityBlockMaterializer,
+				Log,
+				TEXT(
+					"%s RoadSideCorner spawn | Key: %s, BlockId: %s, Role: %s, BP: %s, "
+					"BoundsMeters(L=%.3f W=%.3f H=%.3f), CenterOffsetMeters=(%.3f, %.3f, %.3f), "
+					"AnchorCm=(%.2f, %.2f, %.2f), BoundsCenterCm=(%.2f, %.2f, %.2f), YawDeg: %.2f"),
+				*options.LogContext,
+				*cornerPlacement.DebugKey,
+				*blockEntry.BlockId.ToString(),
+				CityBlockRoleToString(blockEntry.Role),
+				*blockEntry.BPClass.ToSoftObjectPath().ToString(),
+				blockEntry.BoundsMeters.LengthMeters,
+				blockEntry.BoundsMeters.WidthMeters,
+				blockEntry.BoundsMeters.HeightMeters,
+				blockEntry.BoundsMeters.CenterOffsetMeters.X,
+				blockEntry.BoundsMeters.CenterOffsetMeters.Y,
+				blockEntry.BoundsMeters.CenterOffsetMeters.Z,
+				cornerPlacement.AnchorLocationCm.X,
+				cornerPlacement.AnchorLocationCm.Y,
+				cornerPlacement.AnchorLocationCm.Z,
+				desiredBoundsCenter.X,
+				desiredBoundsCenter.Y,
+				desiredBoundsCenter.Z,
+				cornerPlacement.YawDegrees);
 			if (SpawnCityBlockActorAtBoundsCenter(
 				world,
 				*blockClass,
@@ -1554,6 +2161,41 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 	const bool bHasRoadSideCornerEntry = roadSideCornerPlacements.IsEmpty()
 		? false
 		: FindCityBlockEntryForRoadSideCorner(*catalog, roadSideCornerBlockEntry);
+	if (!roadSideCornerPlacements.IsEmpty())
+	{
+		if (bHasRoadSideCornerEntry)
+		{
+			UE_LOG(
+				LogScenarioCityBlockMaterializer,
+				Log,
+				TEXT(
+					"%s selected road-side corner entry | BlockId: %s, Role: %s, BP: %s, "
+					"Priority: %d, BoundsMeters(L=%.3f W=%.3f H=%.3f), CenterOffsetMeters=(%.3f, %.3f, %.3f), "
+					"SurfaceIds: %d"),
+				*options.LogContext,
+				*roadSideCornerBlockEntry.BlockId.ToString(),
+				CityBlockRoleToString(roadSideCornerBlockEntry.Role),
+				*roadSideCornerBlockEntry.BPClass.ToSoftObjectPath().ToString(),
+				roadSideCornerBlockEntry.PlacementProfile.Priority,
+				roadSideCornerBlockEntry.BoundsMeters.LengthMeters,
+				roadSideCornerBlockEntry.BoundsMeters.WidthMeters,
+				roadSideCornerBlockEntry.BoundsMeters.HeightMeters,
+				roadSideCornerBlockEntry.BoundsMeters.CenterOffsetMeters.X,
+				roadSideCornerBlockEntry.BoundsMeters.CenterOffsetMeters.Y,
+				roadSideCornerBlockEntry.BoundsMeters.CenterOffsetMeters.Z,
+				roadSideCornerBlockEntry.SemanticProfile.SurfaceIds.Num());
+		}
+		else
+		{
+			UE_LOG(
+				LogScenarioCityBlockMaterializer,
+				Log,
+				TEXT("%s no road-side corner entry matched %d inferred corner placement(s). Catalog: %s"),
+				*options.LogContext,
+				roadSideCornerPlacements.Num(),
+				*options.CatalogDebugName);
+		}
+	}
 	if (bHasRoadSideCornerEntry)
 	{
 		BuildRoadSideCornerPlacements(
@@ -1567,6 +2209,7 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 	const TMap<FString, FGeneratedRegionStraightGapCm>* activeRoadSideCornerGapsCm =
 		bHasRoadSideCornerEntry ? &roadSideCornerGapsCm : nullptr;
 	TArray<FGeneratedBuildingFootprint> acceptedBuildingFootprints;
+	TArray<FGeneratedRoadStraightSplinePiece> roadStraightSplinePieces;
 
 	for (const FScenarioGroundRegionSpec& regionSpec : groundRegions)
 	{
@@ -1622,6 +2265,26 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 		const FGeneratedRegionStraightGapCm* straightGapCm = activeRoadSideCornerGapsCm
 			? FindCornerGapForGeneratedRoadSideRegion(regionSpec, *activeRoadSideCornerGapsCm)
 			: nullptr;
+		if (IsGeneratedRoadPenaltyRegion(regionSpec)
+			&& blockEntry.Role == EScenarioCityBlockRole::RoadStraight)
+		{
+			FGeneratedRoadStraightSplinePiece roadStraightSplinePiece;
+			if (TryBuildRoadStraightSplinePiece(
+				regionSpec,
+				blockEntry,
+				straightGapCm,
+				roadStraightSplinePiece,
+				options))
+			{
+				roadStraightSplinePieces.Add(MoveTemp(roadStraightSplinePiece));
+			}
+			else
+			{
+				++result.SkippedSpawnFailureCount;
+			}
+			continue;
+		}
+
 		const int32 spawnedRegionActorCount = SpawnCityBlockVisualsForRegion(
 			*world,
 			regionSpec,
@@ -1642,6 +2305,20 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 		{
 			++result.SkippedSpawnFailureCount;
 		}
+	}
+
+	if (!roadStraightSplinePieces.IsEmpty())
+	{
+		int32 skippedRoadSplineSpawnFailureCount = 0;
+		const int32 spawnedRoadSplineActorCount = SpawnRoadStraightSplineVisuals(
+			*world,
+			roadStraightSplinePieces,
+			outSpawnedActors,
+			skippedRoadSplineSpawnFailureCount,
+			options);
+		result.SpawnedActorCount += spawnedRoadSplineActorCount;
+		result.SpawnedRoadSideCompositeCount += spawnedRoadSplineActorCount;
+		result.SkippedSpawnFailureCount += skippedRoadSplineSpawnFailureCount;
 	}
 
 	if (!roadSideCornerPlacements.IsEmpty())

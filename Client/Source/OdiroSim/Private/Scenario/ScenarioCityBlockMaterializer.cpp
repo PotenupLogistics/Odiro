@@ -22,7 +22,7 @@ namespace
 	const double GeneratedCornerRightAngleDotTolerance = 0.05;
 	// Maximum distance from a seam-line intersection to each segment endpoint when inferring a corner.
 	const double GeneratedCornerJoinToleranceCm = 500.0;
-	// Straight road-side visual span reserved on each side of an authored corner asset.
+	// Fallback straight road-side span reserved when a corner asset has no authored length.
 	const double GeneratedCornerStraightReserveGapCm = 500.0;
 
 	// Generated city band markers encode the side needed for corridor-relative edge anchoring.
@@ -65,13 +65,19 @@ namespace
 		double YawDegrees = 0.0;
 	};
 
-	// Reserved local-X span near a road-side corner for straight visual blocks.
+	// Signed local-X endpoint offsets near a road-side corner for straight visual blocks.
 	struct FGeneratedRegionStraightGapCm
 	{
-		// Gap from the negative local-X endpoint of the generated region.
+		// Whether the negative local-X endpoint has an explicit corner offset.
+		bool bHasStartGap = false;
+
+		// Offset from the negative local-X endpoint; negative values extend beyond the generated region.
 		double StartGapCm = 0.0;
 
-		// Gap from the positive local-X endpoint of the generated region.
+		// Whether the positive local-X endpoint has an explicit corner offset.
+		bool bHasEndGap = false;
+
+		// Offset from the positive local-X endpoint; negative values extend beyond the generated region.
 		double EndGapCm = 0.0;
 	};
 
@@ -117,7 +123,7 @@ namespace
 			&& regionSpec.RegionId.StartsWith(GeneratedCityRegionIdPrefix);
 	}
 
-	// Detects the generated curb band used as the road-side composite placement trigger.
+	// Detects the generated curb band used as road-side seam metadata.
 	bool IsGeneratedRoadCurbRegion(const FScenarioGroundRegionSpec& regionSpec)
 	{
 		const FName surfaceId(*regionSpec.SurfaceId);
@@ -128,7 +134,7 @@ namespace
 				|| regionSpec.RegionId.Contains(TEXT("_curb_")));
 	}
 
-	// Detects the generated road band that should be covered by a curb-triggered composite block.
+	// Detects the generated road band that receives the RoadStraight curb+road visual block.
 	bool IsGeneratedRoadPenaltyRegion(const FScenarioGroundRegionSpec& regionSpec)
 	{
 		const FName surfaceId(*regionSpec.SurfaceId);
@@ -225,7 +231,6 @@ namespace
 		const FName surfaceId(*regionSpec.SurfaceId);
 		if (IsGeneratedRoadCurbRegion(regionSpec))
 		{
-			outRoles.Add(EScenarioCityBlockRole::WalkwayRoadStraight);
 			return;
 		}
 
@@ -235,7 +240,8 @@ namespace
 			return;
 		}
 
-		if (surfaceId == CityBlockRoadSurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Penalty)
+		if (IsGeneratedRoadPenaltyRegion(regionSpec)
+			|| (surfaceId == CityBlockRoadSurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Penalty))
 		{
 			outRoles.Add(EScenarioCityBlockRole::RoadStraight);
 			return;
@@ -465,12 +471,6 @@ namespace
 				continue;
 			}
 
-			if (IsGeneratedRoadCurbRegion(regionSpec)
-				&& blockEntry.SemanticProfile.PrimaryRegionType != regionSpec.RegionType)
-			{
-				continue;
-			}
-
 			const int32 score = ScoreCityBlockEntryForRegion(blockEntry, regionSpec, surfaceId);
 			if (!bestEntry || score > bestScore)
 			{
@@ -675,12 +675,126 @@ namespace
 			: seam.YawDegrees;
 	}
 
+	// Projects a corner block's authored bounds from its actor origin onto the requested seam direction.
+	double ResolveCornerBoundsExtentFromAnchorCm(
+		const FScenarioCityBlockCatalogEntry& blockEntry,
+		double cornerYawDegrees,
+		const FVector& directionFromAnchorCm,
+		double fallbackReserveGapCm)
+	{
+		const double halfLengthCm = blockEntry.BoundsMeters.LengthMeters * 50.0;
+		const double halfWidthCm = blockEntry.BoundsMeters.WidthMeters * 50.0;
+		if (halfLengthCm <= KINDA_SMALL_NUMBER || halfWidthCm <= KINDA_SMALL_NUMBER)
+		{
+			return FMath::Max(0.0, fallbackReserveGapCm);
+		}
+
+		const FVector safeDirection = directionFromAnchorCm.GetSafeNormal2D();
+		if (safeDirection.IsNearlyZero())
+		{
+			return FMath::Max(0.0, fallbackReserveGapCm);
+		}
+
+		const FRotator cornerRotation(0.0, cornerYawDegrees, 0.0);
+		const FVector boundsCenterOffsetCm = blockEntry.BoundsMeters.CenterOffsetMeters * 100.0;
+		const FVector localCornersCm[] =
+		{
+			boundsCenterOffsetCm + FVector(-halfLengthCm, -halfWidthCm, 0.0),
+			boundsCenterOffsetCm + FVector(-halfLengthCm, halfWidthCm, 0.0),
+			boundsCenterOffsetCm + FVector(halfLengthCm, -halfWidthCm, 0.0),
+			boundsCenterOffsetCm + FVector(halfLengthCm, halfWidthCm, 0.0)
+		};
+
+		double maxProjectionCm = 0.0;
+		for (const FVector& localCornerCm : localCornersCm)
+		{
+			maxProjectionCm = FMath::Max(
+				maxProjectionCm,
+				FVector::DotProduct(cornerRotation.RotateVector(localCornerCm), safeDirection));
+		}
+
+		return FMath::Max(0.0, maxProjectionCm);
+	}
+
+	// Resolves how far a corner block occupies the seam side adjacent to one straight road segment.
+	double ResolveCornerReserveGapForSeamCm(
+		const FGeneratedRoadCurbSeam& seam,
+		const FVector& anchorLocationCm,
+		double cornerYawDegrees,
+		const FScenarioCityBlockCatalogEntry* cornerBlockEntry,
+		double fallbackReserveGapCm)
+	{
+		if (!cornerBlockEntry)
+		{
+			return FMath::Max(0.0, fallbackReserveGapCm);
+		}
+
+		const FVector seamForward = seam.Forward.GetSafeNormal2D();
+		if (seamForward.IsNearlyZero())
+		{
+			return FMath::Max(0.0, fallbackReserveGapCm);
+		}
+
+		const double startDistanceCm = FVector::Dist2D(anchorLocationCm, seam.SeamStartCm);
+		const double endDistanceCm = FVector::Dist2D(anchorLocationCm, seam.SeamEndCm);
+		const FVector directionFromAnchorCm = startDistanceCm <= endDistanceCm
+			? seamForward
+			: -seamForward;
+		return ResolveCornerBoundsExtentFromAnchorCm(
+			*cornerBlockEntry,
+			cornerYawDegrees,
+			directionFromAnchorCm,
+			fallbackReserveGapCm);
+	}
+
+	// Keeps the most conservative signed endpoint offset when several corner seams share one region key.
+	void ApplyEndpointGapCm(
+		FGeneratedRegionStraightGapCm& inOutGapCm,
+		bool bStartEndpoint,
+		double gapCm)
+	{
+		if (bStartEndpoint)
+		{
+			if (!inOutGapCm.bHasStartGap || gapCm > inOutGapCm.StartGapCm)
+			{
+				inOutGapCm.bHasStartGap = true;
+				inOutGapCm.StartGapCm = gapCm;
+			}
+			return;
+		}
+
+		if (!inOutGapCm.bHasEndGap || gapCm > inOutGapCm.EndGapCm)
+		{
+			inOutGapCm.bHasEndGap = true;
+			inOutGapCm.EndGapCm = gapCm;
+		}
+	}
+
 	// Applies a straight-block corner reservation to whichever endpoint is closest to the inferred anchor.
 	void ApplyCornerGapForSeam(
 		const FGeneratedRoadCurbSeam& seam,
 		const FVector& anchorLocationCm,
+		double cornerYawDegrees,
+		const FScenarioCityBlockCatalogEntry* cornerBlockEntry,
+		double fallbackReserveGapCm,
 		TMap<FString, FGeneratedRegionStraightGapCm>& inOutStraightGapsCm)
 	{
+		const FVector seamForward = seam.Forward.GetSafeNormal2D();
+		const double seamLengthCm = FVector::Dist2D(seam.SeamStartCm, seam.SeamEndCm);
+		if (seamForward.IsNearlyZero() || seamLengthCm <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		const FVector seamCenterCm = (seam.SeamStartCm + seam.SeamEndCm) * 0.5;
+		const double halfSeamLengthCm = seamLengthCm * 0.5;
+		const double anchorLocalCm = FVector::DotProduct(anchorLocationCm - seamCenterCm, seamForward);
+		const double reserveGapCm = ResolveCornerReserveGapForSeamCm(
+			seam,
+			anchorLocationCm,
+			cornerYawDegrees,
+			cornerBlockEntry,
+			fallbackReserveGapCm);
 		const double startDistanceCm = FVector::Dist2D(anchorLocationCm, seam.SeamStartCm);
 		const double endDistanceCm = FVector::Dist2D(anchorLocationCm, seam.SeamEndCm);
 		FGeneratedRegionStraightGapCm& regionGapCm = inOutStraightGapsCm.FindOrAdd(seam.RegionId);
@@ -694,22 +808,20 @@ namespace
 
 		if (startDistanceCm <= endDistanceCm)
 		{
-			regionGapCm.StartGapCm = FMath::Max(regionGapCm.StartGapCm, GeneratedCornerStraightReserveGapCm);
+			const double startGapCm = (anchorLocalCm + reserveGapCm) - (-halfSeamLengthCm);
+			ApplyEndpointGapCm(regionGapCm, true, startGapCm);
 			if (compositeGapCm)
 			{
-				compositeGapCm->StartGapCm = FMath::Max(
-					compositeGapCm->StartGapCm,
-					GeneratedCornerStraightReserveGapCm);
+				ApplyEndpointGapCm(*compositeGapCm, true, startGapCm);
 			}
 			return;
 		}
 
-		regionGapCm.EndGapCm = FMath::Max(regionGapCm.EndGapCm, GeneratedCornerStraightReserveGapCm);
+		const double endGapCm = halfSeamLengthCm - (anchorLocalCm - reserveGapCm);
+		ApplyEndpointGapCm(regionGapCm, false, endGapCm);
 		if (compositeGapCm)
 		{
-			compositeGapCm->EndGapCm = FMath::Max(
-				compositeGapCm->EndGapCm,
-				GeneratedCornerStraightReserveGapCm);
+			ApplyEndpointGapCm(*compositeGapCm, false, endGapCm);
 		}
 	}
 
@@ -735,6 +847,8 @@ namespace
 	// Infers right-angle road-side corner anchors from adjacent generated curb seam lines.
 	void BuildRoadSideCornerPlacements(
 		const TArray<FScenarioGroundRegionSpec>& groundRegions,
+		const FScenarioCityBlockCatalogEntry* cornerBlockEntry,
+		double fallbackStraightReserveGapCm,
 		TArray<FGeneratedRoadSideCornerPlacement>& outCornerPlacements,
 		TMap<FString, FGeneratedRegionStraightGapCm>& outStraightGapsCm)
 	{
@@ -800,14 +914,36 @@ namespace
 				cornerPlacement.DebugKey = cornerKey;
 				outCornerPlacements.Add(MoveTemp(cornerPlacement));
 
-				ApplyCornerGapForSeam(firstSeam, anchorLocationCm, outStraightGapsCm);
-				ApplyCornerGapForSeam(secondSeam, anchorLocationCm, outStraightGapsCm);
+				const double cornerYawDegrees = outCornerPlacements.Last().YawDegrees;
+				ApplyCornerGapForSeam(
+					firstSeam,
+					anchorLocationCm,
+					cornerYawDegrees,
+					cornerBlockEntry,
+					fallbackStraightReserveGapCm,
+					outStraightGapsCm);
+				ApplyCornerGapForSeam(
+					secondSeam,
+					anchorLocationCm,
+					cornerYawDegrees,
+					cornerBlockEntry,
+					fallbackStraightReserveGapCm,
+					outStraightGapsCm);
 			}
 		}
 	}
 
-	// Finds road-side chunks whose curb band will spawn a composite visual block.
-	void BuildRoadSideCompositeCoverageKeys(
+	// Uses the authored corner/crossroad length so stretched RoadStraight visuals meet the corner mesh edge.
+	double ResolveRoadSideCornerStraightReserveGapCm(const FScenarioCityBlockCatalogEntry& blockEntry)
+	{
+		const double authoredHalfLengthCm = blockEntry.BoundsMeters.LengthMeters * 50.0;
+		return authoredHalfLengthCm > KINDA_SMALL_NUMBER
+			? authoredHalfLengthCm
+			: GeneratedCornerStraightReserveGapCm;
+	}
+
+	// Finds road-side chunks whose generated road band has a configured RoadStraight visual block.
+	void BuildRoadSideCompositeCandidateKeys(
 		const UScenarioCityBlockCatalog& catalog,
 		const TArray<FScenarioGroundRegionSpec>& groundRegions,
 		TSet<FString>& outCompositeKeys)
@@ -815,14 +951,14 @@ namespace
 		outCompositeKeys.Reset();
 		for (const FScenarioGroundRegionSpec& regionSpec : groundRegions)
 		{
-			if (!IsGeneratedRoadCurbRegion(regionSpec))
+			if (!IsGeneratedRoadPenaltyRegion(regionSpec))
 			{
 				continue;
 			}
 
 			FScenarioCityBlockCatalogEntry blockEntry;
 			if (!FindCityBlockEntryForRegion(catalog, regionSpec, blockEntry)
-				|| blockEntry.Role != EScenarioCityBlockRole::WalkwayRoadStraight)
+				|| blockEntry.Role != EScenarioCityBlockRole::RoadStraight)
 			{
 				continue;
 			}
@@ -835,8 +971,8 @@ namespace
 		}
 	}
 
-	// Checks whether a road band should be skipped because its curb band owns the composite visual.
-	bool IsRoadBandCoveredByComposite(
+	// Checks whether a generated road chunk has a configured RoadStraight composite candidate.
+	bool IsRoadSideCompositeCandidate(
 		const FScenarioGroundRegionSpec& regionSpec,
 		const TSet<FString>& compositeKeys)
 	{
@@ -904,9 +1040,14 @@ namespace
 
 		if (lateralAnchor == EScenarioCityBlockLateralAnchor::RegionInnerEdge)
 		{
-			// For generated curb bands, this inner edge is the continuous walkway-curb seam.
+			// RoadStraight owns curb+road, so generated road bands anchor one curb-width inward at the walkway-curb seam.
+			const double roadSideSeamInsetCm =
+				IsGeneratedRoadPenaltyRegion(regionSpec) && blockEntry.Role == EScenarioCityBlockRole::RoadStraight
+				? FScenarioCorridorGeometry::GeneratedCityCurbWidthMeters * 100.0
+				: 0.0;
 			return baseRegionCenter
-				+ (right * sideSign * (blockHalfWidthCm - regionHalfWidthCm + postAnchorOffsetCm));
+				+ (right * sideSign * (blockHalfWidthCm - regionHalfWidthCm - roadSideSeamInsetCm
+					+ postAnchorOffsetCm));
 		}
 
 		// For generated road bands, this outer edge is the continuous far-side road boundary.
@@ -969,27 +1110,24 @@ namespace
 		return blockClass;
 	}
 
-	// Spawns one visual-only block actor whose authored bounds center has already been resolved.
-	AActor* SpawnCityBlockActorAtBoundsCenter(
+	// Spawns one visual-only block actor at a resolved actor-origin transform.
+	AActor* SpawnCityBlockActorAtLocation(
 		UWorld& world,
 		UClass& blockClass,
 		const FScenarioCityBlockCatalogEntry& blockEntry,
 		const FRotator& blockRotation,
-		const FVector& desiredBoundsCenter,
+		const FVector& actorLocation,
 		const FString& debugSourceId,
 		TArray<TObjectPtr<AActor>>& outSpawnedActors,
-		const FScenarioCityBlockMaterializationOptions& options)
+		const FScenarioCityBlockMaterializationOptions& options,
+		FVector actorScale = FVector::OneVector)
 	{
-		const FVector boundsCenterOffsetCm =
-			blockRotation.RotateVector(blockEntry.BoundsMeters.CenterOffsetMeters * 100.0);
-		const FVector spawnLocation = desiredBoundsCenter - boundsCenterOffsetCm;
-
 		FActorSpawnParameters spawnParams;
 		spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 		AActor* blockActor = world.SpawnActor<AActor>(
 			&blockClass,
-			FTransform(blockRotation, spawnLocation),
+			FTransform(blockRotation, actorLocation, actorScale),
 			spawnParams);
 		if (!blockActor)
 		{
@@ -1007,6 +1145,37 @@ namespace
 		SetActorReceivesDecals(*blockActor, false);
 		outSpawnedActors.Add(blockActor);
 		return blockActor;
+	}
+
+	// Spawns one visual-only block actor whose authored bounds center has already been resolved.
+	AActor* SpawnCityBlockActorAtBoundsCenter(
+		UWorld& world,
+		UClass& blockClass,
+		const FScenarioCityBlockCatalogEntry& blockEntry,
+		const FRotator& blockRotation,
+		const FVector& desiredBoundsCenter,
+		const FString& debugSourceId,
+		TArray<TObjectPtr<AActor>>& outSpawnedActors,
+		const FScenarioCityBlockMaterializationOptions& options,
+		FVector actorScale = FVector::OneVector)
+	{
+		const FVector boundsCenterOffsetCm = blockEntry.BoundsMeters.CenterOffsetMeters * 100.0;
+		const FVector scaledBoundsCenterOffsetCm(
+			boundsCenterOffsetCm.X * actorScale.X,
+			boundsCenterOffsetCm.Y * actorScale.Y,
+			boundsCenterOffsetCm.Z * actorScale.Z);
+		const FVector actorLocation =
+			desiredBoundsCenter - blockRotation.RotateVector(scaledBoundsCenterOffsetCm);
+		return SpawnCityBlockActorAtLocation(
+			world,
+			blockClass,
+			blockEntry,
+			blockRotation,
+			actorLocation,
+			debugSourceId,
+			outSpawnedActors,
+			options,
+			actorScale);
 	}
 
 	// Spawns building frontage blocks using authored bounds rather than fixed 10m modular spacing.
@@ -1203,18 +1372,56 @@ namespace
 			return 0;
 		}
 
+		const bool bStretchGeneratedRoadStraight =
+			IsGeneratedRoadPenaltyRegion(regionSpec) && blockEntry.Role == EScenarioCityBlockRole::RoadStraight;
+		const double reservedStartGapCm = straightGapCm && straightGapCm->bHasStartGap
+			? (bStretchGeneratedRoadStraight ? straightGapCm->StartGapCm : FMath::Max(0.0, straightGapCm->StartGapCm))
+			: 0.0;
+		const double reservedEndGapCm = straightGapCm && straightGapCm->bHasEndGap
+			? (bStretchGeneratedRoadStraight ? straightGapCm->EndGapCm : FMath::Max(0.0, straightGapCm->EndGapCm))
+			: 0.0;
+		const double usableStartCm = (-regionSpec.Size.X * 0.5) + reservedStartGapCm;
+		const double usableEndCm = (regionSpec.Size.X * 0.5) - reservedEndGapCm;
+		const double usableLengthCm = usableEndCm - usableStartCm;
+		const FRotator blockRotation(0.0, regionSpec.YawDegrees, 0.0);
+		const FVector forward = blockRotation.RotateVector(FVector::ForwardVector);
+
+		if (bStretchGeneratedRoadStraight)
+		{
+			if (usableLengthCm <= KINDA_SMALL_NUMBER)
+			{
+				return 0;
+			}
+
+			const double alongOffsetCm = (usableStartCm + usableEndCm) * 0.5;
+			const FVector desiredBoundsCenter = ResolveDesiredBlockBoundsCenter(
+				regionSpec,
+				blockEntry,
+				blockRotation,
+				forward,
+				alongOffsetCm);
+			const FVector actorScale(usableLengthCm / blockLengthCm, 1.0, 1.0);
+			const FVector startAnchorLocation = desiredBoundsCenter - (forward * usableLengthCm * 0.5);
+			return SpawnCityBlockActorAtLocation(
+				world,
+				*blockClass,
+				blockEntry,
+				blockRotation,
+				startAnchorLocation,
+				regionSpec.RegionId,
+				outSpawnedActors,
+				options,
+				actorScale)
+				? 1
+				: 0;
+		}
+
 		int32 blockCount = 0;
 		double firstAlongOffsetCm = 0.0;
 		const bool bHasReservedGap = straightGapCm
-			&& (straightGapCm->StartGapCm > KINDA_SMALL_NUMBER
-				|| straightGapCm->EndGapCm > KINDA_SMALL_NUMBER);
+			&& (straightGapCm->bHasStartGap || straightGapCm->bHasEndGap);
 		if (bHasReservedGap)
 		{
-			const double usableStartCm =
-				(-regionSpec.Size.X * 0.5) + FMath::Max(0.0, straightGapCm->StartGapCm);
-			const double usableEndCm =
-				(regionSpec.Size.X * 0.5) - FMath::Max(0.0, straightGapCm->EndGapCm);
-			const double usableLengthCm = usableEndCm - usableStartCm;
 			if (usableLengthCm + KINDA_SMALL_NUMBER < blockLengthCm)
 			{
 				return 0;
@@ -1231,9 +1438,6 @@ namespace
 			const double chainLengthCm = static_cast<double>(blockCount - 1) * blockLengthCm;
 			firstAlongOffsetCm = chainLengthCm * -0.5;
 		}
-
-		const FRotator blockRotation(0.0, regionSpec.YawDegrees, 0.0);
-		const FVector forward = blockRotation.RotateVector(FVector::ForwardVector);
 
 		int32 spawnedActorCount = 0;
 		for (int32 blockIndex = 0; blockIndex < blockCount; ++blockIndex)
@@ -1333,18 +1537,33 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 		return result;
 	}
 
-	TSet<FString> roadSideCompositeKeys;
-	BuildRoadSideCompositeCoverageKeys(*catalog, groundRegions, roadSideCompositeKeys);
+	TSet<FString> roadSideCompositeCandidateKeys;
+	BuildRoadSideCompositeCandidateKeys(*catalog, groundRegions, roadSideCompositeCandidateKeys);
+	result.RoadSideCompositeCandidateCount = roadSideCompositeCandidateKeys.Num();
 
 	TArray<FGeneratedRoadSideCornerPlacement> roadSideCornerPlacements;
 	TMap<FString, FGeneratedRegionStraightGapCm> roadSideCornerGapsCm;
-	BuildRoadSideCornerPlacements(groundRegions, roadSideCornerPlacements, roadSideCornerGapsCm);
-	result.CornerCandidateCount = roadSideCornerPlacements.Num();
+	BuildRoadSideCornerPlacements(
+		groundRegions,
+		nullptr,
+		GeneratedCornerStraightReserveGapCm,
+		roadSideCornerPlacements,
+		roadSideCornerGapsCm);
 
 	FScenarioCityBlockCatalogEntry roadSideCornerBlockEntry;
 	const bool bHasRoadSideCornerEntry = roadSideCornerPlacements.IsEmpty()
 		? false
 		: FindCityBlockEntryForRoadSideCorner(*catalog, roadSideCornerBlockEntry);
+	if (bHasRoadSideCornerEntry)
+	{
+		BuildRoadSideCornerPlacements(
+			groundRegions,
+			&roadSideCornerBlockEntry,
+			ResolveRoadSideCornerStraightReserveGapCm(roadSideCornerBlockEntry),
+			roadSideCornerPlacements,
+			roadSideCornerGapsCm);
+	}
+	result.CornerCandidateCount = roadSideCornerPlacements.Num();
 	const TMap<FString, FGeneratedRegionStraightGapCm>* activeRoadSideCornerGapsCm =
 		bHasRoadSideCornerEntry ? &roadSideCornerGapsCm : nullptr;
 	TArray<FGeneratedBuildingFootprint> acceptedBuildingFootprints;
@@ -1359,12 +1578,6 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 		}
 
 		++result.CandidateRegionCount;
-		if (IsRoadBandCoveredByComposite(regionSpec, roadSideCompositeKeys))
-		{
-			++result.SkippedCoveredByCompositeCount;
-			continue;
-		}
-
 		if (IsGeneratedBuildingRegion(regionSpec))
 		{
 			TArray<FScenarioCityBlockCatalogEntry> buildingBlockEntries;
@@ -1396,6 +1609,11 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 		FScenarioCityBlockCatalogEntry blockEntry;
 		if (!FindCityBlockEntryForRegion(*catalog, regionSpec, blockEntry))
 		{
+			if (IsGeneratedRoadPenaltyRegion(regionSpec)
+				&& !IsRoadSideCompositeCandidate(regionSpec, roadSideCompositeCandidateKeys))
+			{
+				++result.SkippedRoadSideCompositeNoEntryCount;
+			}
 			++result.SkippedNoEntryCount;
 			continue;
 		}
@@ -1404,13 +1622,22 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 		const FGeneratedRegionStraightGapCm* straightGapCm = activeRoadSideCornerGapsCm
 			? FindCornerGapForGeneratedRoadSideRegion(regionSpec, *activeRoadSideCornerGapsCm)
 			: nullptr;
-		result.SpawnedActorCount += SpawnCityBlockVisualsForRegion(
+		const int32 spawnedRegionActorCount = SpawnCityBlockVisualsForRegion(
 			*world,
 			regionSpec,
 			blockEntry,
 			straightGapCm,
 			outSpawnedActors,
 			options);
+		result.SpawnedActorCount += spawnedRegionActorCount;
+		if (spawnedRegionActorCount > 0)
+		{
+			if (IsGeneratedRoadPenaltyRegion(regionSpec)
+				&& blockEntry.Role == EScenarioCityBlockRole::RoadStraight)
+			{
+				result.SpawnedRoadSideCompositeCount += spawnedRegionActorCount;
+			}
+		}
 		if (outSpawnedActors.Num() == beforeSpawnCount)
 		{
 			++result.SkippedSpawnFailureCount;
@@ -1440,11 +1667,13 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 	if (result.CandidateRegionCount > 0
 		|| result.SpawnedActorCount > 0
 		|| result.CornerCandidateCount > 0
+		|| result.RoadSideCompositeCandidateCount > 0
 		|| result.SkippedNoEntryCount > 0
+		|| result.SkippedRoadSideCompositeNoEntryCount > 0
 		|| result.SkippedCornerNoEntryCount > 0
 		|| result.SkippedSpawnFailureCount > 0
 		|| result.SkippedCornerSpawnFailureCount > 0
-		|| result.SkippedCoveredByCompositeCount > 0
+		|| result.SpawnedRoadSideCompositeCount > 0
 		|| result.SkippedBuildingOverlapCount > 0)
 	{
 		UE_LOG(
@@ -1453,18 +1682,22 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 			TEXT(
 				"%s generated city block visuals complete | "
 				"CandidateRegions: %d, SpawnedActors: %d, CornerCandidates: %d, "
-				"SkippedNoEntry: %d, SkippedCornerNoEntry: %d, SkippedSpawnFailure: %d, "
-				"SkippedCornerSpawnFailure: %d, SkippedCoveredByComposite: %d, "
+				"RoadSideCompositeCandidates: %d, SkippedNoEntry: %d, "
+				"SkippedRoadSideCompositeNoEntry: %d, SkippedCornerNoEntry: %d, "
+				"SkippedSpawnFailure: %d, SkippedCornerSpawnFailure: %d, "
+				"SpawnedRoadSideComposite: %d, "
 				"SkippedBuildingOverlap: %d"),
 			*options.LogContext,
 			result.CandidateRegionCount,
 			result.SpawnedActorCount,
 			result.CornerCandidateCount,
+			result.RoadSideCompositeCandidateCount,
 			result.SkippedNoEntryCount,
+			result.SkippedRoadSideCompositeNoEntryCount,
 			result.SkippedCornerNoEntryCount,
 			result.SkippedSpawnFailureCount,
 			result.SkippedCornerSpawnFailureCount,
-			result.SkippedCoveredByCompositeCount,
+			result.SpawnedRoadSideCompositeCount,
 			result.SkippedBuildingOverlapCount);
 	}
 

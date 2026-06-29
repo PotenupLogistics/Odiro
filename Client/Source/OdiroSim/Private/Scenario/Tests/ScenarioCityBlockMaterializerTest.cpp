@@ -95,7 +95,7 @@ namespace
 		return regionSpec;
 	}
 
-	// Creates a generated building-side walkway extension that should not trigger road composite blocks.
+	// Creates a generated building-side walkway extension that should not trigger RoadStraight blocks.
 	FScenarioGroundRegionSpec MakeGeneratedWalkwayExtensionRegion(
 		const FString& regionId,
 		const FVector& center,
@@ -130,6 +130,20 @@ namespace
 		blockEntry.SemanticProfile.PrimaryRegionType = primaryRegionType;
 		return blockEntry;
 	}
+
+	// Creates the RoadStraight entry used for generated curb+road road-side visuals.
+	FScenarioCityBlockCatalogEntry MakeRoadSideCompositeTestEntry(FName blockId)
+	{
+		FScenarioCityBlockCatalogEntry blockEntry = MakeMaterializerTestEntry(
+			blockId,
+			EScenarioCityBlockRole::RoadStraight,
+			EScenarioGroundRegionType::Penalty,
+			FScenarioCorridorGeometry::GeneratedCityCurbWidthMeters
+				+ FScenarioCorridorGeometry::GeneratedCityTwoLaneRoadWidthMeters);
+		blockEntry.SemanticProfile.PenaltyKind = TEXT("road");
+		blockEntry.PlacementProfile.LateralAnchor = EScenarioCityBlockLateralAnchor::RegionInnerEdge;
+		return blockEntry;
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -153,24 +167,82 @@ bool FScenarioCityBlockMaterializerRoadCompositeTest::RunTest(const FString& Par
 		return false;
 	}
 
-	FScenarioCityBlockCatalogEntry roadBlock = MakeMaterializerTestEntry(
-		TEXT("city.road_straight_10m"),
-		EScenarioCityBlockRole::RoadStraight,
-		EScenarioGroundRegionType::Penalty,
-		6.4);
-	roadBlock.SemanticProfile.PenaltyKind = TEXT("road");
-	catalog->Entries.Add(roadBlock);
+	FScenarioCityBlockCatalogEntry roadSideCompositeBlock = MakeRoadSideCompositeTestEntry(
+		TEXT("city.road_straight_10m"));
+	roadSideCompositeBlock.PlacementProfile.Priority = 10;
+	catalog->Entries.Add(roadSideCompositeBlock);
 
-	FScenarioCityBlockCatalogEntry compositeBlock = MakeMaterializerTestEntry(
-		TEXT("city.walkway_curb_road_straight_10m"),
-		EScenarioCityBlockRole::WalkwayRoadStraight,
+	TArray<FScenarioGroundRegionSpec> groundRegions;
+	groundRegions.Add(MakeGeneratedRoadSideRegion(
+		TEXT("generated_city_main_upper_curb_00_00"),
 		EScenarioGroundRegionType::Blocked,
-		7.0);
-	compositeBlock.SemanticProfile.SurfaceIds = { TEXT("road"), TEXT("walkway") };
-	compositeBlock.SemanticProfile.CollisionTag = TEXT("curb");
-	compositeBlock.PlacementProfile.Priority = 10;
-	compositeBlock.PlacementProfile.LateralAnchor = EScenarioCityBlockLateralAnchor::RegionInnerEdge;
-	catalog->Entries.Add(compositeBlock);
+		FVector(0.0, 25.0, 0.0),
+		FVector2D(2300.0, 50.0),
+		TEXT("curb")));
+	groundRegions.Add(MakeGeneratedRoadSideRegion(
+		TEXT("generated_city_main_upper_road_2lane_00_00"),
+		EScenarioGroundRegionType::Penalty,
+		FVector(0.0, 370.0, 0.0),
+		FVector2D(2300.0, 640.0),
+		FString(),
+		TEXT("road")));
+
+	TArray<TObjectPtr<AActor>> spawnedActors;
+	FScenarioCityBlockMaterializationOptions options;
+	options.LogContext = TEXT("ScenarioCityBlockMaterializerTest");
+	const FScenarioCityBlockMaterializationResult result =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			testWorld.World,
+			catalog,
+			groundRegions,
+			spawnedActors,
+			options);
+
+	TestEqual(TEXT("only the generated road band is a materializer candidate"), result.CandidateRegionCount, 1);
+	TestEqual(TEXT("one RoadStraight road-side composite candidate is configured"), result.RoadSideCompositeCandidateCount, 1);
+	TestEqual(TEXT("RoadStraight composite stretches into one actor"), result.SpawnedActorCount, 1);
+	TestEqual(TEXT("spawned actor is counted as a road-side composite"), result.SpawnedRoadSideCompositeCount, 1);
+	TestEqual(TEXT("configured composite avoids road-side composite no-entry skips"), result.SkippedRoadSideCompositeNoEntryCount, 0);
+	TestEqual(TEXT("configured entries avoid no-entry skips"), result.SkippedNoEntryCount, 0);
+	TestEqual(TEXT("one visual actor remains owned by the materializer"), spawnedActors.Num(), 1);
+	if (spawnedActors.Num() == 1 && spawnedActors[0])
+	{
+		TestTrue(
+			TEXT("RoadStraight inner edge aligns to the walkway-curb seam"),
+			FMath::IsNearlyEqual(spawnedActors[0]->GetActorLocation().Y, 345.0, 0.1));
+		TestTrue(
+			TEXT("RoadStraight actor origin sits on the generated road span start"),
+			FMath::IsNearlyEqual(spawnedActors[0]->GetActorLocation().X, -1150.0, 0.1));
+		TestTrue(
+			TEXT("RoadStraight stretches to the full generated road segment length"),
+			FMath::IsNearlyEqual(spawnedActors[0]->GetActorScale3D().X, 2.3, 0.01));
+		TestEqual(TEXT("road-side composite snaps to road height"), spawnedActors[0]->GetActorLocation().Z, 0.0);
+	}
+
+	spawnedActors.Reset();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioCityBlockMaterializerRoadCompositeRequiresRoadStraightTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.RoadCompositeRequiresRoadStraight",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioCityBlockMaterializerRoadCompositeRequiresRoadStraightTest::RunTest(const FString& Parameters)
+{
+	FScenarioCityBlockMaterializerTestWorld testWorld;
+	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
+	if (!testWorld.World)
+	{
+		return false;
+	}
+
+	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
+	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
+	if (!catalog)
+	{
+		return false;
+	}
 
 	TArray<FScenarioGroundRegionSpec> groundRegions;
 	groundRegions.Add(MakeGeneratedRoadSideRegion(
@@ -198,29 +270,24 @@ bool FScenarioCityBlockMaterializerRoadCompositeTest::RunTest(const FString& Par
 			spawnedActors,
 			options);
 
-	TestEqual(TEXT("curb and road bands are both materializer candidates"), result.CandidateRegionCount, 2);
-	TestEqual(TEXT("curb-triggered composite spawns once"), result.SpawnedActorCount, 1);
-	TestEqual(TEXT("road band is skipped when covered by the composite"), result.SkippedCoveredByCompositeCount, 1);
-	TestEqual(TEXT("configured entries avoid no-entry skips"), result.SkippedNoEntryCount, 0);
-	TestEqual(TEXT("one visual actor remains owned by the materializer"), spawnedActors.Num(), 1);
-	if (spawnedActors.Num() == 1 && spawnedActors[0])
-	{
-		TestTrue(
-			TEXT("composite inner edge aligns to the curb inner edge"),
-			FMath::IsNearlyEqual(spawnedActors[0]->GetActorLocation().Y, 350.0, 0.1));
-		TestEqual(TEXT("road-side composite snaps to road height"), spawnedActors[0]->GetActorLocation().Z, 0.0);
-	}
+	TestEqual(TEXT("only the generated road band is a materializer candidate"), result.CandidateRegionCount, 1);
+	TestEqual(TEXT("no RoadStraight road-side composite candidate is configured"), result.RoadSideCompositeCandidateCount, 0);
+	TestEqual(TEXT("no RoadStraight composite spawns without a catalog entry"), result.SpawnedActorCount, 0);
+	TestEqual(TEXT("no road-side composite actor is spawned"), result.SpawnedRoadSideCompositeCount, 0);
+	TestEqual(TEXT("missing RoadStraight composite is diagnosed"), result.SkippedRoadSideCompositeNoEntryCount, 1);
+	TestEqual(TEXT("the road candidate lacks an entry"), result.SkippedNoEntryCount, 1);
+	TestEqual(TEXT("no visual actors remain owned by the materializer"), spawnedActors.Num(), 0);
 
 	spawnedActors.Reset();
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FScenarioCityBlockMaterializerRoadCompositeSeamRootTest,
-	"OdiroSim.Scenario.CityBlockMaterializer.RoadCompositeSupportsSeamRoot",
+	FScenarioCityBlockMaterializerRoadCompositeStartRootTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.RoadCompositeSupportsStartRoot",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FScenarioCityBlockMaterializerRoadCompositeSeamRootTest::RunTest(const FString& Parameters)
+bool FScenarioCityBlockMaterializerRoadCompositeStartRootTest::RunTest(const FString& Parameters)
 {
 	FScenarioCityBlockMaterializerTestWorld testWorld;
 	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
@@ -236,24 +303,18 @@ bool FScenarioCityBlockMaterializerRoadCompositeSeamRootTest::RunTest(const FStr
 		return false;
 	}
 
-	FScenarioCityBlockCatalogEntry compositeBlock = MakeMaterializerTestEntry(
-		TEXT("city.walkway_curb_road_straight_10m"),
-		EScenarioCityBlockRole::WalkwayRoadStraight,
-		EScenarioGroundRegionType::Blocked,
-		7.0);
-	compositeBlock.SemanticProfile.SurfaceIds = { TEXT("road"), TEXT("walkway") };
-	compositeBlock.SemanticProfile.CollisionTag = TEXT("curb");
-	compositeBlock.PlacementProfile.LateralAnchor = EScenarioCityBlockLateralAnchor::RegionInnerEdge;
-	compositeBlock.BoundsMeters.CenterOffsetMeters = FVector(0.0, 3.5, 0.0);
-	catalog->Entries.Add(compositeBlock);
+	FScenarioCityBlockCatalogEntry roadSideCompositeBlock = MakeRoadSideCompositeTestEntry(
+		TEXT("city.road_straight_10m"));
+	catalog->Entries.Add(roadSideCompositeBlock);
 
 	TArray<FScenarioGroundRegionSpec> groundRegions;
 	groundRegions.Add(MakeGeneratedRoadSideRegion(
-		TEXT("generated_city_main_upper_curb_00_00"),
-		EScenarioGroundRegionType::Blocked,
-		FVector(0.0, 25.0, 0.0),
-		FVector2D(1000.0, 50.0),
-		TEXT("curb")));
+		TEXT("generated_city_main_upper_road_2lane_00_00"),
+		EScenarioGroundRegionType::Penalty,
+		FVector(0.0, 370.0, 0.0),
+		FVector2D(1000.0, 640.0),
+		FString(),
+		TEXT("road")));
 
 	TArray<TObjectPtr<AActor>> spawnedActors;
 	FScenarioCityBlockMaterializationOptions options;
@@ -266,14 +327,17 @@ bool FScenarioCityBlockMaterializerRoadCompositeSeamRootTest::RunTest(const FStr
 			spawnedActors,
 			options);
 
-	TestEqual(TEXT("curb-triggered composite spawns once"), result.SpawnedActorCount, 1);
-	TestEqual(TEXT("one seam-rooted actor remains owned by the materializer"), spawnedActors.Num(), 1);
+	TestEqual(TEXT("RoadStraight composite spawns once"), result.SpawnedActorCount, 1);
+	TestEqual(TEXT("one start-rooted actor remains owned by the materializer"), spawnedActors.Num(), 1);
 	if (spawnedActors.Num() == 1 && spawnedActors[0])
 	{
 		TestTrue(
-			TEXT("BP origin can sit on the continuous walkway-curb seam"),
-			FMath::IsNearlyEqual(spawnedActors[0]->GetActorLocation().Y, 0.0, 0.1));
-		TestEqual(TEXT("seam-rooted composite still snaps to road height"), spawnedActors[0]->GetActorLocation().Z, 0.0);
+			TEXT("BP origin can sit on the generated road span start"),
+			FMath::IsNearlyEqual(spawnedActors[0]->GetActorLocation().X, -500.0, 0.1));
+		TestTrue(
+			TEXT("BP origin stays on the RoadStraight width centerline"),
+			FMath::IsNearlyEqual(spawnedActors[0]->GetActorLocation().Y, 345.0, 0.1));
+		TestEqual(TEXT("start-rooted composite still snaps to road height"), spawnedActors[0]->GetActorLocation().Z, 0.0);
 	}
 
 	spawnedActors.Reset();
@@ -301,22 +365,18 @@ bool FScenarioCityBlockMaterializerRoadCornerTest::RunTest(const FString& Parame
 		return false;
 	}
 
-	FScenarioCityBlockCatalogEntry compositeBlock = MakeMaterializerTestEntry(
-		TEXT("city.walkway_curb_road_straight_10m"),
-		EScenarioCityBlockRole::WalkwayRoadStraight,
-		EScenarioGroundRegionType::Blocked,
-		7.0);
-	compositeBlock.SemanticProfile.SurfaceIds = { TEXT("road"), TEXT("walkway") };
-	compositeBlock.SemanticProfile.CollisionTag = TEXT("curb");
-	compositeBlock.PlacementProfile.Priority = 10;
-	compositeBlock.PlacementProfile.LateralAnchor = EScenarioCityBlockLateralAnchor::RegionInnerEdge;
-	catalog->Entries.Add(compositeBlock);
+	FScenarioCityBlockCatalogEntry roadSideCompositeBlock = MakeRoadSideCompositeTestEntry(
+		TEXT("city.road_straight_10m"));
+	roadSideCompositeBlock.PlacementProfile.Priority = 10;
+	catalog->Entries.Add(roadSideCompositeBlock);
 
 	FScenarioCityBlockCatalogEntry cornerBlock = MakeMaterializerTestEntry(
 		TEXT("city.walkway_road_corner_10m"),
 		EScenarioCityBlockRole::Corner,
 		EScenarioGroundRegionType::Penalty,
 		10.0);
+	cornerBlock.BoundsMeters.LengthMeters = 8.0;
+	cornerBlock.BoundsMeters.CenterOffsetMeters = FVector(4.0, 0.0, 0.0);
 	cornerBlock.SemanticProfile.SurfaceIds = { TEXT("road"), TEXT("walkway") };
 	cornerBlock.PlacementProfile.Priority = 20;
 	catalog->Entries.Add(cornerBlock);
@@ -363,16 +423,19 @@ bool FScenarioCityBlockMaterializerRoadCornerTest::RunTest(const FString& Parame
 			spawnedActors,
 			options);
 
-	TestEqual(TEXT("two curb bands and two covered road bands are candidates"), result.CandidateRegionCount, 4);
+	TestEqual(TEXT("two generated road bands are materializer candidates"), result.CandidateRegionCount, 2);
 	TestEqual(TEXT("one road-side corner is inferred"), result.CornerCandidateCount, 1);
+	TestEqual(TEXT("two RoadStraight road-side composite candidates are configured"), result.RoadSideCompositeCandidateCount, 2);
 	TestEqual(TEXT("straight composites and the corner actor spawn"), result.SpawnedActorCount, 3);
-	TestEqual(TEXT("road bands are skipped when covered by road-side composites"), result.SkippedCoveredByCompositeCount, 2);
+	TestEqual(TEXT("two road-side straight composites spawn"), result.SpawnedRoadSideCompositeCount, 2);
 	TestEqual(TEXT("configured corner entry avoids corner no-entry skips"), result.SkippedCornerNoEntryCount, 0);
 	TestEqual(TEXT("three visual actors remain owned by the materializer"), spawnedActors.Num(), 3);
 
 	bool bFoundHorizontalStraight = false;
 	bool bFoundVerticalStraight = false;
 	bool bFoundCornerAnchor = false;
+	bool bHorizontalStraightScaleMatchesGap = false;
+	bool bVerticalStraightScaleMatchesGap = false;
 	for (const TObjectPtr<AActor>& spawnedActor : spawnedActors)
 	{
 		if (!spawnedActor)
@@ -381,16 +444,25 @@ bool FScenarioCityBlockMaterializerRoadCornerTest::RunTest(const FString& Parame
 		}
 
 		const FVector location = spawnedActor->GetActorLocation();
-		bFoundHorizontalStraight |= FMath::IsNearlyEqual(location.X, 750.0, 0.1)
-			&& FMath::IsNearlyEqual(location.Y, 350.0, 0.1);
-		bFoundVerticalStraight |= FMath::IsNearlyEqual(location.X, 2350.0, 0.1)
-			&& FMath::IsNearlyEqual(location.Y, -1250.0, 0.1);
+		const FVector scale = spawnedActor->GetActorScale3D();
+		const bool bIsHorizontalStraight = FMath::IsNearlyEqual(location.X, 0.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 345.0, 0.1);
+		const bool bIsVerticalStraight = FMath::IsNearlyEqual(location.X, 2345.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, -500.0, 0.1);
+		bFoundHorizontalStraight |= bIsHorizontalStraight;
+		bFoundVerticalStraight |= bIsVerticalStraight;
+		bHorizontalStraightScaleMatchesGap |= bIsHorizontalStraight
+			&& FMath::IsNearlyEqual(scale.X, 2.0, 0.01);
+		bVerticalStraightScaleMatchesGap |= bIsVerticalStraight
+			&& FMath::IsNearlyEqual(scale.X, 1.5, 0.01);
 		bFoundCornerAnchor |= FMath::IsNearlyEqual(location.X, 2000.0, 0.1)
 			&& FMath::IsNearlyEqual(location.Y, 0.0, 0.1);
 	}
 
-	TestTrue(TEXT("horizontal straight composite leaves a corner reservation"), bFoundHorizontalStraight);
-	TestTrue(TEXT("vertical straight composite leaves a corner reservation"), bFoundVerticalStraight);
+	TestTrue(TEXT("horizontal straight composite starts at the corner mesh edge"), bFoundHorizontalStraight);
+	TestTrue(TEXT("vertical straight composite starts at the corner mesh edge"), bFoundVerticalStraight);
+	TestTrue(TEXT("horizontal straight composite stretches to the corner mesh edge"), bHorizontalStraightScaleMatchesGap);
+	TestTrue(TEXT("vertical straight composite stretches to the corner mesh edge"), bVerticalStraightScaleMatchesGap);
 	TestTrue(TEXT("corner actor is anchored at the continuous walkway-curb seam intersection"), bFoundCornerAnchor);
 
 	spawnedActors.Reset();
@@ -576,15 +648,9 @@ bool FScenarioCityBlockMaterializerRoadCompositeSkipsWalkwayExtensionTest::RunTe
 		return false;
 	}
 
-	FScenarioCityBlockCatalogEntry compositeBlock = MakeMaterializerTestEntry(
-		TEXT("city.walkway_curb_road_straight_10m"),
-		EScenarioCityBlockRole::WalkwayRoadStraight,
-		EScenarioGroundRegionType::Blocked,
-		7.0);
-	compositeBlock.SemanticProfile.SurfaceIds = { TEXT("road"), TEXT("walkway") };
-	compositeBlock.SemanticProfile.CollisionTag = TEXT("curb");
-	compositeBlock.PlacementProfile.LateralAnchor = EScenarioCityBlockLateralAnchor::RegionInnerEdge;
-	catalog->Entries.Add(compositeBlock);
+	FScenarioCityBlockCatalogEntry roadSideCompositeBlock = MakeRoadSideCompositeTestEntry(
+		TEXT("city.road_straight_10m"));
+	catalog->Entries.Add(roadSideCompositeBlock);
 
 	TArray<FScenarioGroundRegionSpec> groundRegions;
 	groundRegions.Add(MakeGeneratedWalkwayExtensionRegion(
@@ -604,7 +670,7 @@ bool FScenarioCityBlockMaterializerRoadCompositeSkipsWalkwayExtensionTest::RunTe
 			options);
 
 	TestEqual(TEXT("walkway extension is a materializer candidate"), result.CandidateRegionCount, 1);
-	TestEqual(TEXT("road-side composite does not spawn for building-side walkway extension"), result.SpawnedActorCount, 0);
+	TestEqual(TEXT("RoadStraight composite does not spawn for building-side walkway extension"), result.SpawnedActorCount, 0);
 	TestEqual(TEXT("walkway extension without a walkway-building entry is skipped as no entry"), result.SkippedNoEntryCount, 1);
 	TestEqual(TEXT("no visual actors remain owned by the materializer"), spawnedActors.Num(), 0);
 

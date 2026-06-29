@@ -19,8 +19,14 @@ struct ODIROSIM_API FScenarioCityBlockMaterializationResult
 	// Generated road-side seam corners inferred from adjacent right-angle curb bands.
 	int32 CornerCandidateCount = 0;
 
+	// Generated road chunks that have a matching RoadStraight road-side composite catalog entry.
+	int32 RoadSideCompositeCandidateCount = 0;
+
 	// Candidate GroundRegions skipped because the configured catalog had no matching entry.
 	int32 SkippedNoEntryCount = 0;
+
+	// Generated road chunks skipped because no RoadStraight road-side composite entry was configured.
+	int32 SkippedRoadSideCompositeNoEntryCount = 0;
 
 	// Inferred road-side seam corners skipped because the configured catalog had no corner entry.
 	int32 SkippedCornerNoEntryCount = 0;
@@ -31,8 +37,8 @@ struct ODIROSIM_API FScenarioCityBlockMaterializationResult
 	// Inferred road-side seam corners skipped because their catalog entry could not spawn a valid actor.
 	int32 SkippedCornerSpawnFailureCount = 0;
 
-	// Candidate GroundRegions skipped because a composite visual block already covers the same generated side strip.
-	int32 SkippedCoveredByCompositeCount = 0;
+	// RoadStraight visual actors spawned for generated road-side curb+road chunks.
+	int32 SpawnedRoadSideCompositeCount = 0;
 
 	// Candidate building frontage blocks skipped because their authored bounds overlap an accepted frontage footprint.
 	int32 SkippedBuildingOverlapCount = 0;

@@ -2906,6 +2906,7 @@ void AScenarioEditorController::UpdatePlacementPreview()
 
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if ((SelectedPlacementItemType == EScenarioPaletteItemType::StaticObstacle
+			|| SelectedPlacementItemType == EScenarioPaletteItemType::Pedestrian
 			|| SelectedPlacementItemType == EScenarioPaletteItemType::RobotStart
 			|| SelectedPlacementItemType == EScenarioPaletteItemType::RobotGoal)
 		&& authoringSubsystem)

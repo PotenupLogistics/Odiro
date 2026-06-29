@@ -10,9 +10,9 @@
 
 namespace
 {
-	// Thin surface tops stay slightly above the ground to avoid z-fighting.
-	const double PreviewSurfaceTopZCm = 1.0;
-	// Non-blocking surfaces are thick enough to overlap 15cm side offsets without vertical holes.
+	// Preview corridor surface top follows the shared editor/runtime curb alignment height.
+	const double PreviewSurfaceTopZCm = FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
+	// Non-blocking surfaces are thick enough to overlap curb-side height offsets without vertical holes.
 	const double MinimumSurfacePreviewHeightCm = 20.0;
 	// Blocked corridor surfaces match the legacy blocked ground-region collision height.
 	const double BlockedPreviewHeightCm = 200.0;

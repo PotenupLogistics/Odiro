@@ -11,9 +11,9 @@ DEFINE_LOG_CATEGORY_STATIC(LogScenarioCorridorRuntime, Log, All);
 
 namespace
 {
-	// Thin surface tops stay slightly above the ground to avoid z-fighting.
-	const double RuntimeSurfaceTopZCm = 1.0;
-	// Non-blocking surfaces are thick enough to overlap 15cm side offsets without vertical holes.
+	// Runtime corridor surface top follows the shared editor/runtime curb alignment height.
+	const double RuntimeSurfaceTopZCm = FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
+	// Non-blocking surfaces are thick enough to overlap curb-side height offsets without vertical holes.
 	const double RuntimeSurfaceHeightCm = 20.0;
 	// Blocked corridor surfaces match the blocked ground-region collision height.
 	const double RuntimeBlockedHeightCm = 200.0;

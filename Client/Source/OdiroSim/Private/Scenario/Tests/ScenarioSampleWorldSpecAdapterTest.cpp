@@ -152,6 +152,7 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 		TestEqual(TEXT("generated curb surface"), GeneratedCurbRegion->SurfaceId, FString(TEXT("road")));
 		TestEqual(TEXT("generated curb collision tag"), GeneratedCurbRegion->CollisionTag, FString(TEXT("curb")));
 		TestEqual(TEXT("generated curb width cm"), GeneratedCurbRegion->Size.Y, 50.0);
+		TestEqual(TEXT("generated curb top z cm"), GeneratedCurbRegion->Center.Z, 0.0);
 	}
 	const FScenarioGroundRegionSpec* GeneratedRoadRegion =
 		FindGeneratedCityRegion(Result, TEXT("generated_city_main_upper_road_2lane_00_00"));
@@ -165,6 +166,7 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 		TestEqual(TEXT("generated road surface"), GeneratedRoadRegion->SurfaceId, FString(TEXT("road")));
 		TestEqual(TEXT("generated road penalty kind"), GeneratedRoadRegion->PenaltyKind, FString(TEXT("road")));
 		TestEqual(TEXT("generated road width cm"), GeneratedRoadRegion->Size.Y, 640.0);
+		TestEqual(TEXT("generated road top z cm"), GeneratedRoadRegion->Center.Z, 0.0);
 	}
 	const FScenarioRuntimeCorridorSpec& RuntimeCorridor = Result.WorldSpec.Corridors[0];
 	TestEqual(TEXT("runtime corridor layout count"), RuntimeCorridor.Layout.Num(), 1);
@@ -181,7 +183,7 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestNotNull(TEXT("runtime curb lane"), CurbRuntimeLane);
 	if (CurbRuntimeLane)
 	{
-		TestEqual(TEXT("runtime curb lane z offset"), CurbRuntimeLane->SurfaceZOffsetCm, -15.0);
+		TestEqual(TEXT("runtime curb lane z offset"), CurbRuntimeLane->SurfaceZOffsetCm, -17.0);
 		TestEqual(
 			TEXT("runtime curb lane region type"),
 			static_cast<int32>(CurbRuntimeLane->RegionType),
@@ -201,7 +203,7 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestNotNull(TEXT("static obstacle spec"), StaticObstacleSpec);
 	if (StaticObstacleSpec)
 	{
-		TestEqual(TEXT("static obstacle surface z"), StaticObstacleSpec->Transform.GetLocation().Z, -15.0);
+		TestEqual(TEXT("static obstacle surface z"), StaticObstacleSpec->Transform.GetLocation().Z, 0.0);
 	}
 
 	const FScenarioPlaceableInstanceSpec* RobotSpec = Result.WorldSpec.Placeables.FindByPredicate(
@@ -214,6 +216,8 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	{
 		TestEqual(TEXT("robot start x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 100.0);
 		TestEqual(TEXT("robot goal x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 900.0);
+		TestEqual(TEXT("robot start surface z"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.Z, 17.0);
+		TestEqual(TEXT("robot goal surface z"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.Z, 17.0);
 		TestTrue(TEXT("robot has route"), RobotSpec->DeliveryBot.bHasStartLocation && RobotSpec->DeliveryBot.bHasGoalLocation);
 		TestTrue(TEXT("robot setup has goal"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal);
 

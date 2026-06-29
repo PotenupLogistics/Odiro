@@ -25,7 +25,9 @@ UENUM(BlueprintType)
 enum class EScenarioCityBlockLateralAnchor : uint8
 {
 	RegionCenter UMETA(DisplayName = "Generated Region Center"),
+	// Continuous side seam closest to the authored Corridor, such as the walkway-curb seam.
 	RegionInnerEdge UMETA(DisplayName = "Generated Region Inner Edge"),
+	// Continuous side seam farthest from the authored Corridor, such as the road outside edge.
 	RegionOuterEdge UMETA(DisplayName = "Generated Region Outer Edge")
 };
 
@@ -47,7 +49,7 @@ struct ODIROSIM_API FScenarioCityBlockBoundsMeters
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|City Block", meta = (ClampMin = "0.0"))
 	double HeightMeters = 1.0;
 
-	// Offset from the actor origin to the authored bounds center.
+	// Offset from the actor origin to the authored bounds center; use this when the BP root is a seam anchor.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|City Block")
 	FVector CenterOffsetMeters = FVector::ZeroVector;
 };

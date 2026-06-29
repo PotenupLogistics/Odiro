@@ -57,16 +57,6 @@ private:
 	void ApplyCollisionSettings();
 	void ApplyMaterialSettings();
 	UMaterialInterface* ResolveSurfaceCatalogMaterial() const;
-	UMaterialInterface* ResolveRegionTypeMaterial() const;
-
-	UPROPERTY(EditAnywhere, Category = "Scenario|Visual")
-	TObjectPtr<UMaterialInterface> WalkableGroundMaterial;
-
-	UPROPERTY(EditAnywhere, Category = "Scenario|Visual")
-	TObjectPtr<UMaterialInterface> PenaltyGroundMaterial;
-
-	UPROPERTY(EditAnywhere, Category = "Scenario|Visual")
-	TObjectPtr<UMaterialInterface> BlockedAreaMaterial;
 
 	// Shared surface catalog for matching generated runtime ground-region visuals to editor Corridor preview.
 	UPROPERTY(EditAnywhere, Category = "Scenario|Visual")

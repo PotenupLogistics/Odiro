@@ -12,6 +12,9 @@ class UWorld;
 // Shared viewport presentation helpers used by editor, simulation, and preview capture cameras.
 struct ODIROSIM_API FScenarioViewportPresentation
 {
+	// Global setup-time switch for grey background use across editor, simulation, replay, and capture viewports.
+	static bool bUseGreyBackgroundPostProcess;
+
 	// Returns the canonical grey background post-process asset for preload requests.
 	static TSoftObjectPtr<UObject> MakeGreyBackgroundPreloadAsset();
 

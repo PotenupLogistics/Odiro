@@ -15,20 +15,6 @@ namespace
 	const FName PenaltyRegionCollisionProfileName{ TEXT("Penalty") };
 	const FName BlockedRegionCollisionProfileName{ TEXT("Blocked") };
 
-	FName GetGroundRegionCollisionProfileName(EScenarioGroundRegionType regionType)
-	{
-		switch (regionType)
-		{
-		case EScenarioGroundRegionType::Penalty:
-			return PenaltyRegionCollisionProfileName;
-		case EScenarioGroundRegionType::Blocked:
-			return BlockedRegionCollisionProfileName;
-		case EScenarioGroundRegionType::Walkable:
-		default:
-			return WalkableRegionCollisionProfileName;
-		}
-	}
-
 	double GetGroundRegionCollisionCenterZCm(EScenarioGroundRegionType regionType, double collisionHeightCm)
 	{
 		if (regionType == EScenarioGroundRegionType::Blocked)
@@ -116,24 +102,6 @@ AScenarioGroundRegion::AScenarioGroundRegion()
 		RegionBoundsComponent->SetStaticMesh(cubeMeshAsset.Object);
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> walkableGroundMaterialAsset(TEXT("/Game/Materials/M_ScenarioGroundWalkable.M_ScenarioGroundWalkable"));
-	if (walkableGroundMaterialAsset.Succeeded())
-	{
-		WalkableGroundMaterial = walkableGroundMaterialAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> penaltyGroundMaterialAsset(TEXT("/Game/Materials/M_ScenarioGroundPenalty.M_ScenarioGroundPenalty"));
-	if (penaltyGroundMaterialAsset.Succeeded())
-	{
-		PenaltyGroundMaterial = penaltyGroundMaterialAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedAreaMaterialAsset(TEXT("/Game/Materials/M_ScenarioGroundBlock.M_ScenarioGroundBlock"));
-	if (blockedAreaMaterialAsset.Succeeded())
-	{
-		BlockedAreaMaterial = blockedAreaMaterialAsset.Object;
-	}
-
 	SurfaceCatalog = UScenarioCorridorSurfaceCatalog::MakeDefaultCatalogReference();
 
 	ApplyMaterialSettings();
@@ -197,7 +165,6 @@ void AScenarioGroundRegion::ApplyCollisionSettings()
 	if (!RegionBoundsComponent) return;
 
 	RegionBoundsComponent->SetVisibility(true);
-	RegionBoundsComponent->SetCollisionProfileName(GetGroundRegionCollisionProfileName(RegionSpec.RegionType));
 	RegionBoundsComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	RegionBoundsComponent->SetGenerateOverlapEvents(false);
 }
@@ -207,10 +174,6 @@ void AScenarioGroundRegion::ApplyMaterialSettings()
 	if (!RegionBoundsComponent) return;
 
 	UMaterialInterface* selectedMaterial = ResolveSurfaceCatalogMaterial();
-	if (!selectedMaterial)
-	{
-		selectedMaterial = ResolveRegionTypeMaterial();
-	}
 
 	if (selectedMaterial)
 	{
@@ -269,32 +232,11 @@ UMaterialInterface* AScenarioGroundRegion::ResolveSurfaceCatalogMaterial() const
 		UE_LOG(
 			LogScenarioGroundRegion,
 			Warning,
-			TEXT("Corridor surface material failed to load for runtime ground region; using region-type material. Region: %s | Surface: %s | Path: %s"),
+			TEXT("Corridor surface material failed to load for runtime ground region; no material applied. Region: %s | Surface: %s | Path: %s"),
 			*RegionSpec.RegionId,
 			*RegionSpec.SurfaceId,
 			*surfaceEntry.PreviewMaterial.ToSoftObjectPath().ToString());
 	}
 
 	return nullptr;
-}
-
-UMaterialInterface* AScenarioGroundRegion::ResolveRegionTypeMaterial() const
-{
-	UMaterialInterface* selectedMaterial = nullptr;
-	switch (RegionSpec.RegionType)
-	{
-	case EScenarioGroundRegionType::Walkable:
-		selectedMaterial = WalkableGroundMaterial;
-		break;
-	case EScenarioGroundRegionType::Penalty:
-		selectedMaterial = PenaltyGroundMaterial;
-		break;
-	case EScenarioGroundRegionType::Blocked:
-		selectedMaterial = BlockedAreaMaterial;
-		break;
-	default:
-		break;
-	}
-
-	return selectedMaterial;
 }

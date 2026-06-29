@@ -49,17 +49,29 @@ namespace
 	}
 }
 
+// Defaults scenario maps to the neutral grey background unless a caller opts out before viewport setup.
+bool FScenarioViewportPresentation::bUseGreyBackgroundPostProcess = false;
+
 TSoftObjectPtr<UObject> FScenarioViewportPresentation::MakeGreyBackgroundPreloadAsset()
 {
+	if (!bUseGreyBackgroundPostProcess)
+	{
+		return TSoftObjectPtr<UObject>();
+	}
+
 	return TSoftObjectPtr<UObject>(FSoftObjectPath(GreyBackgroundPostProcessMaterialPath));
 }
 
 TArray<TSoftObjectPtr<UObject>> FScenarioViewportPresentation::MakeScenarioMapPreloadAssets()
 {
-	return {
-		MakeGreyBackgroundPreloadAsset(),
-		TSoftObjectPtr<UObject>(FSoftObjectPath(EditorOutlinePostProcessMaterialPath))
-	};
+	TArray<TSoftObjectPtr<UObject>> preloadAssets;
+	if (TSoftObjectPtr<UObject> greyBackgroundAsset = MakeGreyBackgroundPreloadAsset();
+		!greyBackgroundAsset.IsNull())
+	{
+		preloadAssets.Add(greyBackgroundAsset);
+	}
+	preloadAssets.Add(TSoftObjectPtr<UObject>(FSoftObjectPath(EditorOutlinePostProcessMaterialPath)));
+	return preloadAssets;
 }
 
 UMaterialInterface* FScenarioViewportPresentation::ResolveLoadedMaterial(
@@ -76,11 +88,21 @@ UMaterialInterface* FScenarioViewportPresentation::ResolveOrLoadMaterial(
 
 UMaterialInterface* FScenarioViewportPresentation::ResolveLoadedGreyBackgroundPostProcessMaterial()
 {
+	if (!bUseGreyBackgroundPostProcess)
+	{
+		return nullptr;
+	}
+
 	return ResolveLoadedMaterialFromPath(FSoftObjectPath(GreyBackgroundPostProcessMaterialPath));
 }
 
 UMaterialInterface* FScenarioViewportPresentation::ResolveOrLoadGreyBackgroundPostProcessMaterial()
 {
+	if (!bUseGreyBackgroundPostProcess)
+	{
+		return nullptr;
+	}
+
 	return ResolveOrLoadMaterialFromPath(FSoftObjectPath(GreyBackgroundPostProcessMaterialPath));
 }
 
@@ -89,6 +111,11 @@ bool FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(
 	UMaterialInterface* postProcessMaterial,
 	const float blendWeight)
 {
+	if (!bUseGreyBackgroundPostProcess)
+	{
+		return false;
+	}
+
 	if (!cameraComponent || !postProcessMaterial || !IsValidGreyBackgroundRequest(blendWeight))
 	{
 		return false;
@@ -113,6 +140,11 @@ bool FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(
 	USceneCaptureComponent2D* captureComponent,
 	const float blendWeight)
 {
+	if (!bUseGreyBackgroundPostProcess)
+	{
+		return false;
+	}
+
 	UMaterialInterface* postProcessMaterial = ResolveOrLoadGreyBackgroundPostProcessMaterial();
 	if (!captureComponent || !postProcessMaterial || !IsValidGreyBackgroundRequest(blendWeight))
 	{
@@ -128,6 +160,11 @@ APostProcessVolume* FScenarioViewportPresentation::SpawnGreyBackgroundPostProces
 	UWorld* world,
 	const float blendWeight)
 {
+	if (!bUseGreyBackgroundPostProcess)
+	{
+		return nullptr;
+	}
+
 	UMaterialInterface* postProcessMaterial = ResolveOrLoadGreyBackgroundPostProcessMaterial();
 	if (!IsValid(world) || !postProcessMaterial || !IsValidGreyBackgroundRequest(blendWeight))
 	{

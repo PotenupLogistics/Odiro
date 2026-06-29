@@ -93,6 +93,23 @@ namespace
 		return regionSpec;
 	}
 
+	// Creates a generated building-side walkway extension that should not trigger road composite blocks.
+	FScenarioGroundRegionSpec MakeGeneratedWalkwayExtensionRegion(
+		const FString& regionId,
+		const FVector& center,
+		const FVector2D& size)
+	{
+		FScenarioGroundRegionSpec regionSpec;
+		regionSpec.RegionId = regionId;
+		regionSpec.RegionType = EScenarioGroundRegionType::Walkable;
+		regionSpec.SurfaceId = TEXT("walkway");
+		regionSpec.ShapeType = EScenarioGroundShapeType::Rectangle;
+		regionSpec.Center = center;
+		regionSpec.Size = size;
+		regionSpec.YawDegrees = 0.0;
+		return regionSpec;
+	}
+
 	// Creates a root-backed engine actor entry so tests do not depend on project content assets.
 	FScenarioCityBlockCatalogEntry MakeMaterializerTestEntry(
 		FName blockId,
@@ -193,6 +210,127 @@ bool FScenarioCityBlockMaterializerRoadCompositeTest::RunTest(const FString& Par
 	}
 
 	spawnedActors.Reset();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioCityBlockMaterializerRoadCompositeSeamRootTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.RoadCompositeSupportsSeamRoot",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioCityBlockMaterializerRoadCompositeSeamRootTest::RunTest(const FString& Parameters)
+{
+	FScenarioCityBlockMaterializerTestWorld testWorld;
+	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
+	if (!testWorld.World)
+	{
+		return false;
+	}
+
+	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
+	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
+	if (!catalog)
+	{
+		return false;
+	}
+
+	FScenarioCityBlockCatalogEntry compositeBlock = MakeMaterializerTestEntry(
+		TEXT("city.walkway_curb_road_straight_10m"),
+		EScenarioCityBlockRole::WalkwayRoadStraight,
+		EScenarioGroundRegionType::Blocked,
+		7.0);
+	compositeBlock.SemanticProfile.SurfaceIds = { TEXT("road"), TEXT("walkway") };
+	compositeBlock.SemanticProfile.CollisionTag = TEXT("curb");
+	compositeBlock.PlacementProfile.LateralAnchor = EScenarioCityBlockLateralAnchor::RegionInnerEdge;
+	compositeBlock.BoundsMeters.CenterOffsetMeters = FVector(0.0, 3.5, 0.0);
+	catalog->Entries.Add(compositeBlock);
+
+	TArray<FScenarioGroundRegionSpec> groundRegions;
+	groundRegions.Add(MakeGeneratedRoadSideRegion(
+		TEXT("generated_city_main_upper_curb_00_00"),
+		EScenarioGroundRegionType::Blocked,
+		FVector(0.0, 25.0, 0.0),
+		FVector2D(1000.0, 50.0),
+		TEXT("curb")));
+
+	TArray<TObjectPtr<AActor>> spawnedActors;
+	FScenarioCityBlockMaterializationOptions options;
+	options.LogContext = TEXT("ScenarioCityBlockMaterializerTest");
+	const FScenarioCityBlockMaterializationResult result =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			testWorld.World,
+			catalog,
+			groundRegions,
+			spawnedActors,
+			options);
+
+	TestEqual(TEXT("curb-triggered composite spawns once"), result.SpawnedActorCount, 1);
+	TestEqual(TEXT("one seam-rooted actor remains owned by the materializer"), spawnedActors.Num(), 1);
+	if (spawnedActors.Num() == 1 && spawnedActors[0])
+	{
+		TestTrue(
+			TEXT("BP origin can sit on the continuous walkway-curb seam"),
+			FMath::IsNearlyEqual(spawnedActors[0]->GetActorLocation().Y, 0.0, 0.1));
+		TestEqual(TEXT("seam-rooted composite still snaps to road height"), spawnedActors[0]->GetActorLocation().Z, 0.0);
+	}
+
+	spawnedActors.Reset();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioCityBlockMaterializerRoadCompositeSkipsWalkwayExtensionTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.RoadCompositeSkipsWalkwayExtension",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioCityBlockMaterializerRoadCompositeSkipsWalkwayExtensionTest::RunTest(const FString& Parameters)
+{
+	FScenarioCityBlockMaterializerTestWorld testWorld;
+	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
+	if (!testWorld.World)
+	{
+		return false;
+	}
+
+	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
+	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
+	if (!catalog)
+	{
+		return false;
+	}
+
+	FScenarioCityBlockCatalogEntry compositeBlock = MakeMaterializerTestEntry(
+		TEXT("city.walkway_curb_road_straight_10m"),
+		EScenarioCityBlockRole::WalkwayRoadStraight,
+		EScenarioGroundRegionType::Blocked,
+		7.0);
+	compositeBlock.SemanticProfile.SurfaceIds = { TEXT("road"), TEXT("walkway") };
+	compositeBlock.SemanticProfile.CollisionTag = TEXT("curb");
+	compositeBlock.PlacementProfile.LateralAnchor = EScenarioCityBlockLateralAnchor::RegionInnerEdge;
+	catalog->Entries.Add(compositeBlock);
+
+	TArray<FScenarioGroundRegionSpec> groundRegions;
+	groundRegions.Add(MakeGeneratedWalkwayExtensionRegion(
+		TEXT("generated_city_main_upper_walkway_extension_00_00"),
+		FVector(0.0, 250.0, FScenarioCorridorGeometry::DefaultSurfaceTopZCm),
+		FVector2D(1000.0, 500.0)));
+
+	TArray<TObjectPtr<AActor>> spawnedActors;
+	FScenarioCityBlockMaterializationOptions options;
+	options.LogContext = TEXT("ScenarioCityBlockMaterializerTest");
+	const FScenarioCityBlockMaterializationResult result =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			testWorld.World,
+			catalog,
+			groundRegions,
+			spawnedActors,
+			options);
+
+	TestEqual(TEXT("walkway extension is a materializer candidate"), result.CandidateRegionCount, 1);
+	TestEqual(TEXT("road-side composite does not spawn for building-side walkway extension"), result.SpawnedActorCount, 0);
+	TestEqual(TEXT("walkway extension without a walkway-building entry is skipped as no entry"), result.SkippedNoEntryCount, 1);
+	TestEqual(TEXT("no visual actors remain owned by the materializer"), spawnedActors.Num(), 0);
+
 	return true;
 }
 

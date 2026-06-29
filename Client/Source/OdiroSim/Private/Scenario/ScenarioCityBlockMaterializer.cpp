@@ -66,6 +66,16 @@ namespace
 				|| regionSpec.RegionId.Contains(TEXT("_road_2lane_")));
 	}
 
+	// Detects generated building-side walkway extensions without treating them as road-side composite triggers.
+	bool IsGeneratedWalkwayExtensionRegion(const FScenarioGroundRegionSpec& regionSpec)
+	{
+		const FName surfaceId(*regionSpec.SurfaceId);
+		return IsGeneratedCityVisualRegion(regionSpec)
+			&& surfaceId == WalkwaySurfaceId
+			&& regionSpec.RegionType == EScenarioGroundRegionType::Walkable
+			&& regionSpec.RegionId.Contains(TEXT("_walkway_extension_"));
+	}
+
 	// Maps source-of-truth GroundRegion semantics to the straight block roles supported by the catalog.
 	void ResolveCityBlockRolesForRegion(
 		const FScenarioGroundRegionSpec& regionSpec,
@@ -79,9 +89,8 @@ namespace
 			return;
 		}
 
-		if (surfaceId == WalkwaySurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Walkable)
+		if (IsGeneratedWalkwayExtensionRegion(regionSpec))
 		{
-			outRoles.Add(EScenarioCityBlockRole::WalkwayRoadStraight);
 			outRoles.Add(EScenarioCityBlockRole::WalkwayBuildingStraight);
 			return;
 		}
@@ -375,7 +384,7 @@ namespace
 		return regionSpec.Center.Z;
 	}
 
-	// Computes the desired authored bounds center for center- and edge-anchored visual blocks.
+	// Computes the desired authored bounds center for center- and continuous-edge anchored visual blocks.
 	FVector ResolveDesiredBlockBoundsCenter(
 		const FScenarioGroundRegionSpec& regionSpec,
 		const FScenarioCityBlockCatalogEntry& blockEntry,
@@ -412,10 +421,12 @@ namespace
 
 		if (lateralAnchor == EScenarioCityBlockLateralAnchor::RegionInnerEdge)
 		{
+			// For generated curb bands, this inner edge is the continuous walkway-curb seam.
 			return baseRegionCenter
 				+ (right * sideSign * (blockHalfWidthCm - regionHalfWidthCm + postAnchorOffsetCm));
 		}
 
+		// For generated road bands, this outer edge is the continuous far-side road boundary.
 		return baseRegionCenter
 			+ (right * sideSign * (regionHalfWidthCm - blockHalfWidthCm + postAnchorOffsetCm));
 	}

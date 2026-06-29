@@ -299,6 +299,7 @@ class ScenarioGenerationV2Agent:
         """Apply prompt-specific corrections that are independent of optional presets."""
         self._apply_alpha_pedestrian_policy(scenario)
         self._prefer_corridor_pose_robot_anchors(scenario)
+        self._apply_requested_obstacle_sequence(scenario, intent)
         if intent.robot_anchor_only:
             obstacles = scenario.setdefault("obstacles", {})
             obstacles["placements"] = []
@@ -310,6 +311,59 @@ class ScenarioGenerationV2Agent:
             if isinstance(placements, list) and len(placements) > 2:
                 obstacles["placements"] = self._first_gate_pair(placements)
         return scenario
+
+    def _apply_requested_obstacle_sequence(self, scenario: dict, intent: ScenarioIntent) -> None:
+        """Preserve explicit catalog prop/count intent on LLM and repair candidates."""
+        if intent.explicit_no_obstacles or not intent.requested_props:
+            return
+        obstacles = scenario.setdefault("obstacles", {})
+        if not isinstance(obstacles, dict):
+            scenario["obstacles"] = {"min_clear_width_m": 0.9, "placements": []}
+            obstacles = scenario["obstacles"]
+        placements = obstacles.get("placements")
+        if not isinstance(placements, list):
+            placements = []
+        desired_count = intent.requested_obstacle_count or len(intent.requested_props)
+        if desired_count <= 0:
+            obstacles["placements"] = []
+            return
+        placement_template = self._placement_template(placements)
+        patched: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for index in range(desired_count):
+            placement = deepcopy(placements[index]) if index < len(placements) and isinstance(placements[index], dict) else deepcopy(placement_template)
+            placement["kind"] = placement.get("kind") if placement.get("kind") in {"fixed", "pattern"} else "fixed"
+            placement["id"] = self._requested_obstacle_id(placement, index, seen_ids)
+            seen_ids.add(placement["id"])
+            placement["prop"] = intent.requested_props[index % len(intent.requested_props)]
+            placement.setdefault("at", deepcopy(placement_template.get("at", {})))
+            placement.setdefault("yaw_deg", 0)
+            if intent.explicit_blocking:
+                placement["allow_blocking"] = True
+            elif placement.get("allow_blocking") is True:
+                placement["allow_blocking"] = False
+            patched.append(placement)
+        obstacles["placements"] = patched
+
+    def _placement_template(self, placements: list[object]) -> dict[str, Any]:
+        """Return a placement template for extending underfit LLM outputs."""
+        for placement in placements:
+            if isinstance(placement, dict):
+                return placement
+        return {
+            "kind": "fixed",
+            "id": "requested_obstacle_01",
+            "prop": "obstacle.road_cone_01",
+            "at": {"segment": "conflict", "along_m": 0.0, "offset_m": 0.0, "lane": "walkway"},
+            "yaw_deg": 0,
+        }
+
+    def _requested_obstacle_id(self, placement: dict[str, Any], index: int, seen_ids: set[str]) -> str:
+        """Return a stable id while avoiding duplicates for expanded placements."""
+        placement_id = placement.get("id")
+        if isinstance(placement_id, str) and placement_id and placement_id not in seen_ids:
+            return placement_id
+        return f"requested_obstacle_{index + 1:02d}"
 
     def _try_build_preset_scenario(
         self,

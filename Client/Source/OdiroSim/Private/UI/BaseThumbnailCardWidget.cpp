@@ -3,6 +3,8 @@
 #include "Components/Border.h"
 #include "Components/Image.h"
 #include "Components/NamedSlot.h"
+#include "Components/SizeBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/Widget.h"
 #include "Engine/Texture2D.h"
 #include "UI/BaseWidgetPrivate.h"
@@ -16,6 +18,25 @@ void UBaseThumbnailCardWidget::SynchronizeBaseProperties()
 	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
 	SetImageTexture(MediaImage.Get(), MediaTexture.Get());
 	SetOptionalWidgetVisible(MediaOverlay.Get(), bShowMedia);
+	SetOptionalWidgetVisible(ContentSlot.Get(), !bMediaOnly);
+	if (RootSize && bMediaOnly)
+	{
+		RootSize->ClearWidthOverride();
+		RootSize->ClearHeightOverride();
+	}
+	if (MediaSize && bMediaOnly)
+	{
+		MediaSize->ClearWidthOverride();
+		MediaSize->ClearHeightOverride();
+	}
+	if (MediaOverlay && bMediaOnly)
+	{
+		if (UVerticalBoxSlot* mediaSlot = Cast<UVerticalBoxSlot>(MediaOverlay->Slot))
+		{
+			mediaSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			mediaSlot->SetVerticalAlignment(VAlign_Fill);
+		}
+	}
 	if (MediaBorder && tokens)
 	{
 		MediaBorder->SetPadding(MediaPaddingMode == EBaseThumbnailMediaPaddingMode::Inset
@@ -67,6 +88,12 @@ void UBaseThumbnailCardWidget::SetShowMedia(const bool bInShowMedia)
 void UBaseThumbnailCardWidget::SetMediaPaddingMode(const EBaseThumbnailMediaPaddingMode inPaddingMode)
 {
 	MediaPaddingMode = inPaddingMode;
+	SynchronizeBaseProperties();
+}
+
+void UBaseThumbnailCardWidget::SetMediaOnly(const bool bInMediaOnly)
+{
+	bMediaOnly = bInMediaOnly;
 	SynchronizeBaseProperties();
 }
 

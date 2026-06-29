@@ -196,11 +196,15 @@ void UBaseTextInputWidget::NativeConstruct()
 
 	if (TextBox)
 	{
+		TextBox->OnTextChanged.RemoveDynamic(this, &UBaseTextInputWidget::HandleEditableTextChanged);
+		TextBox->OnTextChanged.AddDynamic(this, &UBaseTextInputWidget::HandleEditableTextChanged);
 		TextBox->OnTextCommitted.RemoveDynamic(this, &UBaseTextInputWidget::HandleEditableTextCommitted);
 		TextBox->OnTextCommitted.AddDynamic(this, &UBaseTextInputWidget::HandleEditableTextCommitted);
 	}
 	if (MultiLineTextBox)
 	{
+		MultiLineTextBox->OnTextChanged.RemoveDynamic(this, &UBaseTextInputWidget::HandleMultiLineTextChanged);
+		MultiLineTextBox->OnTextChanged.AddDynamic(this, &UBaseTextInputWidget::HandleMultiLineTextChanged);
 		MultiLineTextBox->OnTextCommitted.RemoveDynamic(this, &UBaseTextInputWidget::HandleMultiLineTextCommitted);
 		MultiLineTextBox->OnTextCommitted.AddDynamic(this, &UBaseTextInputWidget::HandleMultiLineTextCommitted);
 	}
@@ -230,10 +234,12 @@ void UBaseTextInputWidget::NativeDestruct()
 {
 	if (TextBox)
 	{
+		TextBox->OnTextChanged.RemoveDynamic(this, &UBaseTextInputWidget::HandleEditableTextChanged);
 		TextBox->OnTextCommitted.RemoveDynamic(this, &UBaseTextInputWidget::HandleEditableTextCommitted);
 	}
 	if (MultiLineTextBox)
 	{
+		MultiLineTextBox->OnTextChanged.RemoveDynamic(this, &UBaseTextInputWidget::HandleMultiLineTextChanged);
 		MultiLineTextBox->OnTextCommitted.RemoveDynamic(this, &UBaseTextInputWidget::HandleMultiLineTextCommitted);
 	}
 	if (LowerTextBox)
@@ -266,6 +272,32 @@ void UBaseTextInputWidget::SetText(const FText inText)
 {
 	Text = inText;
 	SynchronizeBaseProperties();
+}
+
+FText UBaseTextInputWidget::GetCurrentText() const
+{
+	if (Mode == EBaseTextInputMode::Number)
+	{
+		return TextBox ? TextBox->GetText() : FormatNumberText(NumericValue, DisplayDecimals);
+	}
+
+	if (Mode == EBaseTextInputMode::NumberRange)
+	{
+		const FString lowerText = LowerTextBox
+			? LowerTextBox->GetText().ToString()
+			: FormatNumberText(LowerValue, DisplayDecimals).ToString();
+		const FString upperText = UpperTextBox
+			? UpperTextBox->GetText().ToString()
+			: FormatNumberText(UpperValue, DisplayDecimals).ToString();
+		return FText::FromString(FString::Printf(TEXT("%s - %s"), *lowerText, *upperText));
+	}
+
+	if (Mode == EBaseTextInputMode::Multiline)
+	{
+		return MultiLineTextBox ? MultiLineTextBox->GetText() : Text;
+	}
+
+	return TextBox ? TextBox->GetText() : Text;
 }
 
 void UBaseTextInputWidget::SetPlaceholderText(const FText inPlaceholderText)
@@ -350,6 +382,11 @@ bool UBaseTextInputWidget::CommitText(const FText inText)
 	return true;
 }
 
+bool UBaseTextInputWidget::CommitCurrentText()
+{
+	return CommitText(GetCurrentText());
+}
+
 void UBaseTextInputWidget::SetBaseState(const EBaseWidgetState inState)
 {
 	State = inState;
@@ -383,12 +420,28 @@ void UBaseTextInputWidget::HandleEditableTextCommitted(const FText& committedTex
 	}
 }
 
+void UBaseTextInputWidget::HandleEditableTextChanged(const FText& changedText)
+{
+	if (!bSynchronizing && Mode == EBaseTextInputMode::Text)
+	{
+		OnTextChanged.Broadcast(this, changedText);
+	}
+}
+
 void UBaseTextInputWidget::HandleMultiLineTextCommitted(const FText& committedText, ETextCommit::Type commitMethod)
 {
 	(void)commitMethod;
 	if (!bSynchronizing)
 	{
 		CommitText(committedText);
+	}
+}
+
+void UBaseTextInputWidget::HandleMultiLineTextChanged(const FText& changedText)
+{
+	if (!bSynchronizing && Mode == EBaseTextInputMode::Multiline)
+	{
+		OnTextChanged.Broadcast(this, changedText);
 	}
 }
 

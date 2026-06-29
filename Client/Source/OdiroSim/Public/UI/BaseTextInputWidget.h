@@ -38,6 +38,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
 	FText GetText() const { return Text; }
 
+	// Returns the current visible edit value, including uncommitted child field text.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
+	FText GetCurrentText() const;
+
 	// Updates the placeholder text used by editable controls.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
 	void SetPlaceholderText(FText inPlaceholderText);
@@ -90,6 +94,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
 	bool CommitText(FText inText);
 
+	// Parses and commits the current visible edit value.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
+	bool CommitCurrentText();
+
 	// Updates the semantic visual state.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
 	void SetBaseState(EBaseWidgetState inState);
@@ -122,6 +130,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "UI|Base Text Input|Events")
 	FBaseTextInputTextEvent OnTextCommitted;
 
+	// Broadcasts while text or multiline input changes before commit.
+	UPROPERTY(BlueprintAssignable, Category = "UI|Base Text Input|Events")
+	FBaseTextInputTextChangedEvent OnTextChanged;
+
 	// Broadcasts after number input commits.
 	UPROPERTY(BlueprintAssignable, Category = "UI|Base Text Input|Events")
 	FBaseTextInputNumberEvent OnNumericValueCommitted;
@@ -153,9 +165,17 @@ protected:
 	UFUNCTION()
 	void HandleEditableTextCommitted(const FText& committedText, ETextCommit::Type commitMethod);
 
+	// Handles single-line text edits from the bound editable text box.
+	UFUNCTION()
+	void HandleEditableTextChanged(const FText& changedText);
+
 	// Handles multiline text commits from the bound editable text box.
 	UFUNCTION()
 	void HandleMultiLineTextCommitted(const FText& committedText, ETextCommit::Type commitMethod);
+
+	// Handles multiline text edits from the bound editable text box.
+	UFUNCTION()
+	void HandleMultiLineTextChanged(const FText& changedText);
 
 	// Handles lower range field commits.
 	UFUNCTION()

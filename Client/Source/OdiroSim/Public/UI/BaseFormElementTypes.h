@@ -196,6 +196,9 @@ struct ODIROSIM_API FBaseContextMenuItem
 // Broadcasts text input text commits.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FBaseTextInputTextEvent, UBaseTextInputWidget*, Widget, const FText&, Text);
 
+// Broadcasts text input text edits before commit.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FBaseTextInputTextChangedEvent, UBaseTextInputWidget*, Widget, const FText&, Text);
+
 // Broadcasts text input numeric commits.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FBaseTextInputNumberEvent, UBaseTextInputWidget*, Widget, float, Value);
 

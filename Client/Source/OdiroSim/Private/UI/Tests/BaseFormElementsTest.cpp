@@ -20,6 +20,12 @@ bool FBaseFormElementsTextInputTest::RunTest(const FString& parameters)
 		return false;
 	}
 
+	input->SetInputMode(EBaseTextInputMode::Text);
+	input->SetText(FText::FromString(TEXT("draft path")));
+	TestEqual(TEXT("current text returns stored text without bound editable"), input->GetCurrentText().ToString(), FString(TEXT("draft path")));
+	TestTrue(TEXT("commit current text succeeds in text mode"), input->CommitCurrentText());
+	TestEqual(TEXT("commit current text preserves text"), input->GetText().ToString(), FString(TEXT("draft path")));
+
 	input->SetValueRange(0.0f, 10.0f);
 	input->SetInputMode(EBaseTextInputMode::Number);
 	input->SetNumericValue(15.0f);

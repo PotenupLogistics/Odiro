@@ -8,6 +8,7 @@
 class UBorder;
 class UImage;
 class UNamedSlot;
+class USizeBox;
 class UTexture2D;
 class UWidget;
 
@@ -45,6 +46,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Thumbnail Card")
 	EBaseThumbnailMediaPaddingMode GetMediaPaddingMode() const { return MediaPaddingMode; }
 
+	// Updates whether this instance renders only the media area inside its parent.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Thumbnail Card")
+	void SetMediaOnly(bool bInMediaOnly);
+
+	// Returns whether this instance hides the content slot and fills the parent with media.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Thumbnail Card")
+	bool IsMediaOnly() const { return bMediaOnly; }
+
 	// Updates whether the card renders selected.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Thumbnail Card")
 	void SetSelected(bool bInSelected);
@@ -77,6 +86,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetMediaPaddingMode", Setter = "SetMediaPaddingMode", BlueprintGetter = "GetMediaPaddingMode", BlueprintSetter = "SetMediaPaddingMode", Category = "UI|Base Thumbnail Card", meta = (ExposeOnSpawn = "true"))
 	EBaseThumbnailMediaPaddingMode MediaPaddingMode = EBaseThumbnailMediaPaddingMode::FullBleed;
 
+	// When true, the card hides named content and lets the media area fill the assigned slot.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsMediaOnly", Setter = "SetMediaOnly", BlueprintGetter = "IsMediaOnly", BlueprintSetter = "SetMediaOnly", Category = "UI|Base Thumbnail Card", meta = (ExposeOnSpawn = "true"))
+	bool bMediaOnly = false;
+
 	// Selected card state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsBaseSelected", Setter = "SetSelected", BlueprintGetter = "IsBaseSelected", BlueprintSetter = "SetSelected", Category = "UI|Base Thumbnail Card", meta = (ExposeOnSpawn = "true"))
 	bool bSelected = false;
@@ -92,6 +105,10 @@ protected:
 	// Media area wrapper (toggled by bShowMedia) owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> MediaOverlay;
+
+	// Optional media size wrapper owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<USizeBox> MediaSize;
 
 	// Media wrapper owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

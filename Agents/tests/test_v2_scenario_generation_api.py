@@ -410,6 +410,14 @@ def _assert_scenario_quality_guardrails(
             assert not (along_overlap and offset_overlap)
 
 
+def _assert_no_catalog_metadata_leaked(payload: dict) -> None:
+    """Assert scenario output does not copy catalog documentation fields."""
+    rendered = str(payload)
+    assert "bbox_m" not in rendered
+    assert "footprint_m" not in rendered
+    assert "Prop Bounding Boxes" not in rendered
+
+
 def _assert_complex_g_shape_construction_scenario(payload: dict) -> None:
     """Assert the complex Korean prompt keeps shape, count, and placement intent."""
     _assert_raw_scenario(payload)
@@ -1700,6 +1708,177 @@ def test_v2_missing_preset_requested_catalog_prop_uses_intent_prop_fallback() ->
     assert {placement["prop"] for placement in placements} == {"obstacle.box_01"}
 
 
+def test_v2_deterministic_korean_fixture_alias_prompt_uses_catalog_props() -> None:
+    """Use Korean fixture aliases as static obstacle intent in deterministic generation."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(prompt="보도 가장자리에 휴지통과 우편함이 있고 중앙은 통과 가능한 시나리오를 만들어줘")
+    )
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    placements = scenario["obstacles"]["placements"]
+    props = {placement["prop"] for placement in placements}
+    assert len(placements) >= 2
+    assert props & {"obstacle.trash_bin", "obstacle.bin"}
+    assert "obstacle.mailbox" in props
+    assert all(placement.get("allow_blocking") is not True for placement in placements)
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
+def test_v2_deterministic_mixed_korean_alias_prompt_preserves_prop_sequence() -> None:
+    """Map mixed Korean obstacle aliases to their catalog prop ids."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(prompt="소화전, 벤치, 박스가 섞여 있는 복잡한 보도 장애물 시나리오를 만들어줘")
+    )
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    props = {placement["prop"] for placement in scenario["obstacles"]["placements"]}
+    assert {"obstacle.fire_hydrant", "obstacle.street_bank", "obstacle.box_01"} <= props
+    assert props <= get_allowed_static_obstacle_prop_ids()
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
+def test_v2_deterministic_alias_count_prompt_uses_requested_manhole_count() -> None:
+    """Parse an alias-adjacent count such as manhole four as obstacle count."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="맨홀 4개가 낮은 장애물처럼 깔려 있는 시나리오를 만들어줘"))
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    placements = scenario["obstacles"]["placements"]
+    assert len(placements) == 4
+    assert {placement["prop"] for placement in placements} <= {
+        "obstacle.manhole_01",
+        "obstacle.manhole_02",
+        "obstacle.manhole_03",
+        "obstacle.manhole_04",
+    }
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
+def test_v2_deterministic_grouped_alias_counts_preserve_each_prop_count() -> None:
+    """Apply each alias-adjacent count to its own mentioned prop."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="우편함 2개와 맨홀 3개가 있는 시나리오를 만들어줘"))
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    props = [placement["prop"] for placement in scenario["obstacles"]["placements"]]
+    assert len(props) == 5
+    assert props.count("obstacle.mailbox") == 2
+    assert sum(1 for prop in props if prop.startswith("obstacle.manhole_")) == 3
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
+def test_v2_deterministic_korean_word_grouped_alias_counts_preserve_each_prop_count() -> None:
+    """Parse Korean number words next to static obstacle aliases."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="라바콘 세 개와 박스 두 개가 있는 공사 구간 시나리오를 만들어줘"))
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    props = [placement["prop"] for placement in scenario["obstacles"]["placements"]]
+    assert len(props) == 5
+    assert props.count("obstacle.road_cone_01") == 3
+    assert props.count("obstacle.box_01") == 2
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
+def test_v2_deterministic_mixed_digit_alias_counts_preserve_each_prop_count() -> None:
+    """Do not let generic cone count parsing hide other alias-count groups."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(
+            prompt="좁은 보도, 곡선 구간, 도로 가장자리, 바리케이드 1개, 라바콘 2개, 박스 1개가 함께 있는 복잡한 시나리오를 만들어줘"
+        )
+    )
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    props = [placement["prop"] for placement in scenario["obstacles"]["placements"]]
+    assert len(props) == 4
+    assert props.count("obstacle.road_barrier_01") == 1
+    assert props.count("obstacle.road_cone_01") == 2
+    assert props.count("obstacle.box_01") == 1
+    assert all(placement.get("allow_blocking") is not True for placement in scenario["obstacles"]["placements"])
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
+def test_v2_deterministic_between_obstacles_prompt_keeps_passable_gap() -> None:
+    """Treat wall/road side wording as context while preserving box and trash-bin obstacles."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(
+            prompt=(
+                "건물 벽 쪽은 막혀 있고 차도 쪽은 위험 영역이며, "
+                "로봇이 박스와 쓰레기통 사이를 지나가야 하는 시나리오를 만들어줘"
+            )
+        )
+    )
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    placements = scenario["obstacles"]["placements"]
+    props = {placement["prop"] for placement in placements}
+    assert "obstacle.box_01" in props
+    assert props & {"obstacle.trash_bin", "obstacle.bin"}
+    assert all(placement.get("allow_blocking") is not True for placement in placements)
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
+def test_v2_deterministic_unknown_signage_prompt_stays_catalog_safe() -> None:
+    """Avoid inventing a prop id when a Korean object name is outside the catalog."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(prompt="안내판이 있는 시나리오를 만들어줘. catalog에 없는 prop id를 만들면 안 돼")
+    )
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    props = {placement["prop"] for placement in scenario["obstacles"]["placements"]}
+    assert props
+    assert props <= get_allowed_static_obstacle_prop_ids()
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
+def test_v2_deterministic_pedestrian_alias_work_keeps_alpha_policy() -> None:
+    """Keep alpha pedestrian output disabled while obstacle alias parsing evolves."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="보행자가 있는 좁은 보도 시나리오를 만들어줘"))
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    assert response.scenario["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+
+
 def test_v2_missing_preset_unknown_prop_fallback_keeps_catalog_safe_output() -> None:
     """Do not expose unknown prompt prop ids in validator-approved fallback output."""
     agent = ScenarioGenerationV2Agent(
@@ -2215,6 +2394,36 @@ def test_v2_llm_path_normalizes_legacy_obstacle_prop_before_response() -> None:
     assert response.validation.valid is True
 
 
+def test_v2_llm_path_removes_catalog_metadata_and_keeps_alpha_pedestrians() -> None:
+    """Strip catalog-only fields from valid LLM output before returning scenario JSON."""
+    llm_template = _llm_scenario_with_obstacle("llm_catalog_metadata_leak")
+    llm_template["obstacles"]["placements"][0]["prop"] = "obstacle.trash_bin"
+    llm_template["obstacles"]["placements"][0]["bbox_m"] = [0.9, 0.9, 1.8]
+    llm_template["obstacles"]["placements"][0]["footprint_m"] = [0.9, 0.9]
+    llm_template["bbox_m"] = {"obstacle.trash_bin": [0.9, 0.9, 1.8]}
+    llm_template["pedestrians"] = {
+        "background": {"count": 2, "speed_mps": 1.0},
+        "encounters": [
+            {
+                "id": "llm_crossing",
+                "type": "cross_path",
+                "at": "conflict",
+                "persona": "normal",
+            }
+        ],
+    }
+    fake = _FakeJsonClient([llm_template])
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=True), llm_client=fake)
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="보도 가장자리에 쓰레기통이 있는 시나리오"))
+
+    assert response.generation_mode == "llm"
+    assert response.scenario is not None
+    assert response.scenario["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    _assert_no_catalog_metadata_leaked(response.scenario)
+    assert response.validation.valid is True
+
+
 def test_v2_scenario_agent_falls_back_when_llm_and_repair_fail() -> None:
     fake = _FakeJsonClient([ValueError("bad json"), ValueError("repair bad json")])
     agent = ScenarioGenerationV2Agent(
@@ -2232,6 +2441,126 @@ def test_v2_scenario_agent_falls_back_when_llm_and_repair_fail() -> None:
         warning.message == "LLM output validation failed; deterministic fallback scenario was used."
         for warning in response.validation.warnings
     )
+
+
+def test_v2_llm_failure_fallback_preserves_korean_multi_prop_intent() -> None:
+    """Use deterministic alias parsing when LLM and repair outputs fall back."""
+    fake = _FakeJsonClient([ValueError("bad json"), ValueError("repair bad json")])
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=True, v2AgentLlmRepairEnabled=True),
+        llm_client=fake,
+    )
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(prompt="보도 가장자리에 휴지통과 우편함이 있고 중앙은 통과 가능한 시나리오를 만들어줘")
+    )
+
+    assert response.generation_mode == "fallback"
+    assert response.scenario is not None
+    props = {placement["prop"] for placement in response.scenario["obstacles"]["placements"]}
+    assert props <= get_allowed_static_obstacle_prop_ids()
+    assert props & {"obstacle.trash_bin", "obstacle.bin"}
+    assert "obstacle.mailbox" in props
+    assert all(placement.get("allow_blocking") is not True for placement in response.scenario["obstacles"]["placements"])
+    _assert_no_catalog_metadata_leaked(response.scenario)
+
+
+def test_v2_llm_invalid_prop_output_stays_catalog_safe() -> None:
+    """Do not expose non-catalog LLM prop ids in final output."""
+    invalid_template = _llm_scenario_with_obstacle("llm_invalid_signboard")
+    invalid_template["obstacles"]["placements"][0]["prop"] = "obstacle.signboard_01"
+    fake = _FakeJsonClient([invalid_template, ValueError("repair bad json")])
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=True, v2AgentLlmRepairEnabled=True),
+        llm_client=fake,
+    )
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(prompt="안내판이 있는 시나리오를 만들어줘. catalog에 없는 prop id를 만들면 안 돼")
+    )
+
+    assert response.scenario is not None
+    props = {placement["prop"] for placement in response.scenario["obstacles"]["placements"]}
+    assert "obstacle.signboard_01" not in props
+    assert props <= get_allowed_static_obstacle_prop_ids()
+    _assert_no_catalog_metadata_leaked(response.scenario)
+
+
+def test_v2_llm_malformed_fallback_preserves_manhole_alias_count() -> None:
+    """Keep alias-adjacent counts when LLM and repair both fail."""
+    fake = _FakeJsonClient([ValueError("bad json"), ValueError("repair bad json")])
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=True, v2AgentLlmRepairEnabled=True),
+        llm_client=fake,
+    )
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="맨홀 4개가 낮은 장애물처럼 깔려 있는 시나리오를 만들어줘"))
+
+    assert response.generation_mode == "fallback"
+    assert response.scenario is not None
+    placements = response.scenario["obstacles"]["placements"]
+    assert len(placements) == 4
+    assert {placement["prop"] for placement in placements} <= {
+        "obstacle.manhole_01",
+        "obstacle.manhole_02",
+        "obstacle.manhole_03",
+        "obstacle.manhole_04",
+    }
+    _assert_no_catalog_metadata_leaked(response.scenario)
+
+
+def test_v2_llm_missing_fields_fallback_preserves_box_trash_gap_intent() -> None:
+    """Keep box and trash-bin props when a missing-field LLM candidate falls back."""
+    fake = _FakeJsonClient([{"schema": "scenario", "version": 1}, ValueError("repair bad json")])
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=True, v2AgentLlmRepairEnabled=True),
+        llm_client=fake,
+    )
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(
+            prompt=(
+                "건물 벽 쪽은 막혀 있고 차도 쪽은 위험 영역이며, "
+                "로봇이 박스와 쓰레기통 사이를 지나가야 하는 시나리오를 만들어줘"
+            )
+        )
+    )
+
+    assert response.generation_mode == "fallback"
+    assert response.scenario is not None
+    placements = response.scenario["obstacles"]["placements"]
+    props = {placement["prop"] for placement in placements}
+    assert "obstacle.box_01" in props
+    assert props & {"obstacle.trash_bin", "obstacle.bin"}
+    assert all(placement.get("allow_blocking") is not True for placement in placements)
+    _assert_no_catalog_metadata_leaked(response.scenario)
+
+
+def test_v2_llm_repair_preserves_explicit_multi_prop_alias_counts() -> None:
+    """Keep explicit alias-count constraints after LLM-assisted repair succeeds."""
+    repaired_template = _llm_scenario_with_obstacle("llm_repaired_underfit_multi_prop")
+    repaired_template["obstacles"]["placements"][0]["prop"] = "obstacle.road_cone_01"
+    fake = _FakeJsonClient([{"schema": "scenario", "version": 1}, repaired_template])
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=True, v2AgentLlmRepairEnabled=True),
+        llm_client=fake,
+    )
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(
+            prompt="우편함 2개와 맨홀 3개가 있는 시나리오를 만들어줘"
+        )
+    )
+
+    assert response.generation_mode == "llm_repaired"
+    assert response.scenario is not None
+    placements = response.scenario["obstacles"]["placements"]
+    props = [placement["prop"] for placement in placements]
+    assert len(props) == 5
+    assert props.count("obstacle.mailbox") == 2
+    assert sum(1 for prop in props if prop.startswith("obstacle.manhole_")) == 3
+    assert all(placement.get("allow_blocking") is not True for placement in placements)
+    _assert_no_catalog_metadata_leaked(response.scenario)
 
 
 def test_v2_scenario_agent_curved_road_prompt_keeps_curved_preset_after_llm_fallback() -> None:

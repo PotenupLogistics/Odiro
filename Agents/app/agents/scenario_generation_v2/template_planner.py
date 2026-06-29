@@ -23,6 +23,7 @@ class TemplatePlan:
     requested_obstacle_count: int | None
     requested_obstacle_counts: list[int]
     requested_prop: str | None
+    requested_props: list[str]
     requested_length_m: float | None
     corridor_profile: str
     explicit_no_obstacles: bool
@@ -66,6 +67,7 @@ class TemplatePlanner:
             requested_obstacle_count=intent.requested_obstacle_count,
             requested_obstacle_counts=intent.requested_obstacle_counts,
             requested_prop=intent.requested_prop,
+            requested_props=list(intent.requested_props),
             requested_length_m=intent.requested_length_m,
             corridor_profile=intent.corridor_profile,
             explicit_no_obstacles=intent.explicit_no_obstacles,

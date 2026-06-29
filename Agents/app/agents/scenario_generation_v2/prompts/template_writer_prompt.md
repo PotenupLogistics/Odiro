@@ -45,6 +45,10 @@ Project Scenario는 범위값을 포함할 수 있다.
 }
 
 정적 장애물이 필요한 prompt이면 obstacles.placements에 다음 catalog 형태를 사용한다.
+SPEC_CONTEXT의 Environment Catalog에 있는 Prop Bounding Boxes 표를 참고해 prop별 bbox_m, footprint_m 크기에 맞게 at.offset_m, spacing_m, gap_width_m, count를 산정한다.
+bbox_m, footprint_m, catalog 정의, bounding box 표 자체는 scenario.json에 복사하지 않는다.
+큰 obstacle은 좁은 보도 중앙에 무심코 배치하지 않는다.
+사용자가 path blocking, gate, 통행 불가, blocked path처럼 경로 차단 의도를 명시한 경우에만 road_barrier 계열을 barrier/gate 배치로 사용한다.
 
 {
   "kind": "fixed",

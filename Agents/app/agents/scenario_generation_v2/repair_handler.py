@@ -15,6 +15,9 @@ ROBOT_ANCHOR_EXCLUSION_RADIUS_M = 1.0
 DEFAULT_OBSTACLE_FOOTPRINT_WIDTH_M = 0.1
 """Conservative footprint width used for AI-side passable-width repair."""
 
+CATALOG_METADATA_FIELDS = {"bbox_cm", "bbox_m", "footprint_m", "Prop Bounding Boxes"}
+"""Catalog documentation fields that must not be copied into scenario JSON."""
+
 
 class RepairHandler:
     """Applies deterministic, local-only repairs before validation."""
@@ -36,6 +39,7 @@ class RepairHandler:
         for legacy_field in ("template_id", "scenario_template"):
             repaired.pop(legacy_field, None)
         self._remove_null_fields(repaired)
+        self._remove_catalog_metadata_fields(repaired)
         self._repair_obstacle_placements(repaired, diagnostics, stage)
         self._repair_robot_anchors(repaired, diagnostics, stage)
         self._swap_inverted_ranges(repaired, diagnostics, stage)
@@ -43,6 +47,18 @@ class RepairHandler:
         if repair_quality:
             self._repair_obstacle_quality(repaired, diagnostics, stage)
         return repaired
+
+    def _remove_catalog_metadata_fields(self, value: Any) -> None:
+        """Remove catalog-only metadata recursively from generated scenario JSON."""
+        if isinstance(value, dict):
+            for key in list(value):
+                if key in CATALOG_METADATA_FIELDS:
+                    value.pop(key, None)
+                    continue
+                self._remove_catalog_metadata_fields(value[key])
+        elif isinstance(value, list):
+            for item in value:
+                self._remove_catalog_metadata_fields(item)
 
     def _repair_obstacle_placements(
         self,

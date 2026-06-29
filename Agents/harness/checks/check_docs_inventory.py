@@ -21,7 +21,7 @@ POLICY_DECISION_CONTRACT = DOCS / "policy_server" / "POLICY_DECISION_JSON_GUIDE.
 SIMULATION_INTERFACE = REPO_ROOT / "docs" / "specs" / "simulation-interface.md"
 USER_PROJECT_DATA_CONTRACT = CONTRACT_SPECS / "user-project-data.md"
 LEGACY_TERMINOLOGY_DOC = DOCS / "archive" / "deprecated" / ("SCENARIO_" + "EPISODE_TERMINOLOGY.md")
-ENVIRONMENT_CATALOG = DOCS / "environment" / "environment-catalog.md"
+CLIENT_ENVIRONMENT_CATALOG = REPO_ROOT / "Client" / "Json" / "environment-catalog.md"
 
 FORBIDDEN_CODE_PATHS = [
     ROOT / "ue",
@@ -116,7 +116,7 @@ def run_check() -> dict[str, Any]:
                 DOCS / "research" / "RESEARCH_ALIGNMENT.md",
                 DOCS / "architecture" / "UE_CONTRACT_MIGRATION_PLAN.md",
                 DOCS / "environment" / "ENVIRONMENT_PARAMETER_SPEC.md",
-                ENVIRONMENT_CATALOG,
+                CLIENT_ENVIRONMENT_CATALOG,
                 LEGACY_TERMINOLOGY_DOC,
                 DOCS / "policy" / "POLICY_SOURCE_REGISTRY.md",
                 DOCS / "rag" / "RAG_RETRIEVAL_STRATEGY.md",
@@ -132,7 +132,7 @@ def run_check() -> dict[str, Any]:
                 "api/V2_AGENT_APIS.md",
                 "agents/V2_AGENT_ARCHITECTURE.md",
                 "agents/V2_LANGGRAPH_DESIGN.md",
-                "environment/environment-catalog.md",
+                "Client/Json/environment-catalog.md",
             ]
         ),
         "readmesLinkNewStructure": all(
@@ -140,10 +140,11 @@ def run_check() -> dict[str, Any]:
             for term in [
                 "docs/specs/project-structure.md",
                 "docs/specs/simulation-interface.md",
-                "Agents/docs/environment/environment-catalog.md",
+                "Client/Json/environment-catalog.md",
                 "archive/previous_episode_spec",
             ]
         ),
+        "temporaryAgentEnvironmentCatalogRemoved": not (DOCS / "environment" / "environment-catalog.md").exists(),
         "noLiveProviderCallsInHarness": not _imports_live_http_client(Path(__file__)),
         "noUeCodeGenerated": not forbidden_code_paths,
         "forbiddenCodePaths": forbidden_code_paths,
@@ -161,6 +162,7 @@ def run_check() -> dict[str, Any]:
         ("currentDocsMoved", "Current docs must be in their semantic folders."),
         ("readmesLinkCanonicalContractPaths", "README docs must link canonical contract paths."),
         ("readmesLinkNewStructure", "README docs must link the final docs folder structure."),
+        ("temporaryAgentEnvironmentCatalogRemoved", "Temporary Agent environment catalog copy must be removed."),
         ("noLiveProviderCallsInHarness", "Docs inventory harness must not perform live provider calls."),
         ("noUeCodeGenerated", "Docs inventory work must not generate UE code directories."),
     ]:

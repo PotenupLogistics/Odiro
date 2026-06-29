@@ -16,14 +16,26 @@ struct ODIROSIM_API FScenarioCityBlockMaterializationResult
 	// Visual block actors spawned during this materialization pass.
 	int32 SpawnedActorCount = 0;
 
+	// Generated road-side seam corners inferred from adjacent right-angle curb bands.
+	int32 CornerCandidateCount = 0;
+
 	// Candidate GroundRegions skipped because the configured catalog had no matching entry.
 	int32 SkippedNoEntryCount = 0;
+
+	// Inferred road-side seam corners skipped because the configured catalog had no corner entry.
+	int32 SkippedCornerNoEntryCount = 0;
 
 	// Candidate GroundRegions skipped because their matching catalog entry could not spawn a valid actor.
 	int32 SkippedSpawnFailureCount = 0;
 
+	// Inferred road-side seam corners skipped because their catalog entry could not spawn a valid actor.
+	int32 SkippedCornerSpawnFailureCount = 0;
+
 	// Candidate GroundRegions skipped because a composite visual block already covers the same generated side strip.
 	int32 SkippedCoveredByCompositeCount = 0;
+
+	// Candidate building frontage blocks skipped because their authored bounds overlap an accepted frontage footprint.
+	int32 SkippedBuildingOverlapCount = 0;
 };
 
 // Caller-supplied labels used to keep shared materializer diagnostics readable.

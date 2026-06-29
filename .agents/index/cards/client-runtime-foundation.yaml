@@ -1,13 +1,15 @@
 id: client-runtime-foundation
 owner: Client
-description: Unreal project config, module boundaries, maps, assets, and UMG asset ownership.
+description: Unreal project config, module boundaries, maps, assets, DPI scaling, and UMG asset ownership.
 paths:
   - Client/AGENTS.md
   - Client/OdiroSim.uproject
   - Client/Source/*.Target.cs
   - Client/Source/OdiroSim/OdiroSim.Build.cs
   - Client/Source/OdiroSim/Public/UI/Base*.h
+  - Client/Source/OdiroSim/Public/UI/*Dpi*.h
   - Client/Source/OdiroSim/Private/UI/Base*.cpp
+  - Client/Source/OdiroSim/Private/UI/*Dpi*.cpp
   - Client/Config/**
   - Client/Content/**
   - Client/Plugins/UEGitPlugin/**
@@ -29,7 +31,7 @@ entry:
       - Client/Content/Data
       - Client/Plugins/UEGitPlugin
   - id: base-widgets
-    description: Independent base widget token types, component view adapters, and WBP assets.
+    description: Independent base widget token types, component view adapters, DPI rules, and WBP assets.
     read:
       - Client/Source/OdiroSim/Public/UI
       - Client/Source/OdiroSim/Private/UI

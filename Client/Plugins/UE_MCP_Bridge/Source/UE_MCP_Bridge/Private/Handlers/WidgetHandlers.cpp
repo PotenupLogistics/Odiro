@@ -50,6 +50,8 @@
 #include "MovieScene.h"
 #include "MovieScenePossessable.h"
 #include "MovieSceneSpawnable.h"
+#include "Sections/MovieSceneFloatSection.h"
+#include "Tracks/MovieSceneFloatTrack.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "UObject/UnrealType.h"
@@ -812,6 +814,227 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CaptureWidget(const TSharedPtr<FJsonObje
 	return MCPResult(Result);
 }
 
+TSharedPtr<FJsonValue> FWidgetHandlers::EnsureWidgetRenderOpacityAnimations(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	const TArray<TSharedPtr<FJsonValue>>* AnimationSpecs = nullptr;
+	if (!Params->TryGetArrayField(TEXT("animations"), AnimationSpecs) || !AnimationSpecs)
+	{
+		return MCPError(TEXT("Missing 'animations' array."));
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	if (!WidgetBP || !WidgetBP->WidgetTree)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+	}
+
+	WidgetBP->Modify();
+	WidgetBP->WidgetTree->Modify();
+
+	auto FindWidgetByName = [WidgetBP](const FString& WidgetName) -> UWidget*
+	{
+		UWidget* FoundWidget = nullptr;
+		WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
+		{
+			if (Widget && Widget->GetName() == WidgetName)
+			{
+				FoundWidget = Widget;
+			}
+		});
+		return FoundWidget;
+	};
+
+	TArray<TSharedPtr<FJsonValue>> CreatedAnimations;
+	TArray<FString> Errors;
+	constexpr double DefaultDurationSeconds = 0.12;
+	const FFrameRate TickResolution(60000, 1);
+	const FFrameRate DisplayRate(60, 1);
+
+	for (const TSharedPtr<FJsonValue>& SpecValue : *AnimationSpecs)
+	{
+		const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
+		if (!SpecValue.IsValid() || !SpecValue->TryGetObject(SpecPtr) || !SpecPtr || !(*SpecPtr).IsValid())
+		{
+			Errors.Add(TEXT("Animation spec must be an object."));
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject>& Spec = *SpecPtr;
+		FString AnimationName;
+		FString WidgetName;
+		if (!Spec->TryGetStringField(TEXT("animationName"), AnimationName) || AnimationName.IsEmpty())
+		{
+			Errors.Add(TEXT("Animation spec missing 'animationName'."));
+			continue;
+		}
+		if (!Spec->TryGetStringField(TEXT("widgetName"), WidgetName) || WidgetName.IsEmpty())
+		{
+			Errors.Add(FString::Printf(TEXT("%s missing 'widgetName'."), *AnimationName));
+			continue;
+		}
+
+		UWidget* TargetWidget = FindWidgetByName(WidgetName);
+		if (!TargetWidget)
+		{
+			Errors.Add(FString::Printf(TEXT("%s target widget not found: %s"), *AnimationName, *WidgetName));
+			continue;
+		}
+
+		for (int32 Index = WidgetBP->Animations.Num() - 1; Index >= 0; --Index)
+		{
+			UWidgetAnimation* ExistingAnimation = WidgetBP->Animations[Index];
+			if (!ExistingAnimation)
+			{
+				WidgetBP->Animations.RemoveAt(Index);
+				continue;
+			}
+
+			const bool bNameMatches = ExistingAnimation->GetName() == AnimationName;
+#if WITH_EDITOR
+			const bool bLabelMatches = ExistingAnimation->GetDisplayLabel() == AnimationName;
+#else
+			const bool bLabelMatches = false;
+#endif
+			if (bNameMatches || bLabelMatches)
+			{
+				WidgetBP->Animations.RemoveAt(Index);
+				WidgetBP->WidgetVariableNameToGuidMap.Remove(ExistingAnimation->GetFName());
+				if (ExistingAnimation->GetMovieScene())
+				{
+					WidgetBP->WidgetVariableNameToGuidMap.Remove(ExistingAnimation->GetMovieScene()->GetFName());
+				}
+				const FString RemovedName = FString::Printf(
+					TEXT("__McpRemoved_%s_%s"),
+					*ExistingAnimation->GetName(),
+					*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+				ExistingAnimation->Rename(
+					*RemovedName,
+					GetTransientPackage(),
+					REN_DontCreateRedirectors | REN_ForceNoResetLoaders | REN_NonTransactional);
+				ExistingAnimation->SetFlags(RF_Transient);
+			}
+		}
+
+		double DurationSeconds = DefaultDurationSeconds;
+		Spec->TryGetNumberField(TEXT("duration"), DurationSeconds);
+		DurationSeconds = FMath::Max(DurationSeconds, 1.0 / DisplayRate.AsDecimal());
+		const FFrameNumber EndFrame(static_cast<int32>(
+			FMath::Max<int64>(1, FMath::RoundToInt(DurationSeconds * TickResolution.AsDecimal()))));
+
+		UWidgetAnimation* NewAnimation = NewObject<UWidgetAnimation>(
+			WidgetBP,
+			FName(*AnimationName),
+			RF_Transactional);
+		if (!NewAnimation)
+		{
+			Errors.Add(FString::Printf(TEXT("Failed to create animation: %s"), *AnimationName));
+			continue;
+		}
+
+#if WITH_EDITOR
+		NewAnimation->SetDisplayLabel(AnimationName);
+#endif
+		UMovieScene* MovieScene = NewObject<UMovieScene>(NewAnimation, FName(*AnimationName), RF_Transactional);
+		NewAnimation->MovieScene = MovieScene;
+		MovieScene->SetTickResolutionDirectly(TickResolution);
+		MovieScene->SetDisplayRate(DisplayRate);
+		MovieScene->SetPlaybackRange(FFrameNumber(0), EndFrame.Value);
+
+		const FGuid BindingGuid = MovieScene->AddPossessable(WidgetName, TargetWidget->GetClass());
+		FWidgetAnimationBinding Binding;
+		Binding.WidgetName = TargetWidget->GetFName();
+		Binding.AnimationGuid = BindingGuid;
+		Binding.bIsRootWidget = WidgetBP->WidgetTree->RootWidget == TargetWidget;
+		NewAnimation->AnimationBindings.Add(Binding);
+
+		UMovieSceneFloatTrack* FloatTrack = MovieScene->AddTrack<UMovieSceneFloatTrack>(BindingGuid);
+		if (!FloatTrack)
+		{
+			Errors.Add(FString::Printf(TEXT("Failed to create RenderOpacity track for: %s"), *AnimationName));
+			continue;
+		}
+		FloatTrack->SetPropertyNameAndPath(FName(TEXT("RenderOpacity")), TEXT("RenderOpacity"));
+
+		UMovieSceneFloatSection* FloatSection = Cast<UMovieSceneFloatSection>(FloatTrack->CreateNewSection());
+		if (!FloatSection)
+		{
+			Errors.Add(FString::Printf(TEXT("Failed to create RenderOpacity section for: %s"), *AnimationName));
+			continue;
+		}
+		FloatTrack->AddSection(*FloatSection);
+		FloatSection->SetRange(TRange<FFrameNumber>::Inclusive(FFrameNumber(0), EndFrame));
+
+		FMovieSceneFloatChannel& Channel = FloatSection->GetChannel();
+		const TArray<TSharedPtr<FJsonValue>>* KeySpecs = nullptr;
+		if (Spec->TryGetArrayField(TEXT("keys"), KeySpecs) && KeySpecs && KeySpecs->Num() > 0)
+		{
+			for (const TSharedPtr<FJsonValue>& KeyValue : *KeySpecs)
+			{
+				const TSharedPtr<FJsonObject>* KeyObjPtr = nullptr;
+				if (!KeyValue.IsValid() || !KeyValue->TryGetObject(KeyObjPtr) || !KeyObjPtr || !(*KeyObjPtr).IsValid())
+				{
+					continue;
+				}
+
+				double KeyTime = 0.0;
+				double KeyOpacity = 0.0;
+				(*KeyObjPtr)->TryGetNumberField(TEXT("time"), KeyTime);
+				(*KeyObjPtr)->TryGetNumberField(TEXT("value"), KeyOpacity);
+				const FFrameNumber KeyFrame(static_cast<int32>(FMath::Clamp<int64>(
+					FMath::RoundToInt(KeyTime * TickResolution.AsDecimal()),
+					0,
+					EndFrame.Value)));
+				Channel.AddCubicKey(KeyFrame, static_cast<float>(KeyOpacity));
+			}
+		}
+		else
+		{
+			Channel.AddCubicKey(FFrameNumber(0), 0.0f);
+			Channel.AddCubicKey(EndFrame, 1.0f);
+		}
+
+		WidgetBP->Animations.Add(NewAnimation);
+		if (!WidgetBP->WidgetVariableNameToGuidMap.Contains(NewAnimation->GetFName()))
+		{
+			WidgetBP->WidgetVariableNameToGuidMap.Add(NewAnimation->GetFName(), FGuid::NewGuid());
+		}
+		if (!WidgetBP->WidgetVariableNameToGuidMap.Contains(MovieScene->GetFName()))
+		{
+			WidgetBP->WidgetVariableNameToGuidMap.Add(MovieScene->GetFName(), FGuid::NewGuid());
+		}
+
+		TSharedPtr<FJsonObject> Created = MakeShared<FJsonObject>();
+		Created->SetStringField(TEXT("animationName"), AnimationName);
+		Created->SetStringField(TEXT("widgetName"), WidgetName);
+		Created->SetNumberField(TEXT("duration"), DurationSeconds);
+		CreatedAnimations.Add(MakeShared<FJsonValueObject>(Created));
+	}
+
+	McpSynchronizeWidgetBlueprintCompilerState(WidgetBP);
+	WidgetBP->MarkPackageDirty();
+	FCompilerResultsLog CompileLog;
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::None, &CompileLog);
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+
+	if (Errors.Num() > 0)
+	{
+		return MCPError(FString::Printf(
+			TEXT("One or more widget opacity animations failed: %s"),
+			*FString::Join(Errors, TEXT("; "))));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetArrayField(TEXT("createdAnimations"), CreatedAnimations);
+	Result->SetNumberField(TEXT("compileErrors"), CompileLog.NumErrors);
+	Result->SetNumberField(TEXT("compileWarnings"), CompileLog.NumWarnings);
+	return MCPResult(Result);
+}
+
 void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("capture_widget"), &CaptureWidget);
@@ -827,6 +1050,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("clear_widget_binding"), &ClearWidgetBinding);
 	Registry.RegisterHandler(TEXT("set_widget_property"), &SetWidgetProperty);
 	Registry.RegisterHandler(TEXT("read_widget_animations"), &ReadWidgetAnimations);
+	Registry.RegisterHandler(TEXT("ensure_widget_render_opacity_animations"), &EnsureWidgetRenderOpacityAnimations);
 	Registry.RegisterHandler(TEXT("run_editor_utility_widget"), &RunEditorUtilityWidget);
 	Registry.RegisterHandler(TEXT("run_editor_utility_blueprint"), &RunEditorUtilityBlueprint);
 	Registry.RegisterHandler(TEXT("add_widget"), &AddWidget);
@@ -1558,8 +1782,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJs
 		}
 	};
 
-	TFunction<UWidget*(const TSharedPtr<FJsonObject>&, UPanelWidget*)> BuildWidget =
-		[&](const TSharedPtr<FJsonObject>& Spec, UPanelWidget* Parent) -> UWidget*
+	TFunction<UWidget*(const TSharedPtr<FJsonObject>&, UWidget*)> BuildWidget =
+		[&](const TSharedPtr<FJsonObject>& Spec, UWidget* Parent) -> UWidget*
 	{
 		FString WidgetClassName;
 		if (!Spec->TryGetStringField(TEXT("class"), WidgetClassName))
@@ -1618,13 +1842,32 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJs
 		UPanelSlot* Slot = bReused ? Widget->Slot : nullptr;
 		if (!bReused)
 		{
-			if (Parent)
+			if (UPanelWidget* ParentPanel = Cast<UPanelWidget>(Parent))
 			{
-				Slot = Parent->AddChild(Widget);
+				Slot = ParentPanel->AddChild(Widget);
 				if (!Slot)
 				{
 					Errors.Add(FString::Printf(TEXT("Failed to add '%s' to parent '%s'"), *Widget->GetName(), *Parent->GetName()));
 				}
+			}
+			else if (UContentWidget* ParentContent = Cast<UContentWidget>(Parent))
+			{
+				if (ParentContent->GetContent())
+				{
+					Errors.Add(FString::Printf(TEXT("Content widget '%s' already has child content."), *Parent->GetName()));
+				}
+				else
+				{
+					Slot = ParentContent->AddChild(Widget);
+					if (!Slot)
+					{
+						Errors.Add(FString::Printf(TEXT("Failed to set '%s' as content of '%s'"), *Widget->GetName(), *Parent->GetName()));
+					}
+				}
+			}
+			else if (Parent)
+			{
+				Errors.Add(FString::Printf(TEXT("Parent widget '%s' (%s) cannot host children."), *Parent->GetName(), *Parent->GetClass()->GetName()));
 			}
 			else
 			{
@@ -1638,12 +1881,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJs
 		const TArray<TSharedPtr<FJsonValue>>* Children = nullptr;
 		if (Spec->TryGetArrayField(TEXT("children"), Children) && Children)
 		{
-			UPanelWidget* ParentPanel = Cast<UPanelWidget>(Widget);
-			if (!ParentPanel)
-			{
-				Errors.Add(FString::Printf(TEXT("Widget '%s' cannot host children."), *Widget->GetName()));
-			}
-			else
+			if (UPanelWidget* ParentPanel = Cast<UPanelWidget>(Widget))
 			{
 				for (const TSharedPtr<FJsonValue>& ChildValue : *Children)
 				{
@@ -1653,6 +1891,25 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJs
 						BuildWidget(*ChildSpec, ParentPanel);
 					}
 				}
+			}
+			else if (UContentWidget* ParentContent = Cast<UContentWidget>(Widget))
+			{
+				if (Children->Num() > 1)
+				{
+					Errors.Add(FString::Printf(TEXT("Content widget '%s' can host only one child."), *Widget->GetName()));
+				}
+				for (int32 ChildIndex = 0; ChildIndex < FMath::Min(Children->Num(), 1); ++ChildIndex)
+				{
+					const TSharedPtr<FJsonObject>* ChildSpec = nullptr;
+					if ((*Children)[ChildIndex]->TryGetObject(ChildSpec) && ChildSpec && (*ChildSpec).IsValid())
+					{
+						BuildWidget(*ChildSpec, ParentContent);
+					}
+				}
+			}
+			else
+			{
+				Errors.Add(FString::Printf(TEXT("Widget '%s' cannot host children."), *Widget->GetName()));
 			}
 		}
 
@@ -1983,13 +2240,24 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 			return MCPError(FString::Printf(TEXT("Parent widget '%s' not found"), *ParentWidgetName));
 		}
 
-		UPanelWidget* ParentPanel = Cast<UPanelWidget>(ParentRaw);
-		if (!ParentPanel)
+		UPanelSlot* Slot = nullptr;
+		if (UPanelWidget* ParentPanel = Cast<UPanelWidget>(ParentRaw))
 		{
-			return MCPError(FString::Printf(TEXT("Parent widget '%s' (%s) is not a panel widget and cannot have children"), *ParentWidgetName, *ParentRaw->GetClass()->GetName()));
+			Slot = ParentPanel->AddChild(NewWidget);
+		}
+		else if (UContentWidget* ParentContent = Cast<UContentWidget>(ParentRaw))
+		{
+			if (ParentContent->GetContent())
+			{
+				return MCPError(FString::Printf(TEXT("Parent widget '%s' (%s) already has child content"), *ParentWidgetName, *ParentRaw->GetClass()->GetName()));
+			}
+			Slot = ParentContent->AddChild(NewWidget);
+		}
+		else
+		{
+			return MCPError(FString::Printf(TEXT("Parent widget '%s' (%s) cannot have children"), *ParentWidgetName, *ParentRaw->GetClass()->GetName()));
 		}
 
-		UPanelSlot* Slot = ParentPanel->AddChild(NewWidget);
 		if (!Slot)
 		{
 			return MCPError(FString::Printf(TEXT("Failed to add '%s' as child of '%s'"), *NewWidget->GetName(), *ParentWidgetName));
@@ -3725,6 +3993,7 @@ namespace WidgetRuntime_Internal
 		Obj->SetStringField(TEXT("class"), Widget->GetClass()->GetName());
 		Obj->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
 		Obj->SetBoolField(TEXT("isVisible"), Widget->IsVisible());
+		Obj->SetNumberField(TEXT("renderOpacity"), Widget->GetRenderOpacity());
 		Obj->SetObjectField(TEXT("geometry"), MakeGeometryJson(Widget));
 
 		FString Text = SafeGetText(Widget);

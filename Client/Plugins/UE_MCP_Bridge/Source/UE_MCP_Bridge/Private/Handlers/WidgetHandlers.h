@@ -22,6 +22,8 @@ private:
 	static TSharedPtr<FJsonValue> ClearWidgetBinding(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetWidgetProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadWidgetAnimations(const TSharedPtr<FJsonObject>& Params);
+	// Creates or replaces UMG animations that drive a widget RenderOpacity track.
+	static TSharedPtr<FJsonValue> EnsureWidgetRenderOpacityAnimations(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RunEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RunEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddWidget(const TSharedPtr<FJsonObject>& Params);

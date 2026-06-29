@@ -5,6 +5,7 @@ paths:
   - Client/README.md
   - Client/Source/OdiroSim/Public/Platform/**
   - Client/Source/OdiroSim/Private/Platform/**
+  - Client/Docs/RobotPreviewAgent.local.md
   - Client/Plugins/UE_MCP_Bridge/**
   - Client/Tools/**
   - task-run.bat
@@ -28,6 +29,7 @@ entry:
       - Client/Source/OdiroSim/Private/Platform/ViewModel
       - Client/Source/OdiroSim/Public/Platform/Widget/Odiro*Widget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/Odiro*Widget.cpp
+      - Client/Docs/RobotPreviewAgent.local.md
   - id: ui-and-tools
     description: Platform widgets, unified UE MCP tooling plugin, and preview scripts.
     read:
@@ -59,6 +61,7 @@ guardrails:
   - SimulatorLaunchSubsystem treats run output artifacts such as status.json, summary.json, and episode result.json as immutable start guards.
   - Project-run AI analysis uses the v2 `project_path` plus `run_id` request path and stores review artifacts under the run.
   - C++ writes state/text/visibility into WBP-owned layouts; structural UMG ownership stays in client-runtime-foundation.
+  - Robot profile Preview UI is a view adapter over a preview service; it must not make slider edits save profile.json or make widgets own long-lived world actor lifecycle.
   - StartupMenu/MainMenu UMG edits must complete UE_MCP_Bridge widget tree readback, Blueprint compile/save, layout data, overlap check, and runtime or Slate capture verification before completion; property or geometry MCP queries require a scoped safety check because broad JsonUtilities serialization can stack-overflow editor sessions.
   - UE_MCP_Bridge `replace_widget_classes` is the scoped widget-class migration entry point; preserve existing BindWidget names, parent slots, and WBP-owned layout/style when replacing child widgets.
   - StartupMap and ScenarioEditorMap root widget classes are configured by PlatformUiDeveloperSettings or exposed controller/widget properties, not hardcoded class paths.
@@ -82,6 +85,7 @@ verify:
 links:
   - Client/README.md
   - Client/Docs/plans/PLAN-platform-architecture.md
+  - Client/Docs/RobotPreviewAgent.local.md
 related:
   - client-runtime-foundation
   - client-simulation

@@ -92,6 +92,9 @@ class RecommendationGenerator:
         elif "pedestrian_collision" in finding_types:
             title = "보행자 충돌 대응 정책 검토"
             reason = "보행자 충돌 근거가 확인되어 보행자 근접 상황의 감속/정지 조건을 보수적으로 검토할 필요가 있습니다."
+        elif {"timeout", "stuck"} <= finding_types:
+            title = "정체와 제한 시간 초과 대응 정책 검토"
+            reason = "정체 이후 제한 시간 초과가 확인되어 감속, 정지, 재경로 탐색 조건을 검토할 필요가 있습니다."
         elif {"timeout", "stuck"} & finding_types:
             title = "정체와 제한 시간 초과 대응 정책 검토"
             reason = "제한 시간 초과 또는 정체가 확인되어 감속, 정지, 재경로 탐색 조건을 검토할 필요가 있습니다."

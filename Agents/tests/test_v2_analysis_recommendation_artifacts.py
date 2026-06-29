@@ -20,6 +20,84 @@ def _write_episode(project: Path, result: dict, events: str = "") -> None:
     (episode_dir / "result.json").write_text(json.dumps(result), encoding="utf-8")
     if events:
         (episode_dir / "events.jsonl").write_text(events, encoding="utf-8")
+    _write_summary_row(project, result=result, events=events)
+
+
+def _write_summary_row(project: Path, *, result: dict, events: str) -> None:
+    """Write the summary.json row used by the public response contract."""
+    run_dir = project / "runs" / "000001"
+    summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+    result_metrics = result.get("metrics") if isinstance(result.get("metrics"), dict) else {}
+    metrics = dict(result_metrics)
+    for key in (
+        "goal_reached",
+        "penalty_region_violation_count",
+        "blocked_region_collision_count",
+        "blocked_region_violation_count",
+        "pedestrian_collision_count",
+        "static_obstacle_collision_count",
+        "near_miss_count",
+        "repath_count",
+        "duration_s",
+    ):
+        if key in result and key not in metrics:
+            metrics[key] = result[key]
+        if key in summary and key not in metrics:
+            metrics[key] = summary[key]
+    for key, value in _event_counts(events, result).items():
+        metrics.setdefault(key, value)
+    if "goal_reached" in metrics and isinstance(metrics["goal_reached"], bool):
+        metrics["goal_reached"] = 1 if metrics["goal_reached"] else 0
+    success = summary.get("success", result.get("success"))
+    row = {
+        "episode_id": "000001",
+        "outcome": result.get("outcome") or summary.get("outcome") or ("Success" if success is True else "Failure"),
+        "terminal_reason": summary.get("terminal_reason") or result.get("terminal_reason") or result.get("failure_type", ""),
+        "duration_s": result.get("duration_s", metrics.get("duration_s", 10.0)),
+        "metrics": metrics,
+    }
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "schema": "run_summary",
+                "version": 1,
+                "run": {"run_id": "000001", "project_id": project.name},
+                "rows": [row],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _event_counts(events: str, result: dict) -> dict[str, int]:
+    """Return summary-row metric counts from event fixtures and event_summary."""
+    mapping = {
+        "PenaltyRegionViolation": "penalty_region_violation_count",
+        "StaticObstacleCollision": "static_obstacle_collision_count",
+        "PedestrianCollision": "pedestrian_collision_count",
+        "BlockedRegionCollision": "blocked_region_collision_count",
+        "BlockedRegionViolation": "blocked_region_violation_count",
+        "Repath": "repath_count",
+    }
+    counts: dict[str, int] = {}
+    event_summary = result.get("event_summary") if isinstance(result.get("event_summary"), dict) else {}
+    by_type = event_summary.get("by_type") if isinstance(event_summary.get("by_type"), dict) else {}
+    for key, value in by_type.items():
+        metric = mapping.get(str(key))
+        if metric and isinstance(value, int | float):
+            counts[metric] = counts.get(metric, 0) + int(value)
+    for line in events.splitlines():
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        event_type = item.get("event_type") or item.get("event") or item.get("type")
+        metric = mapping.get(str(event_type))
+        if metric:
+            counts[metric] = counts.get(metric, 0) + 1
+    return counts
 
 
 def _write_policy(project: Path) -> Path:
@@ -125,6 +203,15 @@ def _post_analysis(project: Path):
     )
 
 
+def _public_recommendation(recommendation: dict) -> dict:
+    """Return the public display fields for a detailed recommendation."""
+    return {
+        key: recommendation[key]
+        for key in ("target", "priority", "title", "reason", "recommendation")
+        if key in recommendation
+    }
+
+
 def _numeric_assignment_value(source: str, parameter_name: str) -> float:
     """Return a simple numeric policy parameter assignment from source text."""
     import ast
@@ -198,14 +285,16 @@ def test_policy_recommendation_copies_and_modifies_only_review_policy(tmp_path: 
     assert payload["recommendation_type"] == recommendations["recommendation_type"]
     assert recommendations["recommendation_type"] == "policy_review"
     assert recommendations["reason"] == "주행 정책 검토가 필요한 실패 근거가 확인되었습니다."
-    assert recommendations["recommendations"] == payload["recommendations"]
     assert recommendations["recommendations"]
     recommendation = recommendations["recommendations"][0]
+    assert payload["recommendations"] == [_public_recommendation(recommendation)]
     assert recommendation["target"] == "policy"
     assert recommendation["recommendation"]
     assert "llm_recommendation" not in recommendation
     assert isinstance(recommendation["proposed_change"]["content"], dict)
-    assert payload["modified_policy_json"][0]["source_recommendation_id"] == recommendation["id"]
+    assert recommendations["modified_policy_json"][0]["source_recommendation_id"] == recommendation["id"]
+    assert recommendations["modified_environment_json"] == []
+    assert "modified_policy_json" not in payload
     assert recommendations["artifacts"] == expected_artifacts
     assert manifest["artifacts"] == expected_artifacts
     assert "runs/000001/review/0001/policy/__init__.py" in manifest["generated_files"]
@@ -235,8 +324,8 @@ def test_successful_policy_recommendation_reason_avoids_failure_wording(tmp_path
     )
     assert "실패 근거" not in recommendations["reason"]
     assert "실패 근거" not in payload["summary"]["message"]
-    assert "실패 근거" not in payload["analysis_text"]
     assert all("실패 근거" not in recommendation["reason"] for recommendation in payload["recommendations"])
+    assert "analysis_text" not in payload
 
 
 def test_environment_recommendation_copies_and_modifies_only_root_scenario(tmp_path: Path) -> None:
@@ -291,14 +380,16 @@ def test_environment_recommendation_copies_and_modifies_only_root_scenario(tmp_p
     assert payload["recommendation_type"] == recommendations["recommendation_type"]
     assert recommendations["recommendation_type"] == "environment_review"
     assert recommendations["reason"] == "환경 또는 장애물 배치와 관련된 실패 근거가 확인되었습니다."
-    assert recommendations["recommendations"] == payload["recommendations"]
     assert recommendations["recommendations"]
     recommendation = recommendations["recommendations"][0]
+    assert payload["recommendations"] == [_public_recommendation(recommendation)]
     assert recommendation["target"] == "environment"
     assert recommendation["recommendation"]
     assert "llm_recommendation" not in recommendation
     assert isinstance(recommendation["proposed_change"]["content"], dict)
-    assert payload["modified_environment_json"][0]["source_recommendation_id"] == recommendation["id"]
+    assert recommendations["modified_environment_json"][0]["source_recommendation_id"] == recommendation["id"]
+    assert recommendations["modified_policy_json"] == []
+    assert "modified_environment_json" not in payload
     assert recommendations["artifacts"] == expected_artifacts
     assert manifest["artifacts"] == expected_artifacts
     assert "runs/000001/review/0001/scenario.json" in manifest["generated_files"]

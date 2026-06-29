@@ -30,6 +30,12 @@ SUCCESS_POLICY_REVIEW_REASON = (
     "주행은 성공했지만, 패널티 구역 침범과 경로 재탐색 반복 등 정책 검토가 필요한 근거가 확인되었습니다."
 )
 
+# User-facing reason for setup-stage interruptions that currently map to recommendation_type=none.
+SETUP_FAILED_RECOMMENDATION_REASON = (
+    "시뮬레이션이 주행 시작 전 setup 단계에서 중단되어 정책 또는 환경 수정 후보를 생성하지 않았습니다. "
+    "scenario, prop, catalog, asset, 환경 설정을 확인해야 합니다."
+)
+
 
 def default_artifacts() -> dict[str, dict[str, Any]]:
     """Return the stable artifact status object used by recommendations and manifest."""
@@ -66,6 +72,7 @@ FINDING_DISPLAY_LABELS = {
     "policy_decision_error": ("정책 판단 오류", "가"),
     "stuck": ("로봇 정체 상태", "가"),
     "robot_tip_over": ("로봇 전도", "가"),
+    "setup_failed": ("세팅 단계 실패", "가"),
 }
 
 
@@ -105,4 +112,6 @@ def evidence_message(finding_type: str, value: int) -> str:
         return f"로봇 전도가 {value}회 발생했습니다."
     if finding_type == "goal_not_reached":
         return "에피소드가 목표에 도달하지 못했습니다."
+    if finding_type == "setup_failed":
+        return "시뮬레이션 세팅 단계에서 실행이 중단되었습니다."
     return f"{finding_type}이 {value}개의 근거로 확인되었습니다."

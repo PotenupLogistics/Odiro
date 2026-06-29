@@ -49,7 +49,18 @@ def test_missing_policy_cards_fails_when_confirmed_candidates_exist(tmp_path: Pa
     )
 
     assert result["passed"] is False
-    assert result["confirmedCandidateCount"] == 9
+    assert result["confirmedCandidateCount"] == 11
+
+
+def test_policy_cards_check_accepts_current_runtime_cards() -> None:
+    """Current runtime cards include manual confirmations plus promoted KOR-004 candidates."""
+    result = run_check()
+
+    assert result["passed"] is True
+    assert result["confirmedCandidateCount"] == 11
+    assert result["cardCount"] == 11
+    assert result["missingCautionCards"] == []
+    assert result["nonConfirmedCandidateCards"] == []
 
 
 def test_policy_cards_check_accepts_valid_cards_from_confirmed_candidates(tmp_path: Path) -> None:
@@ -75,6 +86,7 @@ def test_policy_cards_check_accepts_valid_cards_from_confirmed_candidates(tmp_pa
         policy_cards_path=cards_path,
         manual_confirmation_path=MANUAL_RESULTS,
         registry_path=REGISTRY,
+        promoted_candidate_paths=(),
     )
 
     assert result["passed"] is True

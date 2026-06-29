@@ -147,7 +147,7 @@ recommendation target이 `policy` 또는 `environment`인지 확인하고, evide
 
 ### `ResponseBuilder`
 
-`analysis_run_response_v2` wrapper를 만듭니다. `modified_policy_json`과 `modified_environment_json`은 recommendations 기반으로 코드가 생성합니다.
+`analysis_run_response_v2` public wrapper를 만듭니다. UI 표시용 추천만 응답에 남기고, 상세 추천 id와 수정 후보 payload는 review `recommendations.json`에 저장합니다.
 
 ## ResultAnalysisV2 LLM mode
 

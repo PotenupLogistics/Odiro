@@ -108,6 +108,6 @@ uv run pytest tests/test_v2_result_analysis_timeline_builder.py tests/test_v2_ra
 1. `/health`가 200을 반환하는지 확인합니다.
 2. `/api/v2/scenarios/generate`가 prompt-only request로 200을 반환하는지 확인합니다.
 3. 실행 개수 필드가 422로 거부되는지 확인합니다.
-4. `/api/v2/analysis/run`이 `project_path`, `run_id` 없이 호출되면 422를 반환하는지 확인합니다.
+4. `/api/v2/analysis/run`이 `project_path`, `run_id` 없이 호출되면 HTTP 400 custom failed body를 반환하는지 확인합니다.
 5. 데이터가 없을 때 `overall_judgement="insufficient_data"`인지 확인합니다.
-6. LLM mode를 켠 경우 scenario generation은 raw `scenario` root field를, analysis는 `analysis_mode`와 `warnings`를 함께 확인합니다.
+6. LLM mode를 켠 경우 scenario generation은 raw `scenario` root field를, analysis는 public `analysis_mode` 없이 fallback `warnings`와 추천 결과를 확인합니다.

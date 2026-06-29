@@ -1,16 +1,18 @@
 # Policy Card Coverage Report
 
-- totalCards: 9
-- cardsByCategory: emergency_stop 2, operator_control 1, perception_requirement 1, sidewalk_operation 1, speed_policy 2, terrain_or_dynamic_safety 2
+- totalCards: 11
+- totalChunks: 17
+- cardsBySource: KOR-003 9, KOR-004 2
+- cardsByCategory: crosswalk_operation 1, emergency_stop 2, operator_control 1, perception_requirement 1, sidewalk_operation 1, speed_policy 3, terrain_or_dynamic_safety 2
 
 ## MVP Situation Coverage
 
-- PedestrianAhead: CARD-KOR-003-perception_requirement-001, CARD-KOR-003-sidewalk_operation-001
+- PedestrianAhead: CARD-KOR-003-perception_requirement-001, CARD-KOR-003-sidewalk_operation-001, CARD-KOR-004-crosswalk_operation-001
 - ObstacleAhead: CARD-KOR-003-perception_requirement-001, CARD-KOR-003-emergency_stop-001
 - FallOrTilt: CARD-KOR-003-terrain_or_dynamic_safety-001, CARD-KOR-003-terrain_or_dynamic_safety-002
 - TerrainRisk: CARD-KOR-003-terrain_or_dynamic_safety-001, CARD-KOR-003-terrain_or_dynamic_safety-002
 - ApproachingObject: CARD-KOR-003-perception_requirement-001, needs_more_evidence
-- CrosswalkApproach: CARD-KOR-003-sidewalk_operation-001
+- CrosswalkApproach: CARD-KOR-003-sidewalk_operation-001, CARD-KOR-004-crosswalk_operation-001
 - CommunicationIssue: CARD-KOR-003-operator_control-001, CARD-KOR-003-emergency_stop-002
 - CrowdedPath: CARD-KOR-003-operator_control-001, CARD-KOR-003-perception_requirement-001, needs_more_evidence
 

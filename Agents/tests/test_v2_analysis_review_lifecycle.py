@@ -19,6 +19,116 @@ def _write_episode(project: Path, run_id: str, episode_id: str, result: dict, ev
     (episode_dir / "result.json").write_text(json.dumps(result), encoding="utf-8")
     if events:
         (episode_dir / "events.jsonl").write_text(events, encoding="utf-8")
+    _upsert_summary_row(project, run_id, _summary_row_from_result(episode_id, result, events=events))
+
+
+def _write_summary(project: Path, run_id: str, summary: dict) -> None:
+    """Write the run summary used by the public analysis contract."""
+    run_dir = project / "runs" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False), encoding="utf-8")
+
+
+def _upsert_summary_row(project: Path, run_id: str, row: dict) -> None:
+    """Keep episode fixtures paired with summary rows used for public metrics."""
+    run_dir = project / "runs" / run_id
+    summary_path = run_dir / "summary.json"
+    if summary_path.is_file():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    else:
+        summary = {
+            "schema": "run_summary",
+            "version": 1,
+            "run": {"run_id": run_id, "project_id": project.name},
+            "rows": [],
+        }
+    rows = [item for item in summary.get("rows", []) if item.get("episode_id") != row["episode_id"]]
+    rows.append(row)
+    summary["rows"] = sorted(rows, key=lambda item: str(item.get("episode_id", "")))
+    _write_summary(project, run_id, summary)
+
+
+def _summary_row_from_result(episode_id: str, result: dict, *, events: str = "") -> dict:
+    """Build a summary.json row that mirrors one episode result fixture."""
+    summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+    result_metrics = result.get("metrics") if isinstance(result.get("metrics"), dict) else {}
+    metrics = dict(result_metrics)
+    for key in (
+        "goal_reached",
+        "goal_threshold_m",
+        "blocked_region_collision_count",
+        "blocked_region_violation_count",
+        "pedestrian_collision_count",
+        "static_obstacle_collision_count",
+        "near_miss_count",
+        "repath_count",
+        "robot_tip_over_count",
+        "penalty_region_violation_count",
+        "duration_s",
+    ):
+        if key in result and key not in metrics:
+            metrics[key] = result[key]
+        if key in summary and key not in metrics:
+            metrics[key] = summary[key]
+    for key, value in _event_counts(events, result).items():
+        metrics.setdefault(key, value)
+    failure_type = str(result.get("failure_type") or summary.get("terminal_reason") or "")
+    if failure_type == "static_obstacle_collision":
+        metrics.setdefault("static_obstacle_collision_count", 1)
+    elif failure_type == "pedestrian_collision":
+        metrics.setdefault("pedestrian_collision_count", 1)
+    elif failure_type in {"blocked_region_collision", "blocked_region_violation"}:
+        metrics.setdefault("blocked_region_collision_count", 1)
+    if "goal_reached" in metrics and isinstance(metrics["goal_reached"], bool):
+        metrics["goal_reached"] = 1 if metrics["goal_reached"] else 0
+    success = summary.get("success", result.get("success"))
+    outcome = result.get("outcome") or summary.get("outcome") or ("Success" if success is True else "Failure")
+    return {
+        "episode_id": episode_id,
+        "outcome": outcome,
+        "terminal_reason": summary.get("terminal_reason") or result.get("terminal_reason") or result.get("failure_type", ""),
+        "duration_s": result.get("duration_s", metrics.get("duration_s", 10.0)),
+        "metrics": metrics,
+    }
+
+
+def _event_counts(events: str, result: dict) -> dict[str, int]:
+    """Return summary-row metric counts from event fixtures and event summaries."""
+    mapping = {
+        "PenaltyRegionViolation": "penalty_region_violation_count",
+        "penalty_region_violation": "penalty_region_violation_count",
+        "StaticObstacleCollision": "static_obstacle_collision_count",
+        "static_obstacle_collision": "static_obstacle_collision_count",
+        "PedestrianCollision": "pedestrian_collision_count",
+        "pedestrian_collision": "pedestrian_collision_count",
+        "BlockedRegionCollision": "blocked_region_collision_count",
+        "blocked_region_collision": "blocked_region_collision_count",
+        "BlockedRegionViolation": "blocked_region_violation_count",
+        "blocked_region_violation": "blocked_region_violation_count",
+        "PedestrianNearMiss": "near_miss_count",
+        "near_miss": "near_miss_count",
+        "Repath": "repath_count",
+        "repath": "repath_count",
+        "RobotTipOver": "robot_tip_over_count",
+        "robot_tip_over": "robot_tip_over_count",
+    }
+    counts: dict[str, int] = {}
+    event_summary = result.get("event_summary") if isinstance(result.get("event_summary"), dict) else {}
+    by_type = event_summary.get("by_type") if isinstance(event_summary.get("by_type"), dict) else {}
+    for event_type, value in by_type.items():
+        metric = mapping.get(str(event_type))
+        if metric and isinstance(value, int | float):
+            counts[metric] = counts.get(metric, 0) + int(value)
+    for line in events.splitlines():
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        event_type = item.get("event_type") or item.get("event") or item.get("type")
+        metric = mapping.get(str(event_type))
+        if metric:
+            counts[metric] = counts.get(metric, 0) + 1
+    return counts
 
 
 def _write_snapshot(project: Path, run_id: str, scenario_body: dict) -> None:
@@ -90,7 +200,7 @@ def test_v2_analysis_run_writes_review_artifacts_and_index(tmp_path) -> None:
     assert request["project_path"] == str(project)
     assert request["run_id"] == "000001"
     assert request["prompt"] == "장애물 때문인지 봐줘"
-    assert report["data_coverage"]["summary_json"] == "missing"
+    assert report["data_coverage"]["summary_json"] == "present"
     assert report["data_coverage"]["result_file_count"] == 1
     assert report["data_coverage"]["events_file_count"] == 1
     assert report["findings"][0]["type"] == "penalty_region_violation"
@@ -218,7 +328,7 @@ def test_v2_analysis_run_missing_run_does_not_create_review_directory(tmp_path) 
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["summary"]["overall_judgement"] == "insufficient_data"
-    assert payload["review_id"] is None
+    assert "review_id" not in payload
     assert payload["run_id"] == "000001"
     assert payload["recommendation_type"] == "insufficient_data"
     assert not (project / "runs" / "000001").exists()

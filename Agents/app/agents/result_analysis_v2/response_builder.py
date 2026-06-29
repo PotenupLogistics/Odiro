@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.agents.result_analysis_v2.analysis_text_builder import AnalysisTextBuilder
-from app.agents.result_analysis_v2.review_text import INSUFFICIENT_DATA_SUMMARY_MESSAGE, default_artifacts
+from app.agents.result_analysis_v2.review_text import INSUFFICIENT_DATA_SUMMARY_MESSAGE
 from app.models.analysis_v2 import (
+    AnalysisEpisodeV2,
+    AnalysisInsightV2,
     AnalysisMetricsV2,
     AnalysisRunV2Response,
+    AnalysisRunOverviewV2,
     AnalysisScopeV2,
     AnalysisSummaryV2,
     RecommendationTypeV2,
@@ -16,10 +18,6 @@ from app.models.analysis_v2 import (
 class ResponseBuilder:
     """Builds the public v2 analysis response from aggregate metrics."""
 
-    def __init__(self, *, analysis_text_builder: AnalysisTextBuilder | None = None) -> None:
-        """Allow tests to provide deterministic response text builders."""
-        self.analysis_text_builder = analysis_text_builder or AnalysisTextBuilder()
-
     def build(
         self,
         *,
@@ -27,6 +25,9 @@ class ResponseBuilder:
         runs_count: int,
         episodes_count: int,
         metrics: AnalysisMetricsV2,
+        run_overview: AnalysisRunOverviewV2 | None = None,
+        episodes: list[AnalysisEpisodeV2] | None = None,
+        insights: list[dict[str, Any]] | None = None,
         patterns: list[dict[str, Any]],
         recommendations: list[dict[str, Any]],
         warnings: list[str],
@@ -35,12 +36,11 @@ class ResponseBuilder:
         review_id: str | None = None,
     ) -> AnalysisRunV2Response:
         """Create an initial response before review artifacts are finalized."""
+        _ = analysis_mode
         if episodes_count == 0:
             judgement = "insufficient_data"
             message = INSUFFICIENT_DATA_SUMMARY_MESSAGE
             recommendation_type: RecommendationTypeV2 = "insufficient_data"
-            if message not in warnings:
-                warnings = [*warnings, message]
         elif recommendations or patterns:
             judgement = "change_recommended"
             message = "반복적인 실패 패턴이 확인되어 정책 또는 환경 개선 검토가 필요합니다."
@@ -53,6 +53,8 @@ class ResponseBuilder:
         return AnalysisRunV2Response(
             run_id=run_id,
             review_id=review_id,
+            run_overview=run_overview,
+            episodes=episodes or [],
             analysis_scope=AnalysisScopeV2(
                 experiments_count=experiments_count,
                 runs_count=runs_count,
@@ -61,23 +63,45 @@ class ResponseBuilder:
             summary=AnalysisSummaryV2(overall_judgement=judgement, message=message),
             metrics=metrics,
             recommendation_type=recommendation_type,
+            insights=self.public_insights(insights or []),
             patterns=patterns,
-            recommendations=recommendations,
-            modified_policy_json=self.modified_candidate_payloads(recommendations=recommendations, target="policy"),
-            modified_environment_json=self.modified_candidate_payloads(
-                recommendations=recommendations,
-                target="environment",
-            ),
+            recommendations=self.public_recommendations(recommendations),
             warnings=warnings,
-            analysis_mode=analysis_mode,
-            analysis_text=self.analysis_text_builder.build(
-                recommendation_type="insufficient_data" if episodes_count == 0 else "none",
-                artifacts=default_artifacts(),
-                metrics=metrics,
-                episodes_count=episodes_count,
-                patterns=patterns,
-            ),
         )
+
+    def public_insights(self, insights: list[dict[str, Any]]) -> list[AnalysisInsightV2]:
+        """Trim detailed insight records down to UI card fields."""
+        public_items: list[AnalysisInsightV2] = []
+        for insight in insights[:3]:
+            if not isinstance(insight, dict):
+                continue
+            severity = str(insight.get("severity") or "medium").casefold()
+            if severity not in {"high", "medium", "low"}:
+                severity = "medium"
+            description = str(insight.get("description") or insight.get("detail") or "")
+            public_items.append(
+                AnalysisInsightV2(
+                    severity=severity,
+                    title=str(insight.get("title") or ""),
+                    description=description,
+                )
+            )
+        return public_items
+
+    def public_recommendations(self, recommendations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Trim detailed recommendation records down to public display fields."""
+        public_items: list[dict[str, Any]] = []
+        for recommendation in recommendations:
+            if not isinstance(recommendation, dict):
+                continue
+            public_items.append(
+                {
+                    key: recommendation.get(key)
+                    for key in ("target", "priority", "title", "reason", "recommendation")
+                    if recommendation.get(key) is not None
+                }
+            )
+        return public_items
 
     def modified_candidate_payloads(self, *, recommendations: list[dict[str, Any]], target: str) -> list[dict[str, Any]]:
         """Build legacy modified_*_json payloads from normalized recommendation items."""

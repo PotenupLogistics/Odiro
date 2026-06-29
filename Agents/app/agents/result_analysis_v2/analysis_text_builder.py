@@ -19,14 +19,17 @@ class AnalysisTextBuilder:
         patterns: list[dict[str, Any]] | None = None,
         findings: list[dict[str, Any]] | None = None,
         evidence: list[dict[str, Any]] | None = None,
+        setup_failure_details: list[Any] | None = None,
     ) -> str:
         """Return deterministic UI report text without exposing JSON structure."""
         artifact_warnings = artifact_warnings or []
         patterns = patterns or []
         findings = findings or []
         evidence = evidence or []
+        setup_failure_details = setup_failure_details or []
         metric_values = self._metrics(metrics)
         finding_types = {str(finding.get("type")) for finding in findings}
+        has_setup_failure = "setup_failed" in finding_types or bool(setup_failure_details)
 
         if recommendation_type == "insufficient_data":
             return self._sections(
@@ -34,6 +37,12 @@ class AnalysisTextBuilder:
                 evidence_text="result.json 또는 events.jsonl 같은 result/events 실행 로그가 누락되었거나 손상되었습니다.",
                 judgement="현재 데이터만으로는 실패 원인이나 추천 유형을 확정하기 어렵습니다.",
                 recommendation="result/events 로그와 실행 로그가 정상적으로 저장되었는지 확인한 뒤 다시 분석하는 것을 권장합니다.",
+            )
+        if recommendation_type == "none" and has_setup_failure:
+            return self._setup_sections(
+                summary=self._setup_failure_summary(setup_failure_details),
+                judgement="이번 결과만으로는 주행 정책 성능을 평가할 수 없습니다.",
+                checks=self._setup_failure_checks(setup_failure_details),
             )
         if recommendation_type == "policy_review":
             recommendation = "review 폴더에 정책 수정 후보가 생성되었습니다."
@@ -47,10 +56,16 @@ class AnalysisTextBuilder:
                 else:
                     recommendation = f"{recommendation} 생성된 policy 후보로 동일 조건에서 다시 실행하여 실패 지표가 줄어드는지 비교하는 것을 권장합니다."
             else:
-                recommendation = "주행 정책 판단과 관련된 근거가 확인되었지만 정책 원본을 찾지 못해 수정 후보는 생성되지 않았습니다."
-            summary = "이번 Run에서는 주행 정책 검토가 필요한 실패 근거가 확인되었습니다."
+                recommendation = "주행 정책 판단과 관련된 신호가 나타났지만 정책 원본을 찾지 못해 수정 후보는 생성되지 않았습니다."
+            if has_setup_failure:
+                recommendation = (
+                    f"{recommendation} 일부 episode는 세팅 단계에서 중단되어 정책 판단과 후보 생성 기준에서 제외했습니다."
+                )
+            summary = "이번 Run에서는 주행 정책 검토가 필요한 실패가 발생했습니다."
             if success_safety_case:
-                summary = "이번 Run은 주행에 성공했지만 안전/정책 검토가 필요한 근거가 확인되었습니다."
+                summary = "이번 Run은 주행에 성공했지만 안전/정책 검토가 필요한 신호가 나타났습니다."
+            if has_setup_failure:
+                summary = f"{summary} 일부 episode는 주행 시작 전 세팅 단계에서 중단되었습니다."
             return self._sections(
                 summary=summary,
                 evidence_text=self._policy_evidence_text(metric_values=metric_values, finding_types=finding_types),
@@ -62,11 +77,18 @@ class AnalysisTextBuilder:
             if artifacts.get("environment", {}).get("generated"):
                 recommendation = f"{recommendation} 생성된 scenario.json 후보로 다시 실행하여 충돌과 제한 시간 초과가 줄어드는지 비교하는 것을 권장합니다."
             elif self._has_warning(artifact_warnings, "scenario source file could not be parsed"):
-                recommendation = "환경 또는 장애물 배치와 관련된 근거가 확인되었지만 scenario.json을 읽는 중 오류가 발생해 수정 후보는 생성되지 않았습니다."
+                recommendation = "환경 또는 장애물 배치와 관련된 신호가 나타났지만 scenario.json을 읽는 중 오류가 발생해 수정 후보는 생성되지 않았습니다."
             else:
-                recommendation = "환경 또는 장애물 배치와 관련된 근거가 확인되었지만 scenario.json을 찾지 못해 수정 후보는 생성되지 않았습니다."
+                recommendation = "환경 또는 장애물 배치와 관련된 신호가 나타났지만 scenario.json을 찾지 못해 수정 후보는 생성되지 않았습니다."
+            if has_setup_failure:
+                recommendation = (
+                    f"{recommendation} 일부 episode는 세팅 단계에서 중단되어 환경 판단과 후보 생성 기준에서 제외했습니다."
+                )
+            summary = "이번 Run에서는 환경 또는 장애물 배치 검토가 필요한 실패가 발생했습니다."
+            if has_setup_failure:
+                summary = f"{summary} 일부 episode는 주행 시작 전 세팅 단계에서 중단되었습니다."
             return self._sections(
-                summary="이번 Run에서는 환경 또는 장애물 배치 검토가 필요한 실패 근거가 확인되었습니다.",
+                summary=summary,
                 evidence_text=self._environment_evidence_text(
                     metric_values=metric_values,
                     episodes_count=episodes_count,
@@ -77,7 +99,7 @@ class AnalysisTextBuilder:
                 recommendation=recommendation,
             )
         return self._sections(
-            summary="이번 Run에서는 정책이나 환경을 수정해야 한다고 판단할 만한 반복 근거가 확인되지 않았습니다.",
+            summary="이번 Run에서는 정책이나 환경을 수정해야 한다고 판단할 만한 반복 문제가 나타나지 않았습니다.",
             evidence_text="분석 가능한 로그에서 충돌, near miss, penalty region 침범, 제한 시간 초과와 같은 주요 문제가 반복적으로 나타나지 않았습니다.",
             judgement="현재 로그 기준으로는 별도 수정 후보를 생성하지 않는 것이 적절합니다.",
             recommendation="동일 조건에서 추가 실행을 통해 결과가 안정적으로 유지되는지 확인하는 것을 권장합니다.",
@@ -91,10 +113,14 @@ class AnalysisTextBuilder:
         """Format the stable UI report sections."""
         return (
             f"[결과 요약]\n{summary}\n\n"
-            f"[주요 근거]\n{evidence_text}\n\n"
+            f"[확인 내용]\n{evidence_text}\n\n"
             f"[판단]\n{judgement}\n\n"
             f"[추천]\n{recommendation}"
         )
+
+    def _setup_sections(self, *, summary: str, judgement: str, checks: str) -> str:
+        """Format setup-failure UI text without exposing internal evidence paths."""
+        return f"[결과 요약]\n{summary}\n\n[판단]\n{judgement}\n\n[확인 사항]\n{checks}"
 
     def _metrics(self, metrics: Any | None) -> dict[str, int]:
         """Read public response metrics from either a pydantic model or dict."""
@@ -131,9 +157,12 @@ class AnalysisTextBuilder:
             signals.append(f"경로 재탐색 {metric_values['repath_count']}회")
         if metric_values.get("robot_tip_over_count", 0):
             signals.append(f"로봇 전도 {metric_values['robot_tip_over_count']}회")
+        elif "robot_tip_over" in finding_types:
+            signals.append("로봇 전도")
         if not signals:
-            signals.append("정책 관련 검토 신호")
-        return f"분석 로그에서 {', '.join(signals)}가 확인되었습니다."
+            return "분석 로그에서 정책 관련 검토 신호가 확인되었습니다."
+        particle = "이" if signals[-1].endswith("미도달") else "가"
+        return f"분석 로그에서 {', '.join(signals)}{particle} 확인되었습니다."
 
     def _environment_evidence_text(
         self,
@@ -166,7 +195,10 @@ class AnalysisTextBuilder:
             parts.append(f"로그에서 보행자 충돌이 총 {pedestrian_collision_count}회 확인되었습니다.")
         elif collision_count := metric_values.get("collision_count", 0):
             parts.append(f"로그에서 충돌이 총 {collision_count}회 확인되었습니다.")
-        blocked_count = metric_values.get("blocked_region_violation_count", 0)
+        blocked_count = self._evidence_metric_total(
+            evidence,
+            "blocked_region_violation_count",
+        ) or metric_values.get("blocked_region_violation_count", 0)
         if blocked_count:
             parts.append(f"차단 구역 충돌 또는 침범은 {blocked_count}회 확인되었습니다.")
         timeout_count = self._pattern_count(patterns, "timeout_repeated")
@@ -187,7 +219,7 @@ class AnalysisTextBuilder:
             quiet_signals.append("근접 위험")
         if quiet_signals:
             parts.append(f"반면 {', '.join(quiet_signals)} 항목은 확인되지 않았습니다.")
-        return " ".join(parts) if parts else "환경 또는 장애물 배치와 관련된 실패 근거가 확인되었습니다."
+        return " ".join(parts) if parts else "환경 또는 장애물 배치와 관련된 실패 신호가 나타났습니다."
 
     def _join_signals(self, signals: list[str]) -> str:
         """Join Korean evidence phrases without exposing raw metric keys."""
@@ -220,3 +252,52 @@ class AnalysisTextBuilder:
             if pattern.get("type") == pattern_type and isinstance(pattern.get("count"), int | float):
                 return int(pattern["count"])
         return 0
+
+    def _setup_failure_summary(self, setup_failure_details: list[Any]) -> str:
+        """Summarize logged setup failures without exposing internal diagnostic locations."""
+        if not setup_failure_details:
+            return (
+                "주행 시작 전 세팅 단계에서 실행이 중단되었습니다. 구체적인 setup 오류 정보는 기록되지 않았습니다."
+            )
+        descriptions = [self._setup_detail_sentence(detail) for detail in setup_failure_details]
+        descriptions = [description for description in descriptions if description]
+        if len(descriptions) == 1:
+            return descriptions[0]
+        return " ".join(["여러 episode가 주행 시작 전 세팅 단계에서 중단되었습니다.", *descriptions])
+
+    def _setup_failure_checks(self, setup_failure_details: list[Any]) -> str:
+        """Return setup-failure checks based only on structured details that were logged."""
+        if not setup_failure_details:
+            return (
+                "scenario 구조와 필수값, prop ID, catalog 등록 상태, asset 등록 상태, map/segment 참조, "
+                "초기 배치 좌표와 환경 설정을 확인해야 합니다. 정책 또는 환경 수정 후보는 생성하지 않았습니다."
+            )
+        resource_types = {str(getattr(detail, "resource_type", "") or "").strip() for detail in setup_failure_details}
+        checks: list[str] = []
+        if "prop" in resource_types:
+            checks.append("scenario의 prop ID와 UE 환경 카탈로그 등록 상태를 확인해야 합니다.")
+        if "asset" in resource_types:
+            checks.append("asset 등록 상태와 로드 경로를 확인해야 합니다.")
+        if {"map", "segment"} & resource_types:
+            checks.append("map 또는 segment 참조 ID가 실제 환경에 존재하는지 확인해야 합니다.")
+        if not checks:
+            checks.append("scenario 구조, prop/catalog/asset 등록 상태와 환경 설정을 확인해야 합니다.")
+        checks.append("정책 또는 환경 수정 후보는 생성하지 않았습니다.")
+        return " ".join(checks)
+
+    def _setup_detail_sentence(self, detail: Any) -> str:
+        """Create one user-facing sentence from structured setup detail fields."""
+        message = str(getattr(detail, "message", "") or "").strip()
+        error_code = str(getattr(detail, "error_code", "") or "").strip()
+        resource_type = str(getattr(detail, "resource_type", "") or "").strip()
+        resource_id = str(getattr(detail, "resource_id", "") or "").strip()
+        code_text = f" 오류 코드 {error_code}." if error_code else ""
+        if resource_type == "prop" and resource_id:
+            return f"{resource_id}가 환경 카탈로그에 등록되지 않아 주행 시작 전 세팅 단계에서 실행이 중단되었습니다.{code_text}"
+        if resource_type == "asset" and resource_id:
+            return f"{resource_id} asset을 불러오지 못해 주행 시작 전 세팅 단계에서 실행이 중단되었습니다.{code_text}"
+        if resource_type in {"map", "segment"} and resource_id:
+            return f"{resource_type} 참조 ID {resource_id}를 확인하지 못해 주행 시작 전 세팅 단계에서 실행이 중단되었습니다.{code_text}"
+        if message:
+            return f"주행 시작 전 세팅 단계에서 실행이 중단되었습니다. 기록된 setup 오류: {message}{code_text}"
+        return f"주행 시작 전 세팅 단계에서 실행이 중단되었습니다.{code_text}"

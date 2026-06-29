@@ -209,7 +209,7 @@ class ReviewLifecycleManager:
             "status": "completed",
             "created_at": session.started_at,
             "completed_at": completed_at,
-            "summary_judgement": response.summary.overall_judgement,
+            "summary_judgement": response.summary.overall_judgement if response.summary is not None else None,
             "recommendation_type": recommendation_type,
             "based_on_review_id": session.based_on_review_id,
             "path": f"runs/{session.run_id}/review/{session.review_id}",

@@ -19,8 +19,8 @@ EXPORT_SCRIPT_PATH = ROOT / "scripts" / "export_ue5_handoff_payload.py"
 DOC_PATH = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md"
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 RAG_CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
-EXPECTED_POLICY_CARD_COUNT = 9
-EXPECTED_RAG_CHUNK_COUNT = 15
+EXPECTED_POLICY_CARD_COUNT = 11
+EXPECTED_RAG_CHUNK_COUNT = 17
 SCHEMA_PATH = CONTRACT_SCHEMA_DIR / "world_config.schema.json"
 
 

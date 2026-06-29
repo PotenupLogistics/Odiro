@@ -100,6 +100,37 @@ def test_openai_success_response_extracts_output_text_and_usage() -> None:
     assert captured["body"]["max_output_tokens"] == 1200
 
 
+def test_openai_request_uses_request_specific_max_tokens() -> None:
+    captured: dict = {}
+    request = _request().model_copy(update={"maxTokens": 4096})
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(http_request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "output": [
+                    {
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "{\"schemaVersion\":\"1.0\"}",
+                            }
+                        ]
+                    }
+                ],
+            },
+        )
+
+    response = OpenAILlmClient(
+        settings=_settings(),
+        transport=httpx.MockTransport(handler),
+    ).generate(request)
+
+    assert response.success is True
+    assert captured["body"]["max_output_tokens"] == 4096
+
+
 def test_openai_timeout_returns_error() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         raise httpx.TimeoutException("timeout")

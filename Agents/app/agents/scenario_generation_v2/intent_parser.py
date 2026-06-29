@@ -109,10 +109,16 @@ class IntentParser:
         if any(token in prompt for token in ("좁", "협소")) or "narrow" in lowered:
             risk_factors.append("narrow_sidewalk")
             difficulty = "medium_high"
+        has_generic_static_obstacle_intent = (
+            not start_goal_clearance
+            and (
+                any(token in prompt for token in ("장애물", "공사", "바리케이드", "차단막", "공사 콘", "콘", "꼬깔", "안내판"))
+                or any(token in lowered for token in ("obstacle", "cone", "sign", "panel"))
+            )
+        )
         if not explicit_no_obstacles and (
             requested_props
-            or any(token in prompt for token in ("장애물", "공사", "바리케이드", "차단막", "공사 콘", "콘", "꼬깔", "안내판"))
-            or any(token in lowered for token in ("obstacle", "cone", "sign", "panel"))
+            or has_generic_static_obstacle_intent
         ):
             risk_factors.append("static_obstacle_ahead")
         if any(token in prompt for token in ("옆에서", "가로지", "가로질", "끼어드", "횡단", "cross")):
@@ -319,14 +325,17 @@ class IntentParser:
         )
 
     def _is_start_goal_clearance_prompt(self, prompt: str, lowered: str) -> bool:
-        """Return whether no-obstacle wording only protects robot anchors."""
-        has_start = any(token in prompt for token in ("출발", "시작")) or "start" in lowered
-        has_goal = any(token in prompt for token in ("도착", "목표")) or "goal" in lowered
-        has_local = any(token in prompt for token in ("주변", "근처", "앞")) or any(
+        """Return whether no-obstacle wording only protects robot anchor areas."""
+        has_anchor = any(token in prompt for token in ("출발", "시작", "도착", "목표")) or any(
+            token in lowered for token in ("start", "goal")
+        )
+        has_local = any(token in prompt for token in ("주변", "근처", "앞", "이내", "반경", "안전거리")) or any(
             token in lowered for token in ("near", "around")
         )
-        has_no_obstacle = "장애물" in prompt and any(token in prompt for token in ("없게", "없도록", "없이"))
-        return has_start and has_goal and has_local and has_no_obstacle
+        has_no_obstacle = re.search(r"장애물(?:은|는|이|가)?\s*(?:없|제거)", prompt) is not None or any(
+            token in prompt for token in ("장애물 없는", "장애물 없이", "장애물 제거")
+        )
+        return has_anchor and has_local and has_no_obstacle
 
     def _requested_conflict_segment_count(self, prompt: str, lowered: str) -> int | None:
         """Return requested conflict-zone count without treating it as obstacle count."""
@@ -357,9 +366,52 @@ class IntentParser:
         return None
 
     def _requested_length_m(self, prompt: str) -> float | None:
-        """Return the first explicit meter length requested for the corridor."""
-        match = re.search(r"(\d+(?:\.\d+)?)\s*(?:m|미터)", prompt, re.IGNORECASE)
-        return float(match.group(1)) if match else None
+        """Return an explicit corridor length while ignoring anchor-clearance distances."""
+        matches = list(re.finditer(r"(\d+(?:\.\d+)?)\s*(?:m|미터)", prompt, re.IGNORECASE))
+        scored_matches: list[tuple[int, int, float]] = []
+        fallback_matches: list[tuple[int, float]] = []
+        for match in matches:
+            if self._is_anchor_clearance_distance(prompt, match):
+                continue
+            value = float(match.group(1))
+            score = self._corridor_length_score(prompt, match)
+            if score > 0:
+                scored_matches.append((score, match.start(), value))
+            else:
+                fallback_matches.append((match.start(), value))
+        if scored_matches:
+            return max(scored_matches, key=lambda item: (item[0], -item[1]))[2]
+        if fallback_matches:
+            return min(fallback_matches, key=lambda item: item[0])[1]
+        return None
+
+    def _is_anchor_clearance_distance(self, prompt: str, match: re.Match[str]) -> bool:
+        """Return whether a meter value describes local robot safety clearance."""
+        before = prompt[max(0, match.start() - 16) : match.start()]
+        after = prompt[match.end() : min(len(prompt), match.end() + 12)]
+        if any(token in before for token in ("안전거리", "반경")) or "반경" in after:
+            return True
+        if any(token in after for token in ("이내", "내는", "내에", "안쪽", "비워")):
+            return True
+        anchor_tokens = ("출발", "시작", "도착", "목표")
+        local_tokens = ("주변", "근처", "앞", "지점")
+        return any(token in before for token in anchor_tokens) and (
+            any(token in before for token in local_tokens) or any(token in after for token in local_tokens)
+        )
+
+    def _corridor_length_score(self, prompt: str, match: re.Match[str]) -> int:
+        """Return a priority score for meter values tied to corridor geometry."""
+        before = prompt[max(0, match.start() - 18) : match.start()]
+        after = prompt[match.end() : min(len(prompt), match.end() + 18)]
+        score = 0
+        if any(token in before for token in ("전체 길이", "길이는", "길이", "도로", "보도", "길")):
+            score += 2
+        if any(token in after for token in ("길이", "긴", "도로", "보도", "길", "곡선", "직선")):
+            score += 2
+        lowered_context = f"{before} {after}".lower()
+        if any(token in lowered_context for token in ("length", "long", "road", "sidewalk", "corridor", "straight", "curve")):
+            score += 1
+        return score
 
     def _corridor_profile(self, prompt: str, lowered: str, requested_length_m: float | None) -> str:
         """Return the natural-language corridor shape used by preset and fallback generation."""

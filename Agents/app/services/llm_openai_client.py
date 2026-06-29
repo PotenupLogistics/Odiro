@@ -49,7 +49,7 @@ class OpenAILlmClient:
                 {"role": "user", "content": request.userPrompt},
             ],
             "temperature": self.settings.openaiTemperature,
-            "max_output_tokens": self.settings.openaiMaxTokens,
+            "max_output_tokens": request.maxTokens,
         }
         if request.responseJsonSchema is not None:
             body["text"] = {

@@ -3,7 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 
 from app.agents.scenario_generation_v2.repair_diagnostics import RepairDiagnosticCode, RepairDiagnosticCollector
-from app.agents.scenario_generation_v2.repair_handler import ROBOT_ANCHOR_EXCLUSION_RADIUS_M, RepairHandler
+from app.agents.scenario_generation_v2.repair_handler import (
+    ROBOT_GOAL_EXCLUSION_RADIUS_M,
+    ROBOT_START_EXCLUSION_RADIUS_M,
+    RepairHandler,
+)
 from app.agents.scenario_generation_v2.template_validator import TemplateValidator
 
 
@@ -77,13 +81,21 @@ def _max_clear_width(walkway_width_m: float, offset_m: object) -> float:
     return max(left_clear, right_clear)
 
 
-def _assert_no_anchor_conflicts(scenario: dict, *, radius_m: float = ROBOT_ANCHOR_EXCLUSION_RADIUS_M) -> None:
+def _assert_no_anchor_conflicts(
+    scenario: dict,
+    *,
+    start_radius_m: float = ROBOT_START_EXCLUSION_RADIUS_M,
+    goal_radius_m: float = ROBOT_GOAL_EXCLUSION_RADIUS_M,
+) -> None:
     """Assert fixed obstacles stay outside start/goal along safety bands."""
-    anchors = [scenario["robot"]["start"], scenario["robot"]["goal"]]
+    anchors = [
+        (scenario["robot"]["start"], start_radius_m),
+        (scenario["robot"]["goal"], goal_radius_m),
+    ]
     for placement in scenario["obstacles"]["placements"]:
         at = placement["at"]
         along_bounds = _bounds(at["along_m"])
-        for anchor in anchors:
+        for anchor, radius_m in anchors:
             if at["segment"] != anchor["segment"]:
                 continue
             anchor_along = float(anchor["along_m"])
@@ -216,6 +228,64 @@ def test_repair_records_anchor_clearance_relocation_and_removal() -> None:
     removed, removal_events = _repair_with_events(blocked)
 
     assert removed["obstacles"]["placements"] == []
+    assert RepairDiagnosticCode.OBSTACLE_REMOVED_ANCHOR_CLEARANCE.value in _event_codes(removal_events)
+
+
+def test_repair_applies_two_meter_start_and_one_meter_goal_clearance() -> None:
+    """Relocate only obstacles inside the start 2m band or goal 1m band."""
+    start_blocked = _base_quality_scenario()
+    start_blocked["obstacles"]["placements"] = [_cone("start_outer_cone", along_m=2.5, offset_m=-0.65)]
+
+    start_repaired, start_events = _repair_with_events(start_blocked)
+
+    assert len(start_repaired["obstacles"]["placements"]) == 1
+    _assert_no_anchor_conflicts(start_repaired)
+    assert RepairDiagnosticCode.OBSTACLE_RELOCATED_ANCHOR_CLEARANCE.value in _event_codes(start_events)
+
+    goal_allowed = _base_quality_scenario()
+    goal_allowed["obstacles"]["placements"] = [_cone("goal_outer_cone", along_m=7.5, offset_m=-0.65)]
+
+    goal_allowed_repaired, goal_allowed_events = _repair_with_events(goal_allowed)
+
+    assert goal_allowed_repaired["obstacles"]["placements"][0]["at"]["along_m"] == 7.5
+    _assert_no_anchor_conflicts(goal_allowed_repaired)
+    assert goal_allowed_events == []
+
+    goal_blocked = _base_quality_scenario()
+    goal_blocked["obstacles"]["placements"] = [_cone("goal_inner_cone", along_m=8.5, offset_m=-0.65)]
+
+    goal_repaired, goal_events = _repair_with_events(goal_blocked)
+
+    assert len(goal_repaired["obstacles"]["placements"]) == 1
+    _assert_no_anchor_conflicts(goal_repaired)
+    assert RepairDiagnosticCode.OBSTACLE_RELOCATED_ANCHOR_CLEARANCE.value in _event_codes(goal_events)
+
+
+def test_repair_treats_start_safety_boundary_as_overlap() -> None:
+    """Relocate obstacles that touch the closed start safety boundary."""
+    scenario = _base_quality_scenario()
+    scenario["obstacles"]["placements"] = [_cone("start_boundary_cone", along_m=3.0, offset_m=-0.65)]
+
+    repaired, events = _repair_with_events(scenario)
+
+    assert len(repaired["obstacles"]["placements"]) == 1
+    _assert_no_anchor_conflicts(repaired)
+    assert RepairDiagnosticCode.OBSTACLE_RELOCATED_ANCHOR_CLEARANCE.value in _event_codes(events)
+
+
+def test_repair_removes_obstacles_when_start_goal_bands_fill_short_corridor() -> None:
+    """Remove obstacles when start 2m and goal 1m bands leave no usable along interval."""
+    scenario = _base_quality_scenario()
+    scenario["corridor"]["axis"]["points_m"] = [[0.0, 0.0], [4.0, 0.0]]
+    scenario["corridor"]["segments"] = [{"id": "main", "type": "straight", "along_range_m": [0.0, 4.0]}]
+    scenario["robot"]["start"]["along_m"] = 1.0
+    scenario["robot"]["goal"]["along_m"] = 3.5
+    scenario["obstacles"]["placements"] = [_cone("trapped_cone", along_m=2.8, offset_m=-0.65)]
+
+    removed, removal_events = _repair_with_events(scenario)
+
+    assert removed["obstacles"]["placements"] == []
+    assert TemplateValidator().validate(removed).valid is True
     assert RepairDiagnosticCode.OBSTACLE_REMOVED_ANCHOR_CLEARANCE.value in _event_codes(removal_events)
 
 

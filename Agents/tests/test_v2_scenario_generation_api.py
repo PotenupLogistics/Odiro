@@ -10,7 +10,10 @@ from app.agents.common.llm_json_client import AgentLlmJsonClient
 from app.agents.scenario_generation_v2 import ScenarioGenerationV2Agent
 from app.agents.scenario_generation_v2.graph_runner import ScenarioGenerationGraphRunnerV2
 from app.agents.scenario_generation_v2.repair_diagnostics import RepairDiagnosticCode
-from app.agents.scenario_generation_v2.repair_handler import ROBOT_ANCHOR_EXCLUSION_RADIUS_M
+from app.agents.scenario_generation_v2.repair_handler import (
+    ROBOT_GOAL_EXCLUSION_RADIUS_M,
+    ROBOT_START_EXCLUSION_RADIUS_M,
+)
 from app.agents.scenario_generation_v2.scenario_preset_loader import ScenarioPresetLoader
 from app.agents.scenario_generation_v2.scenario_template_schema import project_scenario_v1_json_schema
 from app.agents.scenario_generation_v2.template_validator import ALLOWED_LANES, TemplateValidator
@@ -18,6 +21,7 @@ from app.catalogs.static_obstacle_catalog import get_allowed_static_obstacle_pro
 from app.core.settings import Settings
 from app.main import app
 from app.models.scenario_generation_v2 import ScenarioGenerateV2Request
+from app.services.json_output_extractor import JsonExtractionError
 
 
 COMPLEX_G_SHAPE_CONSTRUCTION_PROMPT = (
@@ -37,6 +41,15 @@ COMPLEX_40M_CONFLICTS_CORNER_PROMPT = (
     "후반부는 ㄱ자 도로처럼 직각으로 꺾이게 해줘. 좁아지는 conflict 구간을 2개 만들고, "
     "첫 번째 구간에는 콘 4개, 두 번째 구간에는 obstacle.road_cone_01 4개를 지그재그로 배치해줘. "
     "장애물끼리는 겹치지 않게 하고 보행자는 없이 만들어줘."
+)
+
+START_CLEARANCE_MAILBOX_MANHOLE_PROMPT = (
+    "출발지 주변에는 장애물이 없고, 중간 구간에 우편함 2개와 맨홀 3개가 있는 시나리오를 생성해줘"
+)
+
+START_RADIUS_20M_CURVED_MULTI_PROP_PROMPT = (
+    "출발지 주변 2m 이내는 비워두고, 20m 곡선 도로 중간 구간에 라바콘 2개, "
+    "쓰레기통 1개, 소화전 1개를 좌우로 나누어 배치한 시나리오를 생성해줘"
 )
 
 
@@ -364,7 +377,8 @@ def _max_numeric_value(value: object) -> float | None:
 def _assert_scenario_quality_guardrails(
     payload: dict,
     *,
-    safety_radius_m: float = ROBOT_ANCHOR_EXCLUSION_RADIUS_M,
+    start_safety_radius_m: float = ROBOT_START_EXCLUSION_RADIUS_M,
+    goal_safety_radius_m: float = ROBOT_GOAL_EXCLUSION_RADIUS_M,
 ) -> None:
     """Assert generated scenarios satisfy UE-facing obstacle quality guardrails."""
     _assert_raw_scenario(payload)
@@ -390,7 +404,11 @@ def _assert_scenario_quality_guardrails(
         segment_start, segment_end = segment_ranges[at["segment"]]
         along_bounds = _range_bounds(at["along_m"])
         assert float(segment_start) <= along_bounds[0] <= along_bounds[1] <= float(segment_end)
-        for anchor in (payload["robot"]["start"], payload["robot"]["goal"]):
+        anchor_radii = [
+            (payload["robot"]["start"], start_safety_radius_m),
+            (payload["robot"]["goal"], goal_safety_radius_m),
+        ]
+        for anchor, safety_radius_m in anchor_radii:
             if at["segment"] != anchor["segment"]:
                 continue
             anchor_along = float(anchor["along_m"])
@@ -416,6 +434,25 @@ def _assert_no_catalog_metadata_leaked(payload: dict) -> None:
     assert "bbox_m" not in rendered
     assert "footprint_m" not in rendered
     assert "Prop Bounding Boxes" not in rendered
+
+
+def _assert_mailbox_manhole_counts(payload: dict) -> None:
+    """Assert grouped Korean alias counts are preserved in placements."""
+    props = [placement["prop"] for placement in payload["obstacles"]["placements"]]
+    assert len(props) == 5
+    assert props.count("obstacle.mailbox") == 2
+    assert sum(1 for prop in props if prop.startswith("obstacle.manhole_")) == 3
+
+
+def _assert_20m_curved_multi_prop_intent(payload: dict) -> None:
+    """Assert the local start-radius wording does not hide the 20m curved obstacle request."""
+    points = payload["corridor"]["axis"]["points_m"]
+    assert 19.0 <= _axis_path_length(points) <= 21.0
+    props = [placement["prop"] for placement in payload["obstacles"]["placements"]]
+    assert len(props) >= 4
+    assert props.count("obstacle.road_cone_01") == 2
+    assert props.count("obstacle.trash_bin") == 1
+    assert props.count("obstacle.fire_hydrant") == 1
 
 
 def _assert_complex_g_shape_construction_scenario(payload: dict) -> None:
@@ -1174,6 +1211,25 @@ def test_v2_scenario_graph_uses_valid_llm_scenario_without_fallback_warning() ->
     assert not any("fallback scenario" in warning.message for warning in response.validation.warnings)
 
 
+def test_v2_scenario_graph_llm_json_failure_fallback_preserves_local_radius_20m_intent() -> None:
+    """Keep deterministic fallback intent after a malformed LLM JSON response."""
+    fake = _FakeJsonClient([JsonExtractionError("Could not extract a JSON object: malformed content.")])
+    runner = ScenarioGenerationGraphRunnerV2(
+        settings=Settings(_env_file=None, v2AgentLlmEnabled=True, v2AgentLlmRepairEnabled=True),
+        llm_client=fake,
+    )
+
+    response = runner.run(ScenarioGenerateV2Request(prompt=START_RADIUS_20M_CURVED_MULTI_PROP_PROMPT))
+
+    assert response.status == "success"
+    assert response.generation_mode == "langgraph"
+    assert len(fake.calls) == 1
+    assert response.scenario is not None
+    _assert_scenario_quality_guardrails(response.scenario)
+    _assert_20m_curved_multi_prop_intent(response.scenario)
+    assert any("deterministic fallback scenario was used" in warning.message for warning in response.validation.warnings)
+
+
 def test_v2_scenario_graph_curved_road_prompt_overrides_valid_straight_llm_candidate() -> None:
     fake = _FakeJsonClient([_llm_scenario("valid_straight_graph_candidate")])
     runner = ScenarioGenerationGraphRunnerV2(
@@ -1785,6 +1841,48 @@ def test_v2_deterministic_grouped_alias_counts_preserve_each_prop_count() -> Non
     _assert_no_catalog_metadata_leaked(scenario)
 
 
+def test_v2_deterministic_start_clearance_phrase_preserves_midfield_alias_counts() -> None:
+    """Treat start-local no-obstacle wording as clearance without dropping requested obstacles."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt=START_CLEARANCE_MAILBOX_MANHOLE_PROMPT))
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    _assert_mailbox_manhole_counts(scenario)
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
+def test_v2_deterministic_global_no_obstacle_prompt_stays_empty() -> None:
+    """Keep whole-scenario no-obstacle wording as an empty placement request."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="장애물이 없는 넓은 보도 기본 시나리오를 만들어줘"))
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    assert scenario["obstacles"]["placements"] == []
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
+def test_v2_deterministic_start_radius_phrase_does_not_override_20m_curved_length() -> None:
+    """Ignore start-radius meter values when selecting the corridor length."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt=START_RADIUS_20M_CURVED_MULTI_PROP_PROMPT))
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    _assert_20m_curved_multi_prop_intent(scenario)
+    _assert_no_catalog_metadata_leaked(scenario)
+
+
 def test_v2_deterministic_korean_word_grouped_alias_counts_preserve_each_prop_count() -> None:
     """Parse Korean number words next to static obstacle aliases."""
     agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
@@ -1941,29 +2039,34 @@ def test_v2_scenario_preset_loader_optional_load_handles_json_parse_failure(tmp_
     assert result.error is not None
 
 
-def test_v2_deterministic_straight_obstacle_prompt_uses_line_preset_skeleton() -> None:
-    """Use the line preset skeleton for straight obstacle prompts."""
+def test_v2_deterministic_straight_obstacle_prompt_keeps_safe_line_preset() -> None:
+    """Use the line preset while dropping obstacles when anchor bands fill it."""
     agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
 
     response = agent.generate(ScenarioGenerateV2Request(prompt="직선 보도에서 장애물이 있는 시나리오를 생성해줘"))
 
     assert response.scenario is not None
-    points = response.scenario["corridor"]["axis"]["points_m"]
+    assert response.validation.valid is True
+    scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
+    points = scenario["corridor"]["axis"]["points_m"]
     assert points == [[0.0, 0.0], [4.0, 0.0]]
-    assert response.scenario["scenario_id"] == "demo_sidewalk_obstacle"
-    assert len(response.scenario["obstacles"]["placements"]) == 1
+    assert scenario["scenario_id"] == "demo_sidewalk_obstacle"
+    assert scenario["obstacles"]["placements"] == []
 
 
-def test_v2_deterministic_straight_obstacle_count_prompt_keeps_requested_count() -> None:
-    """Keep straight corridor geometry while honoring an explicit obstacle count."""
+def test_v2_deterministic_straight_obstacle_count_prompt_prioritizes_anchor_clearance() -> None:
+    """Prefer start/goal safety over requested count when no interval remains."""
     agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
 
     response = agent.generate(ScenarioGenerateV2Request(prompt="장애물 3개 있는 직선 도로 만들어줘"))
 
     assert response.scenario is not None
+    assert response.validation.valid is True
     scenario = response.scenario
+    _assert_scenario_quality_guardrails(scenario)
     assert scenario["corridor"]["axis"]["points_m"] == [[0.0, 0.0], [4.0, 0.0]]
-    assert len(scenario["obstacles"]["placements"]) == 3
+    assert scenario["obstacles"]["placements"] == []
 
 
 def test_v2_deterministic_pedestrian_prompt_keeps_alpha_pedestrians_empty() -> None:

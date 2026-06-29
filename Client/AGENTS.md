@@ -1,11 +1,13 @@
 ## Repository
-- Asset edits: prefer MCP over commandlets if available; otherwise use editor, commandlet, or project scripts
+- Asset edits: write with commandlet first, then verify touched assets with UE_MCP_Bridge/MCP readback; MCP may also be used earlier for inspection or authoring
 - Automation: build `..\task-build.bat client`, PIE preview `..\task-run.bat -SkipAgents -SkipBridge -- ...`
 - Commands: no hardcoded local UE install paths
 
 ## MCP
-- Before the first Unreal MCP call in a session, discover active tool names and match them to these roles; do not guess alternate server names
+- MCP is exposed as active Codex tools, not as repo files or shell commands.
+- Before the first Unreal MCP call in a session, inspect active tools or use `tool_search` when available for `UE_MCP_Bridge`, `Unreal`, or `MCP`; match by capability, not namespace text, and do not guess server names.
   - `UE_MCP_Bridge`: UMG writes, widget capture/runtime geometry, PIE/runtime screenshots, logs, build status, and screen-debug work
+- If Unreal MCP tools are not exposed in the current tool list, state that MCP verification is unavailable instead of inventing `mcp__...` calls.
 - Reuse an open editor when possible; launch it only when MCP needs an editor-backed server
 - If the agent launched an editor only for MCP, close or reuse it before C++ edits, builds, or another editor launch unless the user wants it open
 - Treat early `connection refused` as editor/MCP startup state

@@ -5,6 +5,7 @@
 #include "RobotConfigEditorWidget.generated.h"
 
 class UButton;
+class UBaseSliderWidget;
 class UEditableText;
 class URobotProfileViewModel;
 class UTextBlock;
@@ -56,6 +57,10 @@ private:
 	UFUNCTION()
 	void HandleLidarTabClicked();
 
+	// Body section slider command.
+	UFUNCTION()
+	void HandleBodySliderChanged(UWidget* widget, float value);
+
 	URobotProfileViewModel* ResolveViewModel();
 	bool LoadProfileFromViewModel();
 	bool ReadFieldsIntoViewModel();
@@ -64,7 +69,13 @@ private:
 	void ShowProfileSection(ERobotProfileSection section) const;
 	void SetProfileStatus(const FString& statusText) const;
 	void SetProfilePathText(const FString& profilePath) const;
+	// Registers one custom body slider with the shared body slider handler.
+	static void BindBodySlider(UBaseSliderWidget* slider, URobotConfigEditorWidget* owner);
+	// Releases one custom body slider from the shared body slider handler.
+	static void UnbindBodySlider(UBaseSliderWidget* slider, URobotConfigEditorWidget* owner);
 	static void SetInputText(UEditableText* input, float value);
+	// Applies one numeric value to a paired text field and optional custom slider.
+	static void SetLinkedSliderFieldValue(UEditableText* input, UBaseSliderWidget* slider, float value);
 	static FString FormatProfileFloat(float value);
 
 	// ViewModel supplied by PlatformUiSubsystem.
@@ -119,21 +130,41 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableText> BodyLengthInput;
 
+	// robot.body.length_m slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> BodyLengthSlider;
+
 	// robot.body.width_m input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableText> BodyWidthInput;
+
+	// robot.body.width_m slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> BodyWidthSlider;
 
 	// robot.body.height_m input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableText> BodyHeightInput;
 
+	// robot.body.height_m slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> BodyHeightSlider;
+
 	// robot.body.wheel_base_m input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableText> BodyWheelBaseInput;
 
+	// robot.body.wheel_base_m slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> BodyWheelBaseSlider;
+
 	// robot.body.turning_radius_m input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableText> BodyTurningRadiusInput;
+
+	// robot.body.turning_radius_m slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> BodyTurningRadiusSlider;
 
 	// robot.drive.max_speed_kmh input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

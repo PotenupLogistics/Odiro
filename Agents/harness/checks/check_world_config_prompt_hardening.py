@@ -12,8 +12,8 @@ SMOKE_SCRIPT_PATH = ROOT / "scripts" / "run_ollama_world_config_smoke.py"
 GUIDE_PATH = ROOT / "docs" / "architecture" / "WORLD_CONFIG_PROMPT_HARDENING.md"
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 RAG_CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
-EXPECTED_POLICY_CARD_COUNT = 9
-EXPECTED_RAG_CHUNK_COUNT = 15
+EXPECTED_POLICY_CARD_COUNT = 11
+EXPECTED_RAG_CHUNK_COUNT = 17
 
 
 def _base_result() -> dict[str, Any]:

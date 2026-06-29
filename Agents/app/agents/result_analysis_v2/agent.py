@@ -8,7 +8,6 @@ from typing import Any
 from app.agents.common.llm_json_client import AgentLlmClient, AgentLlmJsonClient
 from app.agents.common.spec_context_loader import SpecContextLoader
 from app.agents.result_analysis_v2.analysis_context_builder import AnalysisContextBuilder
-from app.agents.result_analysis_v2.analysis_text_builder import AnalysisTextBuilder
 from app.agents.result_analysis_v2.artifact_classifier import ArtifactClassifier
 from app.agents.result_analysis_v2.artifact_parser import ArtifactParser, ParsedArtifact
 from app.agents.result_analysis_v2.data_coverage import DataCoverageBuilder
@@ -26,10 +25,11 @@ from app.agents.result_analysis_v2.recommendation_validator import Recommendatio
 from app.agents.result_analysis_v2.representative_selector import RepresentativeFailedEpisodeSelectorV2
 from app.agents.result_analysis_v2.response_builder import ResponseBuilder
 from app.agents.result_analysis_v2.review_lifecycle import ReviewLifecycleManager, ReviewSession
-from app.agents.result_analysis_v2.review_text import INSUFFICIENT_DATA_SUMMARY_MESSAGE, default_artifacts
+from app.agents.result_analysis_v2.review_text import INSUFFICIENT_DATA_SUMMARY_MESSAGE
 from app.agents.result_analysis_v2.run_aggregator import RunAggregator
 from app.agents.result_analysis_v2.run_comparison import PreviousRunComparator
 from app.agents.result_analysis_v2.snapshot_hash import SnapshotHashBuilder
+from app.agents.result_analysis_v2.summary_row_public_builder import SummaryRowPublicBuilder
 from app.agents.result_analysis_v2.timeline_builder import EventTimelineBuilderV2
 from app.agents.result_analysis_v2.workspace_scanner import WorkspaceScan, WorkspaceScanner
 from app.core.settings import Settings
@@ -73,7 +73,7 @@ class ResultAnalysisV2Agent:
         self.previous_run_comparator = PreviousRunComparator()
         self.review_lifecycle = ReviewLifecycleManager()
         self.recommendation_artifact_writer = RecommendationArtifactWriter()
-        self.analysis_text_builder = AnalysisTextBuilder()
+        self.summary_row_public_builder = SummaryRowPublicBuilder()
 
     def run(self, request: AnalysisRunV2Request | None = None) -> AnalysisRunV2Response:
         review_session = self.review_lifecycle.start(request)
@@ -86,6 +86,7 @@ class ResultAnalysisV2Agent:
                 warnings.extend(artifact.warnings)
 
             episodes = self._extract_episodes(parsed)
+            public_data = self.summary_row_public_builder.build(self._summary_rows(parsed))
             experiments_count, runs_count, episodes_count = self._scope_counts(parsed, episodes)
             run_summaries = self.run_aggregator.aggregate(episodes)
             experiment_summaries = self.experiment_aggregator.aggregate(run_summaries)
@@ -126,14 +127,19 @@ class ResultAnalysisV2Agent:
                 refs=refs,
             )
             warnings.extend(llm_warnings)
+            public_patterns = patterns if public_data.has_rows else []
+            public_recommendations = recommendations if public_data.has_rows else []
+            public_episodes_count = len(public_data.episodes) if public_data.has_rows else 0
 
             response = self.response_builder.build(
                 experiments_count=experiments_count,
                 runs_count=runs_count,
-                episodes_count=episodes_count,
-                metrics=self._response_metrics(episodes, parsed),
-                patterns=patterns,
-                recommendations=recommendations,
+                episodes_count=public_episodes_count,
+                metrics=public_data.metrics,
+                run_overview=public_data.run_overview,
+                episodes=public_data.episodes if public_data.has_rows else None,
+                patterns=public_patterns,
+                recommendations=public_recommendations,
                 warnings=warnings,
                 analysis_mode=analysis_mode,
                 run_id=request.run_id if request is not None else None,
@@ -147,6 +153,7 @@ class ResultAnalysisV2Agent:
                 parsed=parsed,
                 episodes=episodes,
                 warnings=warnings,
+                detailed_recommendations=public_recommendations,
             )
             return response
         except Exception as exc:
@@ -371,12 +378,25 @@ class ResultAnalysisV2Agent:
         summary = self._first_run_summary(artifacts)
         if summary is None:
             return 0
+        rows = summary.get("rows")
+        if isinstance(rows, list):
+            return sum(1 for row in rows if isinstance(row, dict))
         for key in ("episode_count", "episodes_count", "total_episodes"):
             value = summary.get(key)
             if isinstance(value, int | float):
                 return max(0, int(value))
         episodes = summary.get("episodes")
         return len(episodes) if isinstance(episodes, list) else 0
+
+    def _summary_rows(self, artifacts: list[ParsedArtifact]) -> list[dict[str, Any]]:
+        """Return valid summary.json rows used by the public dashboard response."""
+        summary = self._first_run_summary(artifacts)
+        if summary is None:
+            return []
+        rows = summary.get("rows")
+        if not isinstance(rows, list):
+            return []
+        return [row for row in rows if isinstance(row, dict)]
 
     def _first_run_summary(self, artifacts: list[ParsedArtifact]) -> dict[str, Any] | None:
         """Return the first parsed run summary object, ignoring malformed summaries."""
@@ -443,6 +463,7 @@ class ResultAnalysisV2Agent:
         parsed: list[ParsedArtifact],
         episodes: list[EpisodeMetrics],
         warnings: list[str],
+        detailed_recommendations: list[dict[str, Any]],
     ) -> None:
         """Finalize review artifacts when this request has a valid run directory."""
         if session is None or request is None:
@@ -459,8 +480,9 @@ class ResultAnalysisV2Agent:
                 parsed_artifacts=parsed,
                 prompt_focus=self._prompt_focus(request),
             )
+            setup_failure_details = self._setup_failure_details(episodes)
             decision = self.recommendation_type_decider.decide(
-                summary_judgement=response.summary.overall_judgement,
+                summary_judgement=response.summary.overall_judgement if response.summary is not None else "insufficient_data",
                 findings=findings,
                 data_coverage=data_coverage,
                 metrics=response.metrics,
@@ -473,14 +495,22 @@ class ResultAnalysisV2Agent:
                 recommendation_type=decision.recommendation_type,
                 findings=findings,
                 prompt_focus=self._prompt_focus(request),
+                setup_failure_details=setup_failure_details,
             )
-            response.recommendations = self.recommendation_generator.ensure_for_review(
-                recommendations=response.recommendations,
+            review_recommendations = self.recommendation_generator.ensure_for_review(
+                recommendations=detailed_recommendations,
                 recommendation_type=decision.recommendation_type,
                 findings=findings,
                 metrics=response.metrics,
             )
-            self._sync_modified_candidate_payloads(response)
+            modified_policy_json = self.response_builder.modified_candidate_payloads(
+                recommendations=review_recommendations,
+                target="policy",
+            )
+            modified_environment_json = self.response_builder.modified_candidate_payloads(
+                recommendations=review_recommendations,
+                target="environment",
+            )
             artifact_write = self.recommendation_artifact_writer.write(
                 session=session,
                 recommendation_type=decision.recommendation_type,
@@ -490,16 +520,14 @@ class ResultAnalysisV2Agent:
                 response.warnings.extend(
                     warning for warning in artifact_write.warnings if warning not in response.warnings
                 )
-            response.analysis_text = self.analysis_text_builder.build(
-                recommendation_type=decision.recommendation_type,
-                artifacts=artifact_write.artifacts,
-                artifact_warnings=artifact_write.warnings,
-                metrics=response.metrics,
-                episodes_count=response.analysis_scope.episodes_count,
-                patterns=response.patterns,
+            detailed_insights = self._build_insights(
                 findings=findings,
                 evidence=evidence,
+                metrics=response.metrics,
+                recommendation_type=decision.recommendation_type,
             )
+            response.insights = self.response_builder.public_insights(detailed_insights)
+            response.recommendations = self.response_builder.public_recommendations(review_recommendations)
             snapshot_hashes = self.snapshot_hash_builder.build(project_path=Path(request.project_path), run_id=request.run_id)
             comparison = self.previous_run_comparator.compare(
                 project_path=Path(request.project_path),
@@ -507,17 +535,21 @@ class ResultAnalysisV2Agent:
                 current_snapshot_hashes=snapshot_hashes,
             )
             report = {
-                "summary": response.summary.model_dump(),
-                "metrics": response.metrics.model_dump(),
+                "summary": response.summary.model_dump() if response.summary is not None else None,
+                "metrics": response.metrics.model_dump() if response.metrics is not None else None,
                 "data_coverage": data_coverage,
+                "insights": detailed_insights,
                 "findings": findings,
                 "evidence": evidence,
+                "patterns": response.patterns or [],
             }
             recommendation_artifact = {
                 "recommendation_type": decision.recommendation_type,
-                "recommendations": response.recommendations,
+                "recommendations": review_recommendations,
                 "reason": decision.reason,
                 "evidence_ids": decision.evidence_ids,
+                "modified_policy_json": modified_policy_json,
+                "modified_environment_json": modified_environment_json,
                 "artifacts": artifact_write.artifacts,
                 "artifact_warnings": artifact_write.warnings,
             }
@@ -538,16 +570,9 @@ class ResultAnalysisV2Agent:
             self.review_lifecycle.fail(session=session, code=exc.__class__.__name__, message=str(exc))
             response.warnings.append(f"review artifact write failed: {exc}")
             response.recommendation_type = (
-                "insufficient_data" if response.summary.overall_judgement == "insufficient_data" else "none"
-            )
-            response.analysis_text = self.analysis_text_builder.build(
-                recommendation_type="insufficient_data"
-                if response.summary.overall_judgement == "insufficient_data"
-                else "none",
-                artifacts=default_artifacts(),
-                metrics=response.metrics,
-                episodes_count=response.analysis_scope.episodes_count,
-                patterns=response.patterns,
+                "insufficient_data"
+                if response.summary is not None and response.summary.overall_judgement == "insufficient_data"
+                else "none"
             )
 
     def _source_run_files(self, parsed: list[ParsedArtifact]) -> list[str]:
@@ -565,16 +590,146 @@ class ResultAnalysisV2Agent:
             return False
         return not relative_path.startswith("runs/") or "/review/" not in relative_path
 
+    def _setup_failure_details(self, episodes: list[EpisodeMetrics]) -> list[Any]:
+        """Return setup failure details recorded on setup-stage episodes."""
+        return [episode.setup_failure_details for episode in episodes if episode.setup_failure_details is not None]
+
+    def _build_insights(
+        self,
+        *,
+        findings: list[dict[str, Any]],
+        evidence: list[dict[str, Any]],
+        metrics: AnalysisMetricsV2 | None,
+        recommendation_type: str,
+    ) -> list[dict[str, Any]]:
+        """Build detailed report insights from findings and public metrics."""
+        if recommendation_type == "insufficient_data":
+            return []
+        finding_types = {str(finding.get("type")) for finding in findings}
+        evidence_by_id = {
+            str(item.get("evidence_id")): item for item in evidence if item.get("evidence_id")
+        }
+        insights: list[dict[str, Any]] = []
+        if (
+            metrics is not None
+            and metrics.collision_count == 0
+            and {"timeout", "goal_not_reached", "stuck"} & finding_types
+        ):
+            evidence_ids = self._finding_evidence_ids(findings, {"timeout", "goal_not_reached", "stuck"})
+            title = "충돌 없이 제한 시간 초과"
+            detail = "충돌은 발생하지 않았지만 목표 도달 실패, 제한 시간 초과, 또는 정체 신호가 확인되었습니다."
+            if {"timeout", "stuck"} <= finding_types:
+                title = "정체 후 제한 시간 초과"
+                detail = "충돌은 발생하지 않았지만 정체 신호가 확인되었고, 제한 시간 내 목표에 도달하지 못했습니다."
+            insights.append(
+                self._insight(
+                    index=len(insights) + 1,
+                    insight_type="timeout_without_collision",
+                    severity="high",
+                    title=title,
+                    detail=detail,
+                    evidence_ids=evidence_ids,
+                    evidence_by_id=evidence_by_id,
+                )
+            )
+        if {"static_obstacle_collision", "blocked_region_collision", "pedestrian_collision"} & finding_types:
+            evidence_ids = self._finding_evidence_ids(
+                findings,
+                {"static_obstacle_collision", "blocked_region_collision", "pedestrian_collision"},
+            )
+            insights.append(
+                self._insight(
+                    index=len(insights) + 1,
+                    insight_type="collision_observed",
+                    severity="high",
+                    title="충돌 관련 이벤트 확인",
+                    detail="정적 장애물, 보행자, 또는 차단 구역 충돌 이벤트가 확인되었습니다.",
+                    evidence_ids=evidence_ids,
+                    evidence_by_id=evidence_by_id,
+                )
+            )
+        if recommendation_type == "policy_review":
+            evidence_ids = self._finding_evidence_ids(
+                findings,
+                {
+                    "penalty_region_violation",
+                    "timeout",
+                    "goal_not_reached",
+                    "near_miss",
+                    "repath",
+                    "policy_decision_error",
+                    "stuck",
+                    "robot_tip_over",
+                },
+            )
+            insights.append(
+                self._insight(
+                    index=len(insights) + 1,
+                    insight_type="policy_review_priority",
+                    severity="medium",
+                    title="정책 검토 우선",
+                    detail="경로 추종, 감속/정지, 재경로 탐색 조건 확인이 우선입니다.",
+                    evidence_ids=evidence_ids,
+                    evidence_by_id=evidence_by_id,
+                )
+            )
+        if "setup_failed" in finding_types:
+            evidence_ids = self._finding_evidence_ids(findings, {"setup_failed"})
+            insights.append(
+                self._insight(
+                    index=len(insights) + 1,
+                    insight_type="setup_failed",
+                    severity="high",
+                    title="세팅 단계 중단",
+                    detail="주행 시작 전 scenario, prop, catalog, asset, map/segment 참조 확인이 필요한 중단이 기록되었습니다.",
+                    evidence_ids=evidence_ids,
+                    evidence_by_id=evidence_by_id,
+                )
+            )
+        return insights[:3]
+
+    def _insight(
+        self,
+        *,
+        index: int,
+        insight_type: str,
+        severity: str,
+        title: str,
+        detail: str,
+        evidence_ids: list[str],
+        evidence_by_id: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Create one detailed report insight record."""
+        related_episode_ids = sorted(
+            {
+                str(evidence_by_id[evidence_id].get("episode_id"))
+                for evidence_id in evidence_ids
+                if evidence_id in evidence_by_id and evidence_by_id[evidence_id].get("episode_id")
+            }
+        )
+        return {
+            "id": f"INS-{index:03d}",
+            "type": insight_type,
+            "severity": severity,
+            "title": title,
+            "detail": detail,
+            "description": detail,
+            "related_episode_ids": related_episode_ids,
+            "evidence_ids": evidence_ids,
+        }
+
+    def _finding_evidence_ids(self, findings: list[dict[str, Any]], finding_types: set[str]) -> list[str]:
+        """Collect evidence ids from matching findings."""
+        evidence_ids: list[str] = []
+        for finding in findings:
+            if finding.get("type") not in finding_types:
+                continue
+            evidence_ids.extend(str(evidence_id) for evidence_id in finding.get("evidence_ids", []))
+        return evidence_ids
+
     def _sync_modified_candidate_payloads(self, response: AnalysisRunV2Response) -> None:
-        """Refresh modified_*_json arrays after review-level recommendation changes."""
-        response.modified_policy_json = self.response_builder.modified_candidate_payloads(
-            recommendations=response.recommendations,
-            target="policy",
-        )
-        response.modified_environment_json = self.response_builder.modified_candidate_payloads(
-            recommendations=response.recommendations,
-            target="environment",
-        )
+        """Legacy hook kept so older tests can call it without restoring public candidate fields."""
+        _ = response
 
     def _align_response_summary_with_review_decision(
         self,
@@ -583,9 +738,17 @@ class ResultAnalysisV2Agent:
         recommendation_type: str,
         findings: list[dict[str, Any]],
         prompt_focus: list[str],
+        setup_failure_details: list[Any],
     ) -> None:
         """Keep user-facing summary consistent with review artifact recommendation type."""
+        if response.summary is None:
+            return
         if recommendation_type == "none":
+            if self._has_setup_failure(findings=findings, setup_failure_details=setup_failure_details):
+                response.summary.overall_judgement = "change_recommended"
+                response.summary.message = self._setup_summary_message(setup_failure_details)
+                self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
+                return
             response.summary.overall_judgement = "no_change_needed"
             return
         if recommendation_type == "insufficient_data":
@@ -595,13 +758,16 @@ class ResultAnalysisV2Agent:
 
         response.summary.overall_judgement = "change_recommended"
         finding_types = {str(finding.get("type")) for finding in findings}
+        has_setup_failure = self._has_setup_failure(findings=findings, setup_failure_details=setup_failure_details)
         if recommendation_type == "environment_review":
-            response.summary.message = "환경 또는 장애물 관련 충돌 근거가 확인되어 환경 검토가 필요합니다."
+            response.summary.message = "환경 또는 장애물 관련 충돌이 발생해 환경 검토가 필요합니다."
+            if has_setup_failure:
+                response.summary.message = f"{response.summary.message} 일부 episode는 세팅 단계에서 중단되어 환경 판단에서 제외했습니다."
             self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
             return
-        if response.metrics.success_count > 0 and response.metrics.failure_count == 0:
+        if response.metrics is not None and response.metrics.success_count > 0 and response.metrics.failure_count == 0:
             response.summary.message = (
-                "주행은 성공했지만, 패널티 구역 침범 등 안전/정책 검토가 필요한 근거가 확인되었습니다."
+                "주행은 성공했지만, 패널티 구역 침범 등 안전/정책 검토가 필요한 신호가 나타났습니다."
             )
             self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
             return
@@ -611,16 +777,48 @@ class ResultAnalysisV2Agent:
             and not {"static_obstacle_collision", "blocked_region_collision"} & finding_types
         ):
             response.summary.message = (
-                "사용자 요청 관점에서 요청한 장애물/충돌 근거는 확인되지 않았고, "
-                "패널티 구역 침범 근거가 확인되어 주행 정책 검토가 필요합니다."
+                "사용자 요청 관점에서 요청한 장애물/충돌 문제는 확인되지 않았고, "
+                "패널티 구역 침범이 발생해 주행 정책 검토가 필요합니다."
             )
+        elif {"timeout", "stuck"} <= finding_types:
+            response.summary.message = "정체 이후 제한 시간 초과로 종료되어 주행 정책 검토가 필요합니다."
         else:
-            response.summary.message = "주행 정책 검토가 필요한 실패 근거가 확인되었습니다."
+            response.summary.message = "주행 정책 검토가 필요한 실패가 발생했습니다."
+        if has_setup_failure:
+            response.summary.message = f"{response.summary.message} 일부 episode는 세팅 단계에서 중단되어 정책 판단에서 제외했습니다."
         self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
+
+    def _has_setup_failure(self, *, findings: list[dict[str, Any]], setup_failure_details: list[Any]) -> bool:
+        """Return whether this run contains setup-stage failures."""
+        return bool(setup_failure_details) or any(finding.get("type") == "setup_failed" for finding in findings)
+
+    def _setup_summary_message(self, setup_failure_details: list[Any]) -> str:
+        """Build setup-failure summary text without exposing diagnostic source paths."""
+        if not setup_failure_details:
+            return (
+                "주행 시작 전 세팅 단계에서 실행이 중단되었습니다. "
+                "scenario, prop, catalog, asset, 환경 설정 확인이 필요합니다."
+            )
+        detail = setup_failure_details[0]
+        resource_type = str(getattr(detail, "resource_type", "") or "").strip()
+        resource_id = str(getattr(detail, "resource_id", "") or "").strip()
+        message = str(getattr(detail, "message", "") or "").strip()
+        if resource_type == "prop" and resource_id:
+            return f"{resource_id}가 환경 카탈로그에 등록되지 않아 주행 시작 전 세팅 단계에서 실행이 중단되었습니다."
+        if resource_type == "asset" and resource_id:
+            return f"{resource_id} asset을 불러오지 못해 주행 시작 전 세팅 단계에서 실행이 중단되었습니다."
+        if resource_type in {"map", "segment"} and resource_id:
+            return f"{resource_type} 참조 ID {resource_id}를 확인하지 못해 주행 시작 전 세팅 단계에서 실행이 중단되었습니다."
+        if message:
+            return f"주행 시작 전 세팅 단계에서 실행이 중단되었습니다. 기록된 setup 오류: {message}"
+        return (
+            "주행 시작 전 세팅 단계에서 실행이 중단되었습니다. "
+            "scenario, prop, catalog, asset, 환경 설정 확인이 필요합니다."
+        )
 
     def _append_prompt_focus_message(self, *, response: AnalysisRunV2Response, prompt_focus: list[str]) -> None:
         """Append prompt focus text when summary alignment replaced the original message."""
-        if prompt_focus and "사용자 요청 관점" not in response.summary.message:
+        if response.summary is not None and prompt_focus and "사용자 요청 관점" not in response.summary.message:
             response.summary.message = (
                 f"{response.summary.message} 사용자 요청 관점: {', '.join(prompt_focus)} 중심으로 확인했습니다."
             )

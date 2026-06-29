@@ -162,7 +162,7 @@
 - Policy Config 파라미터는 policy card 근거와 연결된 항목부터 정의한다.
 - UE5 Decision Request 필드는 policy card와 MVP 액션에 필요한 필드 중심으로 정리한다.
 - JSON Schema, sample fixture, API는 다음 단계에서 진행한다.
-- policy card 9개를 기반으로 JSON 계약을 설계한다.
+- policy card 11개를 기반으로 JSON 계약을 설계한다.
 - 단위는 cm, kmh, sec, degree를 사용한다.
 - sample JSON fixture는 schema 검증 이후 별도 단계에서 작성한다.
 - FastAPI API는 schema와 모델 검증 이후 별도 단계에서 작성한다.
@@ -176,7 +176,7 @@
 - LLM이 생성한 JSON은 validation layer를 통과한 뒤에만 UE5에 전달한다.
 - API 구현은 자연어 입력 설계 문서가 정리된 뒤 별도 단계에서 진행한다.
 - RAG MVP는 원본 PDF가 아니라 confirmed policy card 기반으로 구성한다.
-- 1 policy card = 1 RAG chunk 전략을 사용한다.
+- runtime RAG chunk는 confirmed policy card 기반으로 생성하되, 내부 프로젝트 보강 chunk를 포함할 수 있다.
 - 원본 문서 RAG와 정책 카드 RAG는 분리한다.
 - embedding/vector DB 생성은 chunk 검증 이후 별도 단계에서 진행한다.
 

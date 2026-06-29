@@ -13,6 +13,8 @@ class FailurePatternDetector:
         """Return repeated pattern records using unique episode evidence per pattern."""
         by_type: dict[str, dict[tuple[str, str], EpisodeMetrics]] = defaultdict(dict)
         for episode in episodes:
+            if episode.failure_type == "setup_failed":
+                continue
             if episode.failure_type:
                 self._add_episode(by_type, episode.failure_type, episode)
             if episode.blocked_region_violation_count:

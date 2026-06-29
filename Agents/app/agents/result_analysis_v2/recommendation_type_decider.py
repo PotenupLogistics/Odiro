@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.agents.result_analysis_v2.review_text import SUCCESS_POLICY_REVIEW_REASON, recommendation_type_reason
+from app.agents.result_analysis_v2.review_text import (
+    SETUP_FAILED_RECOMMENDATION_REASON,
+    SUCCESS_POLICY_REVIEW_REASON,
+    recommendation_type_reason,
+)
 
 
 @dataclass(frozen=True)
@@ -61,12 +65,27 @@ class RecommendationTypeDecider:
             "stuck",
             "robot_tip_over",
         }
+        if any(finding.get("type") in policy_types for finding in findings):
+            return RecommendationTypeDecision(
+                recommendation_type="policy_review",
+                reason=SUCCESS_POLICY_REVIEW_REASON
+                if self._success_safety_case(metrics)
+                else recommendation_type_reason("policy_review"),
+                evidence_ids=self._evidence_ids(findings, policy_types),
+            )
+
+        setup_types = {"setup_failed"}
+        if any(finding.get("type") in setup_types for finding in findings):
+            return RecommendationTypeDecision(
+                recommendation_type="none",
+                reason=SETUP_FAILED_RECOMMENDATION_REASON,
+                evidence_ids=self._evidence_ids(findings, setup_types),
+            )
+
         return RecommendationTypeDecision(
-            recommendation_type="policy_review",
-            reason=SUCCESS_POLICY_REVIEW_REASON
-            if self._success_safety_case(metrics)
-            else recommendation_type_reason("policy_review"),
-            evidence_ids=self._evidence_ids(findings, policy_types),
+            recommendation_type="none",
+            reason=recommendation_type_reason("none"),
+            evidence_ids=[],
         )
 
     def _has_no_result_basis(self, data_coverage: dict[str, Any]) -> bool:

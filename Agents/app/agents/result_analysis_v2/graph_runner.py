@@ -58,6 +58,7 @@ class ResultAnalysisGraphRunnerV2:
                 parsed=state.get("parsed_artifacts", []),
                 episodes=state.get("episode_metrics", []),
                 warnings=state.get("warnings", []),
+                detailed_recommendations=state.get("detailed_recommendations", []),
             )
             self.last_state = state
             return state["response"]
@@ -244,14 +245,19 @@ class ResultAnalysisGraphRunnerV2:
         parsed = state.get("parsed_artifacts", [])
         episodes = state.get("episode_metrics", [])
         experiments_count, runs_count, episodes_count = self.agent._scope_counts(parsed, episodes)
+        public_data = self.agent.summary_row_public_builder.build(self.agent._summary_rows(parsed))
         request = state.get("request")
+        public_patterns = state.get("failure_patterns", []) if public_data.has_rows else []
+        detailed_recommendations = state.get("recommendations", []) if public_data.has_rows else []
         response = self.agent.response_builder.build(
             experiments_count=experiments_count,
             runs_count=runs_count,
-            episodes_count=episodes_count,
-            metrics=self.agent._response_metrics(episodes, parsed),
-            patterns=state.get("failure_patterns", []),
-            recommendations=state.get("recommendations", []),
+            episodes_count=len(public_data.episodes) if public_data.has_rows else 0,
+            metrics=public_data.metrics,
+            run_overview=public_data.run_overview,
+            episodes=public_data.episodes if public_data.has_rows else None,
+            patterns=public_patterns,
+            recommendations=detailed_recommendations,
             warnings=state.get("warnings", []),
             analysis_mode=state.get("analysis_mode", "rule_based"),
             run_id=request.run_id if request is not None else None,
@@ -260,8 +266,7 @@ class ResultAnalysisGraphRunnerV2:
         return {
             **state,
             "response": response,
-            "modified_policy_json": response.modified_policy_json,
-            "modified_environment_json": response.modified_environment_json,
+            "detailed_recommendations": detailed_recommendations,
         }
 
     def _known_episode_refs(self, state: ResultAnalysisGraphStateV2) -> set[tuple[str, str, str]]:

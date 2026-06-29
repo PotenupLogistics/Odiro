@@ -62,6 +62,68 @@ class AnalysisMetricsV2(BaseModel):
     penalty_region_violation_count: int = Field(ge=0)
 
 
+class AnalysisRunOverviewDisplayV2(BaseModel):
+    """UI-ready text for the run overview cards."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_play_time: str
+    success_rate: str
+    collision_count: str
+
+
+class AnalysisRunOverviewV2(BaseModel):
+    """Run-level dashboard values calculated from summary.json rows."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_play_time_s: float = Field(ge=0)
+    success_rate: float = Field(ge=0, le=1)
+    collision_count: int = Field(ge=0)
+    episode_count: int = Field(ge=0)
+    display: AnalysisRunOverviewDisplayV2
+
+
+class AnalysisEpisodeDisplayV2(BaseModel):
+    """UI-ready text for an episode replay row."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    duration: str
+    outcome: str
+
+
+class AnalysisEpisodeV2(BaseModel):
+    """Public episode summary generated from one summary.json row."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    episode_id: str
+    duration_s: float = Field(ge=0)
+    outcome: Literal["success", "failure"]
+    display: AnalysisEpisodeDisplayV2
+
+
+class AnalysisInsightV2(BaseModel):
+    """Compact public insight card for the UI."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["high", "medium", "low"]
+    title: str
+    description: str
+
+
+class AnalysisErrorV2(BaseModel):
+    """Failure details returned only when the API cannot build a valid response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    message: str
+    phase: str
+
+
 class AnalysisRunV2Response(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -70,14 +132,14 @@ class AnalysisRunV2Response(BaseModel):
     status: Literal["success", "failed"] = "success"
     run_id: str | None = Field(default=None, description="Requested run id when the response is scoped to one user project run.")
     review_id: str | None = Field(default=None, description="Generated review id, or null when no review directory was created.")
-    analysis_scope: AnalysisScopeV2
-    summary: AnalysisSummaryV2
-    metrics: AnalysisMetricsV2
-    recommendation_type: RecommendationTypeV2 = "insufficient_data"
-    patterns: list[dict[str, Any]] = Field(default_factory=list)
-    recommendations: list[dict[str, Any]] = Field(default_factory=list)
-    modified_policy_json: list[dict[str, Any]] = Field(default_factory=list)
-    modified_environment_json: list[dict[str, Any]] = Field(default_factory=list)
+    run_overview: AnalysisRunOverviewV2 | None = None
+    episodes: list[AnalysisEpisodeV2] | None = None
+    analysis_scope: AnalysisScopeV2 | None = None
+    summary: AnalysisSummaryV2 | None = None
+    metrics: AnalysisMetricsV2 | None = None
+    recommendation_type: RecommendationTypeV2 | None = None
+    insights: list[AnalysisInsightV2] | None = None
+    patterns: list[dict[str, Any]] | None = None
+    recommendations: list[dict[str, Any]] | None = None
     warnings: list[str] = Field(default_factory=list)
-    analysis_mode: Literal["rule_based", "llm", "fallback"] = "rule_based"
-    analysis_text: str = Field(description="API-only natural-language display summary; review artifacts do not persist it.")
+    error: AnalysisErrorV2 | None = None

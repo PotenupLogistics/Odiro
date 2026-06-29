@@ -77,8 +77,8 @@ manual live execution은 automated tests 밖에서만 수행한다.
 - WorldConfig generation, prompt package, and contract validation remain covered through service/function or CLI tests.
 - The harness does not perform a live external LLM call.
 - No hardcoded API key or secret string is present.
-- Policy card count remains 9.
-- Policy RAG chunk count remains 9.
+- Policy card count remains 11.
+- Policy RAG chunk count remains 17.
 - No sample JSON, fixture, vector DB, or embedding index artifacts are created.
 
 ## World Config Generation Orchestrator Check
@@ -93,8 +93,8 @@ manual live execution은 automated tests 밖에서만 수행한다.
 - The harness does not perform a live external LLM call.
 - No hardcoded API key or secret string is present.
 - FastAPI endpoint set includes `/health`, legacy `/api/v1` routes, and v2 user project routes.
-- Policy card count remains 9.
-- Policy RAG chunk count remains 9.
+- Policy card count remains 11.
+- Policy RAG chunk count remains 17.
 - No sample JSON, fixture, vector DB, or embedding index artifacts are created.
 
 ## LLM Client Abstraction Check
@@ -365,7 +365,7 @@ Source Registry가 통과해야만 원본 문서가 실제로 등록되어 있�
 confirmed 후보가 0개이고 `policy_knowledge_cards.jsonl`이 없으면 PASS다. confirmed 후보가 1개 이상인데 JSONL이 없으면 WARNING으로 처리한다.
 ## Policy Card 검증
 
-`harness.checks.check_policy_cards`는 confirmed 후보 수와 `policy_knowledge_cards.jsonl`의 card 수가 일치하는지 검증한다. 현재 confirmed 후보가 9개이면 card도 9개여야 한다.
+`harness.checks.check_policy_cards`는 manual confirmed 후보 9개와 별도 promoted KOR-004 candidate JSON 2개를 합친 confirmed source 수가 `policy_knowledge_cards.jsonl`의 card 수와 일치하는지 검증한다.
 
 검증 항목:
 
@@ -375,16 +375,16 @@ confirmed 후보가 0개이고 `policy_knowledge_cards.jsonl`이 없으면 PASS�
 - required field 누락 여부
 - `evidenceText`와 `evidenceLocation` 존재 여부
 - pending/rejected 후보가 card로 생성되지 않았는지 여부
-- caution 문구 포함 여부
+- caution 문구 포함 여부. KOR-004 promoted card는 전체 문서를 포괄하지 않는 scoped runtime 보강 근거 caution을 허용한다.
 - 과장된 인증/준수 보장 표현이 없는지 여부
 
 ## Policy Mapping Docs 검증
 
-`harness.checks.check_policy_mapping_docs`는 policy card 9개를 기반으로 작성한 매핑 문서와 coverage report를 검증한다.
+`harness.checks.check_policy_mapping_docs`는 policy card 11개를 기반으로 작성한 매핑 문서와 coverage report를 검증한다.
 
 검증 항목:
 
-- `policy_knowledge_cards.jsonl` 존재 여부와 card 수 9개 여부
+- `policy_knowledge_cards.jsonl` 존재 여부와 card 수 11개 여부
 - `docs/policy/POLICY_CARD_COVERAGE.md` 존재 여부
 - `docs/policy/POLICY_PARAMETER_CATALOG.md` 존재 여부
 - `docs/policy/DECISION_ACTION_MAPPING.md` 존재 여부
@@ -405,7 +405,7 @@ confirmed 후보가 0개이고 `policy_knowledge_cards.jsonl`이 없으면 PASS�
 - 각 schema의 `schemaVersion` 정의 여부
 - 각 schema의 `required` 필드 존재 여부
 - Pydantic 모델 파일 존재 여부
-- policy card 9개 유지 여부
+- policy card 11개 유지 여부
 - sample JSON, fixture, API가 생성되지 않았는지 여부
 
 ## Contract Validation 검증
@@ -419,7 +419,7 @@ confirmed 후보가 0개이고 `policy_knowledge_cards.jsonl`이 없으면 PASS�
 - `scripts/validate_contract.py` 존재 여부
 - `ContractType` 6개 계약 타입 존재 여부
 - 각 contract type의 schema/model mapping 존재 여부
-- policy card 9개 유지 여부
+- policy card 11개 유지 여부
 - sample JSON, fixture, API가 생성되지 않았는지 여부
 
 ## Natural Language Plan 검증
@@ -434,7 +434,7 @@ confirmed 후보가 0개이고 `policy_knowledge_cards.jsonl`이 없으면 PASS�
 - `docs/json_contracts/NATURAL_LANGUAGE_GENERATION_CONTRACT.md` 존재 여부
 - 각 문서가 World Config 또는 `world_config`를 언급하는지 여부
 - API, sample JSON, fixture가 생성되지 않았는지 여부
-- policy card 9개 유지 여부
+- policy card 11개 유지 여부
 
 ## RAG Chunk 검증
 

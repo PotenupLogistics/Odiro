@@ -23,6 +23,7 @@ EXPECTED_MODEL_FILES = {
     "app/models/evaluation.py",
     "app/models/run_result.py",
 }
+EXPECTED_POLICY_CARD_COUNT = 11
 
 
 def _base_result() -> dict[str, Any]:
@@ -90,8 +91,8 @@ def run_check() -> dict[str, Any]:
         result["policyCardCount"] = sum(
             1 for line in POLICY_CARDS_PATH.read_text(encoding="utf-8-sig").splitlines() if line.strip()
         )
-    if result["policyCardCount"] != 9:
-        result["errors"].append("policy card count must remain 9.")
+    if result["policyCardCount"] != EXPECTED_POLICY_CARD_COUNT:
+        result["errors"].append(f"policy card count must remain {EXPECTED_POLICY_CARD_COUNT}.")
 
     forbidden = _detect_forbidden_artifacts()
     result["generatedArtifactsWarnings"] = forbidden

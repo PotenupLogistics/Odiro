@@ -27,7 +27,9 @@ def test_coverage_report_exists() -> None:
     assert COVERAGE_REPORT_JSON.exists()
     assert COVERAGE_REPORT_MD.exists()
     report = json.loads(COVERAGE_REPORT_JSON.read_text(encoding="utf-8-sig"))
-    assert report["totalCards"] == 9
+    assert report["totalCards"] == 11
+    assert report["cardsByCategory"]["crosswalk_operation"] == 1
+    assert report["cardsByCategory"]["speed_policy"] == 3
 
 
 def test_mapping_documents_exist_and_reference_cards() -> None:

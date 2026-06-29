@@ -24,6 +24,25 @@ def test_v2_analysis_api_keeps_response_schema_without_internal_state(tmp_path) 
         json.dumps({"success": True, "goal_reached": True}),
         encoding="utf-8",
     )
+    (project / "runs" / "000001" / "summary.json").write_text(
+        json.dumps(
+            {
+                "schema": "run_summary",
+                "version": 1,
+                "run": {"run_id": "000001", "project_id": project.name},
+                "rows": [
+                    {
+                        "episode_id": "000001",
+                        "outcome": "Success",
+                        "terminal_reason": "GoalReached",
+                        "duration_s": 10.0,
+                        "metrics": {"goal_reached": 1},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
 

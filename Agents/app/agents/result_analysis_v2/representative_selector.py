@@ -31,7 +31,9 @@ class RepresentativeFailedEpisodeSelectorV2:
 
     def _rank(self, metric: dict[str, Any]) -> tuple[int, str, str, str]:
         failure_type = str(metric.get("failure_type") or "")
-        if self._positive(metric, "collision_count") or failure_type in {"collision", "static_obstacle_collision", "pedestrian_collision"}:
+        if failure_type == "setup_failed":
+            priority = 99
+        elif self._positive(metric, "collision_count") or failure_type in {"collision", "static_obstacle_collision", "pedestrian_collision"}:
             priority = 1
         elif self._positive(metric, "blocked_region_violation_count") or failure_type == "blocked_region_violation":
             priority = 2

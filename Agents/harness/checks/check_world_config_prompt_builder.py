@@ -13,7 +13,7 @@ from app.services.world_config_prompt_builder import build_world_config_prompt_p
 
 ROOT = Path(__file__).resolve().parents[2]
 CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
-EXPECTED_RAG_CHUNK_COUNT = 15
+EXPECTED_RAG_CHUNK_COUNT = 17
 REQUIRED_FILES = {
     "app/models/generation.py",
     "app/services/natural_language_normalizer.py",

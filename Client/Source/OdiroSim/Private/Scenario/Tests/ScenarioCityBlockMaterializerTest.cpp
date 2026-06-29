@@ -60,7 +60,8 @@ namespace
 		const FVector& center,
 		const FVector2D& size,
 		const FString& collisionTag = FString(),
-		const FString& penaltyKind = FString())
+		const FString& penaltyKind = FString(),
+		double yawDegrees = 0.0)
 	{
 		FScenarioGroundRegionSpec regionSpec;
 		regionSpec.RegionId = regionId;
@@ -69,7 +70,7 @@ namespace
 		regionSpec.ShapeType = EScenarioGroundShapeType::Rectangle;
 		regionSpec.Center = center;
 		regionSpec.Size = size;
-		regionSpec.YawDegrees = 0.0;
+		regionSpec.YawDegrees = yawDegrees;
 		regionSpec.CollisionTag = collisionTag;
 		regionSpec.PenaltyKind = penaltyKind;
 		return regionSpec;
@@ -79,7 +80,8 @@ namespace
 	FScenarioGroundRegionSpec MakeGeneratedBuildingRegion(
 		const FString& regionId,
 		const FVector& center,
-		const FVector2D& size)
+		const FVector2D& size,
+		double yawDegrees = 0.0)
 	{
 		FScenarioGroundRegionSpec regionSpec;
 		regionSpec.RegionId = regionId;
@@ -88,7 +90,7 @@ namespace
 		regionSpec.ShapeType = EScenarioGroundShapeType::Rectangle;
 		regionSpec.Center = center;
 		regionSpec.Size = size;
-		regionSpec.YawDegrees = 0.0;
+		regionSpec.YawDegrees = yawDegrees;
 		regionSpec.CollisionTag = TEXT("building");
 		return regionSpec;
 	}
@@ -272,6 +274,281 @@ bool FScenarioCityBlockMaterializerRoadCompositeSeamRootTest::RunTest(const FStr
 			TEXT("BP origin can sit on the continuous walkway-curb seam"),
 			FMath::IsNearlyEqual(spawnedActors[0]->GetActorLocation().Y, 0.0, 0.1));
 		TestEqual(TEXT("seam-rooted composite still snaps to road height"), spawnedActors[0]->GetActorLocation().Z, 0.0);
+	}
+
+	spawnedActors.Reset();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioCityBlockMaterializerRoadCornerTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.RoadSideRightAngleCorner",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioCityBlockMaterializerRoadCornerTest::RunTest(const FString& Parameters)
+{
+	FScenarioCityBlockMaterializerTestWorld testWorld;
+	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
+	if (!testWorld.World)
+	{
+		return false;
+	}
+
+	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
+	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
+	if (!catalog)
+	{
+		return false;
+	}
+
+	FScenarioCityBlockCatalogEntry compositeBlock = MakeMaterializerTestEntry(
+		TEXT("city.walkway_curb_road_straight_10m"),
+		EScenarioCityBlockRole::WalkwayRoadStraight,
+		EScenarioGroundRegionType::Blocked,
+		7.0);
+	compositeBlock.SemanticProfile.SurfaceIds = { TEXT("road"), TEXT("walkway") };
+	compositeBlock.SemanticProfile.CollisionTag = TEXT("curb");
+	compositeBlock.PlacementProfile.Priority = 10;
+	compositeBlock.PlacementProfile.LateralAnchor = EScenarioCityBlockLateralAnchor::RegionInnerEdge;
+	catalog->Entries.Add(compositeBlock);
+
+	FScenarioCityBlockCatalogEntry cornerBlock = MakeMaterializerTestEntry(
+		TEXT("city.walkway_road_corner_10m"),
+		EScenarioCityBlockRole::Corner,
+		EScenarioGroundRegionType::Penalty,
+		10.0);
+	cornerBlock.SemanticProfile.SurfaceIds = { TEXT("road"), TEXT("walkway") };
+	cornerBlock.PlacementProfile.Priority = 20;
+	catalog->Entries.Add(cornerBlock);
+
+	TArray<FScenarioGroundRegionSpec> groundRegions;
+	groundRegions.Add(MakeGeneratedRoadSideRegion(
+		TEXT("generated_city_main_a_upper_curb_00_00"),
+		EScenarioGroundRegionType::Blocked,
+		FVector(1000.0, 25.0, 0.0),
+		FVector2D(2000.0, 50.0),
+		TEXT("curb")));
+	groundRegions.Add(MakeGeneratedRoadSideRegion(
+		TEXT("generated_city_main_a_upper_road_2lane_00_00"),
+		EScenarioGroundRegionType::Penalty,
+		FVector(1000.0, 370.0, 0.0),
+		FVector2D(2000.0, 640.0),
+		FString(),
+		TEXT("road")));
+	groundRegions.Add(MakeGeneratedRoadSideRegion(
+		TEXT("generated_city_main_b_upper_curb_00_00"),
+		EScenarioGroundRegionType::Blocked,
+		FVector(2025.0, -1000.0, 0.0),
+		FVector2D(2000.0, 50.0),
+		TEXT("curb"),
+		FString(),
+		-90.0));
+	groundRegions.Add(MakeGeneratedRoadSideRegion(
+		TEXT("generated_city_main_b_upper_road_2lane_00_00"),
+		EScenarioGroundRegionType::Penalty,
+		FVector(2370.0, -1000.0, 0.0),
+		FVector2D(2000.0, 640.0),
+		FString(),
+		TEXT("road"),
+		-90.0));
+
+	TArray<TObjectPtr<AActor>> spawnedActors;
+	FScenarioCityBlockMaterializationOptions options;
+	options.LogContext = TEXT("ScenarioCityBlockMaterializerTest");
+	const FScenarioCityBlockMaterializationResult result =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			testWorld.World,
+			catalog,
+			groundRegions,
+			spawnedActors,
+			options);
+
+	TestEqual(TEXT("two curb bands and two covered road bands are candidates"), result.CandidateRegionCount, 4);
+	TestEqual(TEXT("one road-side corner is inferred"), result.CornerCandidateCount, 1);
+	TestEqual(TEXT("straight composites and the corner actor spawn"), result.SpawnedActorCount, 3);
+	TestEqual(TEXT("road bands are skipped when covered by road-side composites"), result.SkippedCoveredByCompositeCount, 2);
+	TestEqual(TEXT("configured corner entry avoids corner no-entry skips"), result.SkippedCornerNoEntryCount, 0);
+	TestEqual(TEXT("three visual actors remain owned by the materializer"), spawnedActors.Num(), 3);
+
+	bool bFoundHorizontalStraight = false;
+	bool bFoundVerticalStraight = false;
+	bool bFoundCornerAnchor = false;
+	for (const TObjectPtr<AActor>& spawnedActor : spawnedActors)
+	{
+		if (!spawnedActor)
+		{
+			continue;
+		}
+
+		const FVector location = spawnedActor->GetActorLocation();
+		bFoundHorizontalStraight |= FMath::IsNearlyEqual(location.X, 750.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 350.0, 0.1);
+		bFoundVerticalStraight |= FMath::IsNearlyEqual(location.X, 2350.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, -1250.0, 0.1);
+		bFoundCornerAnchor |= FMath::IsNearlyEqual(location.X, 2000.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 0.0, 0.1);
+	}
+
+	TestTrue(TEXT("horizontal straight composite leaves a corner reservation"), bFoundHorizontalStraight);
+	TestTrue(TEXT("vertical straight composite leaves a corner reservation"), bFoundVerticalStraight);
+	TestTrue(TEXT("corner actor is anchored at the continuous walkway-curb seam intersection"), bFoundCornerAnchor);
+
+	spawnedActors.Reset();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioCityBlockMaterializerBuildingFrontageTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.BuildingFrontageUsesBoundsAndInnerEdge",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioCityBlockMaterializerBuildingFrontageTest::RunTest(const FString& Parameters)
+{
+	FScenarioCityBlockMaterializerTestWorld testWorld;
+	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
+	if (!testWorld.World)
+	{
+		return false;
+	}
+
+	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
+	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
+	if (!catalog)
+	{
+		return false;
+	}
+
+	FScenarioCityBlockCatalogEntry buildingBlock = MakeMaterializerTestEntry(
+		TEXT("city.building_frontage_18m"),
+		EScenarioCityBlockRole::Building,
+		EScenarioGroundRegionType::Blocked,
+		22.0);
+	buildingBlock.BoundsMeters.LengthMeters = 18.0;
+	buildingBlock.SemanticProfile.SurfaceIds = { TEXT("building") };
+	buildingBlock.SemanticProfile.CollisionTag = TEXT("building");
+	catalog->Entries.Add(buildingBlock);
+
+	TArray<FScenarioGroundRegionSpec> groundRegions;
+	groundRegions.Add(MakeGeneratedBuildingRegion(
+		TEXT("generated_city_main_upper_building_00_00"),
+		FVector(0.0, 1000.0, 0.0),
+		FVector2D(6000.0, 1000.0)));
+
+	TArray<TObjectPtr<AActor>> spawnedActors;
+	FScenarioCityBlockMaterializationOptions options;
+	options.LogContext = TEXT("ScenarioCityBlockMaterializerTest");
+	const FScenarioCityBlockMaterializationResult result =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			testWorld.World,
+			catalog,
+			groundRegions,
+			spawnedActors,
+			options);
+
+	TestEqual(TEXT("building band is a materializer candidate"), result.CandidateRegionCount, 1);
+	TestEqual(TEXT("building frontage uses floor fit based on authored bounds length"), result.SpawnedActorCount, 3);
+	TestEqual(TEXT("three building actors remain owned by the materializer"), spawnedActors.Num(), 3);
+
+	bool bFoundFirst = false;
+	bool bFoundSecond = false;
+	bool bFoundThird = false;
+	for (const TObjectPtr<AActor>& spawnedActor : spawnedActors)
+	{
+		if (!spawnedActor)
+		{
+			continue;
+		}
+
+		const FVector location = spawnedActor->GetActorLocation();
+		bFoundFirst |= FMath::IsNearlyEqual(location.X, -1800.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 1600.0, 0.1);
+		bFoundSecond |= FMath::IsNearlyEqual(location.X, 0.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 1600.0, 0.1);
+		bFoundThird |= FMath::IsNearlyEqual(location.X, 1800.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 1600.0, 0.1);
+		TestTrue(
+			TEXT("building center is placed outside the generated building inner edge"),
+			location.Y >= 1600.0 - 0.1);
+	}
+
+	TestTrue(TEXT("first bounds-fitted building frontage actor is placed"), bFoundFirst);
+	TestTrue(TEXT("second bounds-fitted building frontage actor is placed"), bFoundSecond);
+	TestTrue(TEXT("third bounds-fitted building frontage actor is placed"), bFoundThird);
+
+	spawnedActors.Reset();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioCityBlockMaterializerBuildingFrontageOverlapTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.BuildingFrontageSkipsOverlappingSegments",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioCityBlockMaterializerBuildingFrontageOverlapTest::RunTest(const FString& Parameters)
+{
+	FScenarioCityBlockMaterializerTestWorld testWorld;
+	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
+	if (!testWorld.World)
+	{
+		return false;
+	}
+
+	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
+	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
+	if (!catalog)
+	{
+		return false;
+	}
+
+	FScenarioCityBlockCatalogEntry buildingBlock = MakeMaterializerTestEntry(
+		TEXT("city.building_frontage_18m"),
+		EScenarioCityBlockRole::Building,
+		EScenarioGroundRegionType::Blocked,
+		22.0);
+	buildingBlock.BoundsMeters.LengthMeters = 18.0;
+	buildingBlock.SemanticProfile.SurfaceIds = { TEXT("building") };
+	buildingBlock.SemanticProfile.CollisionTag = TEXT("building");
+	catalog->Entries.Add(buildingBlock);
+
+	TArray<FScenarioGroundRegionSpec> groundRegions;
+	groundRegions.Add(MakeGeneratedBuildingRegion(
+		TEXT("generated_city_main_upper_building_00_00"),
+		FVector(0.0, 1000.0, 0.0),
+		FVector2D(6000.0, 1000.0)));
+	groundRegions.Add(MakeGeneratedBuildingRegion(
+		TEXT("generated_city_main_upper_building_01_00"),
+		FVector(1000.0, 1600.0, 0.0),
+		FVector2D(6000.0, 1000.0),
+		-90.0));
+
+	TArray<TObjectPtr<AActor>> spawnedActors;
+	FScenarioCityBlockMaterializationOptions options;
+	options.LogContext = TEXT("ScenarioCityBlockMaterializerTest");
+	const FScenarioCityBlockMaterializationResult result =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			testWorld.World,
+			catalog,
+			groundRegions,
+			spawnedActors,
+			options);
+
+	TestEqual(TEXT("two building bands are materializer candidates"), result.CandidateRegionCount, 2);
+	TestEqual(TEXT("overlapping second-segment building frontages are skipped"), result.SkippedBuildingOverlapCount, 3);
+	TestEqual(TEXT("overlap skips are not spawn failures"), result.SkippedSpawnFailureCount, 0);
+	TestEqual(TEXT("only the first non-overlapping frontage row spawns"), result.SpawnedActorCount, 3);
+	TestEqual(TEXT("three building actors remain owned by the materializer"), spawnedActors.Num(), 3);
+
+	for (const TObjectPtr<AActor>& spawnedActor : spawnedActors)
+	{
+		if (!spawnedActor)
+		{
+			continue;
+		}
+
+		const FVector location = spawnedActor->GetActorLocation();
+		TestTrue(
+			TEXT("accepted building actor remains on the first frontage row"),
+			FMath::IsNearlyEqual(location.Y, 1600.0, 0.1));
 	}
 
 	spawnedActors.Reset();

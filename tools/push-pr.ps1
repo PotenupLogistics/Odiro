@@ -133,18 +133,13 @@ function Update-RemoteBranchRefIfPresent {
     }
 }
 
-# Returns the commit/ref used to approximate the pre-push asset range.
+# Returns the base commit used to separate branch-owned asset changes from main updates.
 function Get-PushScanBase {
     param(
         [string] $RemoteName,
         [string] $BaseBranch,
         [string] $Branch
     )
-
-    $remoteBranchRef = "refs/remotes/$RemoteName/$Branch"
-    if (Test-GitRefExists -RefName $remoteBranchRef) {
-        return $remoteBranchRef
-    }
 
     $remoteBaseRef = "refs/remotes/$RemoteName/$BaseBranch"
     $localBaseRef = "refs/heads/$BaseBranch"
@@ -154,16 +149,16 @@ function Get-PushScanBase {
     }
     elseif (Test-GitRefExists -RefName $localBaseRef) {
         $baseRef = $localBaseRef
-        Write-Step "Remote $BaseBranch is not present locally; using local $BaseBranch for new branch asset range."
+        Write-Step "Remote $BaseBranch is not present locally; using local $BaseBranch for branch asset range."
     }
 
     if ([string]::IsNullOrWhiteSpace($baseRef)) {
-        throw "Cannot inspect new branch asset changes because neither $remoteBaseRef nor $localBaseRef is present."
+        throw "Cannot inspect branch asset changes because neither $remoteBaseRef nor $localBaseRef is present."
     }
 
     $base = git -C $repoRoot merge-base HEAD $baseRef
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($base)) {
-        throw "Cannot inspect new branch asset changes because $baseRef has no merge-base with HEAD."
+        throw "Cannot inspect branch asset changes because $baseRef has no merge-base with HEAD."
     }
 
     return $base.Trim()

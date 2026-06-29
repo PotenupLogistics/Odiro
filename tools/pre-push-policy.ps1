@@ -50,6 +50,14 @@ function Test-GitCommitExists {
     return $LASTEXITCODE -eq 0
 }
 
+# Checks whether a local Git ref exists.
+function Test-GitRefExists {
+    param([string] $RefName)
+
+    git -C $repoRoot show-ref --verify --quiet $RefName
+    return $LASTEXITCODE -eq 0
+}
+
 # Checks fast-forward ancestry for push and local main update policy.
 function Test-GitAncestor {
     param(
@@ -67,28 +75,67 @@ function Test-GitAncestor {
     throw "Unable to classify ancestry between $Ancestor and $Descendant."
 }
 
+# Returns the local base branch ref used to separate branch-owned asset changes from main updates.
+function Get-BaseBranchRef {
+    param(
+        [string] $RemoteName,
+        [string] $BaseBranch = "main"
+    )
+
+    $effectiveRemoteName = if ([string]::IsNullOrWhiteSpace($RemoteName)) { "origin" } else { $RemoteName }
+    $remoteBaseRef = "refs/remotes/$effectiveRemoteName/$BaseBranch"
+    if (Test-GitRefExists -RefName $remoteBaseRef) {
+        return $remoteBaseRef
+    }
+
+    $localBaseRef = "refs/heads/$BaseBranch"
+    if (Test-GitRefExists -RefName $localBaseRef) {
+        Write-Step "Remote $BaseBranch is not present locally; using local $BaseBranch for branch asset range."
+        return $localBaseRef
+    }
+
+    throw "Cannot inspect branch asset changes because neither $remoteBaseRef nor $localBaseRef is present."
+}
+
+# Returns the merge-base used for topic branch asset lock verification.
+function Get-BranchAssetBase {
+    param([string] $NewOid)
+
+    $baseRef = Get-BaseBranchRef -RemoteName $RemoteName
+    $base = git -C $repoRoot merge-base $NewOid $baseRef
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($base)) {
+        return $base.Trim()
+    }
+
+    throw "Cannot inspect branch asset changes because $baseRef has no merge-base with $NewOid."
+}
+
 # Returns changed paths for one pre-push ref update.
 function Get-ChangedPaths {
     param(
         [string] $OldOid,
-        [string] $NewOid
+        [string] $NewOid,
+        [string] $RemoteRef
     )
 
     if (Test-ZeroOid $NewOid) {
         return @()
     }
 
+    if ($RemoteRef -match '^refs/heads/' -and $RemoteRef -ne "refs/heads/main") {
+        $base = Get-BranchAssetBase -NewOid $NewOid
+        return @(git -C $repoRoot diff --name-only $base $NewOid)
+    }
+
     if (Test-ZeroOid $OldOid) {
         $remoteMainName = if ([string]::IsNullOrWhiteSpace($RemoteName)) { "origin" } else { $RemoteName }
         $remoteMainRef = "refs/remotes/$remoteMainName/main"
         $baseRef = ""
-        git -C $repoRoot show-ref --verify --quiet $remoteMainRef
-        if ($LASTEXITCODE -eq 0) {
+        if (Test-GitRefExists -RefName $remoteMainRef) {
             $baseRef = $remoteMainRef
         }
         else {
-            git -C $repoRoot show-ref --verify --quiet refs/heads/main
-            if ($LASTEXITCODE -eq 0) {
+            if (Test-GitRefExists -RefName "refs/heads/main") {
                 $baseRef = "refs/heads/main"
                 Write-Step "Remote main is not present locally; using local main for new branch asset range."
             }
@@ -191,7 +238,7 @@ foreach ($line in $updates) {
         continue
     }
 
-    foreach ($path in Get-ChangedPaths -OldOid $remoteOid -NewOid $localOid) {
+    foreach ($path in Get-ChangedPaths -OldOid $remoteOid -NewOid $localOid -RemoteRef $remoteRef) {
         $gitPath = ConvertTo-GitPath $path
         if (Test-UnrealAssetPath $gitPath) {
             [void] $changedAssets.Add($gitPath)

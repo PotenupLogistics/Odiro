@@ -5,6 +5,7 @@
 #include "ScenarioGroundRegion.generated.h"
 
 class UDecalComponent;
+class UProceduralMeshComponent;
 class UScenarioPlaceableComponent;
 class UScenarioCorridorSurfaceCatalog;
 class UMaterialInterface;
@@ -28,12 +29,19 @@ public:
 		const FScenarioGroundRegionSpec& regionSpec,
 		FString& outFailureReason);
 
+	// Root transform shared by the visual surface and collision proxy.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<USceneComponent> SceneRoot;
 
+	// Hidden box proxy that preserves GroundRegion collision and query semantics.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<UStaticMeshComponent> RegionBoundsComponent;
 
+	// Flat procedural surface used for editor/runtime GroundRegion visualization.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
+	TObjectPtr<UProceduralMeshComponent> RegionVisualMeshComponent;
+
+	// Optional decal hook retained for Blueprint/editor presentation extensions.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<UDecalComponent> RegionDecalComponent;
 
@@ -56,6 +64,10 @@ protected:
 private:
 	void ApplyCollisionSettings();
 	void ApplyMaterialSettings();
+	// Rebuilds the local flat procedural surface from the current rectangle spec.
+	void RebuildVisualMesh();
+	// Returns whether this GroundRegion owns its visual surface or delegates it to CityBuildings assets.
+	bool ShouldRenderVisualMesh() const;
 	UMaterialInterface* ResolveSurfaceCatalogMaterial() const;
 
 	// Shared surface catalog for matching generated runtime ground-region visuals to editor Corridor preview.

@@ -11,9 +11,9 @@ namespace
 	// Generated-city GroundRegion ids are the only regions eligible for CityBuildings visual blocks.
 	const FString GeneratedCityRegionIdPrefix(TEXT("generated_city_"));
 	// Surface ids match the reduced authoring/runtime vocabulary.
-	const FName BuildingSurfaceId(TEXT("building"));
-	const FName RoadSurfaceId(TEXT("road"));
-	const FName WalkwaySurfaceId(TEXT("walkway"));
+	const FName CityBlockBuildingSurfaceId(TEXT("building"));
+	const FName CityBlockRoadSurfaceId(TEXT("road"));
+	const FName CityBlockWalkwaySurfaceId(TEXT("walkway"));
 	// Generated curb GroundRegions use this collision tag while remaining road-surface metadata.
 	const FString CurbCollisionTag(TEXT("curb"));
 	// Generated road GroundRegions use this penalty kind for the two-lane road band.
@@ -122,7 +122,7 @@ namespace
 	{
 		const FName surfaceId(*regionSpec.SurfaceId);
 		return IsGeneratedCityVisualRegion(regionSpec)
-			&& surfaceId == RoadSurfaceId
+			&& surfaceId == CityBlockRoadSurfaceId
 			&& regionSpec.RegionType == EScenarioGroundRegionType::Blocked
 			&& (regionSpec.CollisionTag.Equals(CurbCollisionTag, ESearchCase::IgnoreCase)
 				|| regionSpec.RegionId.Contains(TEXT("_curb_")));
@@ -133,7 +133,7 @@ namespace
 	{
 		const FName surfaceId(*regionSpec.SurfaceId);
 		return IsGeneratedCityVisualRegion(regionSpec)
-			&& surfaceId == RoadSurfaceId
+			&& surfaceId == CityBlockRoadSurfaceId
 			&& regionSpec.RegionType == EScenarioGroundRegionType::Penalty
 			&& (regionSpec.PenaltyKind.Equals(RoadPenaltyKind, ESearchCase::IgnoreCase)
 				|| regionSpec.RegionId.Contains(TEXT("_road_2lane_")));
@@ -144,7 +144,7 @@ namespace
 	{
 		const FName surfaceId(*regionSpec.SurfaceId);
 		return IsGeneratedCityVisualRegion(regionSpec)
-			&& surfaceId == WalkwaySurfaceId
+			&& surfaceId == CityBlockWalkwaySurfaceId
 			&& regionSpec.RegionType == EScenarioGroundRegionType::Walkable
 			&& regionSpec.RegionId.Contains(TEXT("_walkway_extension_"));
 	}
@@ -154,7 +154,7 @@ namespace
 	{
 		const FName surfaceId(*regionSpec.SurfaceId);
 		return IsGeneratedCityVisualRegion(regionSpec)
-			&& surfaceId == BuildingSurfaceId
+			&& surfaceId == CityBlockBuildingSurfaceId
 			&& regionSpec.RegionType == EScenarioGroundRegionType::Blocked
 			&& regionSpec.RegionId.Contains(TEXT("_building_"));
 	}
@@ -235,13 +235,13 @@ namespace
 			return;
 		}
 
-		if (surfaceId == RoadSurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Penalty)
+		if (surfaceId == CityBlockRoadSurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Penalty)
 		{
 			outRoles.Add(EScenarioCityBlockRole::RoadStraight);
 			return;
 		}
 
-		if (surfaceId == BuildingSurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Blocked)
+		if (surfaceId == CityBlockBuildingSurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Blocked)
 		{
 			outRoles.Add(EScenarioCityBlockRole::Building);
 		}
@@ -554,8 +554,8 @@ namespace
 				}
 
 				if (!blockEntry.SemanticProfile.SurfaceIds.IsEmpty()
-					&& !blockEntry.SemanticProfile.SurfaceIds.Contains(RoadSurfaceId)
-					&& !blockEntry.SemanticProfile.SurfaceIds.Contains(WalkwaySurfaceId))
+					&& !blockEntry.SemanticProfile.SurfaceIds.Contains(CityBlockRoadSurfaceId)
+					&& !blockEntry.SemanticProfile.SurfaceIds.Contains(CityBlockWalkwaySurfaceId))
 				{
 					continue;
 				}
@@ -854,12 +854,12 @@ namespace
 	double ResolveCityBlockSurfaceTopZCm(const FScenarioGroundRegionSpec& regionSpec)
 	{
 		const FName surfaceId(*regionSpec.SurfaceId);
-		if (surfaceId == RoadSurfaceId)
+		if (surfaceId == CityBlockRoadSurfaceId)
 		{
 			return 0.0;
 		}
 
-		if (surfaceId == WalkwaySurfaceId || surfaceId == BuildingSurfaceId)
+		if (surfaceId == CityBlockWalkwaySurfaceId || surfaceId == CityBlockBuildingSurfaceId)
 		{
 			return FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
 		}

@@ -25,6 +25,8 @@ private:
 	static TSharedPtr<FJsonValue> RunEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RunEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddWidget(const TSharedPtr<FJsonObject>& Params);
+	// Replaces named widgets while preserving WBP-owned names, slots, and common visual properties.
+	static TSharedPtr<FJsonValue> ReplaceWidgetClasses(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetNamedSlotContent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RenameWidget(const TSharedPtr<FJsonObject>& Params);

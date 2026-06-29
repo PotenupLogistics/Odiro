@@ -60,6 +60,7 @@ guardrails:
   - Project-run AI analysis uses the v2 `project_path` plus `run_id` request path and stores review artifacts under the run.
   - C++ writes state/text/visibility into WBP-owned layouts; structural UMG ownership stays in client-runtime-foundation.
   - StartupMenu/MainMenu UMG edits must complete UE_MCP_Bridge widget tree readback, Blueprint compile/save, layout data, overlap check, and runtime or Slate capture verification before completion; property or geometry MCP queries require a scoped safety check because broad JsonUtilities serialization can stack-overflow editor sessions.
+  - UE_MCP_Bridge `replace_widget_classes` is the scoped widget-class migration entry point; preserve existing BindWidget names, parent slots, and WBP-owned layout/style when replacing child widgets.
   - StartupMap and ScenarioEditorMap root widget classes are configured by PlatformUiDeveloperSettings or exposed controller/widget properties, not hardcoded class paths.
   - Platform UI dynamic row/card widget classes, including startup recent-project cards and project run/result rows, are configured by WBP exposed properties first, with PlatformUiDeveloperSettings soft-class fallbacks for project-level defaults.
   - Client tools use `Client/Tools/Common.ps1`, never root `tools/common.ps1`.

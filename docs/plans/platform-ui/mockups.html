@@ -1,0 +1,2707 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Odiro UI Mockups</title>
+  <style>
+    @font-face {
+      font-family: "Freesentation";
+      src:
+        url("fonts/Freesentation-4Regular.woff2") format("woff2"),
+        local("Freesentation 4 Regular"),
+        local("Freesentation-4Regular"),
+        local("Freesentation");
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: "Freesentation";
+      src:
+        url("fonts/Freesentation-5Medium.woff2") format("woff2"),
+        local("Freesentation 5 Medium"),
+        local("Freesentation-5Medium"),
+        local("Freesentation Medium");
+      font-weight: 500;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: "Freesentation";
+      src:
+        url("fonts/Freesentation-6SemiBold.woff2") format("woff2"),
+        local("Freesentation 6 SemiBold"),
+        local("Freesentation-6SemiBold"),
+        local("Freesentation SemiBold");
+      font-weight: 600;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: "Freesentation";
+      src:
+        url("fonts/Freesentation-7Bold.woff2") format("woff2"),
+        local("Freesentation 7 Bold"),
+        local("Freesentation-7Bold"),
+        local("Freesentation Bold");
+      font-weight: 700;
+      font-style: normal;
+    }
+
+    :root {
+      --bg: #1a1a1a;
+      --chrome: #151515;
+      --panel: #242424;
+      --panel-2: #1b1b1b;
+      --well: #0f0f0f;
+      --border: #3a3a3a;
+      --border-hover: #5e5e5e;
+      --text: #cfcfcf;
+      --text-strong: #f1f1f1;
+      --muted: #a8a8a8;
+      --label: #8c8c8c;
+      --faint: #5e5e5e;
+      --accent: #0070e0;
+      --accent-hover: #2589f5;
+      --accent-active: #0059c2;
+      --success: #4caf50;
+      --warn: #e0a030;
+      --danger: #e5534b;
+      --info: #4a9ff5;
+      --violet: #8a7cf6;
+      --cyan: #39b8c8;
+      --radius: 4px;
+      --font-title: 17.5px;
+      --font-label: 15px;
+      --font-body: 16px;
+      --font-caption: 14px;
+      --font-value: 35px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      background: #070707;
+      color: var(--text);
+      font-family: "Freesentation", "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+      font-size: var(--font-body);
+      letter-spacing: 0;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+    }
+
+    .frame {
+      width: 1600px;
+      height: 900px;
+      overflow: hidden;
+      position: relative;
+      background: var(--bg);
+      border: 1px solid #262626;
+    }
+
+    .app {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+    }
+
+    .titlebar {
+      height: 34px;
+      flex: 0 0 34px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 0 0 10px;
+      background: #111111;
+      border-bottom: 1px solid #2a2a2a;
+      color: var(--muted);
+      font-size: var(--font-caption);
+    }
+
+    .title-left,
+    .title-right,
+    .row,
+    .toolbar,
+    .tabs,
+    .status-row,
+    .field-row,
+    .control-row,
+    .metric-row,
+    .timeline,
+    .table-row {
+      display: flex;
+      align-items: center;
+    }
+
+    .window-dots {
+      display: flex;
+      gap: 7px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #3c3c3c;
+      border: 1px solid #555;
+    }
+
+    .window-icon {
+      width: 16px;
+      height: 16px;
+      object-fit: contain;
+    }
+
+    .window-title {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--muted);
+      font-size: var(--font-caption);
+      font-weight: 600;
+    }
+
+    .window-controls {
+      margin-left: auto;
+      display: flex;
+      height: 100%;
+    }
+
+    .window-control {
+      width: 46px;
+      height: 100%;
+      position: relative;
+      display: grid;
+      place-items: center;
+      color: var(--label);
+      font-size: 0;
+    }
+
+    .window-control.close:hover {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .window-control::before,
+    .window-control::after {
+      content: "";
+      position: absolute;
+      background: currentColor;
+    }
+
+    .window-control.min::before {
+      width: 12px;
+      height: 1px;
+    }
+
+    .window-control.max::before {
+      width: 11px;
+      height: 11px;
+      background: transparent;
+      border: 1px solid currentColor;
+    }
+
+    .window-control.close::before,
+    .window-control.close::after {
+      width: 13px;
+      height: 1px;
+      background: currentColor;
+    }
+
+    .window-control.close::before { transform: rotate(45deg); }
+    .window-control.close::after { transform: rotate(-45deg); }
+
+    .content {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+    }
+
+    .topbar {
+      height: 58px;
+      flex: 0 0 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      background: var(--chrome);
+      border-bottom: 1px solid #2d2d2d;
+    }
+
+    .statusbar {
+      height: 58px;
+      flex: 0 0 58px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 16px;
+      background: var(--chrome);
+      border-bottom: 0;
+    }
+
+    .statusbar .brand {
+      flex: 0 0 auto;
+      min-width: 0;
+    }
+
+    .status-logo {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+    }
+
+    .statusbar-title {
+      color: var(--text-strong);
+      font-size: var(--font-title);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .statusbar-subtitle {
+      margin-top: 1px;
+      color: var(--label);
+      font-size: var(--font-caption);
+      white-space: nowrap;
+    }
+
+    .status-tabs {
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .status-tab {
+      height: 40px;
+      min-width: 132px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      color: var(--muted);
+      background: #202020;
+      border: 1px solid #303030;
+      border-bottom: 0;
+      border-radius: 4px 4px 0 0;
+      font-size: var(--font-label);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .status-tab.active {
+      color: var(--text-strong);
+      background: var(--panel);
+      border-color: #454545;
+      position: relative;
+      z-index: 2;
+    }
+
+    .status-tab.active::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      height: 1px;
+      background: var(--panel);
+    }
+
+    .tab-close {
+      width: 18px;
+      height: 18px;
+      margin-left: auto;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 3px;
+      opacity: .72;
+    }
+
+    .tab-close .ui-icon {
+      width: 12px;
+      height: 12px;
+    }
+
+    .status-tab-swatch {
+      width: 4px;
+      height: 18px;
+      border-radius: 1px;
+      background: var(--tab-color, var(--accent));
+    }
+
+    .ui-icon {
+      width: 18px;
+      height: 18px;
+      object-fit: contain;
+      flex: 0 0 auto;
+    }
+
+    .status-tab .ui-icon {
+      width: 17px;
+      height: 17px;
+      opacity: .9;
+    }
+
+    .statusbar-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .statusbar .window-controls {
+      margin-left: 8px;
+      flex: 0 0 auto;
+    }
+
+    .statusbar .window-control {
+      width: 42px;
+      height: 58px;
+    }
+
+    .project-tabbar {
+      height: 45px;
+      flex: 0 0 45px;
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      padding: 0 16px;
+      background: #151515;
+      border-bottom: 1px solid #303030;
+    }
+
+    .project-tab {
+      height: 37px;
+      min-width: 138px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 14px;
+      color: var(--muted);
+      background: #202020;
+      border: 1px solid #303030;
+      border-bottom: 0;
+      border-radius: 4px 4px 0 0;
+      font-size: var(--font-label);
+      font-weight: 500;
+    }
+
+    .project-tab.active {
+      color: var(--text-strong);
+      background: #242424;
+      border-color: #3a3a3a;
+    }
+
+    .project-tab-swatch {
+      width: 4px;
+      height: 18px;
+      border-radius: 1px;
+      background: var(--tab-color, var(--accent));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 30px;
+      height: 30px;
+      position: relative;
+      border: 1px solid #4f4f4f;
+      background: #101010;
+      border-radius: var(--radius);
+    }
+
+    .mark::before,
+    .mark::after {
+      content: "";
+      position: absolute;
+      inset: 7px;
+      border: 2px solid var(--accent);
+      transform: rotate(45deg);
+    }
+
+    .mark::after {
+      inset: 11px;
+      border-color: var(--success);
+    }
+
+    .brand-title {
+      color: var(--text-strong);
+      font-size: var(--font-title);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .brand-subtitle {
+      margin-top: 2px;
+      color: var(--label);
+      font-size: var(--font-caption);
+    }
+
+    .rail {
+      width: 68px;
+      flex: 0 0 68px;
+      background: #121212;
+      border-right: 1px solid #2d2d2d;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .rail-button,
+    .icon-button {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      background: #1d1d1d;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .rail-button.active,
+    .icon-button.active {
+      color: #fff;
+      border-color: var(--accent);
+      box-shadow: inset 3px 0 0 var(--accent);
+      background: #202020;
+    }
+
+    .page {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .workspace {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      gap: 16px;
+      padding: 16px;
+      background: var(--panel);
+    }
+
+    .workspace.tight {
+      gap: 10px;
+      padding: 10px;
+    }
+
+    .panel {
+      min-width: 0;
+      min-height: 0;
+      background: rgba(36,36,36,.97);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .workspace > .panel {
+      border-color: transparent;
+      border-radius: 0;
+    }
+
+    .panel.well {
+      background: var(--well);
+    }
+
+    .panel-head {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 14px;
+      border-bottom: 1px solid #303030;
+      background: #202020;
+    }
+
+    .panel-title {
+      color: var(--text-strong);
+      font-size: var(--font-title);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .panel-title .ui-icon {
+      vertical-align: -3px;
+      margin-right: 6px;
+    }
+
+    .panel-subtitle {
+      color: var(--label);
+      font-size: var(--font-caption);
+      white-space: nowrap;
+    }
+
+    .panel-body {
+      padding: 14px;
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .btn {
+      height: 38px;
+      min-width: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 14px;
+      color: var(--text);
+      background: #2a2a2a;
+      border: 1px solid var(--border-hover);
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: var(--font-body);
+      white-space: nowrap;
+    }
+
+    .btn.small {
+      height: 30px;
+      padding: 0 10px;
+      font-size: var(--font-caption);
+    }
+
+    .btn.primary {
+      color: white;
+      background: var(--accent);
+      border-color: var(--accent-hover);
+    }
+
+    .btn.ghost {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--muted);
+    }
+
+    .btn.danger {
+      color: white;
+      background: #3a2020;
+      border-color: var(--danger);
+    }
+
+    .btn.success {
+      color: white;
+      background: #1f3a22;
+      border-color: var(--success);
+    }
+
+    .icon-action {
+      width: 38px;
+      height: 38px;
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+    }
+
+    .icon-action .ui-icon {
+      width: 20px;
+      height: 20px;
+    }
+
+    .field,
+    .select,
+    .number-field,
+    .textarea {
+      width: 100%;
+      min-height: 29px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 10px;
+      background: var(--well);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: var(--font-body);
+    }
+
+    .field.focused {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(0,112,224,.35);
+    }
+
+    .textarea {
+      min-height: 82px;
+      align-items: flex-start;
+      padding-top: 8px;
+      line-height: 1.45;
+    }
+
+    .label {
+      color: var(--label);
+      font-size: var(--font-label);
+    }
+
+    .value {
+      color: var(--text);
+      font-size: var(--font-body);
+    }
+
+    .muted {
+      color: var(--label);
+    }
+
+    .strong {
+      color: var(--text-strong);
+      font-weight: 700;
+    }
+
+    .field-row {
+      gap: 10px;
+      justify-content: space-between;
+    }
+
+    .field-col {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .field-col.grow {
+      flex: 1;
+    }
+
+    .switcher {
+      height: 34px;
+      display: flex;
+      background: var(--well);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .segment {
+      min-width: 82px;
+      display: grid;
+      place-items: center;
+      padding: 0 12px;
+      color: var(--muted);
+      border-right: 1px solid #2d2d2d;
+      font-size: var(--font-caption);
+    }
+
+    .segment:last-child {
+      border-right: 0;
+    }
+
+    .segment.active {
+      color: white;
+      background: var(--accent);
+    }
+
+    .slider {
+      height: 4px;
+      position: relative;
+      background: #383838;
+      border-radius: 2px;
+    }
+
+    .slider .fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 4px;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    .slider .handle {
+      position: absolute;
+      top: -8px;
+      width: 4px;
+      height: 20px;
+      background: #f2f2f2;
+      border-radius: 2px;
+      box-shadow: 0 0 0 1px #777;
+    }
+
+    .check,
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-size: var(--font-body);
+    }
+
+    .box {
+      width: 18px;
+      height: 18px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border-hover);
+      border-radius: 3px;
+      background: var(--well);
+      color: white;
+      font-size: 11px;
+    }
+
+    .box.checked {
+      background: var(--accent);
+      border-color: var(--accent-hover);
+    }
+
+    .pill {
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+      color: var(--muted);
+      border: 1px solid #454545;
+      border-radius: 999px;
+      background: #1a1a1a;
+      font-size: var(--font-caption);
+      white-space: nowrap;
+    }
+
+    .pill.active {
+      color: #fff;
+      border-color: var(--accent);
+      background: rgba(0,112,224,.25);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--label);
+    }
+
+    .status-dot.success { background: var(--success); }
+    .status-dot.warn { background: var(--warn); }
+    .status-dot.danger { background: var(--danger); }
+    .status-dot.info { background: var(--info); }
+
+    .divider {
+      height: 1px;
+      background: #333;
+      margin: 4px 0;
+    }
+
+    .thumbnail {
+      min-width: 0;
+      background: #212121;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .thumbnail.compact {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .thumbnail.preset {
+      min-height: 0;
+    }
+
+    .thumbnail.selected {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(0,112,224,.4);
+    }
+
+    .thumb-media {
+      height: 150px;
+      position: relative;
+      background:
+        linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px),
+        #101010;
+      background-size: 18px 18px;
+      border-bottom: 1px solid #303030;
+      overflow: hidden;
+    }
+
+    .thumb-media.ratio {
+      height: auto;
+      aspect-ratio: 4 / 3;
+    }
+
+    .thumb-media.small {
+      height: 92px;
+    }
+
+    .thumb-body {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .preset-grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .preset-grid.four {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .preset-card {
+      min-width: 0;
+      padding: 0;
+      background: #212121;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      overflow: hidden;
+    }
+
+    .preset-card.selected {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(0,112,224,.45);
+    }
+
+    .preset-thumb {
+      position: relative;
+      aspect-ratio: 4 / 3;
+      background:
+        linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px),
+        #101010;
+      background-size: 18px 18px;
+      border-bottom: 1px solid #303030;
+      overflow: hidden;
+    }
+
+    .preset-body {
+      min-height: 68px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .path-field {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .map-path {
+      position: absolute;
+      left: 28px;
+      right: 28px;
+      top: 50%;
+      height: 4px;
+      background: var(--accent);
+      transform: rotate(-8deg);
+      transform-origin: center;
+      border-radius: 3px;
+    }
+
+    .map-path::before,
+    .map-path::after {
+      content: "";
+      position: absolute;
+      top: -5px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid white;
+      background: #101010;
+    }
+
+    .map-path::before { left: -6px; }
+    .map-path::after { right: -6px; background: var(--success); }
+
+    .obstacle {
+      position: absolute;
+      width: 28px;
+      height: 20px;
+      background: #58413b;
+      border: 1px solid #8a6b5f;
+      border-radius: 3px;
+    }
+
+    .lane {
+      position: absolute;
+      background: rgba(76,175,80,.18);
+      border: 1px solid rgba(76,175,80,.45);
+    }
+
+    .tree {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: var(--font-body);
+    }
+
+    .tree-row {
+      height: 30px;
+      display: grid;
+      grid-template-columns: 18px 22px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+      border-radius: 3px;
+      color: var(--muted);
+    }
+
+    .tree-row > span {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tree-row.selected {
+      color: var(--text-strong);
+      background: #2a2a2a;
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .tree-row.indent-1 { padding-left: 24px; }
+    .tree-row.indent-2 { padding-left: 48px; }
+
+    .row-icon {
+      width: 18px;
+      height: 18px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #444;
+      border-radius: 3px;
+      background: #323232;
+      color: var(--label);
+      font-size: 10px;
+    }
+
+    .row-icon .ui-icon {
+      width: 14px;
+      height: 14px;
+      opacity: .8;
+    }
+
+    .content-drawer {
+      margin-top: auto;
+      border-top: 1px solid #303030;
+      background: #191919;
+    }
+
+    .content-drawer-head {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      color: var(--text-strong);
+      font-size: var(--font-label);
+      font-weight: 700;
+    }
+
+    .asset-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      padding: 0 12px 12px;
+      min-height: 0;
+    }
+
+    .asset-tile {
+      min-width: 0;
+      aspect-ratio: 1 / 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      border: 1px solid #333;
+      border-radius: var(--radius);
+      background: #202020;
+      color: var(--muted);
+      font: inherit;
+      font-size: 11px;
+      text-align: center;
+      overflow: hidden;
+    }
+
+    .asset-tile.selected {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(0,112,224,.35);
+    }
+
+    .asset-thumb {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+    }
+
+    .scenario-sidebar .panel-body {
+      flex: 7 1 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .scenario-sidebar .tree {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .scenario-sidebar .content-drawer {
+      flex: 3 1 0;
+      min-height: 0;
+      margin-top: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .scenario-sidebar .asset-grid {
+      flex: 1;
+      align-content: start;
+      overflow: hidden;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 12px;
+      background: #1f1f1f;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .metric.compact {
+      padding: 8px 12px;
+    }
+
+    .metric.compact .num {
+      margin-top: 2px;
+      font-size: 24px;
+    }
+
+    .metric.compact .delta {
+      margin-top: 2px;
+    }
+
+    .metric .num {
+      margin-top: 6px;
+      color: var(--text-strong);
+      font-size: var(--font-value);
+      font-weight: 700;
+    }
+
+    .metric .delta {
+      margin-top: 6px;
+      color: var(--label);
+      font-size: var(--font-caption);
+    }
+
+    .table {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid #303030;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .table-row {
+      min-height: 36px;
+      display: grid;
+      grid-template-columns: var(--cols, 1fr 1fr 1fr);
+      gap: 12px;
+      padding: 0 12px;
+      border-bottom: 1px solid #303030;
+      font-size: var(--font-body);
+    }
+
+    .table-row:last-child {
+      border-bottom: 0;
+    }
+
+    .table-row.head {
+      color: var(--label);
+      background: #1a1a1a;
+      font-size: var(--font-caption);
+    }
+
+    .table-row.selected {
+      background: #292929;
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .viewport {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      background:
+        linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px),
+        #101010;
+      background-size: 28px 28px;
+      overflow: hidden;
+    }
+
+    .viewport::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border: 1px solid rgba(255,255,255,.05);
+    }
+
+    .corridor {
+      position: absolute;
+      left: 16%;
+      right: 11%;
+      top: 43%;
+      height: 132px;
+      background: rgba(80,80,80,.35);
+      border: 1px solid #555;
+      transform: rotate(-11deg);
+      box-shadow: inset 0 36px rgba(76,175,80,.12), inset 0 -36px rgba(74,159,245,.10);
+    }
+
+    .route {
+      position: absolute;
+      left: 21%;
+      right: 15%;
+      top: 49%;
+      height: 5px;
+      background: var(--accent);
+      border-radius: 4px;
+      transform: rotate(-11deg);
+      box-shadow: 0 0 14px rgba(0,112,224,.35);
+    }
+
+    .route::before,
+    .route::after {
+      content: "";
+      position: absolute;
+      top: -7px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid white;
+      background: #111;
+    }
+
+    .route::before { left: -8px; }
+    .route::after { right: -8px; background: var(--success); }
+
+    .viewport-chip {
+      position: absolute;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 24px;
+      padding: 0 8px;
+      border: 1px solid #444;
+      background: rgba(15,15,15,.88);
+      color: var(--text);
+      border-radius: var(--radius);
+      font-size: var(--font-caption);
+    }
+
+    .robot {
+      position: absolute;
+      width: 42px;
+      height: 28px;
+      background: #d2d2d2;
+      border: 2px solid #8c8c8c;
+      border-radius: 6px;
+      transform: rotate(-11deg);
+      box-shadow: 0 0 0 3px rgba(0,112,224,.25);
+    }
+
+    .robot::before,
+    .robot::after {
+      content: "";
+      position: absolute;
+      top: -7px;
+      width: 9px;
+      height: 42px;
+      border-radius: 6px;
+      background: #2c2c2c;
+      border: 1px solid #666;
+    }
+
+    .robot::before { left: 4px; }
+    .robot::after { right: 4px; }
+
+    .side-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .form-section {
+      padding: 12px;
+      border: 1px solid #333;
+      background: #202020;
+      border-radius: var(--radius);
+    }
+
+    .form-section h3 {
+      margin: 0 0 10px;
+      color: var(--text-strong);
+      font-size: var(--font-label);
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--label);
+      font-size: var(--font-caption);
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: #333;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-bar span {
+      display: block;
+      height: 100%;
+      width: var(--w, 50%);
+      background: var(--accent);
+    }
+
+    .splash {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 48%, rgba(0,112,224,.14), transparent 34%),
+        linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px),
+        #0e0e0e;
+      background-size: auto, 40px 40px, 40px 40px, auto;
+    }
+
+    .splash > .titlebar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+    }
+
+    .splash-card {
+      width: 520px;
+      padding: 38px;
+      border: 1px solid #343434;
+      background: rgba(21,21,21,.94);
+      border-radius: var(--radius);
+      box-shadow: 0 20px 80px rgba(0,0,0,.45);
+    }
+
+    .startup-blank {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      background: #1a1a1a;
+    }
+
+    .startup-focus {
+      width: 1180px;
+      min-height: 720px;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      border: 1px solid #333333;
+      background: #202020;
+      border-radius: var(--radius);
+      box-shadow: 0 18px 46px rgba(0,0,0,.28);
+      overflow: hidden;
+    }
+
+    .splash h1 {
+      margin: 18px 0 4px;
+      color: var(--text-strong);
+      font-size: 38px;
+      line-height: 1.1;
+    }
+
+    .splash .logo-mark {
+      width: 74px;
+      height: 74px;
+      position: relative;
+      border: 1px solid #4b4b4b;
+      background: #101010;
+      border-radius: var(--radius);
+    }
+
+    .splash .logo-mark::before,
+    .splash .logo-mark::after {
+      content: "";
+      position: absolute;
+      inset: 16px;
+      border: 4px solid var(--accent);
+      transform: rotate(45deg);
+    }
+
+    .splash .logo-mark::after {
+      inset: 27px;
+      border-color: var(--success);
+    }
+
+    .startup-screen {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 42% 58%;
+      min-height: 0;
+      background: var(--bg);
+    }
+
+    .startup-left {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid #303030;
+      background: #1a1a1a;
+    }
+
+    .startup-identity {
+      width: 250px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .startup-logo {
+      width: 140px;
+      height: 140px;
+      image-rendering: auto;
+      object-fit: contain;
+    }
+
+    .startup-title {
+      color: var(--text-strong);
+      font-size: 54px;
+      line-height: 1;
+      font-weight: 700;
+    }
+
+    .startup-subtitle {
+      color: var(--muted);
+      font-size: var(--font-title);
+      font-weight: 500;
+    }
+
+    .startup-main {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 34px;
+    }
+
+    .startup-panel {
+      width: 100%;
+    }
+
+    .startup-heading {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-strong);
+      font-size: var(--font-title);
+      font-weight: 700;
+      border-bottom: 1px solid var(--line-quiet, #303030);
+      margin-bottom: 18px;
+    }
+
+    .startup-project-grid {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .startup-project-card {
+      flex: 0 0 calc((100% - 24px) / 3);
+      min-width: 0;
+      padding: 0;
+      display: block;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      background: transparent;
+      border: 0;
+    }
+
+    .startup-project-card.selected {
+      border-color: var(--accent);
+    }
+
+    .startup-project-title {
+      color: var(--text-strong);
+      font-size: var(--font-body);
+      font-weight: 700;
+    }
+
+    .startup-project-path {
+      color: var(--muted);
+      font-size: var(--font-caption);
+    }
+
+    .startup-create {
+      margin-top: 18px;
+      width: 100%;
+    }
+
+    .startup-actions {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .create-layout {
+      display: grid;
+      grid-template-columns: 1fr 440px;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .create-main {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .create-section {
+      padding: 14px;
+      border: 1px solid #333;
+      border-radius: var(--radius);
+      background: #202020;
+    }
+
+    .create-section-head {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      color: var(--text-strong);
+      font-size: var(--font-label);
+      font-weight: 700;
+    }
+
+    .create-compact .create-main {
+      gap: 10px;
+      padding: 12px !important;
+      overflow: hidden;
+    }
+
+    .create-compact .create-section {
+      padding: 10px;
+    }
+
+    .create-compact .create-section-head {
+      height: 22px;
+      margin-bottom: 8px;
+    }
+
+    .create-compact .preset-grid {
+      gap: 10px;
+      grid-template-columns: repeat(3, 176px);
+    }
+
+    .create-compact .preset-grid.two {
+      grid-template-columns: repeat(2, 176px);
+    }
+
+    .create-compact .preset-thumb {
+      height: auto;
+      aspect-ratio: 4 / 3;
+    }
+
+    .create-compact .preset-body {
+      min-height: 42px;
+      padding: 7px 10px;
+    }
+
+    .create-compact .preset-body .strong,
+    .create-compact .preset-body .muted {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .create-compact .preset-thumb > .chart {
+      height: 100%;
+      border: 0;
+      border-radius: 0;
+    }
+
+    .episode-strip {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+
+    .episode-card {
+      flex: 0 0 168px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #202020;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+    }
+
+    .episode-card.selected {
+      border-color: var(--accent);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .result-detail-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(420px, 2fr);
+    }
+
+    .ai-analysis {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      line-height: 1.42;
+    }
+
+    .ai-section-title {
+      color: var(--text-strong);
+      font-weight: 700;
+    }
+
+    .ai-item {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 8px;
+      padding: 8px 0;
+      border-top: 1px solid #303030;
+    }
+
+    .ai-priority {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    .result-detail-layout .episode-strip {
+      gap: 8px;
+      padding-bottom: 2px;
+    }
+
+    .result-detail-layout .episode-card {
+      flex-basis: 126px;
+      padding: 8px;
+    }
+
+    .replay-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr 360px;
+      min-height: 0;
+    }
+
+    .replay-main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .replay-main .replay-map {
+      min-height: 0;
+    }
+
+    .replay-control-panel {
+      border-left: 1px solid #303030;
+      background: #202020;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .replay-control-panel .panel-body {
+      padding: 12px;
+      gap: 10px;
+    }
+
+    .replay-control-panel .form-section {
+      padding: 10px 12px;
+    }
+
+    .replay-control-panel .form-section h3 {
+      margin-bottom: 6px;
+    }
+
+    .replay-control-panel .metric.compact {
+      padding: 7px 10px;
+    }
+
+    .replay-control-panel .metric.compact .num {
+      font-size: 22px;
+    }
+
+    .replay-control-panel .metric.compact .delta {
+      margin-top: 0;
+    }
+
+    .ai-panel {
+      min-height: 210px;
+      line-height: 1.45;
+      color: var(--text);
+    }
+
+    .result-detail-layout .panel.well .panel-head {
+      height: 34px;
+    }
+
+    .result-detail-layout .panel.well .panel-body {
+      padding: 8px;
+    }
+
+    .result-detail-layout .panel.well .chart {
+      height: 44px;
+    }
+
+    .result-detail-layout .ai-panel {
+      padding: 12px;
+      font-size: var(--font-body);
+      line-height: 1.42;
+    }
+
+    .result-detail-layout .ai-panel h3 {
+      margin-bottom: 10px;
+      font-size: var(--font-body);
+    }
+
+    .result-detail-layout .ai-analysis {
+      gap: 10px;
+    }
+
+    .result-detail-layout .ai-item {
+      grid-template-columns: 44px 1fr;
+      gap: 8px;
+      padding: 6px 0;
+    }
+
+    .loading-list {
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .status-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: var(--font-body);
+    }
+
+    .setup-card {
+      min-height: 112px;
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      align-items: center;
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid #343434;
+      background: #202020;
+      border-radius: var(--radius);
+    }
+
+    .step-num {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--radius);
+      background: var(--well);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .step-num.done {
+      color: white;
+      background: var(--accent);
+      border-color: var(--accent-hover);
+    }
+
+    .chart {
+      height: 110px;
+      position: relative;
+      background:
+        linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px),
+        #171717;
+      background-size: 34px 22px;
+      border: 1px solid #333;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .chart svg,
+    .replay-map svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .robot-preview {
+      position: relative;
+      height: 100%;
+      min-height: 0;
+      perspective: 900px;
+      background:
+        linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px),
+        #101010;
+      background-size: 32px 32px;
+      overflow: hidden;
+    }
+
+    .robot-3d {
+      position: absolute;
+      left: 50%;
+      top: 51%;
+      width: 360px;
+      height: 260px;
+      transform: translate(-50%, -50%) rotateX(58deg) rotateZ(-24deg);
+      transform-style: preserve-3d;
+      filter: drop-shadow(48px 44px 0 rgba(0,0,0,.22));
+      background: none;
+    }
+
+    .robot-3d::before,
+    .robot-3d::after {
+      content: "";
+      position: absolute;
+      transform-style: preserve-3d;
+    }
+
+    .robot-3d .mesh-body {
+      position: absolute;
+      left: 92px;
+      top: 58px;
+      width: 178px;
+      height: 118px;
+      transform-style: preserve-3d;
+      transform: translateZ(44px);
+      background: linear-gradient(135deg, #f4f4f2 0 54%, #d8d8d5 55%);
+      border: 2px solid #777;
+      border-radius: 12px;
+      box-shadow:
+        inset -34px 0 0 #1677e6,
+        inset 0 20px 0 #ffffff,
+        0 0 0 1px rgba(255,255,255,.25);
+    }
+
+    .robot-3d .mesh-body::before {
+      content: "";
+      position: absolute;
+      left: 34px;
+      top: -62px;
+      width: 102px;
+      height: 76px;
+      transform: skewX(-18deg);
+      background: linear-gradient(145deg, #1d1f23, #33363b);
+      border: 2px solid #777;
+      border-radius: 10px;
+      box-shadow: inset 0 -10px 0 rgba(0,0,0,.32);
+    }
+
+    .robot-3d .mesh-body::after {
+      content: "";
+      position: absolute;
+      left: 78px;
+      top: -86px;
+      width: 34px;
+      height: 22px;
+      background: #30d5e8;
+      border: 2px solid #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 0 16px rgba(48,213,232,.5);
+    }
+
+    .robot-3d .mesh-face {
+      position: absolute;
+      left: 46px;
+      top: 88px;
+      width: 68px;
+      height: 58px;
+      transform: translateZ(70px) rotateZ(90deg);
+      background: #101010;
+      border: 2px solid #6b6b6b;
+      border-radius: 10px;
+      box-shadow: inset 0 -18px 0 #1e1e1e;
+    }
+
+    .robot-3d .mesh-face::before,
+    .robot-3d .mesh-face::after {
+      content: "";
+      position: absolute;
+      top: 15px;
+      width: 15px;
+      height: 21px;
+      border-radius: 50%;
+      background: #f2f2f2;
+      box-shadow: inset 0 -7px 0 #1a1a1a;
+    }
+
+    .robot-3d .mesh-face::before { left: 15px; }
+    .robot-3d .mesh-face::after { right: 15px; }
+
+    .robot-3d .wheel {
+      position: absolute;
+      width: 52px;
+      height: 52px;
+      transform: translateZ(18px);
+      border-radius: 50%;
+      background: radial-gradient(circle, #0d0d0d 0 24%, #373737 25% 44%, #111 45% 100%);
+      border: 3px solid #050505;
+      box-shadow: inset 0 0 0 4px #2c2c2c;
+    }
+
+    .robot-3d .w1 { left: 72px; top: 54px; }
+    .robot-3d .w2 { left: 72px; top: 154px; }
+    .robot-3d .w3 { right: 72px; top: 54px; }
+    .robot-3d .w4 { right: 72px; top: 154px; }
+
+    .robot-3d .mesh-axis {
+      position: absolute;
+      left: 54px;
+      right: 54px;
+      top: 104px;
+      height: 10px;
+      transform: translateZ(15px);
+      background: #121212;
+      border-radius: 999px;
+      box-shadow: 0 102px 0 #121212;
+    }
+
+    .sensor-cone {
+      position: absolute;
+      left: 54%;
+      top: 42%;
+      width: 310px;
+      height: 130px;
+      transform-origin: left center;
+      transform: rotate(-8deg);
+      background: conic-gradient(from -21deg at 0 50%, rgba(57,184,200,.32), rgba(57,184,200,.05) 42deg, transparent 43deg);
+      clip-path: polygon(0 50%, 100% 0, 100% 100%);
+    }
+
+    .dimension-line {
+      position: absolute;
+      border-top: 2px solid var(--accent);
+      color: var(--muted);
+      font-size: var(--font-caption);
+    }
+
+    .replay-map {
+      position: relative;
+      height: auto;
+      min-height: 0;
+      background:
+        linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px),
+        #101010;
+      background-size: 34px 34px;
+      overflow: hidden;
+    }
+
+    .timeline {
+      height: 70px;
+      gap: 12px;
+      padding: 0 16px;
+      background: #171717;
+      border-top: 1px solid #303030;
+    }
+
+    .scrubber {
+      flex: 1;
+      height: 8px;
+      position: relative;
+      background: #383838;
+      border-radius: 999px;
+    }
+
+    .scrubber .fill {
+      width: 54%;
+      height: 100%;
+      background: var(--accent);
+      border-radius: 999px;
+    }
+
+    .scrubber .tick {
+      position: absolute;
+      top: -5px;
+      width: 2px;
+      height: 18px;
+      background: var(--warn);
+    }
+
+    .context-menu {
+      width: 214px;
+      padding: 6px;
+      background: #121212;
+      border: 1px solid #4a4a4a;
+      border-radius: var(--radius);
+      box-shadow: 0 16px 42px rgba(0,0,0,.45);
+    }
+
+    .menu-row {
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      color: var(--muted);
+      border-radius: 3px;
+      font-size: var(--font-body);
+    }
+
+    .menu-row.active {
+      color: var(--text-strong);
+      background: #333;
+    }
+
+    .hero-note {
+      position: absolute;
+      right: 24px;
+      bottom: 18px;
+      color: var(--faint);
+      font-size: var(--font-caption);
+    }
+
+    .overview {
+      padding: 34px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .overview a {
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .overview .panel {
+      min-height: 122px;
+      padding: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="frame"></div>
+
+  <script>
+    const screenMeta = [
+      ["splash-screen", "01 Splash Screen"],
+      ["project-create", "03 Project Create"],
+      ["project-startup-guide", "04 Project Startup Guide"],
+      ["project-scenario-editor", "05 Project Scenario Editor"],
+      ["project-robot-configurator", "06 Project Robot Configurator"],
+      ["project-experiment-config-results", "07 Project Experiment Config & Results"],
+      ["project-experiment-result-detail", "08 Project Experiment Result Detail"]
+    ];
+
+    const app = document.getElementById("app");
+
+    function titlebar(title) {
+      return `
+        <div class="titlebar">
+          <div class="title-left row" style="gap:10px;">
+            <img class="window-icon" src="../../../static/assets/logo/logo.png" alt="">
+          </div>
+          <div class="window-title">OdiroSim — ${title}</div>
+          <div class="window-controls">
+            <div class="window-control min"></div>
+            <div class="window-control max"></div>
+            <div class="window-control close"></div>
+          </div>
+        </div>`;
+    }
+
+    function topbar(title, subtitle, actions = "") {
+      const subtitleMarkup = subtitle ? `<div class="brand-subtitle">${subtitle}</div>` : "";
+      return `
+        <div class="topbar">
+          <div class="brand">
+            <div class="mark"></div>
+            <div>
+              <div class="brand-title">${title}</div>
+              ${subtitleMarkup}
+            </div>
+          </div>
+          <div class="row" style="gap:8px;">${actions}</div>
+        </div>`;
+    }
+
+    function rail(active = 0) {
+      const icons = ["⌂", "▦", "◆", "◉", "▤", "⚙"];
+      return `<aside class="rail">${icons.map((icon, index) => `<div class="rail-button ${index === active ? "active" : ""}">${icon}</div>`).join("")}<div style="flex:1"></div><div class="rail-button">?</div></aside>`;
+    }
+
+    function button(label, cls = "") {
+      return `<button class="btn ${cls}">${label}</button>`;
+    }
+
+    function icon(name, size = "24px") {
+      return `<img class="ui-icon" src="../../../static/assets/icons/png/${size}/${name}.png" alt="">`;
+    }
+
+    function iconButton(label, iconName, cls = "ghost") {
+      return `<button class="btn icon-action ${cls}" title="${label}" aria-label="${label}">${icon(iconName)}</button>`;
+    }
+
+    function buttonIcon(label, iconName, cls = "") {
+      return `<button class="btn ${cls}">${icon(iconName)}<span>${label}</span></button>`;
+    }
+
+    function assetTile(label, src, selected = false) {
+      return `<button class="asset-tile ${selected ? "selected" : ""}"><img class="asset-thumb" src="${src}" alt=""><span>${label}</span></button>`;
+    }
+
+    function field(label, value, cls = "") {
+      return `<div class="field-col grow"><div class="label">${label}</div><div class="field ${cls}"><span>${value}</span></div></div>`;
+    }
+
+    function select(label, value) {
+      return `<div class="field-col grow"><div class="label">${label}</div><div class="select"><span>${value}</span><span class="muted">⌄</span></div></div>`;
+    }
+
+    function slider(label, pct, value) {
+      return `
+        <div class="field-col grow">
+          <div class="field-row"><div class="label">${label}</div><div class="number-field" style="width:76px;">${value}</div></div>
+          <div class="slider"><span class="fill" style="width:${pct}%"></span><span class="handle" style="left:${pct}%"></span></div>
+        </div>`;
+    }
+
+    function pill(label, cls = "") {
+      return `<span class="pill ${cls}">${label}</span>`;
+    }
+
+    function metric(label, num, delta, color = "") {
+      return `<div class="metric"><div class="label">${label}</div><div class="num" style="${color ? `color:${color}` : ""}">${num}</div><div class="delta">${delta}</div></div>`;
+    }
+
+    function compactMetric(label, num, delta, color = "") {
+      return `<div class="metric compact"><div class="label">${label}</div><div class="num" style="${color ? `color:${color}` : ""}">${num}</div><div class="delta">${delta}</div></div>`;
+    }
+
+    function thumb(title, subtitle, selected = false) {
+      return `
+        <div class="thumbnail ${selected ? "selected" : ""}">
+          <div class="thumb-media">
+            <div class="lane" style="left:14%;top:18%;width:62%;height:24%;transform:rotate(-8deg);"></div>
+            <div class="map-path"></div>
+            <div class="obstacle" style="left:58%;top:34%;"></div>
+            <div class="obstacle" style="left:29%;top:58%;width:22px;"></div>
+          </div>
+          <div class="thumb-body">
+            <div class="strong">${title}</div>
+            <div class="row" style="justify-content:space-between;">
+              <span class="muted">${subtitle}</span>
+              <span class="row" style="gap:6px;"><span class="status-dot success"></span><span style="color:var(--success);font-size:12px;">Ready</span></span>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function treeRow(label, sub, right = "", indent = 0, selected = false, iconName = "object") {
+      return `
+        <div class="tree-row indent-${indent} ${selected ? "selected" : ""}">
+          <span>${indent < 2 ? "⌄" : ""}</span>
+          <span class="row-icon">${icon(iconName)}</span>
+          <span><span class="${selected ? "strong" : ""}">${label}</span> <span class="muted" style="margin-left:10px;">${sub}</span></span>
+          <span class="muted">${right}</span>
+        </div>`;
+    }
+
+    function chartPath(color = "var(--accent)") {
+      return `<svg viewBox="0 0 420 110" preserveAspectRatio="none"><path d="M0 82 C45 72 72 38 116 45 C158 52 173 92 218 74 C262 56 277 22 330 34 C371 42 390 18 420 26" fill="none" stroke="${color}" stroke-width="4"/><path d="M0 94 C56 82 83 70 129 74 C177 78 191 88 236 70 C282 50 301 58 346 51 C382 45 397 49 420 42" fill="none" stroke="var(--success)" stroke-width="3" opacity=".82"/></svg>`;
+    }
+
+    function projectTabs(active) {
+      if (active <= 0) return "";
+      const tabs = [
+        [1, "시작", "home", "var(--tab-detail, #5CBA60)"],
+        [2, "시나리오", "scenario", "var(--tab-scenario, #D2A23A)"],
+        [3, "로봇", "robot", "var(--info)"],
+        [4, "실험", "experiment", "var(--accent)"]
+      ];
+      if (active === 5) {
+        tabs.push([5, "실험 결과 18", "success-rate", "var(--success)", true]);
+      }
+      return `<nav class="status-tabs">${tabs.map(([id, label, iconName, color, closable]) => `<div class="status-tab ${id === active ? "active" : ""}"><span class="status-tab-swatch" style="--tab-color:${color};"></span>${icon(iconName)}${label}${closable ? `<span class="tab-close">${icon("close")}</span>` : ""}</div>`).join("")}</nav>`;
+    }
+
+    function statusbar(title, subtitle, active, actions = "") {
+      return `
+        <div class="statusbar">
+          <div class="brand">
+            <img class="status-logo" src="../../../static/assets/logo/logo.png" alt="">
+          </div>
+          ${projectTabs(active)}
+          <div class="statusbar-actions">${actions}</div>
+          <div class="window-controls">
+            <div class="window-control min"></div>
+            <div class="window-control max"></div>
+            <div class="window-control close"></div>
+          </div>
+        </div>`;
+    }
+
+    function appShell(title, subtitle, active, actions, body, tight = false) {
+      return `<div class="app">${statusbar(title, subtitle, active, actions)}<div class="content"><main class="page"><div class="workspace ${tight ? "tight" : ""}">${body}</div></main></div></div>`;
+    }
+
+    function renderSplash() {
+      return `
+        <div class="app">
+          ${statusbar("OdiroSim", "", 0, "")}
+          <section class="startup-blank">
+            <div class="startup-focus">
+              <div class="startup-left">
+                <div class="startup-identity">
+                  <img class="startup-logo" src="../../../static/assets/logo/logo.png" alt="">
+                  <div class="startup-title">OdiroSim</div>
+                  <div class="startup-subtitle">주행로봇 시뮬레이터</div>
+                </div>
+              </div>
+              <div class="startup-main">
+                <div class="startup-panel">
+                  <div class="startup-heading">
+                    <span>최근 프로젝트</span>
+                  </div>
+                  <div class="startup-project-grid">
+                    <button class="startup-project-card">
+                      <div class="thumbnail compact selected">
+                        <div class="thumb-media ratio">
+                          <div class="lane" style="left:14%;top:18%;width:62%;height:24%;transform:rotate(-8deg);"></div>
+                          <div class="map-path"></div>
+                          <div class="obstacle" style="left:58%;top:34%;"></div>
+                        </div>
+                        <div class="thumb-body"><div class="startup-project-title">DowntownSmokeTest</div><div class="startup-project-path">UserProjects / Odiro</div></div>
+                      </div>
+                    </button>
+                    <button class="startup-project-card">
+                      <div class="thumbnail compact">
+                        <div class="thumb-media ratio">
+                          <div class="lane" style="left:12%;top:28%;width:70%;height:22%;transform:rotate(8deg);"></div>
+                          <div class="map-path" style="transform:rotate(7deg);top:56%;"></div>
+                          <div class="obstacle" style="left:42%;top:35%;"></div>
+                        </div>
+                        <div class="thumb-body"><div class="startup-project-title">CampusCrossing</div><div class="startup-project-path">UserProjects / Odiro</div></div>
+                      </div>
+                    </button>
+                    <button class="startup-project-card">
+                      <div class="thumbnail compact">
+                        <div class="thumb-media ratio">
+                          <div class="lane" style="left:18%;top:20%;width:60%;height:28%;transform:rotate(-14deg);"></div>
+                          <div class="map-path" style="top:60%;"></div>
+                          <div class="obstacle" style="left:66%;top:45%;"></div>
+                        </div>
+                        <div class="thumb-body"><div class="startup-project-title">DepotSidewalk</div><div class="startup-project-path">UserProjects / Odiro</div></div>
+                      </div>
+                    </button>
+                  </div>
+                  <div class="startup-actions">
+                    <button class="btn primary startup-create">새 프로젝트 만들기</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>`;
+    }
+
+    function renderProjectCreate() {
+      const body = `
+        <section class="panel create-layout create-compact">
+          <section class="create-main" style="padding:16px;">
+            <div class="create-section">
+              <div class="create-section-head"><span>시나리오 프리셋</span></div>
+              <div class="preset-grid three">
+                <button class="preset-card selected">
+                  <div class="preset-thumb"><div class="lane" style="left:12%;top:32%;width:72%;height:22%;"></div><div class="map-path" style="top:59%;transform:rotate(0deg);"></div></div>
+                  <div class="preset-body"><div class="strong">빈 보도</div><div class="muted">직선 12m · 장애물 없음</div></div>
+                </button>
+                <button class="preset-card">
+                  <div class="preset-thumb"><div class="lane" style="left:14%;top:30%;width:66%;height:24%;"></div><div class="map-path" style="top:60%;transform:rotate(0deg);"></div><div class="obstacle" style="left:66%;top:43%;width:20px;height:18px;"></div></div>
+                  <div class="preset-body"><div class="strong">데모 장애물</div><div class="muted">보도 4m · 연석 콘</div></div>
+                </button>
+                <button class="preset-card">
+                  <div class="preset-thumb"><div class="lane" style="left:9%;top:24%;width:74%;height:24%;transform:rotate(-7deg);"></div><div class="map-path" style="left:22px;right:20px;top:60%;transform:rotate(8deg);"></div><div class="obstacle" style="left:34%;top:46%;width:18px;height:16px;"></div><div class="obstacle" style="left:62%;top:36%;width:18px;height:16px;"></div></div>
+                  <div class="preset-body"><div class="strong">S 커브 통과</div><div class="muted">다중 커브 16m · 장애물</div></div>
+                </button>
+              </div>
+            </div>
+            <div class="create-section">
+              <div class="create-section-head"><span>로봇 프로필 프리셋</span></div>
+              <div class="preset-grid two">
+                <button class="preset-card selected">
+                  <div class="preset-thumb"><div class="robot" style="left:39%;top:39%;"></div></div>
+                  <div class="preset-body"><div class="strong">기본 DeliveryBot</div><div class="muted">1.0m × 0.44m · LiDAR 15m</div></div>
+                </button>
+                <button class="preset-card">
+                  <div class="preset-thumb"><div class="sensor-cone" style="left:45%;top:26%;width:120px;height:76px;"></div><div class="robot" style="left:39%;top:39%;"></div></div>
+                  <div class="preset-body"><div class="strong">데모 DeliveryBot</div><div class="muted">디버그 LiDAR · 포인트 클라우드</div></div>
+                </button>
+              </div>
+            </div>
+            <div class="create-section">
+              <div class="create-section-head"><span>정책 스크립트 프리셋</span></div>
+              <div class="preset-grid two">
+                <button class="preset-card selected">
+                  <div class="preset-thumb"><div class="chart">${chartPath("var(--accent)")}</div></div>
+                  <div class="preset-body"><div class="strong">빈 정책</div><div class="muted">시작용 패키지</div></div>
+                </button>
+                <button class="preset-card">
+                  <div class="preset-thumb"><div class="chart">${chartPath("var(--success)")}</div></div>
+                  <div class="preset-body"><div class="strong">데모 경로 추종</div><div class="muted">A* · LiDAR · 정지 정책</div></div>
+                </button>
+              </div>
+            </div>
+          </section>
+          <aside style="border-left:1px solid #303030;background:#202020;display:flex;flex-direction:column;">
+            <div class="panel-head"><div class="panel-title">프로젝트 경로</div></div>
+            <div class="panel-body side-form">
+              <div class="form-section stack">
+                ${field("프로젝트 이름", "sidewalk_demo", "focused")}
+                <div class="field-col grow"><div class="label">상위 폴더</div><div class="field path-field"><span>X:/Users/me/OdiroProjects</span></div></div>
+                <div class="field-row">${button("찾아보기", "ghost small")}</div>
+                <div class="field-col grow"><div class="label">생성 경로</div><div class="field path-field"><span>X:/Users/me/OdiroProjects/sidewalk_demo</span></div></div>
+              </div>
+              <div class="form-section stack">
+                <h3>선택 항목</h3>
+                <div class="table" style="--cols:118px 1fr;">
+                  <div class="table-row"><span class="muted">시나리오</span><span>blank.json</span></div>
+                  <div class="table-row"><span class="muted">프로필</span><span>basic.json</span></div>
+                  <div class="table-row"><span class="muted">정책</span><span>policy/blank</span></div>
+                  <div class="table-row"><span class="muted">설정</span><span>setting.json</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="row" style="gap:8px;justify-content:flex-end;padding:14px;border-top:1px solid #303030;margin-top:auto;">${button("취소", "ghost")}${button("프로젝트 생성", "primary")}</div>
+          </aside>
+        </section>`;
+      return appShell("Project Create", "", 0, "", body);
+    }
+
+    function renderStartupGuide() {
+      const body = `
+        <section class="panel" style="display:grid;grid-template-columns:minmax(0,7fr) minmax(460px,3fr);">
+          <section style="padding:22px;overflow:hidden;">
+            <div class="row" style="justify-content:space-between;margin-bottom:18px;">
+              <div><div class="brand-title">프로젝트 시작 가이드</div></div>
+              <div class="switcher"><div class="segment active">가이드</div><div class="segment">파일</div></div>
+            </div>
+            <div class="stack" style="gap:14px;width:100%;">
+              <div class="setup-card">
+                <div class="step-num done">✓</div>
+                <div><div class="strong">프로젝트 준비 완료</div><div class="muted">scenario.json, profile.json, setting.json 생성됨</div></div>
+                ${pill("완료", "active")}
+              </div>
+              <div class="setup-card">
+                <div class="step-num">2</div>
+                <div><div class="strong">시나리오 편집</div><div class="muted">보도, 시작점, 목표점, 장애물 확인</div></div>
+                ${button("시나리오 열기", "primary small")}
+              </div>
+              <div class="setup-card">
+                <div class="step-num">3</div>
+                <div><div class="strong">로봇 확인</div><div class="muted">이 프로젝트는 로봇 프로필 하나만 사용</div></div>
+                ${button("로봇 열기", "ghost small")}
+              </div>
+              <div class="setup-card">
+                <div class="step-num">4</div>
+                <div><div class="strong">정책 수정</div><div class="muted">policy/blank.py 텍스트 에디터로 열기</div></div>
+                ${button("정책 열기", "ghost small")}
+              </div>
+              <div class="setup-card">
+                <div class="step-num">5</div>
+                <div><div class="strong">실험 실행</div><div class="muted">시나리오와 로봇 설정 후 run 생성</div></div>
+                ${button("실험 열기", "ghost small")}
+              </div>
+            </div>
+          </section>
+          <aside style="border-left:1px solid #303030;background:#202020;">
+            <div class="panel-head"><div class="panel-title">프로젝트</div>${pill("준비됨", "active")}</div>
+            <div class="panel-body stack" style="gap:14px;">
+              <div class="thumb-media ratio" style="height:176px;aspect-ratio:auto;border:1px solid #343434;border-radius:var(--radius);">
+                <div class="lane" style="left:13%;top:18%;width:66%;height:24%;transform:rotate(-8deg);"></div>
+                <div class="map-path" style="top:55%;"></div>
+                <div class="obstacle" style="left:55%;top:39%;"></div>
+              </div>
+              <div>
+                <div class="brand-title">sidewalk_demo</div>
+                <div class="brand-subtitle">blank.json · basic.json · policy/blank</div>
+              </div>
+              <div class="grid-2">
+                ${compactMetric("시나리오", "blank", "보도")}
+                ${compactMetric("로봇", "basic", "DeliveryBot")}
+              </div>
+              <div class="form-section stack">
+                <h3>정책 에디터</h3>
+                <div class="textarea" style="min-height:102px;font-family:Consolas, monospace;font-size:13px;line-height:1.45;white-space:pre;">def decide(obs):
+    target = obs.goal
+    return follow_path(target)</div>
+              </div>
+              <div class="form-section stack">
+                <h3>파일 상태</h3>
+                <div class="table" style="--cols:1fr 88px;">
+                  <div class="table-row"><span>scenario.json</span><span style="color:var(--success)">준비됨</span></div>
+                  <div class="table-row"><span>profile.json</span><span style="color:var(--success)">준비됨</span></div>
+                  <div class="table-row"><span>policy/blank.py</span><span style="color:var(--success)">열림</span></div>
+                  <div class="table-row"><span>setting.json</span><span style="color:var(--success)">준비됨</span></div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </section>`;
+      return appShell("Project Startup Guide", "", 1, "", body);
+    }
+
+    function renderScenarioEditor() {
+      const body = `
+        <section class="panel" style="display:grid;grid-template-columns:310px 1fr 360px;">
+          <aside class="scenario-sidebar" style="border-right:1px solid #303030;background:#1b1b1b;display:flex;flex-direction:column;">
+            <div class="panel-head"><div class="panel-title">${icon("scenario")} 시나리오</div><div class="panel-subtitle">Draft</div></div>
+            <div class="panel-body stack" style="gap:12px;">
+              <div class="tree">
+                ${treeRow("sidewalk_demo", "root", "", 0, false, "home")}
+                ${treeRow("Corridor_A", "보도", "선택됨", 1, true, "path-segment")}
+                ${treeRow("건물 쪽", "벽", "", 2, false, "object")}
+                ${treeRow("연석 쪽", "도로", "", 2, false, "object")}
+                ${treeRow("로봇 경로", "시작 → 목표", "", 1, false, "path-complete")}
+                ${treeRow("보행자_03", "이동", "경고", 1, false, "pedestrian")}
+                ${treeRow("장애물_crate", "고정", "", 1, false, "object")}
+              </div>
+            </div>
+            <div class="content-drawer">
+              <div class="content-drawer-head"><span>콘텐츠 드로어</span><span class="muted">배치 오브젝트</span></div>
+              <div class="asset-grid">
+                ${assetTile("Box 01", "../../../Client/Content/Widgets/Thumbnail/Icon_Box_01.png", true)}
+                ${assetTile("Cone", "../../../Client/Content/Widgets/Thumbnail/Icon_Road_Cone_01.png")}
+                ${assetTile("Barrier", "../../../Client/Content/Widgets/Thumbnail/Icon_Road_Barrier_01.png")}
+                ${assetTile("Hydrant", "../../../Client/Content/Widgets/Thumbnail/Icon_Fire_Hydrant.png")}
+                ${assetTile("Bin", "../../../Client/Content/Widgets/Thumbnail/Icon_bin.png")}
+                ${assetTile("Mailbox", "../../../Client/Content/Widgets/Thumbnail/Icon_Mailbox.png")}
+                ${assetTile("Ped", "../../../Client/Content/Widgets/Thumbnail/icon_pedestrian.png")}
+                ${assetTile("Goal", "../../../Client/Content/Widgets/Thumbnail/icon_goal_point.png")}
+              </div>
+            </div>
+          </aside>
+          <section style="display:flex;flex-direction:column;min-width:0;min-height:0;">
+            <div class="toolbar" style="height:46px;padding:0 12px;border-bottom:1px solid #303030;gap:8px;background:#1b1b1b;">
+              ${button("선택", "primary small")}${button("이동", "ghost small")}${button("회전", "ghost small")}${button("표면", "ghost small")}
+              <div style="flex:1"></div>
+              ${pill("월드", "active")}${pill("로컬")}${pill("스냅 10cm")}
+            </div>
+            <div class="viewport" style="flex:1;">
+              <div class="corridor"></div>
+              <div class="route"></div>
+              <div class="robot" style="left:47%;top:50%;"></div>
+              <div class="obstacle" style="left:55%;top:37%;width:42px;height:30px;"></div>
+              <div class="obstacle" style="left:35%;top:61%;"></div>
+              <div class="viewport-chip" style="left:20%;top:28%;"><span class="status-dot info"></span>시작</div>
+              <div class="viewport-chip" style="right:18%;bottom:26%;"><span class="status-dot success"></span>목표</div>
+              <div class="viewport-chip" style="left:18px;bottom:16px;">상단 뷰 · 직교 · 1 grid = 1m</div>
+            </div>
+            <div class="status-row" style="height:34px;padding:0 12px;border-top:1px solid #303030;background:#171717;gap:18px;">
+              <span class="row" style="gap:6px;"><span class="status-dot success"></span>저장됨 12:42</span>
+              <span class="muted">선택: Corridor_A</span>
+              <span class="muted">경고: 보행자 경로 겹침 1건</span>
+            </div>
+          </section>
+          <aside style="border-left:1px solid #303030;background:#202020;">
+            <div class="panel-head"><div class="panel-title">상세</div>${pill("Corridor", "active")}</div>
+            <div class="panel-body side-form">
+              <div class="form-section">
+                <h3>항목</h3>
+                ${field("인스턴스 ID", "corridor_a")}
+              </div>
+              <div class="form-section stack">
+                <h3>표면</h3>
+                ${select("건물 쪽", "보도 블록")}
+                ${select("연석 쪽", "아스팔트")}
+                ${slider("폭", 64, "3.2m")}
+              </div>
+              <div class="form-section stack">
+                <h3>경로 조건</h3>
+                <label class="check"><span class="box checked">✓</span>보행자 횡단 허용</label>
+                <label class="check"><span class="box"> </span>차단 영역으로 표시</label>
+              </div>
+              <div class="context-menu" style="position:absolute;right:88px;bottom:92px;">
+                <div class="menu-row active"><span>표면 복제</span><span>Ctrl+D</span></div>
+                <div class="menu-row"><span>이름 변경</span><span>F2</span></div>
+                <div class="menu-row"><span>이동</span><span>›</span></div>
+                <div class="divider"></div>
+                <div class="menu-row" style="color:var(--danger);"><span>삭제</span><span>Del</span></div>
+              </div>
+            </div>
+          </aside>
+        </section>`;
+      return appShell("Project Scenario Editor", "", 2, `${iconButton("시나리오 저장", "check")}${iconButton("미리 실행", "media-play", "primary")}`, body, true);
+    }
+
+    function renderRobotConfigurator() {
+      const body = `
+        <section class="panel" style="display:grid;grid-template-columns:1fr 420px;">
+          <section style="display:flex;flex-direction:column;min-width:0;min-height:0;">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">${icon("robot")} 로봇 프로필</div>
+                <div class="panel-subtitle">기본 DeliveryBot</div>
+              </div>
+              <div class="row" style="gap:8px;">${pill("미리보기", "active")}${pill("센서")}${pill("충돌 영역")}</div>
+            </div>
+            <div class="robot-preview">
+              <div class="sensor-cone"></div>
+              <div class="robot-3d">
+                <div class="mesh-axis"></div>
+                <div class="wheel w1"></div>
+                <div class="wheel w2"></div>
+                <div class="wheel w3"></div>
+                <div class="wheel w4"></div>
+                <div class="mesh-body"></div>
+                <div class="mesh-face"></div>
+              </div>
+              <div class="viewport-chip" style="left:34px;top:28px;"><span class="status-dot info"></span>3D LiDAR · 15m</div>
+              <div class="viewport-chip" style="right:34px;top:28px;">전방 카메라 85°</div>
+              <div class="dimension-line" style="left:472px;bottom:180px;width:350px;">길이 1.0m</div>
+              <div class="dimension-line" style="left:398px;top:344px;width:160px;transform:rotate(90deg);">폭 0.44m</div>
+              <div class="viewport-chip" style="left:34px;bottom:24px;">외형 · 충돌 영역 · 센서 범위</div>
+            </div>
+          </section>
+          <aside style="border-left:1px solid #303030;background:#202020;">
+            <div class="panel-head"><div class="panel-title">설정</div>${pill("프로젝트 로봇", "active")}</div>
+            <div class="panel-body side-form">
+              <div class="form-section stack">
+                <h3>프로필</h3>
+                ${field("로봇", "기본 DeliveryBot")}
+                ${select("기본 프리셋", "basic.json")}
+              </div>
+              <div class="form-section stack">
+                <h3>크기와 구동</h3>
+                ${slider("길이", 62, "1.0m")}
+                ${slider("폭", 48, "0.44m")}
+                ${slider("최대 속도", 55, "7.0km/h")}
+              </div>
+              <div class="form-section stack">
+                <h3>센서</h3>
+                ${select("주 LiDAR", "전면 상단 · 270°")}
+                ${slider("거리", 74, "15m")}
+                <label class="check"><span class="box checked">✓</span>포인트 클라우드 기록</label>
+                <label class="check"><span class="box checked">✓</span>LiDAR ray 기록</label>
+              </div>
+            </div>
+          </aside>
+        </section>`;
+      return appShell("Project Robot Configurator", "", 3, `${iconButton("초기화", "refresh")}${iconButton("저장", "check", "primary")}`, body, true);
+    }
+
+    function renderExperimentConfigResults() {
+      const body = `
+        <section class="panel" style="display:grid;grid-template-columns:420px 1fr;">
+          <aside style="border-right:1px solid #303030;background:#202020;">
+            <div class="panel-head"><div class="panel-title">${icon("experiment")} 실험 설정</div>${pill("Baseline", "active")}</div>
+            <div class="panel-body side-form">
+              <div class="form-section stack">
+                <h3>샘플링</h3>
+                ${slider("에피소드 수", 64, "48")}
+                ${slider("기본 시드", 42, "260624")}
+                ${select("생성기", "scenario-sampler-v2")}
+              </div>
+              <div class="form-section stack">
+                <h3>정책 런타임</h3>
+                ${select("정책", "DeliveryBot baseline HTTP")}
+                <label class="check"><span class="box checked">✓</span>Python 서버 자동 실행</label>
+                <label class="check"><span class="box"> </span>디버그 프레임 캡처</label>
+              </div>
+              <div class="form-section stack">
+                <h3>평가</h3>
+                ${slider("제한 시간", 72, "120s")}
+                ${slider("전복 각도", 36, "45°")}
+                ${slider("충돌 패널티", 52, "1.0")}
+              </div>
+              ${buttonIcon("실험 실행", "media-play", "primary")}
+            </div>
+          </aside>
+          <section style="padding:18px;overflow:hidden;">
+            <div class="row" style="justify-content:space-between;margin-bottom:14px;">
+              <div><div class="brand-title">실험 결과</div></div>
+              <div class="switcher"><div class="segment active">결과</div><div class="segment">대기열</div><div class="segment">파일</div></div>
+            </div>
+            <div class="table" style="--cols:120px 1fr 130px 120px 130px 110px;">
+              <div class="table-row head"><span>런</span><span>시나리오</span><span>상태</span><span>성공률</span><span>중앙값</span><span>동작</span></div>
+              <div class="table-row selected"><span>run 18</span><span>sidewalk_demo</span><span style="color:var(--success)">완료</span><span>91%</span><span>04:38</span>${button("열기", "primary small")}</div>
+              <div class="table-row"><span>run 17</span><span>sidewalk_demo</span><span style="color:var(--success)">완료</span><span>83%</span><span>04:50</span>${button("열기", "ghost small")}</div>
+              <div class="table-row"><span>run 16</span><span>s_curve_clearance</span><span style="color:var(--warn)">경고</span><span>76%</span><span>05:12</span>${button("열기", "ghost small")}</div>
+              <div class="table-row"><span>run 15</span><span>barricade</span><span style="color:var(--danger)">중단</span><span>18%</span><span>--</span>${button("검사", "ghost small")}</div>
+              <div class="table-row"><span>run 14</span><span>demo_obstacle</span><span style="color:var(--success)">완료</span><span>88%</span><span>04:44</span>${button("열기", "ghost small")}</div>
+            </div>
+          </section>
+        </section>`;
+      return appShell("Project Experiment Config and Results", "", 4, `${iconButton("비교", "analysis")}${iconButton("실행", "media-play", "primary")}`, body);
+    }
+
+    function renderResultDetail() {
+      const body = `
+        <section class="panel result-detail-layout">
+          <section style="display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px;gap:14px;overflow:hidden;">
+            <div class="row" style="justify-content:space-between;">
+              <div><div class="breadcrumb">프로젝트 › Downtown smoke test › 런 › run 18</div><div class="brand-title" style="margin-top:6px;">실험 결과 상세</div></div>
+              ${button("내보내기", "ghost")}
+            </div>
+            <div class="panel" style="flex:0 0 auto;">
+              <div class="panel-head"><div class="panel-title">에피소드</div></div>
+              <div class="panel-body">
+                <div class="episode-strip">
+                  <button class="episode-card selected"><div class="strong">000031</div><div class="row" style="justify-content:space-between;margin-top:8px;"><span style="color:var(--danger)">실패</span><span class="muted">120.0s</span></div></button>
+                  <button class="episode-card"><div class="strong">000030</div><div class="row" style="justify-content:space-between;margin-top:8px;"><span style="color:var(--success)">성공</span><span class="muted">04:21</span></div></button>
+                  <button class="episode-card"><div class="strong">000029</div><div class="row" style="justify-content:space-between;margin-top:8px;"><span style="color:var(--success)">성공</span><span class="muted">04:36</span></div></button>
+                  <button class="episode-card"><div class="strong">000028</div><div class="row" style="justify-content:space-between;margin-top:8px;"><span style="color:var(--warn)">충돌</span><span class="muted">03:18</span></div></button>
+                  <button class="episode-card"><div class="strong">000027</div><div class="row" style="justify-content:space-between;margin-top:8px;"><span style="color:var(--success)">성공</span><span class="muted">04:44</span></div></button>
+                  <button class="episode-card"><div class="strong">000026</div><div class="row" style="justify-content:space-between;margin-top:8px;"><span style="color:var(--success)">성공</span><span class="muted">04:51</span></div></button>
+                </div>
+              </div>
+            </div>
+            <div class="panel" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+              <div class="panel-head"><div class="panel-title">에피소드 리플레이</div><div class="row" style="gap:8px;">${pill("상단", "active")}${pill("포인트 클라우드")}${pill("LiDAR 레이")}</div></div>
+              <div class="replay-map" style="flex:1;">
+                <svg viewBox="0 0 900 520" preserveAspectRatio="none">
+                  <rect x="120" y="158" width="630" height="130" fill="rgba(80,80,80,.36)" stroke="#666" transform="rotate(-10 440 235)"/>
+                  <rect x="138" y="169" width="590" height="34" fill="rgba(76,175,80,.18)" transform="rotate(-10 440 235)"/>
+                  <rect x="150" y="238" width="560" height="36" fill="rgba(74,159,245,.12)" transform="rotate(-10 440 235)"/>
+                  <path d="M145 360 C265 260 397 248 506 238 C626 226 706 170 790 126" fill="none" stroke="#0070e0" stroke-width="5"/>
+                  <path d="M145 360 C260 286 382 278 495 286 C585 290 620 246 657 213" fill="none" stroke="#e0a030" stroke-width="4" stroke-dasharray="10 9"/>
+                  <circle cx="145" cy="360" r="12" fill="#111" stroke="#fff" stroke-width="3"/>
+                  <circle cx="790" cy="126" r="12" fill="#4caf50" stroke="#fff" stroke-width="3"/>
+                  <rect x="606" y="205" width="42" height="28" fill="#d4d4d4" stroke="#777" stroke-width="2" transform="rotate(-19 627 219)"/>
+                  <circle cx="570" cy="228" r="34" fill="rgba(229,83,75,.15)" stroke="#e5534b" stroke-width="2"/>
+                </svg>
+                <div class="viewport-chip" style="left:18px;top:16px;"><span class="status-dot danger"></span>000031 · 시간 초과</div>
+                <div class="viewport-chip" style="left:18px;bottom:16px;">로봇 경로 · 계획 경로 · 검토 레이어</div>
+              </div>
+              <div class="timeline">
+                ${button("◀", "ghost")}
+                ${button("Ⅱ", "primary")}
+                ${button("▶", "ghost")}
+                <div class="scrubber"><div class="fill"></div><span class="tick" style="left:57%;"></span><span class="tick" style="left:71%;background:var(--danger);"></span></div>
+                <div class="field" style="width:130px;">61.4 / 120.0s</div>
+              </div>
+            </div>
+          </section>
+          <aside style="border-left:1px solid #303030;background:#202020;display:flex;flex-direction:column;min-height:0;">
+            <div class="panel-head"><div class="panel-title">통계</div>${pill("run 18", "active")}</div>
+            <div class="panel-body stack" style="gap:12px;min-height:0;">
+              <div class="grid-2">
+                ${compactMetric("성공", "91%", "44 / 48", "var(--success)")}
+                ${compactMetric("중앙값", "04:38", "episode")}
+              </div>
+              <div class="grid-2">
+                ${compactMetric("충돌", "2", "front-left", "var(--warn)")}
+                ${compactMetric("시간 초과", "2", "curb merge", "var(--warn)")}
+              </div>
+              <div class="panel well"><div class="panel-head"><div class="panel-title">추세</div></div><div class="panel-body"><div class="chart">${chartPath("var(--info)")}</div></div></div>
+              <div class="form-section ai-panel">
+                <h3>AI 분석</h3>
+                <div class="ai-analysis">
+                  <div>
+                    <div class="ai-section-title">요약</div>
+                    <div>주행 정책 검토가 필요한 실패가 발생했습니다.</div>
+                  </div>
+                  <div>
+                    <div class="ai-section-title">핵심 분석</div>
+                    <div class="ai-item"><span class="ai-priority">높음</span><div><span class="strong">충돌 없이 제한 시간 초과</span><br>충돌은 발생하지 않았지만 60초 동안 목표에 도달하지 못했습니다.</div></div>
+                    <div class="ai-item"><span class="ai-priority">중간</span><div><span class="strong">정책 검토 우선</span><br>장애물 충돌보다 경로 추종, 감속/정지, 재경로 탐색 조건 확인이 우선입니다.</div></div>
+                  </div>
+                  <div>
+                    <div class="ai-section-title">개선 제안</div>
+                    <div class="ai-item"><span class="ai-priority">높음</span><div><span class="strong">정체와 제한 시간 초과 대응 정책 검토</span><br>이유: 제한 시간 초과 또는 정체가 확인되어 감속, 정지, 재경로 탐색 조건을 검토할 필요가 있습니다.<br>권장: 반복 실패 구간에서 속도, 경로 추종 허용 오차, 전방 주시 거리, 조향 변화량을 보수적으로 조정해 동일 조건에서 재실행하는 것을 권장합니다.</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </section>`;
+      return appShell("Project Experiment Result Detail", "", 5, `${iconButton("뒤로", "caret-left")}`, body);
+    }
+
+    function renderOverview() {
+      return `<div class="app">${titlebar("Mockup Index")}${topbar("Mockup Index", "", "")}<div class="overview">${screenMeta.map(([id, label]) => `<a class="panel" href="?screen=${id}"><div class="panel-title">${label}</div><div class="panel-subtitle" style="margin-top:10px;">${id}</div></a>`).join("")}</div></div>`;
+    }
+
+    const renderers = {
+      "splash-screen": renderSplash,
+      "project-create": renderProjectCreate,
+      "project-startup-guide": renderStartupGuide,
+      "project-scenario-editor": renderScenarioEditor,
+      "project-robot-configurator": renderRobotConfigurator,
+      "project-experiment-config-results": renderExperimentConfigResults,
+      "project-experiment-result-detail": renderResultDetail
+    };
+
+    const params = new URLSearchParams(window.location.search);
+    const screen = params.get("screen");
+    app.innerHTML = renderers[screen] ? renderers[screen]() : renderOverview();
+    document.title = renderers[screen] ? `Odiro Mockup - ${screen}` : "Odiro Mockup Index";
+  </script>
+</body>
+</html>

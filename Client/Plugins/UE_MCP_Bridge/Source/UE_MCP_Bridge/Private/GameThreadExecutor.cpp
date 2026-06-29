@@ -1,4 +1,5 @@
 #include "GameThreadExecutor.h"
+#include "Async/Async.h"
 #include "HAL/PlatformProcess.h"
 #include "Containers/Ticker.h"
 
@@ -60,9 +61,13 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 	State->DoneEvent = FPlatformProcess::GetSynchEventFromPool();
 
 	// Capture Handler and Params by value so they outlive the caller's stack
-	// if the caller abandons the wait.
-	FTSTicker::GetCoreTicker().AddTicker(
-		FTickerDelegate::CreateLambda([State, Handler = MoveTemp(Handler), Params](float) -> bool
+	// if the caller abandons the wait. Register the ticker from the game thread;
+	// adding it directly from the bridge thread can strand the callback on some
+	// editor builds, leaving every MCP request waiting until timeout.
+	auto RegisterTicker = [State, Handler = MoveTemp(Handler), Params]() mutable
+	{
+		FTSTicker::GetCoreTicker().AddTicker(
+			FTickerDelegate::CreateLambda([State, Handler = MoveTemp(Handler), Params](float) mutable -> bool
 		{
 			// Caller already gave up — skip the work entirely. Python may
 			// still be mid-execution; we cannot safely cancel it, but we
@@ -93,8 +98,10 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 				State->DoneEvent->Trigger();
 			}
 			return false; // one-shot — do not re-tick
-		})
-	);
+		}));
+	};
+
+	AsyncTask(ENamedThreads::GameThread, MoveTemp(RegisterTicker));
 
 	// Block calling thread until the ticker fires or timeout
 	uint32 TimeoutMs = static_cast<uint32>(TimeoutSeconds * 1000.0f);

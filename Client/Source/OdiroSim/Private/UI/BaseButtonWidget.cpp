@@ -2,6 +2,7 @@
 
 #include "Components/Border.h"
 #include "Components/Image.h"
+#include "Components/SizeBox.h"
 #include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
@@ -63,6 +64,19 @@ namespace
 			return tokens.AccentColor;
 		}
 
+		if (variant == EBaseWidgetVariant::Ghost)
+		{
+			if (state == EBaseWidgetState::Hovered)
+			{
+				return tokens.SurfaceControlHoverColor;
+			}
+			if (state == EBaseWidgetState::Pressed)
+			{
+				return tokens.SurfaceControlActiveColor;
+			}
+			return FLinearColor::Transparent;
+		}
+
 		if (IsColoredActionVariant(variant))
 		{
 			const FLinearColor baseColor = tokens.GetVariantColor(variant);
@@ -107,6 +121,13 @@ namespace
 		if (bSelected || state == EBaseWidgetState::Selected)
 		{
 			return state == EBaseWidgetState::Pressed ? tokens.AccentActiveColor : tokens.AccentColor;
+		}
+
+		// Ghost is chrome-free until selected, so its idle/hover frame is invisible.
+		// Segmented controls use this so only the active segment shows a border.
+		if (variant == EBaseWidgetVariant::Ghost)
+		{
+			return FLinearColor::Transparent;
 		}
 
 		if (variant == EBaseWidgetVariant::Primary)
@@ -163,7 +184,9 @@ const UBaseWidgetTokenCatalog* UBaseButtonWidget::GetResolvedBaseTokens() const
 
 FBaseTextStyleToken UBaseButtonWidget::ResolveTextStyle(const EBaseTextRole role) const
 {
-	return BaseWidgetPrivate::ResolveTextStyle(BaseTokens, role);
+	return BaseWidgetPrivate::ResolveTextStyle(
+		BaseTokens,
+		BaseWidgetPrivate::ResolveSizedTextRole(role, Size));
 }
 
 FLinearColor UBaseButtonWidget::ResolveVariantColor(const EBaseWidgetVariant variant) const
@@ -178,6 +201,12 @@ FLinearColor UBaseButtonWidget::ResolveStateColor(const EBaseWidgetState state) 
 
 void UBaseButtonWidget::SynchronizeBaseProperties()
 {
+	BaseWidgetPrivate::ApplySizeConstraints(RootSize.Get(), SizeConstraints);
+	if (RootSizeBox.Get() != RootSize.Get())
+	{
+		BaseWidgetPrivate::ApplySizeConstraints(RootSizeBox.Get(), SizeConstraints);
+	}
+
 	const bool bEnabled = !bDisabled && State != EBaseWidgetState::Disabled;
 	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
 	const EBaseWidgetVariant effectiveVariant = GetEffectiveVariant();
@@ -327,6 +356,12 @@ void UBaseButtonWidget::SetPrimary(const bool bInPrimary)
 void UBaseButtonWidget::SetBaseSize(const EBaseWidgetSize inSize)
 {
 	Size = inSize;
+	SynchronizeBaseProperties();
+}
+
+void UBaseButtonWidget::SetSizeConstraints(const FBaseWidgetSizeConstraints inSizeConstraints)
+{
+	SizeConstraints = BaseWidgetPrivate::NormalizeSizeConstraints(inSizeConstraints);
 	SynchronizeBaseProperties();
 }
 

@@ -26,6 +26,29 @@ enum class EBaseWidgetSize : uint8
 	Large
 };
 
+// Optional min/max desired-size overrides applied only when a WBP binds RootSize or RootSizeBox.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FBaseWidgetSizeConstraints
+{
+	GENERATED_BODY()
+
+	// Minimum desired width in Slate units; zero leaves the WBP-authored value unchanged.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets|Sizing", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	float MinWidth = 0.0f;
+
+	// Minimum desired height in Slate units; zero leaves the WBP-authored value unchanged.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets|Sizing", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	float MinHeight = 0.0f;
+
+	// Maximum desired width in Slate units; zero leaves the WBP-authored value unchanged.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets|Sizing", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	float MaxWidth = 0.0f;
+
+	// Maximum desired height in Slate units; zero leaves the WBP-authored value unchanged.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets|Sizing", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	float MaxHeight = 0.0f;
+};
+
 // Visual state shared by independent base widgets.
 UENUM(BlueprintType)
 enum class EBaseWidgetState : uint8
@@ -51,5 +74,4 @@ enum class EBaseTextRole : uint8
 	Caption,
 	Value
 };
-
 

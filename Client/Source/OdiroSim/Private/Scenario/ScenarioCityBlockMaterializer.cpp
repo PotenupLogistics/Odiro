@@ -43,6 +43,8 @@ namespace
 	const FName GeneratedBuildingCollisionProxyProfileName(TEXT("Blocked"));
 	// Component name prefix used to identify authored-bounds building collision proxies.
 	const FName GeneratedBuildingCollisionProxyComponentName(TEXT("GeneratedBuildingBlockingBounds"));
+	// Clearance reserved only between generated building frontage actors.
+	const double GeneratedBuildingInterBlockGapCm = 100.0;
 
 	// Generated city band markers encode the side needed for corridor-relative edge anchoring.
 	const TCHAR* GeneratedLowerSideMarkers[] =
@@ -392,6 +394,18 @@ namespace
 		}
 
 		return true;
+	}
+
+	// Expands one footprint only for building-to-building spacing checks, not for actor placement.
+	FGeneratedBuildingFootprint MakeBuildingSpacingFootprint(
+		const FGeneratedBuildingFootprint& footprint,
+		double spacingCm)
+	{
+		FGeneratedBuildingFootprint spacingFootprint = footprint;
+		const double halfSpacingCm = FMath::Max(0.0, spacingCm) * 0.5;
+		spacingFootprint.HalfLengthCm += halfSpacingCm;
+		spacingFootprint.HalfWidthCm += halfSpacingCm;
+		return spacingFootprint;
 	}
 
 	// Maps source-of-truth GroundRegion semantics to the straight block roles supported by the catalog.
@@ -2314,13 +2328,16 @@ namespace
 						(spanNextCandidateIndex + candidateAttemptIndex) % buildingCandidates.Num();
 					const FGeneratedBuildingFrontageCandidate& candidate =
 						buildingCandidates[candidateIndex];
-					if (plannedLengthCm + candidate.LengthCm > spanLengthCm + KINDA_SMALL_NUMBER)
+					const double leadingGapCm = plannedCandidateIndices.IsEmpty()
+						? 0.0
+						: GeneratedBuildingInterBlockGapCm;
+					if (plannedLengthCm + leadingGapCm + candidate.LengthCm > spanLengthCm + KINDA_SMALL_NUMBER)
 					{
 						continue;
 					}
 
 					plannedCandidateIndices.Add(candidateIndex);
-					plannedLengthCm += candidate.LengthCm;
+					plannedLengthCm += leadingGapCm + candidate.LengthCm;
 					spanNextCandidateIndex = (candidateIndex + 1) % buildingCandidates.Num();
 					bFoundFittingCandidate = true;
 					break;
@@ -2348,6 +2365,10 @@ namespace
 			{
 				const FGeneratedBuildingFrontageCandidate& candidate =
 					buildingCandidates[plannedCandidateIndices[blockIndex]];
+				if (blockIndex > 0)
+				{
+					alongCursorCm += GeneratedBuildingInterBlockGapCm;
+				}
 				const double alongOffsetCm = alongCursorCm + (candidate.LengthCm * 0.5);
 				alongCursorCm += candidate.LengthCm;
 				const double outwardOffsetCm =
@@ -2367,11 +2388,14 @@ namespace
 					TEXT("%s#%d"),
 					*frontageSpan.DebugSourceId,
 					blockIndex);
+				const FGeneratedBuildingFootprint spacingFootprint = MakeBuildingSpacingFootprint(
+					candidateFootprint,
+					GeneratedBuildingInterBlockGapCm);
 
 				bool bOverlapsAcceptedFootprint = false;
 				for (const FGeneratedBuildingFootprint& acceptedFootprint : inOutAcceptedFootprints)
 				{
-					if (DoBuildingFootprintsOverlap2D(candidateFootprint, acceptedFootprint))
+					if (DoBuildingFootprintsOverlap2D(spacingFootprint, acceptedFootprint))
 					{
 						bOverlapsAcceptedFootprint = true;
 						UE_LOG(
@@ -2417,7 +2441,7 @@ namespace
 						}
 					}
 
-					inOutAcceptedFootprints.Add(candidateFootprint);
+					inOutAcceptedFootprints.Add(spacingFootprint);
 					++spawnedActorCount;
 				}
 			}

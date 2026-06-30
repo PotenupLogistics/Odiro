@@ -17,6 +17,8 @@ namespace
 	constexpr double MaxProceduralLaneCurveStepCm = 25.0;
 	// Hard cap that prevents unusually long segments from generating excessive mesh sections.
 	constexpr int32 MaxProceduralLaneCurveSubdivisions = 256;
+	// Keeps the inside edge of a filleted lane from collapsing into the centerline turn point.
+	constexpr double MinProceduralLaneCornerInnerRadiusCm = 50.0;
 
 	struct FScenarioCorridorProceduralLaneSample
 	{
@@ -99,7 +101,11 @@ namespace
 		const double topZCm = meshSpec.LaneCenterZCm + (meshSpec.LaneHeightCm * 0.5);
 		const double bottomZCm = meshSpec.LaneCenterZCm - (meshSpec.LaneHeightCm * 0.5);
 		const double maxOffsetMagnitudeCm = FMath::Max(FMath::Abs(minOffsetCm), FMath::Abs(maxOffsetCm));
-		const double cornerFilletRadiusCm = FMath::Max(meshSpec.CornerFilletRadiusCm, 0.0);
+		const double cornerFilletRadiusCm = meshSpec.CornerFilletRadiusCm > KINDA_SMALL_NUMBER
+			? FMath::Max(
+				meshSpec.CornerFilletRadiusCm,
+				maxOffsetMagnitudeCm + MinProceduralLaneCornerInnerRadiusCm)
+			: 0.0;
 		outSamples.Reserve(meshSpec.AxisLocationsCm.Num() * 4);
 
 		auto addLaneSample = [&outSamples, minOffsetCm, maxOffsetCm, topZCm, bottomZCm](
@@ -129,28 +135,6 @@ namespace
 			sample.AlongCm = alongCm;
 			outSamples.Add(sample);
 			return true;
-		};
-
-		auto evaluateQuadraticCenterCm = [](
-			const FVector2D& startCm,
-			const FVector2D& controlCm,
-			const FVector2D& endCm,
-			double alpha)
-		{
-			const double inverseAlpha = 1.0 - alpha;
-			return (startCm * FMath::Square(inverseAlpha))
-				+ (controlCm * (2.0 * inverseAlpha * alpha))
-				+ (endCm * FMath::Square(alpha));
-		};
-
-		auto evaluateQuadraticTangentCm = [](
-			const FVector2D& startCm,
-			const FVector2D& controlCm,
-			const FVector2D& endCm,
-			double alpha)
-		{
-			return ((controlCm - startCm) * (2.0 * (1.0 - alpha)))
-				+ ((endCm - controlCm) * (2.0 * alpha));
 		};
 
 		FVector2D firstDirectionCm;
@@ -205,7 +189,11 @@ namespace
 			const double maxSetbackCm = FMath::Min(previousSegmentLengthCm, nextSegmentLengthCm) * 0.45;
 			const double idealSetbackCm = cornerFilletRadiusCm * FMath::Tan(absTurnAngleRadians * 0.5);
 			const double setbackCm = FMath::Min(idealSetbackCm, maxSetbackCm);
-			if (setbackCm <= KINDA_SMALL_NUMBER)
+			const double minimumSafeSetbackCm =
+				(maxOffsetMagnitudeCm + MinProceduralLaneCornerInnerRadiusCm)
+				* FMath::Tan(absTurnAngleRadians * 0.5);
+			if (setbackCm <= KINDA_SMALL_NUMBER
+				|| setbackCm + KINDA_SMALL_NUMBER < minimumSafeSetbackCm)
 			{
 				visualAlongCm += FVector2D::Distance(lastCenterCm, cornerCenterCm);
 				if (!addLaneSample(
@@ -221,6 +209,11 @@ namespace
 
 			const FVector2D filletStartCm = cornerCenterCm - (previousDirectionCm * setbackCm);
 			const FVector2D filletEndCm = cornerCenterCm + (nextDirectionCm * setbackCm);
+			const double turnSign = turnAngleRadians >= 0.0 ? 1.0 : -1.0;
+			const FVector2D turnNormalCm = ResolveScenarioCorridorRightCm(previousDirectionCm) * turnSign;
+			const FVector2D arcCenterCm = filletStartCm + (turnNormalCm * cornerFilletRadiusCm);
+			const FVector2D startRadiusCm = filletStartCm - arcCenterCm;
+			const double startAngleRadians = FMath::Atan2(startRadiusCm.Y, startRadiusCm.X);
 			visualAlongCm += FVector2D::Distance(lastCenterCm, filletStartCm);
 			if (!addLaneSample(
 					ToScenarioCorridorPoint3D(filletStartCm, meshSpec.AxisLocationsCm[pointIndex].Z),
@@ -235,21 +228,23 @@ namespace
 					/ MaxProceduralLaneCurveStepCm),
 				1,
 				MaxProceduralLaneCurveSubdivisions);
-			FVector2D previousCurveCenterCm = filletStartCm;
 			for (int32 stepIndex = 1; stepIndex <= cornerSubdivisionCount; ++stepIndex)
 			{
 				const double alpha = static_cast<double>(stepIndex) / static_cast<double>(cornerSubdivisionCount);
-				const FVector2D curveCenterCm = evaluateQuadraticCenterCm(
-					filletStartCm,
-					cornerCenterCm,
-					filletEndCm,
-					alpha);
-				const FVector2D curveTangentCm = evaluateQuadraticTangentCm(
-					filletStartCm,
-					cornerCenterCm,
-					filletEndCm,
-					alpha);
-				visualAlongCm += FVector2D::Distance(previousCurveCenterCm, curveCenterCm);
+				const bool isEndSample = stepIndex == cornerSubdivisionCount;
+				const double curveAngleRadians = startAngleRadians + (turnAngleRadians * alpha);
+				const FVector2D curveRadiusCm = FVector2D(
+					FMath::Cos(curveAngleRadians),
+					FMath::Sin(curveAngleRadians)) * cornerFilletRadiusCm;
+				const FVector2D curveCenterCm = isEndSample
+					? filletEndCm
+					: arcCenterCm + curveRadiusCm;
+				const FVector2D curveTangentCm = isEndSample
+					? nextDirectionCm
+					: FVector2D(
+						turnSign > 0.0 ? -curveRadiusCm.Y : curveRadiusCm.Y,
+						turnSign > 0.0 ? curveRadiusCm.X : -curveRadiusCm.X);
+				visualAlongCm += cornerFilletRadiusCm * (absTurnAngleRadians / cornerSubdivisionCount);
 				if (!addLaneSample(
 						ToScenarioCorridorPoint3D(curveCenterCm, meshSpec.AxisLocationsCm[pointIndex].Z),
 						ResolveScenarioCorridorRightCm(curveTangentCm),
@@ -257,7 +252,6 @@ namespace
 				{
 					return false;
 				}
-				previousCurveCenterCm = curveCenterCm;
 			}
 
 			lastCenterCm = filletEndCm;

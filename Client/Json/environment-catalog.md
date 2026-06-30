@@ -63,10 +63,12 @@ Prop id는 `obstacles.placements[].prop`에서 직접 사용할 수 있는 정�
 
 | prop_id | 표시명 | 권장 class | 권장 sensor_profile | 사용 기준 |
 | --- | --- | --- | --- | --- |
+| `obstacle.billboard` | Billboard | `blocking` | `solid` | 디지털 입간판이나 넓은 표지판형 고정 장애물. |
 | `obstacle.bin` | Bin | `blocking` | `solid` | 보도 가장자리 휴지통. |
 | `obstacle.box_01` | Box 01 | `blocking` | `solid` | 배달 박스나 적재물. |
 | `obstacle.box_02` | Box 02 | `blocking` | `solid` | 배달 박스나 적재물 변형. |
 | `obstacle.box_03` | Box 03 | `blocking` | `solid` | 배달 박스나 적재물 변형. |
+| `obstacle.bus_shelter` | Bus Shelter | `blocking` | `solid` | 버스 정류장 쉘터처럼 큰 보행로 가장자리 시설물. |
 | `obstacle.fire_hydrant` | Fire Hydrant | `blocking` | `solid` | 고정 설비물. |
 | `obstacle.mailbox` | Mailbox | `blocking` | `solid` | 고정 설비물 또는 보도 가장자리 장애물. |
 | `obstacle.manhole_01` | Manhole 01 | `traversable_cost` | `low_profile` | 낮은 지면 물체. |
@@ -78,7 +80,9 @@ Prop id는 `obstacles.placements[].prop`에서 직접 사용할 수 있는 정�
 | `obstacle.road_cone_01` | Road Cone 01 | `blocking` | `thin` | 임시 통제, 협폭 표시. |
 | `obstacle.road_cone_02` | Road Cone 02 | `blocking` | `thin` | 임시 통제, 협폭 표시 변형. |
 | `obstacle.street_bank` | Street Bank | `blocking` | `solid` | 보도 가장자리 거리 시설물. |
+| `obstacle.street_light` | Street Light | `blocking` | `thin` | 얇고 높은 가로등 또는 전봇대형 고정 장애물. |
 | `obstacle.trash_bin` | Trash Bin | `blocking` | `solid` | 보도 가장자리 휴지통. |
+| `obstacle.tree` | Tree | `blocking` | `solid` | 가로수와 하단 화단이 결합된 보도 가장자리 장애물. |
 
 ## Prop Bounding Boxes
 
@@ -86,10 +90,12 @@ LLM이 `obstacles.placements[]`의 `at.offset_m`, `spacing_m`, `gap_width_m`, `c
 
 | prop_id | 표시명 | bbox_m (X x Y x Z) | footprint_m (X x Y) | 배치 참고 |
 | --- | --- | --- | --- | --- |
+| `obstacle.billboard` | Billboard | `4.30 x 1.65 x 2.85` | `4.30 x 1.65` | 넓은 표지판형 시설물이다. 보행 흐름을 크게 줄이므로 가장자리나 의도적인 협폭 구간에 둔다. |
 | `obstacle.bin` | Bin | `0.90 x 0.90 x 1.80` | `0.90 x 0.90` | 보행로 가장자리나 건물/연석 측에 단독 배치하기 적합하다. |
 | `obstacle.box_01` | Box 01 | `0.90 x 0.90 x 0.90` | `0.90 x 0.90` | 배달 물품, 적재물, 작은 고정 장애물로 쓴다. |
 | `obstacle.box_02` | Box 02 | `0.90 x 0.90 x 0.90` | `0.90 x 0.90` | Box 01과 같은 크기의 시각 변형이다. |
 | `obstacle.box_03` | Box 03 | `0.90 x 0.90 x 0.90` | `0.90 x 0.90` | Box 01과 같은 크기의 시각 변형이다. |
+| `obstacle.bus_shelter` | Bus Shelter | `4.30 x 1.65 x 2.85` | `4.30 x 1.65` | 큰 고정 시설물이므로 넓은 보행로 가장자리나 버스 정류장 역할의 의도된 협폭 구간에만 둔다. |
 | `obstacle.fire_hydrant` | Fire Hydrant | `0.70 x 0.70 x 1.60` | `0.70 x 0.70` | 좁은 고정 설비물로, 가장자리 배치에 적합하다. |
 | `obstacle.mailbox` | Mailbox | `1.10 x 0.90 x 1.80` | `1.10 x 0.90` | 비교적 큰 고정 설비물이므로 보행로 중앙을 막지 않게 배치한다. |
 | `obstacle.manhole_01` | Manhole 01 | `1.10 x 1.10 x 0.10` | `1.10 x 1.10` | 낮은 지면 물체다. 통과 가능 비용이나 주의 요소로 쓰기 좋다. |
@@ -101,7 +107,9 @@ LLM이 `obstacles.placements[]`의 `at.offset_m`, `spacing_m`, `gap_width_m`, `c
 | `obstacle.road_cone_01` | Road Cone 01 | `0.70 x 0.70 x 1.40` | `0.70 x 0.70` | 여러 개를 `pattern`으로 배치해 임시 통제선을 만들기 좋다. |
 | `obstacle.road_cone_02` | Road Cone 02 | `0.70 x 0.70 x 1.40` | `0.70 x 0.70` | Road Cone 01과 같은 크기의 시각 변형이다. |
 | `obstacle.street_bank` | Street Bank | `2.00 x 0.90 x 1.20` | `2.00 x 0.90` | 길쭉한 거리 시설물이다. 보행 흐름을 막지 않도록 가장자리 기준으로 둔다. |
+| `obstacle.street_light` | Street Light | `2.67 x 0.35 x 11.42` | `2.67 x 0.35` | 매우 높은 기둥형 시설물이다. 얇지만 가로 방향 팔 길이를 포함하므로 건물측이나 연석측 가장자리 기준으로 둔다. |
 | `obstacle.trash_bin` | Trash Bin | `0.90 x 0.90 x 1.80` | `0.90 x 0.90` | Bin과 같은 크기의 휴지통 계열 장애물이다. |
+| `obstacle.tree` | Tree | `0.80 x 0.80 x 3.00` | `0.80 x 0.80` | 가로수와 화단이 결합된 고정 장애물이다. 보행로 중앙보다는 가장자리 녹지나 시설물 라인에 둔다. |
 
 ## Placement 사용 기준
 

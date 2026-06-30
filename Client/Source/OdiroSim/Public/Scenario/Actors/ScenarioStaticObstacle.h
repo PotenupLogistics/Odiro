@@ -131,7 +131,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Placement")
 	bool bUseFallbackBoundsWhenMeshMissing = true;
 
-	// Enables the mesh's simple collision when the mesh provides one.
+	// Collision primitive source resolved from the selected catalog entry.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Collision")
+	EScenarioStaticObstacleCollisionSourceMode CollisionSourceMode =
+		EScenarioStaticObstacleCollisionSourceMode::Auto;
+
+	// Enables Auto-mode MeshRoot simple collision when the mesh provides one.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Collision")
 	bool bUseMeshSimpleCollision = true;
 
@@ -146,8 +151,10 @@ private:
 	// Refreshes collision primitives from current prop settings.
 	void ApplyCollisionSettings();
 
-	// Applies visual primitive collision state while leaving the canonical bounds component owned by this actor.
-	void ApplyVisualPrimitiveCollisionSettings(ECollisionEnabled::Type meshRootCollisionEnabled);
+	// Applies collision to visual primitives while leaving the canonical bounds component under separate control.
+	void ApplyVisualPrimitiveCollisionSettings(
+		ECollisionEnabled::Type visualCollisionEnabled,
+		bool bUseAllStaticMeshSimpleCollision);
 
 	// Maintains the actor tag used by semantic object queries.
 	void ApplyObjectTypeActorTag();
@@ -157,6 +164,9 @@ private:
 
 	// Returns true when this actor has a configured visual mesh component.
 	bool HasConfiguredVisualMesh() const;
+
+	// Returns true when any static mesh component can provide simple convex collision for this obstacle.
+	bool HasAnyStaticMeshSimpleCollision() const;
 
 	// Returns true when catalog-authored bounds are available for this obstacle.
 	bool HasAuthoredBoundsSize() const;

@@ -2939,6 +2939,8 @@ bool AScenarioEditorController::ConfigurePlacementPreviewForSelectedItem(
 		return false;
 	}
 
+	PlacementPreviewActor->ClearPreview();
+
 	switch (SelectedPlacementItemType)
 	{
 	case EScenarioPaletteItemType::StaticObstacle:
@@ -3238,6 +3240,7 @@ void AScenarioEditorController::DestroyPlacementPreview()
 {
 	if (IsValid(PlacementPreviewActor))
 	{
+		PlacementPreviewActor->ClearPreview();
 		PlacementPreviewActor->Destroy();
 	}
 

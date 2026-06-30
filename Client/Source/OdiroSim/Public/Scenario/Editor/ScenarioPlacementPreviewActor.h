@@ -11,6 +11,7 @@ class USkeletalMesh;
 class UStaticMeshComponent;
 class UStaticMesh;
 class UScenarioStaticObstaclePropCatalog;
+class AScenarioStaticObstacle;
 
 UCLASS(BlueprintType)
 class ODIROSIM_API AScenarioPlacementPreviewActor : public AActor
@@ -50,19 +51,30 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
 	void SetPlacementValid(bool bCanPlace);
 
+	// Clears any spawned or component-backed preview owned by this placement manager.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
+	void ClearPreview();
+
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor")
 	FName GetPreviewPropId() const { return PreviewPropId; }
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor")
 	double GetPlacementRadius2D() const { return PlacementRadius2D; }
 
+protected:
+	// Destroys transient child preview actors during actor teardown or level transitions.
+	virtual void EndPlay(const EEndPlayReason::Type endPlayReason) override;
+
 private:
 	bool ConfigureActorPreviewFromActor(AActor* actor, FName previewId);
 	bool ConfigureActorPreviewFromSpawnedActor(TSubclassOf<AActor> actorClass);
+	bool ConfigureStaticObstaclePreviewActor(const FScenarioStaticObstaclePropEntry& propEntry);
 	void ClearPreviewMeshes();
+	void DestroyPreviewActor();
 	void SetStaticMeshPreview(UStaticMesh* staticMesh);
 	void SetSkeletalMeshPreview(USkeletalMesh* skeletalMesh);
 	void ApplyPreviewMaterial(UMaterialInterface* material);
+	void ApplyPreviewMaterialToActor(AActor* actor, UMaterialInterface* material);
 	// Offsets static preview meshes so the actor origin remains the ground-contact point.
 	void ApplyStaticMeshGroundAlignment();
 
@@ -71,4 +83,8 @@ private:
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor")
 	double PlacementRadius2D = 0.0;
+
+	// Transient actor preview spawned from a static-obstacle prop actor class.
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> PreviewActor;
 };

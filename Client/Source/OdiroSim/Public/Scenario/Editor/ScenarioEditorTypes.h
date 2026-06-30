@@ -282,6 +282,10 @@ struct ODIROSIM_API FScenarioAuthoringStaticObstacleRecord
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	FTransform Transform = FTransform::Identity;
 
+	// World-space center of the catalog-authored placement bounds.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FVector PlacementBoundsCenter = FVector::ZeroVector;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor", meta = (ClampMin = "0.0"))
 	double PlacementRadius2D = 0.0;
 

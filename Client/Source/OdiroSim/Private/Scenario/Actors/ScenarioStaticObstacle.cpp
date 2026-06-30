@@ -3,6 +3,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -65,6 +66,34 @@ namespace
 		return FName(*(ObjectTypeActorTagPrefix + semanticTypeId.ToString()));
 	}
 
+	TSubclassOf<AScenarioStaticObstacle> ResolveStaticObstacleSpawnClass(
+		TSubclassOf<AScenarioStaticObstacle> fallbackClass,
+		const FScenarioStaticObstaclePropEntry& propEntry,
+		FString& outFailureReason)
+	{
+		if (!propEntry.ObstacleActorClass.IsNull())
+		{
+			UClass* loadedClass = propEntry.ObstacleActorClass.LoadSynchronous();
+			if (!loadedClass || !loadedClass->IsChildOf(AScenarioStaticObstacle::StaticClass()))
+			{
+				outFailureReason = FString::Printf(
+					TEXT("Static obstacle prop '%s' actor class is invalid: %s"),
+					*propEntry.PropId.ToString(),
+					*propEntry.ObstacleActorClass.ToSoftObjectPath().ToString());
+				return nullptr;
+			}
+
+			return loadedClass;
+		}
+
+		if (fallbackClass)
+		{
+			return fallbackClass;
+		}
+
+		return AScenarioStaticObstacle::StaticClass();
+	}
+
 }
 
 AScenarioStaticObstacle* AScenarioStaticObstacle::SpawnConfigured(
@@ -86,10 +115,11 @@ AScenarioStaticObstacle* AScenarioStaticObstacle::SpawnConfigured(
 		return nullptr;
 	}
 
-	TSubclassOf<AScenarioStaticObstacle> spawnClass = obstacleClass;
+	TSubclassOf<AScenarioStaticObstacle> spawnClass =
+		ResolveStaticObstacleSpawnClass(obstacleClass, propEntry, outFailureReason);
 	if (!spawnClass)
 	{
-		spawnClass = AScenarioStaticObstacle::StaticClass();
+		return nullptr;
 	}
 
 	FActorSpawnParameters spawnParams;
@@ -196,7 +226,10 @@ bool AScenarioStaticObstacle::ApplyPropEntry(const FScenarioStaticObstaclePropEn
 	SemanticTypeId = propEntry.SemanticTypeId;
 	PropDisplayName = propEntry.DisplayName;
 	PropCategory = propEntry.Category;
+	ObstacleActorClass = propEntry.ObstacleActorClass;
 	StaticMeshAsset = propEntry.StaticMeshAsset;
+	BoundsSizeMeters = propEntry.BoundsSizeMeters;
+	BoundsCenterOffsetMeters = propEntry.BoundsCenterOffsetMeters;
 	FallbackBoxExtent = propEntry.FallbackBoxExtent;
 	bUseMeshSimpleCollision = propEntry.bUseMeshSimpleCollision;
 	bUseFallbackBoxCollision = propEntry.bUseFallbackBoxCollision;
@@ -211,7 +244,7 @@ bool AScenarioStaticObstacle::ApplyPropEntry(const FScenarioStaticObstaclePropEn
 	const bool bAppliedMesh = ApplyConfiguredStaticMesh();
 	ApplyObjectTypeActorTag();
 	ApplyCollisionSettings();
-	return bAppliedMesh;
+	return bAppliedMesh || HasConfiguredVisualMesh();
 }
 
 void AScenarioStaticObstacle::ApplyObjectTypeActorTag()
@@ -237,31 +270,52 @@ void AScenarioStaticObstacle::ApplyCollisionSettings()
 		? ECollisionEnabled::QueryAndPhysics
 		: (bUseSafetyQuery ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
 
-	const bool bUseMeshCollision = bUseMeshSimpleCollision
+	const bool bUseAuthoredBoundsCollision = HasAuthoredBoundsSize();
+	const bool bUseMeshCollision = !bUseAuthoredBoundsCollision
+		&& bUseMeshSimpleCollision
 		&& MeshRoot
 		&& StaticMeshHasSimpleCollision(MeshRoot->GetStaticMesh());
-	const bool bUseFallbackCollision = !bUseMeshCollision && bUseFallbackBoxCollision;
+	const bool bUseBoundsCollision = bUseFallbackBoxCollision
+		&& (bUseAuthoredBoundsCollision || !bUseMeshCollision);
 
-	ConfigureObstacleCollisionPrimitive(
-		MeshRoot,
-		bUseMeshCollision ? collisionEnabled : ECollisionEnabled::NoCollision);
+	ApplyVisualPrimitiveCollisionSettings(bUseMeshCollision ? collisionEnabled : ECollisionEnabled::NoCollision);
 
 	if (!CollisionBoundsComponent)
 	{
 		return;
 	}
 
-	if (!bUseFallbackCollision)
+	if (!bUseBoundsCollision)
 	{
 		ConfigureObstacleCollisionPrimitive(CollisionBoundsComponent, ECollisionEnabled::NoCollision);
 		return;
 	}
 
-	const FVector boxExtent = ClampCollisionBoxExtent(FallbackBoxExtent);
+	const FVector boxExtent = ClampCollisionBoxExtent(ResolveBoundsExtentCm());
 
 	CollisionBoundsComponent->SetBoxExtent(boxExtent, false);
-	CollisionBoundsComponent->SetRelativeLocation(FVector(0.0, 0.0, boxExtent.Z));
+	CollisionBoundsComponent->SetRelativeLocation(ResolveBoundsCenterOffsetCm());
 	ConfigureObstacleCollisionPrimitive(CollisionBoundsComponent, collisionEnabled);
+}
+
+void AScenarioStaticObstacle::ApplyVisualPrimitiveCollisionSettings(
+	ECollisionEnabled::Type meshRootCollisionEnabled)
+{
+	TArray<UPrimitiveComponent*> primitiveComponents;
+	GetComponents<UPrimitiveComponent>(primitiveComponents);
+	for (UPrimitiveComponent* primitiveComponent : primitiveComponents)
+	{
+		if (!primitiveComponent || primitiveComponent == CollisionBoundsComponent)
+		{
+			continue;
+		}
+
+		const bool bAllowMeshRootCollision =
+			primitiveComponent == MeshRoot && meshRootCollisionEnabled != ECollisionEnabled::NoCollision;
+		ConfigureObstacleCollisionPrimitive(
+			primitiveComponent,
+			bAllowMeshRootCollision ? meshRootCollisionEnabled : ECollisionEnabled::NoCollision);
+	}
 }
 
 bool AScenarioStaticObstacle::ApplyDefaultPropById(FName inPropId)
@@ -322,7 +376,12 @@ bool AScenarioStaticObstacle::GetPlacementBounds(
 	outHalfSize2D = FVector2D::ZeroVector;
 	outRadius2D = 0.0;
 
-	if (MeshRoot && MeshRoot->GetStaticMesh())
+	if (HasAuthoredBoundsSize())
+	{
+		outBoxExtent = ResolveBoundsExtentCm();
+		outOrigin = GetActorTransform().TransformPosition(ResolveBoundsCenterOffsetCm());
+	}
+	else if (MeshRoot && MeshRoot->GetStaticMesh())
 	{
 		const FBoxSphereBounds meshBounds = MeshRoot->Bounds;
 		outOrigin = meshBounds.Origin;
@@ -354,4 +413,63 @@ double AScenarioStaticObstacle::GetPlacementRadius2D() const
 
 	GetPlacementBounds(origin, boxExtent, halfSize2D, radius2D);
 	return radius2D;
+}
+
+bool AScenarioStaticObstacle::HasConfiguredVisualMesh() const
+{
+	TArray<UStaticMeshComponent*> staticMeshComponents;
+	GetComponents<UStaticMeshComponent>(staticMeshComponents);
+	for (const UStaticMeshComponent* staticMeshComponent : staticMeshComponents)
+	{
+		if (staticMeshComponent && staticMeshComponent->GetStaticMesh())
+		{
+			return true;
+		}
+	}
+
+	TArray<USkeletalMeshComponent*> skeletalMeshComponents;
+	GetComponents<USkeletalMeshComponent>(skeletalMeshComponents);
+	for (const USkeletalMeshComponent* skeletalMeshComponent : skeletalMeshComponents)
+	{
+		if (skeletalMeshComponent && skeletalMeshComponent->GetSkeletalMeshAsset())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool AScenarioStaticObstacle::HasAuthoredBoundsSize() const
+{
+	return BoundsSizeMeters.X > KINDA_SMALL_NUMBER
+		&& BoundsSizeMeters.Y > KINDA_SMALL_NUMBER
+		&& BoundsSizeMeters.Z > KINDA_SMALL_NUMBER;
+}
+
+FVector AScenarioStaticObstacle::ResolveBoundsExtentCm() const
+{
+	if (HasAuthoredBoundsSize())
+	{
+		return FVector(
+			FMath::Max(BoundsSizeMeters.X * 50.0, 0.0),
+			FMath::Max(BoundsSizeMeters.Y * 50.0, 0.0),
+			FMath::Max(BoundsSizeMeters.Z * 50.0, 0.0));
+	}
+
+	return FVector(
+		FMath::Max(FallbackBoxExtent.X, 0.0),
+		FMath::Max(FallbackBoxExtent.Y, 0.0),
+		FMath::Max(FallbackBoxExtent.Z, 0.0));
+}
+
+FVector AScenarioStaticObstacle::ResolveBoundsCenterOffsetCm() const
+{
+	const FVector boundsExtentCm = ResolveBoundsExtentCm();
+	FVector centerOffsetCm = BoundsCenterOffsetMeters * 100.0;
+	if (centerOffsetCm.IsNearlyZero())
+	{
+		centerOffsetCm.Z = boundsExtentCm.Z;
+	}
+	return centerOffsetCm;
 }

@@ -444,8 +444,18 @@ private:
 		const FTransform& transform,
 		const FString& ignoredInstanceId,
 		FString& outFailureReason) const;
+	// Returns the 2D safety radius used for editor static-obstacle preview and records.
 	double ComputePlacementRadius2D(const FScenarioStaticObstaclePropEntry& propEntry) const;
+	// Returns the unrotated 2D half extent from the prop catalog bounds.
 	FVector2D ComputePlacementHalfExtent2D(const FScenarioStaticObstaclePropEntry& propEntry) const;
+	// Returns the transformed 2D half extent used by overlap checks.
+	FVector2D ComputePlacementHalfExtent2D(
+		const FScenarioStaticObstaclePropEntry& propEntry,
+		const FTransform& transform) const;
+	// Returns the world center of the prop catalog bounds for one transform.
+	FVector ComputePlacementBoundsCenter(
+		const FScenarioStaticObstaclePropEntry& propEntry,
+		const FTransform& transform) const;
 	bool StaticObstacleFootprintsOverlap(
 		const FVector& candidateLocation,
 		const FVector2D& candidateHalfExtent,

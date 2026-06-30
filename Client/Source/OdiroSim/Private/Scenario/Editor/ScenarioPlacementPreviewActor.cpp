@@ -1,9 +1,11 @@
 #include "Scenario/Editor/ScenarioPlacementPreviewActor.h"
 
 #include "Components/SceneComponent.h"
+#include "Components/MeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
+#include "Scenario/Actors/ScenarioStaticObstacle.h"
 #include "Scenario/Data/ScenarioStaticObstaclePropCatalog.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
@@ -50,15 +52,19 @@ AScenarioPlacementPreviewActor::AScenarioPlacementPreviewActor()
 	SetActorHiddenInGame(true);
 }
 
+void AScenarioPlacementPreviewActor::EndPlay(const EEndPlayReason::Type endPlayReason)
+{
+	DestroyPreviewActor();
+	Super::EndPlay(endPlayReason);
+}
+
 bool AScenarioPlacementPreviewActor::ConfigureStaticObstacleProp(FName propId)
 {
 	FScenarioStaticObstaclePropEntry propEntry;
 	const UScenarioStaticObstaclePropCatalog* propCatalog = StaticObstaclePropCatalog.LoadSynchronous();
 	if (!IsValid(propCatalog) || !propCatalog->FindPropEntryById(propId, propEntry))
 	{
-		SetActorHiddenInGame(true);
-		PreviewPropId = NAME_None;
-		PlacementRadius2D = 0.0;
+		ClearPreview();
 		return false;
 	}
 
@@ -69,21 +75,29 @@ bool AScenarioPlacementPreviewActor::ConfigureStaticObstaclePropEntry(const FSce
 {
 	if (propEntry.PropId.IsNone() || !PreviewMeshComponent)
 	{
-		SetActorHiddenInGame(true);
+		ClearPreview();
 		return false;
+	}
+
+	PreviewPropId = propEntry.PropId;
+	const FVector boundsExtentCm = propEntry.ResolveBoundsExtentCm();
+	PlacementRadius2D = propEntry.SafetyRadius > 0.0
+		? propEntry.SafetyRadius
+		: FMath::Sqrt(FMath::Square(boundsExtentCm.X) + FMath::Square(boundsExtentCm.Y));
+
+	if (ConfigureStaticObstaclePreviewActor(propEntry))
+	{
+		SetActorHiddenInGame(false);
+		SetPlacementValid(true);
+		return true;
 	}
 
 	UStaticMesh* loadedMesh = propEntry.StaticMeshAsset.LoadSynchronous();
 	if (!loadedMesh)
 	{
-		SetActorHiddenInGame(true);
+		ClearPreview();
 		return false;
 	}
-
-	PreviewPropId = propEntry.PropId;
-	PlacementRadius2D = propEntry.SafetyRadius > 0.0
-		? propEntry.SafetyRadius
-		: FMath::Sqrt(FMath::Square(propEntry.FallbackBoxExtent.X) + FMath::Square(propEntry.FallbackBoxExtent.Y));
 
 	SetStaticMeshPreview(loadedMesh);
 	SetActorHiddenInGame(false);
@@ -93,6 +107,8 @@ bool AScenarioPlacementPreviewActor::ConfigureStaticObstaclePropEntry(const FSce
 
 bool AScenarioPlacementPreviewActor::ConfigureActorPreviewClass(TSubclassOf<AActor> actorClass)
 {
+	DestroyPreviewActor();
+
 	if (!actorClass)
 	{
 		ClearPreviewMeshes();
@@ -189,6 +205,8 @@ bool AScenarioPlacementPreviewActor::ConfigureActorPreviewFromSpawnedActor(TSubc
 
 void AScenarioPlacementPreviewActor::ClearPreviewMeshes()
 {
+	DestroyPreviewActor();
+
 	PreviewPropId = NAME_None;
 	PlacementRadius2D = 0.0;
 	if (PreviewMeshComponent)
@@ -204,8 +222,87 @@ void AScenarioPlacementPreviewActor::ClearPreviewMeshes()
 	}
 }
 
+void AScenarioPlacementPreviewActor::ClearPreview()
+{
+	ClearPreviewMeshes();
+	SetActorHiddenInGame(true);
+}
+
+void AScenarioPlacementPreviewActor::DestroyPreviewActor()
+{
+	if (IsValid(PreviewActor))
+	{
+		PreviewActor->Destroy();
+	}
+
+	PreviewActor = nullptr;
+}
+
+bool AScenarioPlacementPreviewActor::ConfigureStaticObstaclePreviewActor(
+	const FScenarioStaticObstaclePropEntry& propEntry)
+{
+	if (propEntry.ObstacleActorClass.IsNull())
+	{
+		return false;
+	}
+
+	UWorld* world = GetWorld();
+	UClass* loadedClass = propEntry.ObstacleActorClass.LoadSynchronous();
+	if (!world || !loadedClass || !loadedClass->IsChildOf(AScenarioStaticObstacle::StaticClass()))
+	{
+		return false;
+	}
+
+	DestroyPreviewActor();
+	if (PreviewMeshComponent)
+	{
+		PreviewMeshComponent->SetStaticMesh(nullptr);
+		PreviewMeshComponent->SetVisibility(false);
+		PreviewMeshComponent->SetRelativeLocation(FVector::ZeroVector);
+	}
+	if (PreviewSkeletalMeshComponent)
+	{
+		PreviewSkeletalMeshComponent->SetSkeletalMesh(nullptr);
+		PreviewSkeletalMeshComponent->SetVisibility(false);
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	spawnParams.ObjectFlags |= RF_Transient;
+
+	AScenarioStaticObstacle* spawnedPreviewActor = world->SpawnActor<AScenarioStaticObstacle>(
+		loadedClass,
+		GetActorTransform(),
+		spawnParams);
+	if (!spawnedPreviewActor)
+	{
+		return false;
+	}
+
+	spawnedPreviewActor->AttachToActor(this, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	spawnedPreviewActor->SetActorRelativeTransform(FTransform::Identity);
+	spawnedPreviewActor->SetActorEnableCollision(false);
+	spawnedPreviewActor->ApplyPropEntry(propEntry);
+
+	TArray<UPrimitiveComponent*> primitiveComponents;
+	spawnedPreviewActor->GetComponents<UPrimitiveComponent>(primitiveComponents);
+	for (UPrimitiveComponent* primitiveComponent : primitiveComponents)
+	{
+		if (primitiveComponent)
+		{
+			primitiveComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			primitiveComponent->SetGenerateOverlapEvents(false);
+		}
+	}
+
+	PreviewActor = spawnedPreviewActor;
+	return true;
+}
+
 void AScenarioPlacementPreviewActor::SetStaticMeshPreview(UStaticMesh* staticMesh)
 {
+	DestroyPreviewActor();
+
 	if (PreviewMeshComponent)
 	{
 		PreviewMeshComponent->SetStaticMesh(staticMesh);
@@ -221,6 +318,8 @@ void AScenarioPlacementPreviewActor::SetStaticMeshPreview(UStaticMesh* staticMes
 
 void AScenarioPlacementPreviewActor::SetSkeletalMeshPreview(USkeletalMesh* skeletalMesh)
 {
+	DestroyPreviewActor();
+
 	if (PreviewSkeletalMeshComponent)
 	{
 		PreviewSkeletalMeshComponent->SetSkeletalMesh(skeletalMesh);
@@ -284,6 +383,32 @@ void AScenarioPlacementPreviewActor::ApplyPreviewMaterial(UMaterialInterface* ma
 		for (int32 index = 0; index < materialCount; ++index)
 		{
 			PreviewSkeletalMeshComponent->SetMaterial(index, material);
+		}
+	}
+
+	ApplyPreviewMaterialToActor(PreviewActor.Get(), material);
+}
+
+void AScenarioPlacementPreviewActor::ApplyPreviewMaterialToActor(AActor* actor, UMaterialInterface* material)
+{
+	if (!actor || !material)
+	{
+		return;
+	}
+
+	TArray<UMeshComponent*> meshComponents;
+	actor->GetComponents<UMeshComponent>(meshComponents);
+	for (UMeshComponent* meshComponent : meshComponents)
+	{
+		if (!meshComponent)
+		{
+			continue;
+		}
+
+		const int32 materialCount = FMath::Max(meshComponent->GetNumMaterials(), 1);
+		for (int32 index = 0; index < materialCount; ++index)
+		{
+			meshComponent->SetMaterial(index, material);
 		}
 	}
 }

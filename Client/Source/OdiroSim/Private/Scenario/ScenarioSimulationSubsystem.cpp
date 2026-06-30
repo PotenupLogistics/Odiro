@@ -256,8 +256,11 @@ bool UScenarioSimulationSubsystem::TryBuildGroundRegionXYBounds(
 
 	for (const FScenarioGroundRegionSpec& regionSpec : groundRegionSpecs)
 	{
-		if (regionSpec.ShapeType != EScenarioGroundShapeType::Rectangle)
+		if (regionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon
+			&& regionSpec.PolygonVertices.Num() < 3)
+		{
 			continue;
+		}
 
 		ExpandXYBoundsWithGroundRegion(regionSpec, outXYBounds);
 		zSum += regionSpec.Center.Z;
@@ -441,11 +444,22 @@ void UScenarioSimulationSubsystem::ExpandXYBoundsWithGroundRegion(
 	const FScenarioGroundRegionSpec& regionSpec,
 	FBox2D& inOutXYBounds)
 {
-	const FVector2D halfSize = regionSpec.Size * 0.5;
 	const FTransform regionTransform(
 		FRotator(0.0, regionSpec.YawDegrees, 0.0),
 		regionSpec.Center
 	);
+
+	if (regionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon)
+	{
+		for (const FVector2D& localVertex : regionSpec.PolygonVertices)
+		{
+			const FVector worldCorner = regionTransform.TransformPosition(FVector(localVertex.X, localVertex.Y, 0.0));
+			inOutXYBounds += FVector2D(worldCorner.X, worldCorner.Y);
+		}
+		return;
+	}
+
+	const FVector2D halfSize = regionSpec.Size * 0.5;
 
 	const FVector localCorners[4] =
 	{

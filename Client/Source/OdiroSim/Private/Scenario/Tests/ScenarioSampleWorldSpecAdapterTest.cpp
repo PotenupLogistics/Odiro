@@ -187,6 +187,34 @@ namespace
 		return Document;
 	}
 
+	// Creates a two-segment skew sample whose building side is represented by one convex polygon.
+	FScenarioSampleDocument MakeSkewBuildingExpansionSampleDocument()
+	{
+		FScenarioSampleDocument Document = MakeRightAngleBuildingExpansionSampleDocument();
+		Document.Sample.SampleId = TEXT("000044");
+		Document.Sample.ScenarioId = TEXT("skew_building_expansion_sample_000044");
+		Document.Sample.Source.TemplateRef = TEXT("templates/skew_building_expansion.template.json");
+		Document.Sample.Source.TemplateHash = TEXT("sha256:templatehash0044");
+		Document.Sample.Source.ProfileRef = TEXT("experiments/skew/profile.json");
+		Document.Sample.Source.ProfileHash = TEXT("sha256:profilehash0044");
+		Document.Sample.Source.SettingRef = TEXT("experiments/skew/setting.json");
+		Document.Sample.Source.SettingHash = TEXT("sha256:settinghash0044");
+		Document.Sample.Source.Seed = 4444;
+
+		FScenarioSampleSemantic& Semantic = Document.Scenario.Semantic;
+		Semantic.RouteAxis.PointsMeters = {
+			FVector2D(0.0, 40.0),
+			FVector2D(60.0, 40.0),
+			FVector2D(100.0, 10.0)
+		};
+		Semantic.RouteAxis.LengthMeters = 110.0;
+		Semantic.Robot.Goal.AlongMeters = 109.0;
+		Semantic.Robot.Goal.HeadingDegrees = -36.8698976458;
+		Semantic.Layout[1].AlongRangeMeters.EndMeters = 110.0;
+		Semantic.Summary.TotalLengthMeters = 110.0;
+		return Document;
+	}
+
 	// Checks whether adapter validation emitted the expected diagnostic code.
 	bool HasAdapterDiagnostic(
 		const FScenarioCompileResult& Result,
@@ -369,6 +397,53 @@ bool FScenarioSampleWorldSpecAdapterRightAngleBuildingExpansionTest::RunTest(con
 	TestEqual(TEXT("building-side expansion length cm"), ExpansionRegion.Size.X, 6000.0);
 	TestEqual(TEXT("building-side expansion width cm"), ExpansionRegion.Size.Y, 4000.0);
 	TestEqual(TEXT("building-side expansion yaw"), ExpansionRegion.YawDegrees, 0.0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSampleWorldSpecAdapterSkewBuildingExpansionTest,
+	"OdiroSim.ScenarioSample.WorldSpecAdapter.SkewBuildingExpansion",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSampleWorldSpecAdapterSkewBuildingExpansionTest::RunTest(const FString& Parameters)
+{
+	const FScenarioSampleDocument Document = MakeSkewBuildingExpansionSampleDocument();
+	const FScenarioCompileResult Result =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);
+
+	TestTrue(TEXT("skew sample adapts"), Result.bSuccess);
+	TestEqual(TEXT("one generated building-side expansion"), Result.WorldSpec.GroundRegions.Num(), 1);
+	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	{
+		return false;
+	}
+
+	const FScenarioGroundRegionSpec& ExpansionRegion = Result.WorldSpec.GroundRegions[0];
+	TestEqual(
+		TEXT("skew expansion id"),
+		ExpansionRegion.RegionId,
+		FString(TEXT("generated_city_lower_building_expansion_00_00")));
+	TestEqual(
+		TEXT("skew expansion shape"),
+		static_cast<int32>(ExpansionRegion.ShapeType),
+		static_cast<int32>(EScenarioGroundShapeType::ConvexPolygon));
+	TestEqual(TEXT("skew expansion surface"), ExpansionRegion.SurfaceId, FString(TEXT("walkway")));
+	TestEqual(
+		TEXT("skew expansion region type"),
+		static_cast<int32>(ExpansionRegion.RegionType),
+		static_cast<int32>(EScenarioGroundRegionType::Walkable));
+	TestEqual(TEXT("skew expansion center x cm"), ExpansionRegion.Center.X, 5000.0);
+	TestEqual(TEXT("skew expansion center y cm"), ExpansionRegion.Center.Y, 2500.0);
+	TestEqual(TEXT("skew expansion bounds width x cm"), ExpansionRegion.Size.X, 10000.0);
+	TestEqual(TEXT("skew expansion bounds width y cm"), ExpansionRegion.Size.Y, 3000.0);
+	TestEqual(TEXT("skew expansion vertex count"), ExpansionRegion.PolygonVertices.Num(), 4);
+	if (ExpansionRegion.PolygonVertices.Num() == 4)
+	{
+		TestEqual(TEXT("skew expansion first vertex x cm"), ExpansionRegion.PolygonVertices[0].X, -1000.0);
+		TestEqual(TEXT("skew expansion first vertex y cm"), ExpansionRegion.PolygonVertices[0].Y, -1500.0);
+		TestEqual(TEXT("skew expansion third vertex x cm"), ExpansionRegion.PolygonVertices[2].X, 1000.0);
+		TestEqual(TEXT("skew expansion third vertex y cm"), ExpansionRegion.PolygonVertices[2].Y, 1500.0);
+	}
 	return true;
 }
 

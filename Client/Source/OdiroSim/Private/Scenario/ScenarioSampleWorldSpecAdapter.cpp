@@ -2,6 +2,7 @@
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Algo/Reverse.h"
 #include "Misc/Crc.h"
 #include "Scenario/ScenarioCorridorGeometry.h"
 #include "Shared/ScenarioSampleJson.h"
@@ -624,8 +625,57 @@ namespace
 		return RegionSpec;
 	}
 
-	// Emits one rectangle when two orthogonal chunks enclose the building-side city block.
-	bool TryAddGeneratedCityRightAngleBuildingExpansionRegion(
+	// Creates one walkable polygon GroundRegion for a non-orthogonal building-side city block.
+	FScenarioGroundRegionSpec MakeGeneratedCityBuildingExpansionPolygonRegion(
+		const FString& RegionId,
+		const TArray<FVector2D>& WorldVerticesMeters)
+	{
+		FVector2D CenterMeters = FVector2D::ZeroVector;
+		for (const FVector2D& VertexMeters : WorldVerticesMeters)
+		{
+			CenterMeters += VertexMeters;
+		}
+		CenterMeters /= static_cast<double>(WorldVerticesMeters.Num());
+
+		TArray<FVector2D> LocalVerticesCm;
+		LocalVerticesCm.Reserve(WorldVerticesMeters.Num());
+		FBox2D LocalBoundsCm(ForceInit);
+		for (const FVector2D& VertexMeters : WorldVerticesMeters)
+		{
+			const FVector2D LocalVertexCm = (VertexMeters - CenterMeters) * MetersToCentimeters;
+			LocalVerticesCm.Add(LocalVertexCm);
+			LocalBoundsCm += LocalVertexCm;
+		}
+
+		double SignedArea = 0.0;
+		for (int32 Index = 0; Index < LocalVerticesCm.Num(); ++Index)
+		{
+			const FVector2D& Current = LocalVerticesCm[Index];
+			const FVector2D& Next = LocalVerticesCm[(Index + 1) % LocalVerticesCm.Num()];
+			SignedArea += (Current.X * Next.Y) - (Next.X * Current.Y);
+		}
+		if (SignedArea < 0.0)
+		{
+			Algo::Reverse(LocalVerticesCm);
+		}
+
+		FScenarioGroundRegionSpec RegionSpec;
+		RegionSpec.RegionId = RegionId;
+		RegionSpec.RegionType = EScenarioGroundRegionType::Walkable;
+		RegionSpec.SurfaceId = TEXT("walkway");
+		RegionSpec.ShapeType = EScenarioGroundShapeType::ConvexPolygon;
+		RegionSpec.Center = FVector(
+			CenterMeters.X * MetersToCentimeters,
+			CenterMeters.Y * MetersToCentimeters,
+			ResolveGeneratedCitySurfaceTopZCm(RegionSpec.SurfaceId));
+		RegionSpec.Size = LocalBoundsCm.bIsValid ? LocalBoundsCm.GetSize() : FVector2D::ZeroVector;
+		RegionSpec.PolygonVertices = MoveTemp(LocalVerticesCm);
+		RegionSpec.TraversabilityScore = ToGeneratedCityTraversabilityScore(RegionSpec.RegionType);
+		return RegionSpec;
+	}
+
+	// Emits one rectangle or convex polygon when two chunks enclose a building-side city block.
+	bool TryAddGeneratedCityTwoChunkBuildingExpansionRegion(
 		const TArray<FGeneratedCityAxisChunk>& Chunks,
 		EGeneratedCitySide Side,
 		int32 LayoutIndex,
@@ -652,11 +702,6 @@ namespace
 
 		const FVector2D FirstForward = FirstVector / FirstLengthMeters;
 		const FVector2D SecondForward = SecondVector / SecondLengthMeters;
-		if (FMath::Abs(FVector2D::DotProduct(FirstForward, SecondForward)) > GeneratedCityRightAngleDotTolerance)
-		{
-			return false;
-		}
-
 		const double CrossZ = (FirstForward.X * SecondForward.Y) - (FirstForward.Y * SecondForward.X);
 		if (FMath::Abs(CrossZ) <= KINDA_SMALL_NUMBER)
 		{
@@ -673,13 +718,27 @@ namespace
 			TEXT("generated_city_%s_building_expansion_%02d_00"),
 			*GeneratedCitySideIdFragment(Side),
 			LayoutIndex);
-		const FVector2D CenterMeters = (Chunks[0].StartWorldMeters + Chunks[1].EndWorldMeters) * 0.5;
-		WorldSpec.GroundRegions.Add(MakeGeneratedCityBuildingExpansionRegion(
+		if (FMath::Abs(FVector2D::DotProduct(FirstForward, SecondForward)) <= GeneratedCityRightAngleDotTolerance)
+		{
+			const FVector2D CenterMeters = (Chunks[0].StartWorldMeters + Chunks[1].EndWorldMeters) * 0.5;
+			WorldSpec.GroundRegions.Add(MakeGeneratedCityBuildingExpansionRegion(
+				RegionId,
+				CenterMeters,
+				FirstLengthMeters,
+				SecondLengthMeters,
+				FMath::RadiansToDegrees(FMath::Atan2(FirstForward.Y, FirstForward.X))));
+			return true;
+		}
+
+		const TArray<FVector2D> WorldVerticesMeters = {
+			Chunks[0].StartWorldMeters,
+			Chunks[0].EndWorldMeters,
+			Chunks[1].EndWorldMeters,
+			Chunks[0].StartWorldMeters + SecondVector
+		};
+		WorldSpec.GroundRegions.Add(MakeGeneratedCityBuildingExpansionPolygonRegion(
 			RegionId,
-			CenterMeters,
-			FirstLengthMeters,
-			SecondLengthMeters,
-			FMath::RadiansToDegrees(FMath::Atan2(FirstForward.Y, FirstForward.X))));
+			WorldVerticesMeters));
 		return true;
 	}
 
@@ -803,7 +862,7 @@ namespace
 			return;
 		}
 
-		if (TryAddGeneratedCityRightAngleBuildingExpansionRegion(Chunks, Side, LayoutIndex, WorldSpec))
+		if (TryAddGeneratedCityTwoChunkBuildingExpansionRegion(Chunks, Side, LayoutIndex, WorldSpec))
 		{
 			return;
 		}

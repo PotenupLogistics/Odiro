@@ -69,6 +69,7 @@ class RobotState:
 class LidarRay:
     hit: bool
     distanceM: float
+    blocksPolicy: bool = True
     rayIndex: int | None = None
     rayYawDegree: float = 0.0
     actorName: str | None = None
@@ -80,6 +81,7 @@ class LidarRay:
 class LidarRay1D:
     hit: bool
     distanceM: float
+    blocksPolicy: bool = True
     rayIndex: int | None = None
     actorName: str | None = None
     actorTags: list[str] = field(default_factory=list)
@@ -90,6 +92,7 @@ class LidarRay1D:
 class LidarRay2D:
     hit: bool
     distanceM: float
+    blocksPolicy: bool = True
     yawDegree: float = 0.0
     rayIndex: int | None = None
     actorName: str | None = None
@@ -101,6 +104,7 @@ class LidarRay2D:
 class LidarRay3D:
     hit: bool
     distanceM: float
+    blocksPolicy: bool = True
     yawDegree: float = 0.0
     pitchDegree: float = 0.0
     rayIndex: int | None = None

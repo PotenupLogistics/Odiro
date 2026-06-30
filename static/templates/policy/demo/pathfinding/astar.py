@@ -1,14 +1,23 @@
 import heapq
 import math
+import time
 
 from ..contract import GoalLocation, GridCell, GridMap, RobotState, StartLocation
 
 
 class AStarResult:
-    def __init__(self, success: bool, path: list[tuple[int, int]], reason: str):
+    # A* 결과와 성능 계측값을 함께 보관한다.
+    def __init__(
+        self,
+        success: bool,
+        path: list[tuple[int, int]],
+        reason: str,
+        metrics: dict | None = None,
+    ):
         self.success = success
         self.path = path
         self.reason = reason
+        self.metrics = dict(metrics or {})
 
 
 class AStarPathfinder:
@@ -27,6 +36,8 @@ class AStarPathfinder:
         self.pathTurnCostPenalty = path_turn_cost_penalty
         self.bAllowDiagonalPathfinding = allow_diagonal_pathfinding
         self.bSmoothPathWithLineOfSight = smooth_path_with_line_of_sight
+        # grid/control 설정별 obstacle soft cost offset을 재사용한다.
+        self.obstacleSoftCostOffsetCache: dict[tuple[float, float, float, float], list[tuple[int, int, float]]] = {}
 
     def configure_from_control_spec(self, control_spec: dict | None) -> None:
         control_spec = control_spec or {}
@@ -63,20 +74,34 @@ class AStarPathfinder:
         goal: GoalLocation,
         grid: GridMap,
     ) -> AStarResult:
-        if not goal.hasGoal:
-            return AStarResult(False, [], "goal_not_available")
+        started_at = time.perf_counter()
+        metrics = self.make_pathfind_metrics(grid)
 
+        def finish_result(success: bool, path: list[tuple[int, int]], reason: str) -> AStarResult:
+            metrics["pathfindTotalMs"] = self.elapsed_ms(started_at)
+            metrics["pathfindPathCellCount"] = len(path)
+            metrics["pathfindReason"] = reason
+            return AStarResult(success, path, reason, metrics)
+
+        if not goal.hasGoal:
+            return finish_result(False, [], "goal_not_available")
+
+        cell_lookup_started_at = time.perf_counter()
         cell_lookup = self.build_cell_lookup(grid)
-        obstacle_soft_costs = self.build_obstacle_soft_costs(grid, cell_lookup)
+        metrics["pathfindCellLookupMs"] = self.elapsed_ms(cell_lookup_started_at)
+
+        soft_cost_started_at = time.perf_counter()
+        obstacle_soft_costs = self.build_obstacle_soft_costs(grid, cell_lookup, metrics)
+        metrics["pathfindSoftCostMs"] = self.elapsed_ms(soft_cost_started_at)
 
         start_cell = self.world_to_cell(start.x, start.y, grid)
         goal_cell = self.world_to_cell(goal.x, goal.y, grid)
 
         if not self.is_walkable(start_cell, grid, cell_lookup):
-            return AStarResult(False, [], "start_cell_blocked")
+            return finish_result(False, [], "start_cell_blocked")
 
         if not self.is_walkable(goal_cell, grid, cell_lookup):
-            return AStarResult(False, [], "goal_cell_blocked")
+            return finish_result(False, [], "goal_cell_blocked")
 
         start_state = self.make_path_state(start_cell, (0, 0))
         open_set: list[tuple[float, int, tuple[int, int, int, int]]] = []
@@ -85,18 +110,25 @@ class AStarPathfinder:
 
         came_from: dict[tuple[int, int, int, int], tuple[int, int, int, int]] = {}
         g_score: dict[tuple[int, int, int, int], float] = {start_state: 0.0}
+        search_started_at = time.perf_counter()
 
         while open_set:
             _, _, current_state = heapq.heappop(open_set)
+            metrics["pathfindVisitedNodeCount"] += 1
             current = self.get_cell_from_path_state(current_state)
             current_direction = self.get_direction_from_path_state(current_state)
 
             if current == goal_cell:
                 path = self.reconstruct_path(came_from, current_state)
+                metrics["pathfindSearchMs"] = self.elapsed_ms(search_started_at)
+                smooth_started_at = time.perf_counter()
                 path = self.smooth_path(path, grid, cell_lookup)
-                return AStarResult(True, path, "path_found")
+                metrics["pathfindSmoothMs"] = self.elapsed_ms(smooth_started_at)
+                return finish_result(True, path, "path_found")
 
-            for neighbor in self.get_neighbors(current, grid, cell_lookup):
+            neighbors = self.get_neighbors(current, grid, cell_lookup)
+            metrics["pathfindNeighborCheckCount"] += len(neighbors)
+            for neighbor in neighbors:
                 next_direction = self.get_move_direction(current, neighbor)
                 next_state = self.make_path_state(neighbor, next_direction)
                 move_cost = self.get_move_cost(current, neighbor, grid, cell_lookup, obstacle_soft_costs)
@@ -109,9 +141,33 @@ class AStarPathfinder:
 
                     priority = next_score + self.heuristic(neighbor, goal_cell)
                     push_order += 1
+                    metrics["pathfindOpenPushCount"] += 1
                     heapq.heappush(open_set, (priority, push_order, next_state))
 
-        return AStarResult(False, [], "path_not_found")
+        metrics["pathfindSearchMs"] = self.elapsed_ms(search_started_at)
+        return finish_result(False, [], "path_not_found")
+
+    # A* 계측값의 기본 필드를 만든다.
+    def make_pathfind_metrics(self, grid: GridMap) -> dict:
+        return {
+            "pathfindTotalMs": 0.0,
+            "pathfindCellLookupMs": 0.0,
+            "pathfindSoftCostMs": 0.0,
+            "pathfindSearchMs": 0.0,
+            "pathfindSmoothMs": 0.0,
+            "pathfindGridCellCount": len(grid.cells),
+            "pathfindBlockedCellCount": 0,
+            "pathfindSoftCostCellCount": 0,
+            "pathfindVisitedNodeCount": 0,
+            "pathfindNeighborCheckCount": 0,
+            "pathfindOpenPushCount": 0,
+            "pathfindPathCellCount": 0,
+            "pathfindReason": "",
+        }
+
+    # perf_counter 기준 경과 시간을 ms로 변환한다.
+    def elapsed_ms(self, started_at: float) -> float:
+        return (time.perf_counter() - started_at) * 1000.0
 
     def world_to_cell(self, x: float, y: float, grid: GridMap) -> tuple[int, int]:
         local_x = x - grid.originCm.x
@@ -288,56 +344,85 @@ class AStarPathfinder:
     def build_cell_lookup(self, grid: GridMap) -> dict[tuple[int, int], GridCell]:
         return {(grid_cell.x, grid_cell.y): grid_cell for grid_cell in grid.cells}
 
+    # obstacle soft cost 후보 offset과 penalty를 만든다.
+    def get_obstacle_soft_cost_offsets(
+        self,
+        cell_size_cm: float,
+        radius_cm: float,
+    ) -> list[tuple[int, int, float]]:
+        cache_key = (
+            cell_size_cm,
+            radius_cm,
+            self.obstacleSoftCostMaxPenalty,
+            self.obstacleSoftCostPower,
+        )
+        cached_offsets = self.obstacleSoftCostOffsetCache.get(cache_key)
+        if cached_offsets is not None:
+            return cached_offsets
+
+        radius_cells = max(1, math.ceil(radius_cm / cell_size_cm))
+        offsets: list[tuple[int, int, float]] = []
+
+        for offset_x in range(-radius_cells, radius_cells + 1):
+            for offset_y in range(-radius_cells, radius_cells + 1):
+                if offset_x == 0 and offset_y == 0:
+                    continue
+
+                distance_cells = math.hypot(offset_x, offset_y)
+                distance_cm = distance_cells * cell_size_cm
+                if distance_cm > radius_cm:
+                    continue
+
+                distance_ratio = max(0.0, min(1.0, 1.0 - (distance_cm / radius_cm)))
+                penalty = self.obstacleSoftCostMaxPenalty * (distance_ratio ** self.obstacleSoftCostPower)
+                if penalty > 0.0:
+                    offsets.append((offset_x, offset_y, penalty))
+
+        self.obstacleSoftCostOffsetCache[cache_key] = offsets
+        return offsets
+
     def build_obstacle_soft_costs(
         self,
         grid: GridMap,
         cell_lookup: dict[tuple[int, int], GridCell],
+        metrics: dict | None = None,
     ) -> dict[tuple[int, int], float]:
-        del cell_lookup
-
         if self.obstacleSoftCostRadiusM <= 0.0 or self.obstacleSoftCostMaxPenalty <= 0.0:
             return {}
 
         radius_cm = self.obstacleSoftCostRadiusM * 100.0
         cell_size_cm = max(grid.cellSizeCm, 1.0)
-        radius_cells = max(1, math.ceil(radius_cm / cell_size_cm))
         blocked_cells = [
             (grid_cell.x, grid_cell.y)
             for grid_cell in grid.cells
             if grid_cell.blocked
         ]
+        if metrics is not None:
+            metrics["pathfindBlockedCellCount"] = len(blocked_cells)
 
         if not blocked_cells:
             return {}
 
+        soft_cost_offsets = self.get_obstacle_soft_cost_offsets(cell_size_cm, radius_cm)
+        if not soft_cost_offsets:
+            return {}
+
         soft_costs: dict[tuple[int, int], float] = {}
 
-        for grid_cell in grid.cells:
-            if grid_cell.blocked:
-                continue
-
-            min_distance_cells = float("inf")
-            for blocked_x, blocked_y in blocked_cells:
-                offset_x = abs(grid_cell.x - blocked_x)
-                offset_y = abs(grid_cell.y - blocked_y)
-                if offset_x > radius_cells or offset_y > radius_cells:
+        # Expand only the configured radius around blockers instead of scanning every
+        # grid cell against every blocked cell.
+        for blocked_x, blocked_y in blocked_cells:
+            for offset_x, offset_y, penalty in soft_cost_offsets:
+                candidate = (blocked_x + offset_x, blocked_y + offset_y)
+                grid_cell = cell_lookup.get(candidate)
+                if grid_cell is None or grid_cell.blocked:
                     continue
 
-                distance_cells = math.hypot(offset_x, offset_y)
-                if distance_cells < min_distance_cells:
-                    min_distance_cells = distance_cells
+                if penalty > soft_costs.get(candidate, 0.0):
+                    soft_costs[candidate] = penalty
 
-            if not math.isfinite(min_distance_cells):
-                continue
-
-            distance_cm = min_distance_cells * cell_size_cm
-            if distance_cm > radius_cm:
-                continue
-
-            distance_ratio = max(0.0, min(1.0, 1.0 - (distance_cm / radius_cm)))
-            penalty = self.obstacleSoftCostMaxPenalty * (distance_ratio ** self.obstacleSoftCostPower)
-            if penalty > 0.0:
-                soft_costs[(grid_cell.x, grid_cell.y)] = penalty
+        if metrics is not None:
+            metrics["pathfindSoftCostCellCount"] = len(soft_costs)
 
         return soft_costs
 

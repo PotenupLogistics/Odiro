@@ -381,6 +381,7 @@ namespace
 		rayObject->SetNumberField(TEXT("rayYawDegree"), rayInfo.RayYawDegree);
 		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
 		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
+		rayObject->SetBoolField(TEXT("blocksPolicy"), rayInfo.bBlocksPolicy);
 		return rayObject;
 	}
 
@@ -393,6 +394,7 @@ namespace
 		rayObject->SetNumberField(TEXT("rayIndex"), rayInfo.RayIndex);
 		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
 		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
+		rayObject->SetBoolField(TEXT("blocksPolicy"), rayInfo.bBlocksPolicy);
 		return rayObject;
 	}
 
@@ -1564,6 +1566,42 @@ bool UDeliveryBot_HttpPolicyComponent::TryBuildRepathEventSnapshot(
 		outSnapshot.DynamicBlockedCellCount = static_cast<int32>(numberValue);
 	}
 
+	auto CopyFloatMetric = [&sourceObject, &debugObject](const FString& FieldName, float& OutValue)
+	{
+		double MetricValue = 0.0;
+		bool bHasMetricValue = false;
+		TryCopyNumberField(sourceObject, FieldName, MetricValue, bHasMetricValue);
+		TryCopyNumberField(debugObject, FieldName, MetricValue, bHasMetricValue);
+		if (bHasMetricValue)
+		{
+			OutValue = static_cast<float>(MetricValue);
+		}
+	};
+
+	auto CopyIntMetric = [&sourceObject, &debugObject](const FString& FieldName, int32& OutValue)
+	{
+		double MetricValue = 0.0;
+		bool bHasMetricValue = false;
+		TryCopyNumberField(sourceObject, FieldName, MetricValue, bHasMetricValue);
+		TryCopyNumberField(debugObject, FieldName, MetricValue, bHasMetricValue);
+		if (bHasMetricValue)
+		{
+			OutValue = static_cast<int32>(MetricValue);
+		}
+	};
+
+	CopyFloatMetric(TEXT("pathfindTotalMs"), outSnapshot.PathfindTotalMs);
+	CopyFloatMetric(TEXT("pathfindCellLookupMs"), outSnapshot.PathfindCellLookupMs);
+	CopyFloatMetric(TEXT("pathfindSoftCostMs"), outSnapshot.PathfindSoftCostMs);
+	CopyFloatMetric(TEXT("pathfindSearchMs"), outSnapshot.PathfindSearchMs);
+	CopyFloatMetric(TEXT("pathfindSmoothMs"), outSnapshot.PathfindSmoothMs);
+	CopyIntMetric(TEXT("pathfindGridCellCount"), outSnapshot.PathfindGridCellCount);
+	CopyIntMetric(TEXT("pathfindBlockedCellCount"), outSnapshot.PathfindBlockedCellCount);
+	CopyIntMetric(TEXT("pathfindSoftCostCellCount"), outSnapshot.PathfindSoftCostCellCount);
+	CopyIntMetric(TEXT("pathfindVisitedNodeCount"), outSnapshot.PathfindVisitedNodeCount);
+	CopyIntMetric(TEXT("pathfindNeighborCheckCount"), outSnapshot.PathfindNeighborCheckCount);
+	CopyIntMetric(TEXT("pathfindOpenPushCount"), outSnapshot.PathfindOpenPushCount);
+
 	TSharedPtr<FJsonObject> targetWorldPointObject;
 	if (!TryGetJsonObjectField(*sourceObject, TEXT("targetWorldPoint"), targetWorldPointObject)
 		&& (!debugObject.IsValid() || !TryGetJsonObjectField(*debugObject, TEXT("targetWorldPoint"), targetWorldPointObject))
@@ -1795,6 +1833,7 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 		objectJson->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(objectInfo.ActorTags));
 		objectJson->SetStringField(TEXT("targetId"), objectInfo.TargetId);
 		objectJson->SetArrayField(TEXT("targetTags"), MakeJsonStringArrayFromNames(objectInfo.TargetTags));
+		objectJson->SetBoolField(TEXT("blocksPolicy"), objectInfo.bBlocksPolicy);
 		objectJson->SetBoolField(TEXT("hasBounds"), objectInfo.bHasBounds);
 		objectJson->SetObjectField(TEXT("boundsOriginCm"), MakeJsonVectorObject(objectInfo.BoundsOriginCm));
 		objectJson->SetObjectField(TEXT("boundsExtentCm"), MakeJsonVectorObject(objectInfo.BoundsExtentCm));

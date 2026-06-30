@@ -9,6 +9,8 @@ paths:
   - Client/Resources/policy-runtime.py
   - static/templates/policy/**
   - Client/Json/Input/PolicySpecs/**
+  - Client/Docs/RepathAgent.md
+  - Client/Docs/TroubleshootingProcess.local.md
 entry:
   - id: unreal-delivery-bot
     description: DeliveryBot actor, components, grid, policy HTTP, setup compiler, and Python process subsystem.
@@ -22,6 +24,13 @@ entry:
     read:
       - Client/Resources/policy-runtime.py
       - static/templates/policy
+  - id: repath-optimization-handoff
+    description: RePath/A* optimization handoff, pathfinding metrics, and portfolio problem-solving log.
+    read:
+      - Client/Docs/RepathAgent.md
+      - Client/Docs/TroubleshootingProcess.local.md
+      - static/templates/policy/demo/pathfinding/astar.py
+      - static/templates/policy/demo/policies/repath_policy.py
 guardrails:
   - Prefer focused shared DeliveryBot structs over direct Scenario/Episode header coupling.
   - Python policy process ownership lives in DeliveryBot subsystem/settings, not root batch files.
@@ -31,9 +40,11 @@ guardrails:
   - Required project-run artifact path validation must fail through `/scenario/start`, not silently fall back to Saved paths.
   - Project-run point-cloud artifacts stay under `episodes/<EpisodeId>/lidar_point_cloud/`; frame dumps stay under `frames/`.
   - NoPointCloud/basic runs with disabled capture are valid without a point-cloud output folder.
+  - LiDAR policy templates and policy-runtime.py must preserve blocksPolicy so review-only floor/corridor hits do not become policy obstacles.
   - DeliveryBot normalizes Python policy events before ScenarioEvaluationSubsystem publishes episode events.
   - "`/scenario/end` response stays minimal; C++ runner owns lifecycle watchdog and exactly-once completion."
   - RePath decisions come from Python `response.events`, not inferred C++ slowdown/path-follow reasons.
+  - RePath optimization must start from recorded pathfind metrics and update `Client/Docs/TroubleshootingProcess.local.md` when a meaningful diagnosis or fix lands.
 verify:
   - when: DeliveryBot C++ behavior changes
     run:

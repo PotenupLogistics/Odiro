@@ -8,6 +8,7 @@ def convert_lidar_ray_1d_to_policy_ray(ray: LidarRay1D) -> LidarRay:
     return LidarRay(
         hit=ray.hit,
         distanceM=ray.distanceM,
+        blocksPolicy=ray.blocksPolicy,
         rayIndex=ray.rayIndex,
         rayYawDegree=0.0,
         actorName=ray.actorName,
@@ -20,6 +21,7 @@ def convert_lidar_ray_2d_to_policy_ray(ray: LidarRay2D) -> LidarRay:
     return LidarRay(
         hit=ray.hit,
         distanceM=ray.distanceM,
+        blocksPolicy=ray.blocksPolicy,
         rayIndex=ray.rayIndex,
         rayYawDegree=ray.yawDegree,
         actorName=ray.actorName,
@@ -34,6 +36,7 @@ def convert_lidar_ray_3d_to_policy_ray(ray: LidarRay3D) -> LidarRay:
     return LidarRay(
         hit=ray.hit,
         distanceM=projected_distance_m,
+        blocksPolicy=ray.blocksPolicy,
         rayIndex=ray.rayIndex,
         rayYawDegree=ray.yawDegree,
         actorName=ray.actorName,
@@ -111,6 +114,9 @@ def is_better_projected_3d_ray(
         return candidate_ray.hit
 
     if candidate_ray.hit:
+        if candidate_ray.blocksPolicy != current_ray.blocksPolicy:
+            return candidate_ray.blocksPolicy
+
         candidate_distance_m = candidate_ray.distanceM * max(0.0, math.cos(math.radians(candidate_ray.pitchDegree)))
         current_distance_m = current_ray.distanceM * max(0.0, math.cos(math.radians(current_ray.pitchDegree)))
         if candidate_distance_m != current_distance_m:

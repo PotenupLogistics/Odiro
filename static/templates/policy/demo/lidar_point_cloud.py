@@ -532,6 +532,7 @@ def build_lidar_point_cloud_frame(
             "rayIndex": ray.rayIndex,
             "actorName": ray.actorName or "",
             "actorTags": list(ray.actorTags or []),
+            "blocksPolicy": ray.blocksPolicy,
             "classification": classification,
         })
         points.append(point)
@@ -689,8 +690,11 @@ def _classify_lidar_ray(ray: LidarRay3D) -> str:
             return "wall"
         return "ground"
 
-    if len(actor_tags) == 0:
+    if not ray.blocksPolicy:
         return "ground"
+
+    if len(actor_tags) == 0:
+        return "obstacle"
 
     return "unknown"
 

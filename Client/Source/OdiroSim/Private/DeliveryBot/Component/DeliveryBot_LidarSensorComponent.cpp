@@ -21,14 +21,14 @@ namespace
 		return placeableComponent ? placeableComponent->InstanceId : FString();
 	}
 
-	// Filters floor-like scenario surfaces so LiDAR reports vertical obstacles instead of road/walkway planes.
-	bool ShouldIgnoreScenarioSurfaceLidarHit(const FHitResult& hitResult)
+	// Returns whether a physical LiDAR hit is allowed to drive policy obstacle behavior.
+	bool IsPolicyBlockingLidarHit(const FHitResult& hitResult)
 	{
 		const AActor* hitActor = hitResult.GetActor();
 		if (IsValid(Cast<AScenarioGroundRegion>(hitActor))
 			|| IsValid(Cast<AScenarioCorridorRuntimeActor>(hitActor)))
 		{
-			return true;
+			return false;
 		}
 
 		const UPrimitiveComponent* hitComponent = hitResult.GetComponent();
@@ -38,8 +38,8 @@ namespace
 		}
 
 		const FName profileName = hitComponent->GetCollisionProfileName();
-		return profileName == FName(TEXT("Walkable"))
-			|| profileName == FName(TEXT("Penalty"));
+		return profileName != FName(TEXT("Walkable"))
+			&& profileName != FName(TEXT("Penalty"));
 	}
 }
 
@@ -175,11 +175,6 @@ bool UDeliveryBot_LidarSensorComponent::TraceLidarRay(
 			continue;
 		}
 
-		if (ShouldIgnoreScenarioSurfaceLidarHit(hitResult))
-		{
-			continue;
-		}
-
 		outRawHitResults.Add(hitResult);
 
 		if (!bFoundActorHit)
@@ -212,11 +207,21 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::BuildPolicy2DScan(c
 			? FMath::Abs(existingRayInfo->RayPitchDegree)
 			: TNumericLimits<float>::Max();
 
-		const bool bUseRay =
-			existingRayInfo == nullptr
-			|| pitchAbsDegree < existingPitchAbsDegree
-			|| (FMath::IsNearlyEqual(pitchAbsDegree, existingPitchAbsDegree)
-				&& rayInfo.DistanceM < existingRayInfo->DistanceM);
+		bool bUseRay = existingRayInfo == nullptr;
+		if (!bUseRay && rayInfo.bHit != existingRayInfo->bHit)
+		{
+			bUseRay = rayInfo.bHit;
+		}
+		else if (!bUseRay && rayInfo.bHit && rayInfo.bBlocksPolicy != existingRayInfo->bBlocksPolicy)
+		{
+			bUseRay = rayInfo.bBlocksPolicy;
+		}
+		else if (!bUseRay)
+		{
+			bUseRay = pitchAbsDegree < existingPitchAbsDegree
+				|| (FMath::IsNearlyEqual(pitchAbsDegree, existingPitchAbsDegree)
+					&& rayInfo.DistanceM < existingRayInfo->DistanceM);
+		}
 
 		if (bUseRay)
 		{
@@ -311,7 +316,7 @@ void UDeliveryBot_LidarSensorComponent::LogLidarTraceSummary(const FDeliveryBotL
 
 		++frontHitCount;
 
-		if (rayInfo.ActorTags.Num() <= 0)
+		if (!rayInfo.bBlocksPolicy)
 			continue;
 
 		++frontObstacleCount;
@@ -583,7 +588,7 @@ TArray<FDeliveryBotLidarDetectedObjectInfo> UDeliveryBot_LidarSensorComponent::B
 
 	for (const FDeliveryBotLidarRayInfo& rayInfo : scanInfo.RayInfos)
 	{
-		if (!rayInfo.bHit || !IsValid(rayInfo.HitActor))
+		if (!rayInfo.bHit || !rayInfo.bBlocksPolicy || !IsValid(rayInfo.HitActor))
 		{
 			continue;
 		}
@@ -599,6 +604,7 @@ TArray<FDeliveryBotLidarDetectedObjectInfo> UDeliveryBot_LidarSensorComponent::B
 			newObjectInfo.ActorTags = rayInfo.ActorTags;
 			newObjectInfo.TargetId = rayInfo.TargetId;
 			newObjectInfo.TargetTags = rayInfo.TargetTags;
+			newObjectInfo.bBlocksPolicy = rayInfo.bBlocksPolicy;
 			rayInfo.HitActor->GetActorBounds(true, newObjectInfo.BoundsOriginCm, newObjectInfo.BoundsExtentCm);
 			newObjectInfo.bHasBounds = !newObjectInfo.BoundsExtentCm.IsNearlyZero();
 			newObjectInfo.ClosestHitLocationCm = rayInfo.HitLocationCm;
@@ -881,10 +887,19 @@ FDeliveryBotLidarRayInfo UDeliveryBot_LidarSensorComponent::MakeRayInfo(
 	rayInfo.ActorTags = hitActor->Tags;
 	rayInfo.TargetId = ResolveLidarScenarioTargetId(hitActor);
 	rayInfo.TargetTags = hitActor->Tags;
+	rayInfo.bBlocksPolicy = IsPolicyBlockingLidarHit(*hitResult);
+	for (const FName& ignoreTag : LidarSensorConfigInfo.IgnoreTags)
+	{
+		if (hitActor->ActorHasTag(ignoreTag))
+		{
+			rayInfo.bBlocksPolicy = false;
+			break;
+		}
+	}
 	rayInfo.HitLocationCm = hitResult->ImpactPoint;
 	rayInfo.DistanceM = FVector::Dist(startLocationCm, hitResult->ImpactPoint) / 100.f;
 
-	DrawAccumulatedHitLocationDebug(rayInfo.HitLocationCm, rayInfo.ActorTags.Num() > 0);
+	DrawAccumulatedHitLocationDebug(rayInfo.HitLocationCm, rayInfo.bBlocksPolicy);
 
 	return rayInfo;
 }

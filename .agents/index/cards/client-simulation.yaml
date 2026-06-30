@@ -163,6 +163,7 @@ guardrails:
   - Embedded Replay fullscreen controls use dedicated WBP_Replay button names for playback, direct camera selection, and map/point-cloud/LiDAR-ray layer toggles; the normal view can keep its single camera-cycle button.
   - Embedded Replay map and point-cloud toggles are render-layer visibility only; they must not alter replay frames, robot playback, policy, or physics.
   - Embedded Replay point-cloud review uses LidarPointCloudRuntime rendering for Orbit, Free, and VehicleFront views, while TopDown uses review-actor-owned HISM sphere instances because the plugin renderer is not reliable in orthographic capture.
+  - DeliveryBot LiDAR raw hits are preserved for point-cloud/replay review, while floor/corridor/walkable surfaces are separated from policy obstacle behavior through the per-ray blocksPolicy flag.
   - Embedded Replay LiDAR Ray review is a replay-only optional layer sourced from Unreal sensor snapshots and stored under episode/replay/lidar_rays; it must not depend on Python point-cloud artifacts.
   - ScenarioReplaySubsystem owns LiDAR Ray artifact load state and time-to-frame selection; render actors should consume its current-frame API rather than reading rays.frames.bin directly.
   - Embedded Replay LiDAR Ray rendering uses a ScenarioReplaySubsystem-owned replay-only actor; UI controls should toggle subsystem visibility, not spawn actors or read ray files.

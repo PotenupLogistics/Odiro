@@ -261,11 +261,11 @@ private:
 
 	// Plugin point sprite size used when rendering the cloud.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud", meta = (ClampMin = "0.1"))
-	float PointSizeCm{ 0.7f };
+	float PointSizeCm{ 0.3f };
 
 	// Sphere diameter in centimeters used only by the TopDown renderer.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|TopDown", meta = (ClampMin = "0.1"))
-	float TopDownSphereSizeCm{ 2.0f };
+	float TopDownSphereSizeCm{ 1.0f };
 
 	// Optional Z offset in centimeters used only by the TopDown sphere renderer.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|TopDown")

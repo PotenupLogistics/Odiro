@@ -458,6 +458,17 @@ void UScenarioEvaluationSubsystem::ReportDeliveryBotPolicyEvent(
 		properties.Add(TEXT("last_obstacle_warning_source"), MakeStringParam(Snapshot.LastObstacleWarningSource));
 		properties.Add(TEXT("blocked_corridor_cell_count"), MakeIntegerParam(Snapshot.BlockedCorridorCellCount));
 		properties.Add(TEXT("dynamic_blocked_cell_count"), MakeIntegerParam(Snapshot.DynamicBlockedCellCount));
+		properties.Add(TEXT("pathfind_total_ms"), MakeFloatParam(Snapshot.PathfindTotalMs));
+		properties.Add(TEXT("pathfind_cell_lookup_ms"), MakeFloatParam(Snapshot.PathfindCellLookupMs));
+		properties.Add(TEXT("pathfind_soft_cost_ms"), MakeFloatParam(Snapshot.PathfindSoftCostMs));
+		properties.Add(TEXT("pathfind_search_ms"), MakeFloatParam(Snapshot.PathfindSearchMs));
+		properties.Add(TEXT("pathfind_smooth_ms"), MakeFloatParam(Snapshot.PathfindSmoothMs));
+		properties.Add(TEXT("pathfind_grid_cell_count"), MakeIntegerParam(Snapshot.PathfindGridCellCount));
+		properties.Add(TEXT("pathfind_blocked_cell_count"), MakeIntegerParam(Snapshot.PathfindBlockedCellCount));
+		properties.Add(TEXT("pathfind_soft_cost_cell_count"), MakeIntegerParam(Snapshot.PathfindSoftCostCellCount));
+		properties.Add(TEXT("pathfind_visited_node_count"), MakeIntegerParam(Snapshot.PathfindVisitedNodeCount));
+		properties.Add(TEXT("pathfind_neighbor_check_count"), MakeIntegerParam(Snapshot.PathfindNeighborCheckCount));
+		properties.Add(TEXT("pathfind_open_push_count"), MakeIntegerParam(Snapshot.PathfindOpenPushCount));
 
 		if (Snapshot.bHasTargetWorldPoint)
 		{

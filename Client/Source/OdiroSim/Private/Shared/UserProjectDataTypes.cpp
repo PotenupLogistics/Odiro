@@ -1435,6 +1435,7 @@ namespace
 	{
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
 		object->SetBoolField(TEXT("hit"), ReadBoolOrDefault(sourceObject, TEXT("hit"), false));
+		object->SetBoolField(TEXT("blocks_policy"), ReadBoolOrDefault(sourceObject, TEXT("blocksPolicy"), true));
 		object->SetNumberField(TEXT("distance_m"), ReadNumberOrDefault(sourceObject, TEXT("distanceM"), 0.0));
 
 		double rayIndex = 0.0;
@@ -1803,6 +1804,7 @@ namespace
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
 		SetTargetIdField(object, sourceObject);
 		SetTargetTagsField(object, sourceObject);
+		object->SetBoolField(TEXT("blocks_policy"), ReadBoolOrDefault(sourceObject, TEXT("blocksPolicy"), true));
 		object->SetBoolField(TEXT("has_bounds"), ReadBoolOrDefault(sourceObject, TEXT("hasBounds"), false));
 		object->SetField(TEXT("bounds_origin_cm"), CloneFieldOrNull(sourceObject, TEXT("boundsOriginCm")));
 		object->SetField(TEXT("bounds_extent_cm"), CloneFieldOrNull(sourceObject, TEXT("boundsExtentCm")));

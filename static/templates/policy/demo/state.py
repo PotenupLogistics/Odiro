@@ -68,6 +68,7 @@ class AgentState:
     repathFrontAngleDegree: float = 0.0                                 # RePath 전방 판정 half angle
     repathBlockRadiusCells: int = 0                                     # RePath가 동적 장애물을 확장해 막는 cell 반경
     currentLookAheadDistanceM: float = 0.0
+    lastPathfindMetrics: dict[str, Any] = field(default_factory=dict)    # 마지막 A* 길찾기 성능 계측값
 
     # /scenario/start가 들어왔을 때 episode 상태를 새로 시작
     def reset_for_start(
@@ -135,6 +136,7 @@ class AgentState:
         self.repathFrontAngleDegree = 0.0
         self.repathBlockRadiusCells = 0
         self.currentLookAheadDistanceM = 0.0
+        self.lastPathfindMetrics = {}
 
     # /scenario/decide가 들어왔을 때 마지막 observation 시간 정보 저장
     def update_decide_time(self, sequence: int, run_time_seconds: float) -> None:
@@ -235,3 +237,4 @@ class AgentState:
         self.repathFrontAngleDegree = 0.0
         self.repathBlockRadiusCells = 0
         self.currentLookAheadDistanceM = 0.0
+        self.lastPathfindMetrics = {}

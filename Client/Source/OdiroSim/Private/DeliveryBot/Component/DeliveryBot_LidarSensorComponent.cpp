@@ -25,6 +25,15 @@ UDeliveryBot_LidarSensorComponent::UDeliveryBot_LidarSensorComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
+FVector UDeliveryBot_LidarSensorComponent::GetSensorWorldLocationCm(const AActor& owner) const
+{
+	const FVector localOffsetCm(
+		LidarSensorConfigInfo.SensorForwardOffsetM * 100.f,
+		LidarSensorConfigInfo.SensorRightOffsetM * 100.f,
+		LidarSensorConfigInfo.SensorHeightM * 100.f);
+	return owner.GetActorLocation() + owner.GetActorRotation().RotateVector(localOffsetCm);
+}
+
 // LiDAR 설정을 런타임에서 안전하게 사용할 수 있도록 보정한다.
 void UDeliveryBot_LidarSensorComponent::InitializeLidar(const FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo)
 {
@@ -33,6 +42,10 @@ void UDeliveryBot_LidarSensorComponent::InitializeLidar(const FDeliveryBotLidarS
 	LidarSensorConfigInfo.ScanRangeM = FMath::Max(LidarSensorConfigInfo.ScanRangeM, 0.f);
 	LidarSensorConfigInfo.AngleStepDegree = FMath::Max(LidarSensorConfigInfo.AngleStepDegree, 1.f);
 	LidarSensorConfigInfo.SensorHeightM = FMath::Max(LidarSensorConfigInfo.SensorHeightM, 0.f);
+	LidarSensorConfigInfo.SensorForwardOffsetM =
+		FMath::Clamp(LidarSensorConfigInfo.SensorForwardOffsetM, -10.f, 10.f);
+	LidarSensorConfigInfo.SensorRightOffsetM =
+		FMath::Clamp(LidarSensorConfigInfo.SensorRightOffsetM, -10.f, 10.f);
 	LidarSensorConfigInfo.ScanRateHz = FMath::Max(LidarSensorConfigInfo.ScanRateHz, 0.1f);
 	LidarSensorConfigInfo.bStoreMissedRays = true;
 	LidarSensorConfigInfo.FrontHalfAngleDegree = FMath::Clamp(LidarSensorConfigInfo.FrontHalfAngleDegree, 0.f, 180.f);
@@ -661,7 +674,7 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar1D() const
 	if (!IsValid(owner))
 		return scanInfo;
 
-	const FVector sensorLocationCm = owner->GetActorLocation() + FVector(0.f, 0.f, LidarSensorConfigInfo.SensorHeightM * 100.f);
+	const FVector sensorLocationCm = GetSensorWorldLocationCm(*owner);
 
 	scanInfo.SensorLocationCm = sensorLocationCm;
 
@@ -700,7 +713,7 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar2D() const
 	if (!IsValid(owner))
 		return scanInfo;
 
-	const FVector sensorLocationCm = owner->GetActorLocation() + FVector(0.f, 0.f, LidarSensorConfigInfo.SensorHeightM * 100.f);
+	const FVector sensorLocationCm = GetSensorWorldLocationCm(*owner);
 
 	scanInfo.SensorLocationCm = sensorLocationCm;
 
@@ -749,8 +762,7 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar3D() const
 	if (!IsValid(owner))
 		return scanInfo;
 
-	const FVector sensorLocationCm =
-		owner->GetActorLocation() + FVector(0.f, 0.f, LidarSensorConfigInfo.SensorHeightM * 100.f);
+	const FVector sensorLocationCm = GetSensorWorldLocationCm(*owner);
 
 	scanInfo.SensorLocationCm = sensorLocationCm;
 

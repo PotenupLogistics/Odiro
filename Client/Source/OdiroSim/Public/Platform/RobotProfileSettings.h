@@ -83,6 +83,14 @@ struct ODIROSIM_API FRobotProfileLidarSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float SensorHeightM = 0.07f;
 
+	// robot.lidar.sensor_forward_offset_m sensor origin forward offset in meters from the robot root.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float SensorForwardOffsetM = 0.00f;
+
+	// robot.lidar.sensor_right_offset_m sensor origin right offset in meters from the robot root.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float SensorRightOffsetM = 0.00f;
+
 	// robot.lidar.front_half_angle_degree front-facing half angle in degrees.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float FrontHalfAngleDegree = 50.00f;
@@ -98,6 +106,10 @@ struct ODIROSIM_API FRobotProfileLidarSettings
 	// robot.lidar.angle_step_degree horizontal ray spacing in degrees.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float AngleStepDegree = 3.00f;
+
+	// robot.lidar.vertical_step_degree vertical ray spacing in degrees for 3D mode.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float VerticalStepDegree = 5.00f;
 
 	// robot.lidar.scan_rate_hz sensor update frequency in hertz.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")

@@ -223,6 +223,16 @@ void URobotProfileViewModel::SetLidarSensorHeightM(const float value)
 	UE_MVVM_SET_PROPERTY_VALUE(LidarSensorHeightM, value);
 }
 
+void URobotProfileViewModel::SetLidarSensorForwardOffsetM(const float value)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(LidarSensorForwardOffsetM, value);
+}
+
+void URobotProfileViewModel::SetLidarSensorRightOffsetM(const float value)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(LidarSensorRightOffsetM, value);
+}
+
 void URobotProfileViewModel::SetLidarFrontHalfAngleDegree(const float value)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(LidarFrontHalfAngleDegree, value);
@@ -241,6 +251,11 @@ void URobotProfileViewModel::SetLidarSlowDownDistanceM(const float value)
 void URobotProfileViewModel::SetLidarAngleStepDegree(const float value)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(LidarAngleStepDegree, value);
+}
+
+void URobotProfileViewModel::SetLidarVerticalStepDegree(const float value)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(LidarVerticalStepDegree, value);
 }
 
 void URobotProfileViewModel::SetLidarScanRateHz(const float value)
@@ -323,6 +338,14 @@ bool URobotProfileViewModel::ValidateInputs(TArray<FString>& outDiagnostics) con
 	{
 		outDiagnostics.Add(TEXT("LiDAR Sensor Height must be 0 m or greater."));
 	}
+	if (FMath::Abs(LidarSensorForwardOffsetM) > 10.0f)
+	{
+		outDiagnostics.Add(TEXT("LiDAR Sensor Forward Offset must be between -10 m and 10 m."));
+	}
+	if (FMath::Abs(LidarSensorRightOffsetM) > 10.0f)
+	{
+		outDiagnostics.Add(TEXT("LiDAR Sensor Right Offset must be between -10 m and 10 m."));
+	}
 	if (LidarFrontHalfAngleDegree < 0.0f || LidarFrontHalfAngleDegree > 180.0f)
 	{
 		outDiagnostics.Add(TEXT("LiDAR Front Angle must be between 0 and 180 degrees."));
@@ -338,6 +361,10 @@ bool URobotProfileViewModel::ValidateInputs(TArray<FString>& outDiagnostics) con
 	if (LidarAngleStepDegree < 1.0f)
 	{
 		outDiagnostics.Add(TEXT("LiDAR Angle Step must be at least 1 degree."));
+	}
+	if (LidarVerticalStepDegree < 1.0f)
+	{
+		outDiagnostics.Add(TEXT("LiDAR Vertical Step must be at least 1 degree."));
 	}
 	if (LidarScanRateHz < 0.1f)
 	{
@@ -391,10 +418,13 @@ FRobotProfileSettings URobotProfileViewModel::MakeSettings() const
 	settings.Lidar.bDrawDebug = bLidarDrawDebug;
 	settings.Lidar.ScanRangeM = LidarScanRangeM;
 	settings.Lidar.SensorHeightM = LidarSensorHeightM;
+	settings.Lidar.SensorForwardOffsetM = LidarSensorForwardOffsetM;
+	settings.Lidar.SensorRightOffsetM = LidarSensorRightOffsetM;
 	settings.Lidar.FrontHalfAngleDegree = LidarFrontHalfAngleDegree;
 	settings.Lidar.StopDistanceM = LidarStopDistanceM;
 	settings.Lidar.SlowDownDistanceM = LidarSlowDownDistanceM;
 	settings.Lidar.AngleStepDegree = LidarAngleStepDegree;
+	settings.Lidar.VerticalStepDegree = LidarVerticalStepDegree;
 	settings.Lidar.ScanRateHz = LidarScanRateHz;
 	return settings;
 }
@@ -416,9 +446,12 @@ void URobotProfileViewModel::ApplySettings(const FRobotProfileSettings& settings
 	SetLidarDrawDebug(settings.Lidar.bDrawDebug);
 	SetLidarScanRangeM(settings.Lidar.ScanRangeM);
 	SetLidarSensorHeightM(settings.Lidar.SensorHeightM);
+	SetLidarSensorForwardOffsetM(settings.Lidar.SensorForwardOffsetM);
+	SetLidarSensorRightOffsetM(settings.Lidar.SensorRightOffsetM);
 	SetLidarFrontHalfAngleDegree(settings.Lidar.FrontHalfAngleDegree);
 	SetLidarStopDistanceM(settings.Lidar.StopDistanceM);
 	SetLidarSlowDownDistanceM(settings.Lidar.SlowDownDistanceM);
 	SetLidarAngleStepDegree(settings.Lidar.AngleStepDegree);
+	SetLidarVerticalStepDegree(settings.Lidar.VerticalStepDegree);
 	SetLidarScanRateHz(settings.Lidar.ScanRateHz);
 }

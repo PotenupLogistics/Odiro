@@ -158,6 +158,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
 	float GetLidarSensorHeightM() const { return LidarSensorHeightM; }
 
+	// Updates the LiDAR sensor forward offset input in meters.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarSensorForwardOffsetM(float value);
+
+	// Returns the LiDAR sensor forward offset input in meters.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetLidarSensorForwardOffsetM() const { return LidarSensorForwardOffsetM; }
+
+	// Updates the LiDAR sensor right offset input in meters.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarSensorRightOffsetM(float value);
+
+	// Returns the LiDAR sensor right offset input in meters.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetLidarSensorRightOffsetM() const { return LidarSensorRightOffsetM; }
+
 	// Updates the LiDAR front half angle input in degrees.
 	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
 	void SetLidarFrontHalfAngleDegree(float value);
@@ -189,6 +205,14 @@ public:
 	// Returns the LiDAR horizontal angle step input in degrees.
 	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
 	float GetLidarAngleStepDegree() const { return LidarAngleStepDegree; }
+
+	// Updates the LiDAR vertical angle step input in degrees.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarVerticalStepDegree(float value);
+
+	// Returns the LiDAR vertical angle step input in degrees.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetLidarVerticalStepDegree() const { return LidarVerticalStepDegree; }
 
 	// Updates the LiDAR scan rate input in hertz.
 	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
@@ -286,6 +310,14 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
 	float LidarSensorHeightM = 0.07f;
 
+	// robot.lidar.sensor_forward_offset_m input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float LidarSensorForwardOffsetM = 0.00f;
+
+	// robot.lidar.sensor_right_offset_m input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float LidarSensorRightOffsetM = 0.00f;
+
 	// robot.lidar.front_half_angle_degree input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
 	float LidarFrontHalfAngleDegree = 50.00f;
@@ -301,6 +333,10 @@ private:
 	// robot.lidar.angle_step_degree input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
 	float LidarAngleStepDegree = 3.00f;
+
+	// robot.lidar.vertical_step_degree input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float LidarVerticalStepDegree = 5.00f;
 
 	// robot.lidar.scan_rate_hz input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))

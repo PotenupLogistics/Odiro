@@ -199,6 +199,14 @@ namespace
 		{
 			diagnostics.Add(TEXT("LiDAR Sensor Height must be 0 m or greater."));
 		}
+		if (FMath::Abs(settings.SensorForwardOffsetM) > 10.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Sensor Forward Offset must be between -10 m and 10 m."));
+		}
+		if (FMath::Abs(settings.SensorRightOffsetM) > 10.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Sensor Right Offset must be between -10 m and 10 m."));
+		}
 		if (settings.FrontHalfAngleDegree < 0.0f || settings.FrontHalfAngleDegree > 180.0f)
 		{
 			diagnostics.Add(TEXT("LiDAR Front Angle must be between 0 and 180 degrees."));
@@ -214,6 +222,10 @@ namespace
 		if (settings.AngleStepDegree < 1.0f)
 		{
 			diagnostics.Add(TEXT("LiDAR Angle Step must be at least 1 degree."));
+		}
+		if (settings.VerticalStepDegree < 1.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Vertical Step must be at least 1 degree."));
 		}
 		if (settings.ScanRateHz < 0.1f)
 		{
@@ -1018,10 +1030,13 @@ bool UPlatformUiSubsystem::LoadRobotProfileForProject(
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("range_m"), outSettings.Lidar.ScanRangeM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("sensor_height_m"), outSettings.Lidar.SensorHeightM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("height_m"), outSettings.Lidar.SensorHeightM);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("sensor_forward_offset_m"), outSettings.Lidar.SensorForwardOffsetM);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("sensor_right_offset_m"), outSettings.Lidar.SensorRightOffsetM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("front_half_angle_degree"), outSettings.Lidar.FrontHalfAngleDegree);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("stop_distance_m"), outSettings.Lidar.StopDistanceM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("slow_down_distance_m"), outSettings.Lidar.SlowDownDistanceM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("angle_step_degree"), outSettings.Lidar.AngleStepDegree);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("vertical_step_degree"), outSettings.Lidar.VerticalStepDegree);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("scan_rate_hz"), outSettings.Lidar.ScanRateHz);
 	}
 	return true;
@@ -1106,10 +1121,13 @@ bool UPlatformUiSubsystem::SaveRobotProfileForProject(
 	{
 		lidarObject->SetNumberField(TEXT("height_m"), settings.Lidar.SensorHeightM);
 	}
+	lidarObject->SetNumberField(TEXT("sensor_forward_offset_m"), settings.Lidar.SensorForwardOffsetM);
+	lidarObject->SetNumberField(TEXT("sensor_right_offset_m"), settings.Lidar.SensorRightOffsetM);
 	lidarObject->SetNumberField(TEXT("front_half_angle_degree"), settings.Lidar.FrontHalfAngleDegree);
 	lidarObject->SetNumberField(TEXT("stop_distance_m"), settings.Lidar.StopDistanceM);
 	lidarObject->SetNumberField(TEXT("slow_down_distance_m"), settings.Lidar.SlowDownDistanceM);
 	lidarObject->SetNumberField(TEXT("angle_step_degree"), settings.Lidar.AngleStepDegree);
+	lidarObject->SetNumberField(TEXT("vertical_step_degree"), settings.Lidar.VerticalStepDegree);
 	lidarObject->SetNumberField(TEXT("scan_rate_hz"), settings.Lidar.ScanRateHz);
 
 	FString updatedJson;

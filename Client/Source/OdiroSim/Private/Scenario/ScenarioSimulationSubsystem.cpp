@@ -620,6 +620,20 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 		}
 	}
 
+	const UScenarioCityBlockCatalog* cityBlockCatalog = CityBlockCatalog.LoadSynchronous();
+	FScenarioCityBlockMaterializationOptions cityBlockOptions;
+	cityBlockOptions.LogContext = TEXT("ScenarioSimulation");
+	cityBlockOptions.CatalogDebugName = CityBlockCatalog.ToSoftObjectPath().ToString();
+	cityBlockOptions.bCreateBuildingCollisionProxies = true;
+	const FScenarioCityBlockMaterializationResult cityBlockResult =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			GetWorld(),
+			cityBlockCatalog,
+			setupSpec.GroundRegions,
+			RuntimeCityBlockActors,
+			cityBlockOptions);
+	const int32 cityBlockActorCount = cityBlockResult.SpawnedActorCount;
+
 	const bool bHasDeliveryBotPlaceable = setupSpec.Placeables.ContainsByPredicate(
 		[](const FScenarioPlaceableInstanceSpec& placeableSpec)
 		{
@@ -631,19 +645,6 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid rebuild failed after scenario surfaces were spawned."));
 		bAllSpawned = false;
 	}
-
-	const UScenarioCityBlockCatalog* cityBlockCatalog = CityBlockCatalog.LoadSynchronous();
-	FScenarioCityBlockMaterializationOptions cityBlockOptions;
-	cityBlockOptions.LogContext = TEXT("ScenarioSimulation");
-	cityBlockOptions.CatalogDebugName = CityBlockCatalog.ToSoftObjectPath().ToString();
-	const FScenarioCityBlockMaterializationResult cityBlockResult =
-		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
-			GetWorld(),
-			cityBlockCatalog,
-			setupSpec.GroundRegions,
-			RuntimeCityBlockActors,
-			cityBlockOptions);
-	const int32 cityBlockActorCount = cityBlockResult.SpawnedActorCount;
 
 	for (const FScenarioPathSpec& pathSpec : setupSpec.Paths)
 	{

@@ -954,8 +954,10 @@ namespace
 		FGeneratedCityBandSpec CurbBand;
 		CurbBand.BandId = Side == EGeneratedCitySide::Lower ? TEXT("lower_curb") : TEXT("upper_curb");
 		CurbBand.SurfaceId = TEXT("road");
-		CurbBand.RegionType = EScenarioGroundRegionType::Blocked;
+		CurbBand.RegionType = EScenarioGroundRegionType::Penalty;
 		CurbBand.CollisionTag = TEXT("curb");
+		CurbBand.PenaltyKind = TEXT("curb");
+		CurbBand.PenaltyCost = 1.0;
 		CurbBand.OffsetRangeMeters.MinMeters =
 			FMath::Min(
 				WalkwayEdgeMeters,

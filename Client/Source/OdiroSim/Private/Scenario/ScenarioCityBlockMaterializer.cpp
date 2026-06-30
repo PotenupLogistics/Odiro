@@ -1,7 +1,9 @@
 #include "Scenario/ScenarioCityBlockMaterializer.h"
 
+#include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/ShapeComponent.h"
 #include "Components/SplineMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/BlueprintGeneratedClass.h"
@@ -35,6 +37,12 @@ namespace
 	const double GeneratedRoadStraightSplineJoinToleranceCm = 750.0;
 	// Projection tolerance for selecting the corridor-facing edge of a generated polygon expansion.
 	const double GeneratedBuildingFrontageCorridorEdgeProjectionToleranceCm = 50.0;
+	// Runtime grid only needs a low semantic volume that covers the robot footprint height.
+	const double GeneratedBuildingCollisionProxyHeightCm = 200.0;
+	// Hidden building proxies use the existing grid rule for blocked areas.
+	const FName GeneratedBuildingCollisionProxyProfileName(TEXT("Blocked"));
+	// Component name prefix used to identify authored-bounds building collision proxies.
+	const FName GeneratedBuildingCollisionProxyComponentName(TEXT("GeneratedBuildingBlockingBounds"));
 
 	// Generated city band markers encode the side needed for corridor-relative edge anchoring.
 	const TCHAR* GeneratedLowerSideMarkers[] =
@@ -155,8 +163,8 @@ namespace
 		TArray<UMaterialInterface*> Materials;
 	};
 
-	// Disables every collision path on visual-only CityBuildings actors.
-	void DisableCityBlockActorCollision(AActor& blockActor);
+	// Disables visual collision while optionally preserving semantic blockers.
+	int32 DisableCityBlockActorCollision(AActor& blockActor, bool bPreserveSemanticBlockingComponents);
 
 	// Prevents generated visual blocks from receiving projected runtime/editor decals.
 	void SetActorReceivesDecals(AActor& blockActor, bool bReceivesDecals);
@@ -272,7 +280,6 @@ namespace
 		const FName surfaceId(*regionSpec.SurfaceId);
 		return IsGeneratedCityVisualRegion(regionSpec)
 			&& surfaceId == CityBlockRoadSurfaceId
-			&& regionSpec.RegionType == EScenarioGroundRegionType::Blocked
 			&& (regionSpec.CollisionTag.Equals(CurbCollisionTag, ESearchCase::IgnoreCase)
 				|| regionSpec.RegionId.Contains(TEXT("_curb_")));
 	}
@@ -1242,11 +1249,52 @@ namespace
 			+ (right * sideSign * (regionHalfWidthCm - blockHalfWidthCm + postAnchorOffsetCm));
 	}
 
-	// Disables every collision path on visual-only CityBuildings actors.
-	void DisableCityBlockActorCollision(AActor& blockActor)
+	// Identifies BP-authored shape components that intentionally represent semantic building blockers.
+	bool IsCityBlockSemanticBlockingComponent(const UPrimitiveComponent* primitiveComponent)
+	{
+		return IsValid(primitiveComponent)
+			&& primitiveComponent->IsA<UShapeComponent>()
+			&& primitiveComponent->GetCollisionProfileName() == GeneratedBuildingCollisionProxyProfileName;
+	}
+
+	// Normalizes preserved BP-authored blocker components for both GridTrace and LiDAR queries.
+	void ConfigureCityBlockSemanticBlockingComponent(UPrimitiveComponent& primitiveComponent)
+	{
+		primitiveComponent.SetCollisionProfileName(GeneratedBuildingCollisionProxyProfileName);
+		primitiveComponent.SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		primitiveComponent.SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		primitiveComponent.SetCollisionResponseToChannel(ECC_GameTraceChannel8, ECR_Block);
+		primitiveComponent.SetGenerateOverlapEvents(false);
+		primitiveComponent.SetHiddenInGame(true);
+		primitiveComponent.SetVisibility(false);
+	}
+
+	// Counts preserved semantic blockers after visual collision has been stripped from a CityBuildings actor.
+	int32 CountCityBlockSemanticBlockingComponents(const AActor& blockActor)
+	{
+		int32 semanticBlockingComponentCount = 0;
+		TArray<UPrimitiveComponent*> primitiveComponents;
+		blockActor.GetComponents<UPrimitiveComponent>(primitiveComponents);
+		for (const UPrimitiveComponent* primitiveComponent : primitiveComponents)
+		{
+			if (IsCityBlockSemanticBlockingComponent(primitiveComponent)
+				&& primitiveComponent->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
+			{
+				++semanticBlockingComponentCount;
+			}
+		}
+
+		return semanticBlockingComponentCount;
+	}
+
+	// Disables visual CityBuildings collision while optionally preserving BP-authored semantic blockers.
+	int32 DisableCityBlockActorCollision(
+		AActor& blockActor,
+		bool bPreserveSemanticBlockingComponents)
 	{
 		blockActor.SetActorEnableCollision(false);
 
+		int32 preservedSemanticBlockingComponentCount = 0;
 		TArray<UPrimitiveComponent*> primitiveComponents;
 		blockActor.GetComponents<UPrimitiveComponent>(primitiveComponents);
 		for (UPrimitiveComponent* primitiveComponent : primitiveComponents)
@@ -1256,9 +1304,74 @@ namespace
 				continue;
 			}
 
+			if (bPreserveSemanticBlockingComponents
+				&& IsCityBlockSemanticBlockingComponent(primitiveComponent))
+			{
+				ConfigureCityBlockSemanticBlockingComponent(*primitiveComponent);
+				++preservedSemanticBlockingComponentCount;
+				continue;
+			}
+
 			primitiveComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			primitiveComponent->SetGenerateOverlapEvents(false);
 		}
+
+		if (preservedSemanticBlockingComponentCount > 0)
+		{
+			blockActor.SetActorEnableCollision(true);
+		}
+
+		return preservedSemanticBlockingComponentCount;
+	}
+
+	// Adds a hidden Blocked box based on authored building bounds for runtime grid classification.
+	bool AttachBuildingCollisionProxy(
+		AActor& blockActor,
+		const FGeneratedBuildingFootprint& buildingFootprint,
+		const FRotator& blockRotation)
+	{
+		USceneComponent* rootComponent = blockActor.GetRootComponent();
+		if (!rootComponent)
+		{
+			return false;
+		}
+
+		UBoxComponent* proxyComponent = NewObject<UBoxComponent>(
+			&blockActor,
+			MakeUniqueObjectName(
+				&blockActor,
+				UBoxComponent::StaticClass(),
+				GeneratedBuildingCollisionProxyComponentName));
+		if (!proxyComponent)
+		{
+			return false;
+		}
+
+		const double halfHeightCm = GeneratedBuildingCollisionProxyHeightCm * 0.5;
+		const FVector proxyCenterCm =
+			buildingFootprint.CenterCm + FVector(0.0, 0.0, halfHeightCm);
+
+		proxyComponent->SetBoxExtent(FVector(
+			buildingFootprint.HalfLengthCm,
+			buildingFootprint.HalfWidthCm,
+			halfHeightCm));
+		proxyComponent->SetWorldLocation(proxyCenterCm);
+		proxyComponent->SetWorldRotation(blockRotation);
+		proxyComponent->SetCollisionProfileName(GeneratedBuildingCollisionProxyProfileName);
+		proxyComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		proxyComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		proxyComponent->SetCollisionResponseToChannel(ECC_GameTraceChannel8, ECR_Block);
+		proxyComponent->SetGenerateOverlapEvents(false);
+		proxyComponent->SetHiddenInGame(true);
+		proxyComponent->SetVisibility(false);
+
+		blockActor.AddInstanceComponent(proxyComponent);
+		proxyComponent->RegisterComponent();
+		proxyComponent->AttachToComponent(
+			rootComponent,
+			FAttachmentTransformRules::KeepWorldTransform);
+		blockActor.SetActorEnableCollision(true);
+		return true;
 	}
 
 	// Prevents generated visual blocks from receiving projected runtime/editor decals.
@@ -1779,7 +1892,7 @@ namespace
 				splineMeshComponent->SetStartAndEnd(startLocalCm, startTangentCm, endLocalCm, endTangentCm, true);
 			}
 
-			DisableCityBlockActorCollision(*roadActor);
+			DisableCityBlockActorCollision(*roadActor, false);
 			SetActorReceivesDecals(*roadActor, false);
 			outSpawnedActors.Add(roadActor);
 			++spawnedActorCount;
@@ -1829,7 +1942,20 @@ namespace
 			return nullptr;
 		}
 
-		DisableCityBlockActorCollision(*blockActor);
+		const int32 preservedSemanticBlockingComponentCount = DisableCityBlockActorCollision(
+			*blockActor,
+			options.bCreateBuildingCollisionProxies && blockEntry.Role == EScenarioCityBlockRole::Building);
+		if (preservedSemanticBlockingComponentCount > 0)
+		{
+			UE_LOG(
+				LogScenarioCityBlockMaterializer,
+				Verbose,
+				TEXT("%s generated city block '%s' preserved %d BP-authored semantic blocker component(s) for '%s'."),
+				*options.LogContext,
+				*blockEntry.BlockId.ToString(),
+				preservedSemanticBlockingComponentCount,
+				*debugSourceId);
+		}
 		SetActorReceivesDecals(*blockActor, false);
 		outSpawnedActors.Add(blockActor);
 		return blockActor;
@@ -2036,9 +2162,11 @@ namespace
 		TArray<FGeneratedBuildingFootprint>& inOutAcceptedFootprints,
 		TArray<TObjectPtr<AActor>>& outSpawnedActors,
 		int32& outSkippedOverlapCount,
+		int32& outSpawnedCollisionProxyCount,
 		const FScenarioCityBlockMaterializationOptions& options)
 	{
 		outSkippedOverlapCount = 0;
+		outSpawnedCollisionProxyCount = 0;
 		TArray<FGeneratedBuildingFrontageSpan> frontageSpans;
 		if (!BuildBuildingFrontageSpansForRegion(regionSpec, frontageSpans))
 		{
@@ -2223,7 +2351,7 @@ namespace
 					continue;
 				}
 
-				if (SpawnCityBlockActorAtBoundsCenter(
+				AActor* spawnedActor = SpawnCityBlockActorAtBoundsCenter(
 					world,
 					*candidate.BlockClass,
 					candidate.BlockEntry,
@@ -2231,8 +2359,23 @@ namespace
 					desiredBoundsCenter,
 					candidateFootprint.DebugSourceId,
 					outSpawnedActors,
-					options))
+					options);
+				if (spawnedActor)
 				{
+					if (options.bCreateBuildingCollisionProxies)
+					{
+						const int32 semanticBlockingComponentCount =
+							CountCityBlockSemanticBlockingComponents(*spawnedActor);
+						if (semanticBlockingComponentCount > 0)
+						{
+							outSpawnedCollisionProxyCount += semanticBlockingComponentCount;
+						}
+						else if (AttachBuildingCollisionProxy(*spawnedActor, candidateFootprint, blockRotation))
+						{
+							++outSpawnedCollisionProxyCount;
+						}
+					}
+
 					inOutAcceptedFootprints.Add(candidateFootprint);
 					++spawnedActorCount;
 				}
@@ -2517,6 +2660,7 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 
 			const int32 beforeSpawnCount = outSpawnedActors.Num();
 			int32 skippedOverlapCount = 0;
+			int32 spawnedCollisionProxyCount = 0;
 			result.SpawnedActorCount += SpawnBuildingFrontageVisualsForRegion(
 				*world,
 				regionSpec,
@@ -2524,8 +2668,10 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 				acceptedBuildingFootprints,
 				outSpawnedActors,
 				skippedOverlapCount,
+				spawnedCollisionProxyCount,
 				options);
 			result.SkippedBuildingOverlapCount += skippedOverlapCount;
+			result.SpawnedBuildingCollisionProxyCount += spawnedCollisionProxyCount;
 			if (outSpawnedActors.Num() == beforeSpawnCount && skippedOverlapCount == 0)
 			{
 				++result.SkippedSpawnFailureCount;
@@ -2635,6 +2781,7 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 		|| result.SkippedSpawnFailureCount > 0
 		|| result.SkippedCornerSpawnFailureCount > 0
 		|| result.SpawnedRoadSideCompositeCount > 0
+		|| result.SpawnedBuildingCollisionProxyCount > 0
 		|| result.SkippedBuildingOverlapCount > 0)
 	{
 		UE_LOG(
@@ -2647,7 +2794,7 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 				"SkippedRoadSideCompositeNoEntry: %d, SkippedCornerNoEntry: %d, "
 				"SkippedSpawnFailure: %d, SkippedCornerSpawnFailure: %d, "
 				"SpawnedRoadSideComposite: %d, "
-				"SkippedBuildingOverlap: %d"),
+				"SpawnedBuildingCollisionProxies: %d, SkippedBuildingOverlap: %d"),
 			*options.LogContext,
 			result.CandidateRegionCount,
 			result.SpawnedActorCount,
@@ -2659,6 +2806,7 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 			result.SkippedSpawnFailureCount,
 			result.SkippedCornerSpawnFailureCount,
 			result.SpawnedRoadSideCompositeCount,
+			result.SpawnedBuildingCollisionProxyCount,
 			result.SkippedBuildingOverlapCount);
 	}
 

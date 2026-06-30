@@ -2,6 +2,7 @@
 
 #include "Scenario/ScenarioCityBlockMaterializer.h"
 
+#include "Components/BoxComponent.h"
 #include "Components/SplineMeshComponent.h"
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
@@ -223,7 +224,7 @@ bool FScenarioCityBlockMaterializerRoadCompositeTest::RunTest(const FString& Par
 	TArray<FScenarioGroundRegionSpec> groundRegions;
 	groundRegions.Add(MakeGeneratedRoadSideRegion(
 		TEXT("generated_city_main_upper_curb_00_00"),
-		EScenarioGroundRegionType::Blocked,
+		EScenarioGroundRegionType::Penalty,
 		FVector(0.0, 25.0, 0.0),
 		FVector2D(2300.0, 50.0),
 		TEXT("curb")));
@@ -306,7 +307,7 @@ bool FScenarioCityBlockMaterializerRoadCompositeRequiresRoadStraightTest::RunTes
 	TArray<FScenarioGroundRegionSpec> groundRegions;
 	groundRegions.Add(MakeGeneratedRoadSideRegion(
 		TEXT("generated_city_main_upper_curb_00_00"),
-		EScenarioGroundRegionType::Blocked,
+		EScenarioGroundRegionType::Penalty,
 		FVector(0.0, 25.0, 0.0),
 		FVector2D(1000.0, 50.0),
 		TEXT("curb")));
@@ -596,7 +597,7 @@ bool FScenarioCityBlockMaterializerRoadCornerTest::RunTest(const FString& Parame
 	TArray<FScenarioGroundRegionSpec> groundRegions;
 	groundRegions.Add(MakeGeneratedRoadSideRegion(
 		TEXT("generated_city_main_a_upper_curb_00_00"),
-		EScenarioGroundRegionType::Blocked,
+		EScenarioGroundRegionType::Penalty,
 		FVector(1000.0, 25.0, 0.0),
 		FVector2D(2000.0, 50.0),
 		TEXT("curb")));
@@ -609,7 +610,7 @@ bool FScenarioCityBlockMaterializerRoadCornerTest::RunTest(const FString& Parame
 		TEXT("road")));
 	groundRegions.Add(MakeGeneratedRoadSideRegion(
 		TEXT("generated_city_main_b_upper_curb_00_00"),
-		EScenarioGroundRegionType::Blocked,
+		EScenarioGroundRegionType::Penalty,
 		FVector(2025.0, -1000.0, 0.0),
 		FVector2D(2000.0, 50.0),
 		TEXT("curb"),
@@ -942,6 +943,107 @@ bool FScenarioCityBlockMaterializerBuildingFrontageCatalogOrderTest::RunTest(con
 	TestTrue(TEXT("first catalog building is placed first along the frontage"), bFoundFirst);
 	TestTrue(TEXT("second catalog building is placed second despite higher priority"), bFoundSecond);
 	TestTrue(TEXT("third catalog building is placed third along the frontage"), bFoundThird);
+
+	spawnedActors.Reset();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioCityBlockMaterializerBuildingCollisionProxyTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.BuildingFrontageCreatesCollisionProxies",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioCityBlockMaterializerBuildingCollisionProxyTest::RunTest(const FString& Parameters)
+{
+	FScenarioCityBlockMaterializerTestWorld testWorld;
+	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
+	if (!testWorld.World)
+	{
+		return false;
+	}
+
+	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
+	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
+	if (!catalog)
+	{
+		return false;
+	}
+
+	FScenarioCityBlockCatalogEntry buildingBlock = MakeMaterializerTestEntry(
+		TEXT("city.building_frontage_20m"),
+		EScenarioCityBlockRole::Building,
+		EScenarioGroundRegionType::Blocked,
+		10.0);
+	buildingBlock.BoundsMeters.LengthMeters = 20.0;
+	buildingBlock.SemanticProfile.SurfaceIds = { TEXT("building") };
+	buildingBlock.SemanticProfile.CollisionTag = TEXT("building");
+	catalog->Entries.Add(buildingBlock);
+
+	TArray<FScenarioGroundRegionSpec> groundRegions;
+	groundRegions.Add(MakeGeneratedBuildingExpansionRegion(
+		TEXT("generated_city_lower_building_expansion_00_00"),
+		FVector(3000.0, 2000.0, FScenarioCorridorGeometry::DefaultSurfaceTopZCm),
+		FVector2D(6000.0, 4000.0)));
+
+	TArray<TObjectPtr<AActor>> spawnedActors;
+	FScenarioCityBlockMaterializationOptions options;
+	options.LogContext = TEXT("ScenarioCityBlockMaterializerTest");
+	options.bCreateBuildingCollisionProxies = true;
+	const FScenarioCityBlockMaterializationResult result =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			testWorld.World,
+			catalog,
+			groundRegions,
+			spawnedActors,
+			options);
+
+	TestEqual(TEXT("building actors spawn"), result.SpawnedActorCount, 3);
+	TestEqual(TEXT("building collision proxies spawn"), result.SpawnedBuildingCollisionProxyCount, 3);
+	TestEqual(TEXT("three building actors remain owned by the materializer"), spawnedActors.Num(), 3);
+
+	int32 blockingProxyCount = 0;
+	for (const TObjectPtr<AActor>& spawnedActor : spawnedActors)
+	{
+		if (!spawnedActor)
+		{
+			continue;
+		}
+
+		TArray<UBoxComponent*> boxComponents;
+		spawnedActor->GetComponents<UBoxComponent>(boxComponents);
+		for (const UBoxComponent* boxComponent : boxComponents)
+		{
+			if (!boxComponent
+				|| !boxComponent->GetName().StartsWith(TEXT("GeneratedBuildingBlockingBounds")))
+			{
+				continue;
+			}
+
+			++blockingProxyCount;
+			TestEqual(
+				TEXT("building proxy uses blocked collision profile"),
+				boxComponent->GetCollisionProfileName(),
+				FName(TEXT("Blocked")));
+			TestEqual(
+				TEXT("building proxy participates in grid queries"),
+				static_cast<int32>(boxComponent->GetCollisionEnabled()),
+				static_cast<int32>(ECollisionEnabled::QueryAndPhysics));
+			const FVector proxyExtent = boxComponent->GetScaledBoxExtent();
+			TestEqual(
+				TEXT("building proxy length comes from authored bounds"),
+				proxyExtent.X,
+				1000.0);
+			TestEqual(
+				TEXT("building proxy width comes from authored bounds"),
+				proxyExtent.Y,
+				500.0);
+			TestFalse(
+				TEXT("building proxy is hidden in game"),
+				boxComponent->IsVisible());
+		}
+	}
+
+	TestEqual(TEXT("one blocking proxy is attached to each building actor"), blockingProxyCount, 3);
 
 	spawnedActors.Reset();
 	return true;

@@ -122,7 +122,7 @@ build/Release/
   OdiroHost.exe                   # 백그라운드 서비스
   resources/
     agents/                       # Agents 런타임 데이터
-    templates/                    # project 생성용 scenario/profile/policy preset source
+    presets/                      # project 생성용 scenario/profile/policy preset source
       setting.json
       scenario/
       profile/

@@ -5,6 +5,7 @@
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Scenario/ScenarioCorridorGeometry.h"
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
+#include "Algo/Reverse.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/World.h"
 #include "UObject/ConstructorHelpers.h"
@@ -30,6 +31,104 @@ namespace
 
 		return -collisionHeightCm * 0.5;
 	}
+
+	bool IsSupportedGroundRegionShape(const FScenarioGroundRegionSpec& regionSpec)
+	{
+		if (regionSpec.ShapeType == EScenarioGroundShapeType::Rectangle)
+		{
+			return true;
+		}
+
+		return regionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon
+			&& regionSpec.PolygonVertices.Num() >= 3;
+	}
+
+	bool IsGeneratedCityRegionSpec(const FScenarioGroundRegionSpec& regionSpec)
+	{
+		return regionSpec.RegionId.StartsWith(GeneratedCityRegionIdPrefix);
+	}
+
+	double CalculateSignedArea2D(const TArray<FVector2D>& vertices)
+	{
+		double signedArea = 0.0;
+		for (int32 Index = 0; Index < vertices.Num(); ++Index)
+		{
+			const FVector2D& Current = vertices[Index];
+			const FVector2D& Next = vertices[(Index + 1) % vertices.Num()];
+			signedArea += (Current.X * Next.Y) - (Next.X * Current.Y);
+		}
+
+		return signedArea * 0.5;
+	}
+
+	FBox2D CalculateLocalPolygonBounds(const TArray<FVector2D>& vertices)
+	{
+		FBox2D bounds(ForceInit);
+		for (const FVector2D& vertex : vertices)
+		{
+			bounds += vertex;
+		}
+
+		return bounds;
+	}
+
+	bool IsPointInsideConvexPolygon2D(const TArray<FVector2D>& vertices, const FVector2D& point)
+	{
+		if (vertices.Num() < 3)
+		{
+			return false;
+		}
+
+		constexpr double EdgeToleranceCm = 0.1;
+		double referenceSign = 0.0;
+		for (int32 Index = 0; Index < vertices.Num(); ++Index)
+		{
+			const FVector2D& Current = vertices[Index];
+			const FVector2D& Next = vertices[(Index + 1) % vertices.Num()];
+			const FVector2D Edge = Next - Current;
+			const FVector2D ToPoint = point - Current;
+			const double CrossZ = (Edge.X * ToPoint.Y) - (Edge.Y * ToPoint.X);
+			if (FMath::Abs(CrossZ) <= EdgeToleranceCm)
+			{
+				continue;
+			}
+
+			const double currentSign = CrossZ > 0.0 ? 1.0 : -1.0;
+			if (referenceSign == 0.0)
+			{
+				referenceSign = currentSign;
+			}
+			else if (!FMath::IsNearlyEqual(referenceSign, currentSign))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	void BuildGroundRegionLocalVertices(const FScenarioGroundRegionSpec& regionSpec, TArray<FVector2D>& outVertices)
+	{
+		outVertices.Reset();
+		if (regionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon)
+		{
+			outVertices = regionSpec.PolygonVertices;
+		}
+		else
+		{
+			const FVector2D halfSize = regionSpec.Size * 0.5;
+			outVertices.Reserve(4);
+			outVertices.Add(FVector2D(-halfSize.X, -halfSize.Y));
+			outVertices.Add(FVector2D(halfSize.X, -halfSize.Y));
+			outVertices.Add(FVector2D(halfSize.X, halfSize.Y));
+			outVertices.Add(FVector2D(-halfSize.X, halfSize.Y));
+		}
+
+		if (CalculateSignedArea2D(outVertices) < 0.0)
+		{
+			Algo::Reverse(outVertices);
+		}
+	}
 }
 
 AScenarioGroundRegion* AScenarioGroundRegion::SpawnConfigured(
@@ -49,7 +148,7 @@ AScenarioGroundRegion* AScenarioGroundRegion::SpawnConfigured(
 		outFailureReason = TEXT("RegionId is empty.");
 		return nullptr;
 	}
-	if (regionSpec.ShapeType != EScenarioGroundShapeType::Rectangle)
+	if (!IsSupportedGroundRegionShape(regionSpec))
 	{
 		outFailureReason = TEXT("Ground region shape is not supported.");
 		return nullptr;
@@ -134,10 +233,31 @@ void AScenarioGroundRegion::ConfigureRegion(const FScenarioGroundRegionSpec& inR
 	RegionSpec = inRegionSpec;
 	RegionSpec.Size.X = FMath::Max(RegionSpec.Size.X, 1.0);
 	RegionSpec.Size.Y = FMath::Max(RegionSpec.Size.Y, 1.0);
+	if (RegionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon)
+	{
+		const FBox2D LocalBounds = CalculateLocalPolygonBounds(RegionSpec.PolygonVertices);
+		if (LocalBounds.bIsValid)
+		{
+			const FVector2D BoundsSize = LocalBounds.GetSize();
+			RegionSpec.Size.X = FMath::Max(BoundsSize.X, 1.0);
+			RegionSpec.Size.Y = FMath::Max(BoundsSize.Y, 1.0);
+		}
+	}
 
 	if (PlaceableComponent)
 	{
+		const bool bGeneratedCityRegion = IsGeneratedCityRegionSpec(RegionSpec);
 		PlaceableComponent->InstanceId = RegionSpec.RegionId;
+		PlaceableComponent->bAuthoringSelectable = !bGeneratedCityRegion;
+		PlaceableComponent->bAuthoringDeletable = !bGeneratedCityRegion;
+		PlaceableComponent->bAuthoringAllowLocationEdit = !bGeneratedCityRegion;
+		PlaceableComponent->bAuthoringAllowRotationEdit = !bGeneratedCityRegion;
+		PlaceableComponent->bAuthoringAllowScaleEdit = false;
+		if (bGeneratedCityRegion)
+		{
+			PlaceableComponent->SetAuthoringHovered(false);
+			PlaceableComponent->SetAuthoringSelected(false);
+		}
 	}
 
 	SetActorLocation(RegionSpec.Center);
@@ -152,10 +272,16 @@ void AScenarioGroundRegion::ConfigureRegion(const FScenarioGroundRegionSpec& inR
 		? BlockedCollisionHeightCm
 		: GroundCollisionThicknessCm;
 	const double safeCollisionHeightCm = FMath::Max(collisionHeightCm, 1.0);
+	const FBox2D LocalPolygonBounds = RegionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon
+		? CalculateLocalPolygonBounds(RegionSpec.PolygonVertices)
+		: FBox2D(ForceInit);
+	const FVector2D LocalBoundsCenter = LocalPolygonBounds.bIsValid
+		? LocalPolygonBounds.GetCenter()
+		: FVector2D::ZeroVector;
 
 	RegionBoundsComponent->SetRelativeLocation(FVector(
-		0.0,
-		0.0,
+		LocalBoundsCenter.X,
+		LocalBoundsCenter.Y,
 		GetGroundRegionCollisionCenterZCm(RegionSpec.RegionType, safeCollisionHeightCm)));
 	RegionBoundsComponent->SetRelativeScale3D(FVector(
 		RegionSpec.Size.X / 100.0,
@@ -163,29 +289,50 @@ void AScenarioGroundRegion::ConfigureRegion(const FScenarioGroundRegionSpec& inR
 		safeCollisionHeightCm / 100.0));
 
 	ApplyMaterialSettings();
-	ApplyCollisionSettings();
 	RebuildVisualMesh();
+	ApplyCollisionSettings();
 }
 
 bool AScenarioGroundRegion::ContainsWorldLocation2D(const FVector& worldLocation) const
 {
 	const FVector localLocation = GetActorTransform().InverseTransformPosition(worldLocation);
-	const FVector2D halfSize(RegionSpec.Size.X * 0.5, RegionSpec.Size.Y * 0.5);
+	if (RegionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon)
+	{
+		return IsPointInsideConvexPolygon2D(
+			RegionSpec.PolygonVertices,
+			FVector2D(localLocation.X, localLocation.Y));
+	}
 
+	const FVector2D halfSize(RegionSpec.Size.X * 0.5, RegionSpec.Size.Y * 0.5);
 	return FMath::Abs(localLocation.X) <= halfSize.X
 		&& FMath::Abs(localLocation.Y) <= halfSize.Y;
 }
 
 void AScenarioGroundRegion::ApplyCollisionSettings()
 {
-	if (!RegionBoundsComponent) return;
+	if (!RegionBoundsComponent || !RegionVisualMeshComponent) return;
 
 	RegionBoundsComponent->SetVisibility(false);
 	RegionBoundsComponent->SetHiddenInGame(true);
+	RegionBoundsComponent->SetGenerateOverlapEvents(false);
+
+	RegionVisualMeshComponent->SetCollisionProfileName(
+		FScenarioCorridorGeometry::ResolveRuntimeCollisionProfileName(RegionSpec.RegionType));
+	RegionVisualMeshComponent->SetGenerateOverlapEvents(false);
+
+	if (RegionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon)
+	{
+		RegionBoundsComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		RegionBoundsComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+		RegionVisualMeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		return;
+	}
+
 	RegionBoundsComponent->SetCollisionProfileName(
 		FScenarioCorridorGeometry::ResolveRuntimeCollisionProfileName(RegionSpec.RegionType));
 	RegionBoundsComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	RegionBoundsComponent->SetGenerateOverlapEvents(false);
+	RegionVisualMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	RegionVisualMeshComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 }
 
 void AScenarioGroundRegion::ApplyMaterialSettings()
@@ -213,47 +360,53 @@ void AScenarioGroundRegion::RebuildVisualMesh()
 
 	RegionVisualMeshComponent->ClearAllMeshSections();
 	const bool bRenderVisualMesh = ShouldRenderVisualMesh();
+	const bool bNeedsMeshCollision = RegionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon;
 	RegionVisualMeshComponent->SetVisibility(bRenderVisualMesh);
 	RegionVisualMeshComponent->SetHiddenInGame(!bRenderVisualMesh);
-	if (!bRenderVisualMesh)
+	if (!bRenderVisualMesh && !bNeedsMeshCollision)
 	{
 		return;
 	}
 
-	const double HalfLengthCm = RegionSpec.Size.X * 0.5;
-	const double HalfWidthCm = RegionSpec.Size.Y * 0.5;
-	const double LengthMeters = RegionSpec.Size.X / 100.0;
-	const double WidthMeters = RegionSpec.Size.Y / 100.0;
+	TArray<FVector2D> LocalVertices2D;
+	BuildGroundRegionLocalVertices(RegionSpec, LocalVertices2D);
+	if (LocalVertices2D.Num() < 3)
+	{
+		return;
+	}
 
-	TArray<FVector> Vertices;
-	Vertices.Reserve(4);
-	Vertices.Add(FVector(-HalfLengthCm, -HalfWidthCm, 0.0));
-	Vertices.Add(FVector(HalfLengthCm, -HalfWidthCm, 0.0));
-	Vertices.Add(FVector(HalfLengthCm, HalfWidthCm, 0.0));
-	Vertices.Add(FVector(-HalfLengthCm, HalfWidthCm, 0.0));
+	const FBox2D LocalBounds = CalculateLocalPolygonBounds(LocalVertices2D);
+	const FVector2D LocalMin = LocalBounds.bIsValid ? LocalBounds.Min : FVector2D::ZeroVector;
 
 	TArray<int32> Triangles;
-	Triangles.Reserve(6);
-	Triangles.Add(3);
-	Triangles.Add(1);
-	Triangles.Add(0);
-	Triangles.Add(3);
-	Triangles.Add(2);
-	Triangles.Add(1);
+	Triangles.Reserve((LocalVertices2D.Num() - 2) * 3);
+	for (int32 Index = 1; Index < LocalVertices2D.Num() - 1; ++Index)
+	{
+		Triangles.Add(0);
+		Triangles.Add(Index + 1);
+		Triangles.Add(Index);
+	}
+
+	TArray<FVector> Vertices;
+	Vertices.Reserve(LocalVertices2D.Num());
+	for (const FVector2D& LocalVertex : LocalVertices2D)
+	{
+		Vertices.Add(FVector(LocalVertex.X, LocalVertex.Y, 0.0));
+	}
 
 	TArray<FVector> Normals;
-	Normals.Init(FVector::UpVector, 4);
+	Normals.Init(FVector::UpVector, Vertices.Num());
 
 	TArray<FVector2D> Uv0;
-	Uv0.Reserve(4);
-	Uv0.Add(FVector2D(0.0, 0.0));
-	Uv0.Add(FVector2D(LengthMeters, 0.0));
-	Uv0.Add(FVector2D(LengthMeters, WidthMeters));
-	Uv0.Add(FVector2D(0.0, WidthMeters));
+	Uv0.Reserve(LocalVertices2D.Num());
+	for (const FVector2D& LocalVertex : LocalVertices2D)
+	{
+		Uv0.Add((LocalVertex - LocalMin) / 100.0);
+	}
 
 	TArray<FLinearColor> VertexColors;
 	TArray<FProcMeshTangent> Tangents;
-	Tangents.Init(FProcMeshTangent(1.0f, 0.0f, 0.0f), 4);
+	Tangents.Init(FProcMeshTangent(1.0f, 0.0f, 0.0f), Vertices.Num());
 
 	RegionVisualMeshComponent->CreateMeshSection_LinearColor(
 		0,
@@ -263,7 +416,7 @@ void AScenarioGroundRegion::RebuildVisualMesh()
 		Uv0,
 		VertexColors,
 		Tangents,
-		false);
+		bNeedsMeshCollision);
 }
 
 bool AScenarioGroundRegion::ShouldRenderVisualMesh() const

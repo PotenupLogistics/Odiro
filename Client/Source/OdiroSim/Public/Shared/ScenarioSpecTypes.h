@@ -151,6 +151,10 @@ struct ODIROSIM_API FScenarioGroundRegionSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FVector2D Size = FVector2D(100.0, 100.0);
 
+	// Local XY vertices in centimeters used when ShapeType is ConvexPolygon.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
+	TArray<FVector2D> PolygonVertices;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	double YawDegrees = 0.0;
 

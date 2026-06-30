@@ -64,7 +64,7 @@ protected:
 private:
 	void ApplyCollisionSettings();
 	void ApplyMaterialSettings();
-	// Rebuilds the local flat procedural surface from the current rectangle spec.
+	// Rebuilds the local flat procedural surface from the current shape spec.
 	void RebuildVisualMesh();
 	// Returns whether this GroundRegion owns its visual surface or delegates it to CityBuildings assets.
 	bool ShouldRenderVisualMesh() const;

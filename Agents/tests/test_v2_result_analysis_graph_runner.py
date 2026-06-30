@@ -283,6 +283,24 @@ def test_graph_runner_falls_back_when_llm_public_text_contains_internal_source_t
     assert response.recommendations[0]["recommendation"] != "policy card 기준을 반영했습니다."
 
 
+def test_graph_runner_falls_back_when_llm_policy_parameter_change_is_invalid(tmp_path) -> None:
+    experiments = tmp_path / "experiments"
+    _write_blocked_episode(experiments, "000001")
+    _write_blocked_episode(experiments, "000002")
+    recommendation = _llm_policy_recommendation(
+        reason="차단 구역 침범이 반복되어 주행 정책 조건 검토가 필요합니다.",
+        recommendation="LLM invalid change should not be public.",
+    )
+    recommendation["proposed_change"]["content"] = {"unsupportedPolicyParameter_max": 1.0}
+    fake = _FakeJsonClient([{"recommendations": [recommendation]}])
+    runner = _runner_with_fake_llm(experiments, fake)
+
+    response = runner.run()
+
+    assert any("rule-based recommendation fallback" in warning for warning in response.warnings)
+    assert response.recommendations[0]["recommendation"] != "LLM invalid change should not be public."
+
+
 def test_analysis_api_preserves_response_schema(tmp_path) -> None:
     project = tmp_path / "Project1"
     _write_project_blocked_episode(project, "000001")

@@ -475,6 +475,58 @@ namespace
 		}
 	}
 
+	// Merges adjacent same-direction chunks so layout splits do not change generated city-block topology.
+	bool TryBuildSimplifiedContinuousCityAxisChunks(
+		const TArray<FGeneratedCityAxisChunk>& Chunks,
+		TArray<FGeneratedCityAxisChunk>& OutChunks)
+	{
+		OutChunks.Reset();
+		for (const FGeneratedCityAxisChunk& Chunk : Chunks)
+		{
+			const FVector2D ChunkVector = Chunk.EndWorldMeters - Chunk.StartWorldMeters;
+			const double ChunkLengthMeters = ChunkVector.Size();
+			if (ChunkLengthMeters <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+
+			if (OutChunks.IsEmpty())
+			{
+				OutChunks.Add(Chunk);
+				continue;
+			}
+
+			FGeneratedCityAxisChunk& PreviousChunk = OutChunks.Last();
+			if ((PreviousChunk.EndWorldMeters - Chunk.StartWorldMeters).Size() > GeneratedCityPointToleranceMeters)
+			{
+				return false;
+			}
+
+			const FVector2D PreviousVector = PreviousChunk.EndWorldMeters - PreviousChunk.StartWorldMeters;
+			const double PreviousLengthMeters = PreviousVector.Size();
+			if (PreviousLengthMeters <= KINDA_SMALL_NUMBER)
+			{
+				PreviousChunk = Chunk;
+				continue;
+			}
+
+			const FVector2D PreviousForward = PreviousVector / PreviousLengthMeters;
+			const FVector2D ChunkForward = ChunkVector / ChunkLengthMeters;
+			const double DirectionCrossZ =
+				(PreviousForward.X * ChunkForward.Y) - (PreviousForward.Y * ChunkForward.X);
+			if (FMath::Abs(DirectionCrossZ) <= GeneratedCityRightAngleDotTolerance
+				&& FVector2D::DotProduct(PreviousForward, ChunkForward) > 0.0)
+			{
+				PreviousChunk.EndWorldMeters = Chunk.EndWorldMeters;
+				continue;
+			}
+
+			OutChunks.Add(Chunk);
+		}
+
+		return !OutChunks.IsEmpty();
+	}
+
 	// Returns the signed offset direction for one generated city side.
 	double GeneratedCitySideSign(EGeneratedCitySide Side)
 	{
@@ -681,13 +733,15 @@ namespace
 		int32 LayoutIndex,
 		FScenarioWorldSpec& WorldSpec)
 	{
-		if (Chunks.Num() != 2)
+		TArray<FGeneratedCityAxisChunk> SimplifiedChunks;
+		if (!TryBuildSimplifiedContinuousCityAxisChunks(Chunks, SimplifiedChunks)
+			|| SimplifiedChunks.Num() != 2)
 		{
 			return false;
 		}
 
-		const FVector2D FirstVector = Chunks[0].EndWorldMeters - Chunks[0].StartWorldMeters;
-		const FVector2D SecondVector = Chunks[1].EndWorldMeters - Chunks[1].StartWorldMeters;
+		const FVector2D FirstVector = SimplifiedChunks[0].EndWorldMeters - SimplifiedChunks[0].StartWorldMeters;
+		const FVector2D SecondVector = SimplifiedChunks[1].EndWorldMeters - SimplifiedChunks[1].StartWorldMeters;
 		const double FirstLengthMeters = FirstVector.Size();
 		const double SecondLengthMeters = SecondVector.Size();
 		if (FirstLengthMeters <= KINDA_SMALL_NUMBER || SecondLengthMeters <= KINDA_SMALL_NUMBER)
@@ -695,13 +749,20 @@ namespace
 			return false;
 		}
 
-		if ((Chunks[0].EndWorldMeters - Chunks[1].StartWorldMeters).Size() > GeneratedCityPointToleranceMeters)
+		if ((SimplifiedChunks[0].EndWorldMeters - SimplifiedChunks[1].StartWorldMeters).Size() > GeneratedCityPointToleranceMeters)
 		{
 			return false;
 		}
 
 		const FVector2D FirstForward = FirstVector / FirstLengthMeters;
 		const FVector2D SecondForward = SecondVector / SecondLengthMeters;
+		const double MinimumExpansionWidthMeters =
+			FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters
+			+ FScenarioCorridorGeometry::GeneratedCityBuildingDepthMeters;
+		const double EffectiveSecondLengthMeters = FMath::Max(SecondLengthMeters, MinimumExpansionWidthMeters);
+		const FVector2D EffectiveSecondVector = SecondForward * EffectiveSecondLengthMeters;
+		const FVector2D EffectiveSecondEndWorldMeters =
+			SimplifiedChunks[1].StartWorldMeters + EffectiveSecondVector;
 		const double CrossZ = (FirstForward.X * SecondForward.Y) - (FirstForward.Y * SecondForward.X);
 		if (FMath::Abs(CrossZ) <= KINDA_SMALL_NUMBER)
 		{
@@ -720,21 +781,22 @@ namespace
 			LayoutIndex);
 		if (FMath::Abs(FVector2D::DotProduct(FirstForward, SecondForward)) <= GeneratedCityRightAngleDotTolerance)
 		{
-			const FVector2D CenterMeters = (Chunks[0].StartWorldMeters + Chunks[1].EndWorldMeters) * 0.5;
+			const FVector2D CenterMeters =
+				(SimplifiedChunks[0].StartWorldMeters + EffectiveSecondEndWorldMeters) * 0.5;
 			WorldSpec.GroundRegions.Add(MakeGeneratedCityBuildingExpansionRegion(
 				RegionId,
 				CenterMeters,
 				FirstLengthMeters,
-				SecondLengthMeters,
+				EffectiveSecondLengthMeters,
 				FMath::RadiansToDegrees(FMath::Atan2(FirstForward.Y, FirstForward.X))));
 			return true;
 		}
 
 		const TArray<FVector2D> WorldVerticesMeters = {
-			Chunks[0].StartWorldMeters,
-			Chunks[0].EndWorldMeters,
-			Chunks[1].EndWorldMeters,
-			Chunks[0].StartWorldMeters + SecondVector
+			SimplifiedChunks[0].StartWorldMeters,
+			SimplifiedChunks[0].EndWorldMeters,
+			EffectiveSecondEndWorldMeters,
+			SimplifiedChunks[0].StartWorldMeters + EffectiveSecondVector
 		};
 		WorldSpec.GroundRegions.Add(MakeGeneratedCityBuildingExpansionPolygonRegion(
 			RegionId,

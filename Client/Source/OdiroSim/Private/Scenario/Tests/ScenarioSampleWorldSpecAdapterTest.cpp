@@ -3,6 +3,7 @@
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 
 #include "Misc/AutomationTest.h"
+#include "Scenario/ScenarioCorridorGeometry.h"
 #include "Shared/ScenarioSampleJson.h"
 
 namespace
@@ -215,6 +216,49 @@ namespace
 		return Document;
 	}
 
+	// Creates a right-angle sample whose first arm is split across two layout entries.
+	FScenarioSampleDocument MakeSplitRightAngleBuildingExpansionSampleDocument()
+	{
+		FScenarioSampleDocument Document = MakeRightAngleBuildingExpansionSampleDocument();
+		FScenarioSampleSemantic& Semantic = Document.Scenario.Semantic;
+		const FScenarioSampleLayoutEntry EastLayoutEntry = Semantic.Layout[0];
+		const FScenarioSampleLayoutEntry SouthLayoutEntry = Semantic.Layout[1];
+
+		Semantic.Layout.Reset();
+
+		FScenarioSampleLayoutEntry EastFirstLayoutEntry = EastLayoutEntry;
+		EastFirstLayoutEntry.SegmentId = TEXT("east_straight_a");
+		EastFirstLayoutEntry.AlongRangeMeters.StartMeters = 0.0;
+		EastFirstLayoutEntry.AlongRangeMeters.EndMeters = 30.0;
+		Semantic.Layout.Add(EastFirstLayoutEntry);
+
+		FScenarioSampleLayoutEntry EastSecondLayoutEntry = EastLayoutEntry;
+		EastSecondLayoutEntry.SegmentId = TEXT("east_straight_b");
+		EastSecondLayoutEntry.AlongRangeMeters.StartMeters = 30.0;
+		EastSecondLayoutEntry.AlongRangeMeters.EndMeters = 60.0;
+		Semantic.Layout.Add(EastSecondLayoutEntry);
+
+		Semantic.Layout.Add(SouthLayoutEntry);
+		return Document;
+	}
+
+	// Creates a right-angle sample whose return arm is shorter than the reserved building frontage depth.
+	FScenarioSampleDocument MakeShortReturnBuildingExpansionSampleDocument()
+	{
+		FScenarioSampleDocument Document = MakeRightAngleBuildingExpansionSampleDocument();
+		FScenarioSampleSemantic& Semantic = Document.Scenario.Semantic;
+		Semantic.RouteAxis.PointsMeters = {
+			FVector2D(0.0, 10.0),
+			FVector2D(60.0, 10.0),
+			FVector2D(60.0, 0.0)
+		};
+		Semantic.RouteAxis.LengthMeters = 70.0;
+		Semantic.Robot.Goal.AlongMeters = 69.0;
+		Semantic.Layout[1].AlongRangeMeters.EndMeters = 70.0;
+		Semantic.Summary.TotalLengthMeters = 70.0;
+		return Document;
+	}
+
 	// Checks whether adapter validation emitted the expected diagnostic code.
 	bool HasAdapterDiagnostic(
 		const FScenarioCompileResult& Result,
@@ -401,6 +445,64 @@ bool FScenarioSampleWorldSpecAdapterRightAngleBuildingExpansionTest::RunTest(con
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSampleWorldSpecAdapterSplitRightAngleBuildingExpansionTest,
+	"OdiroSim.ScenarioSample.WorldSpecAdapter.SplitRightAngleBuildingExpansion",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSampleWorldSpecAdapterSplitRightAngleBuildingExpansionTest::RunTest(const FString& Parameters)
+{
+	const FScenarioSampleDocument Document = MakeSplitRightAngleBuildingExpansionSampleDocument();
+	const FScenarioCompileResult Result =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);
+
+	TestTrue(TEXT("split right-angle sample adapts"), Result.bSuccess);
+	TestEqual(TEXT("split chunks still produce one generated building-side expansion"), Result.WorldSpec.GroundRegions.Num(), 1);
+	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	{
+		return false;
+	}
+
+	const FScenarioGroundRegionSpec& ExpansionRegion = Result.WorldSpec.GroundRegions[0];
+	TestEqual(TEXT("split expansion stays rectangular"), static_cast<int32>(ExpansionRegion.ShapeType), static_cast<int32>(EScenarioGroundShapeType::Rectangle));
+	TestEqual(TEXT("split expansion center x cm"), ExpansionRegion.Center.X, 3000.0);
+	TestEqual(TEXT("split expansion center y cm"), ExpansionRegion.Center.Y, 2000.0);
+	TestEqual(TEXT("split expansion length cm"), ExpansionRegion.Size.X, 6000.0);
+	TestEqual(TEXT("split expansion width cm"), ExpansionRegion.Size.Y, 4000.0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSampleWorldSpecAdapterShortReturnBuildingExpansionTest,
+	"OdiroSim.ScenarioSample.WorldSpecAdapter.ShortReturnBuildingExpansion",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSampleWorldSpecAdapterShortReturnBuildingExpansionTest::RunTest(const FString& Parameters)
+{
+	const FScenarioSampleDocument Document = MakeShortReturnBuildingExpansionSampleDocument();
+	const FScenarioCompileResult Result =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);
+
+	TestTrue(TEXT("short-return right-angle sample adapts"), Result.bSuccess);
+	TestEqual(TEXT("short return still produces one generated building-side expansion"), Result.WorldSpec.GroundRegions.Num(), 1);
+	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	{
+		return false;
+	}
+
+	const double ExpectedMinimumWidthCm =
+		(FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters
+			+ FScenarioCorridorGeometry::GeneratedCityBuildingDepthMeters)
+		* 100.0;
+	const FScenarioGroundRegionSpec& ExpansionRegion = Result.WorldSpec.GroundRegions[0];
+	TestEqual(TEXT("short return expansion stays rectangular"), static_cast<int32>(ExpansionRegion.ShapeType), static_cast<int32>(EScenarioGroundShapeType::Rectangle));
+	TestEqual(TEXT("short return expansion center x cm"), ExpansionRegion.Center.X, 3000.0);
+	TestEqual(TEXT("short return expansion center y cm"), ExpansionRegion.Center.Y, -500.0);
+	TestEqual(TEXT("short return expansion length cm"), ExpansionRegion.Size.X, 6000.0);
+	TestEqual(TEXT("short return expansion uses minimum width cm"), ExpansionRegion.Size.Y, ExpectedMinimumWidthCm);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FScenarioSampleWorldSpecAdapterSkewBuildingExpansionTest,
 	"OdiroSim.ScenarioSample.WorldSpecAdapter.SkewBuildingExpansion",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -455,7 +557,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FScenarioSampleWorldSpecAdapterRejectsObstacleOutsideSurfaceTest::RunTest(const FString& Parameters)
 {
 	FScenarioSampleDocument Document = MakeAdapterTestSampleDocument();
-	Document.Scenario.Semantic.StaticObstacles[0].OffsetMeters = 4.0;
+	Document.Scenario.Semantic.StaticObstacles[0].OffsetMeters = 8.5;
 
 	const FScenarioCompileResult Result =
 		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);

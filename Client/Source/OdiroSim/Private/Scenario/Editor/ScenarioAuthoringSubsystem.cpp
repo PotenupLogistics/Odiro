@@ -50,9 +50,9 @@ namespace
 	const FString CorridorVertexHandleIdPrefix(TEXT("corridor_vertex_"));
 	const FString CorridorSegmentHandleIdPrefix(TEXT("corridor_segment_"));
 	// Prefix reserved for side-band GroundRegions emitted by the scenario sample compiler.
-	const FString GeneratedCityRegionIdPrefix(TEXT("generated_city_"));
+	const FString AuthoringGeneratedCityRegionIdPrefix(TEXT("generated_city_"));
 	// Generated road visuals are delegated to CityBuildings meshes in editor preview.
-	const FString GeneratedRoadSurfaceId(TEXT("road"));
+	const FString AuthoringGeneratedRoadSurfaceId(TEXT("road"));
 	const double CorridorVertexHandleHeightCm = 0.0;
 	const double CorridorSegmentHandleHeightCm = CorridorVertexHandleHeightCm;
 	const double CorridorVertexHandleScale = 0.28;
@@ -84,12 +84,12 @@ namespace
 			return true;
 		}
 
-		if (!regionSpec.RegionId.StartsWith(GeneratedCityRegionIdPrefix))
+		if (!regionSpec.RegionId.StartsWith(AuthoringGeneratedCityRegionIdPrefix))
 		{
 			return false;
 		}
 
-		return !regionSpec.SurfaceId.Equals(GeneratedRoadSurfaceId, ESearchCase::IgnoreCase);
+		return !regionSpec.SurfaceId.Equals(AuthoringGeneratedRoadSurfaceId, ESearchCase::IgnoreCase);
 	}
 }
 

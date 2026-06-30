@@ -529,6 +529,7 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	// Execute handler on game thread
 	FMCPHandlerRegistry::FHandlerFunction Handler = [this, Method, ActiveLease](const TSharedPtr<FJsonObject>& HandlerParams) -> TSharedPtr<FJsonValue>
 	{
+		FDialogHandlers::FScopedAutomationDialogPolicy DialogPolicyScope;
 		ActiveLease->MarkStarted();
 		TSharedPtr<FJsonValue> HandlerResult = HandlerRegistry.ExecuteHandler(Method, HandlerParams);
 		ActiveLease->Release();

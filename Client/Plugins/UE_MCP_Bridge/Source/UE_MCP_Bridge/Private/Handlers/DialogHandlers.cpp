@@ -3,6 +3,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "Misc/CoreDelegates.h"
+#include "Misc/MessageDialog.h"
 #include "GenericPlatform/GenericPlatformMisc.h" // EAppMsgCategory
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
@@ -13,6 +14,12 @@
 TArray<FDialogHandlers::FDialogPolicy> FDialogHandlers::Policies;
 FDelegateHandle FDialogHandlers::OriginalDelegateHandle;
 bool FDialogHandlers::bHookInstalled = false;
+
+namespace
+{
+	/** Per-thread nesting depth for bridge-owned editor automation. */
+	thread_local int32 GAutomationDialogPolicyDepth = 0;
+}
 
 void FDialogHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -66,10 +73,50 @@ void FDialogHandlers::AddDefaultPolicy(const FString& Pattern, EAppReturnType::T
 	Policies.Add(Policy);
 }
 
+FDialogHandlers::FScopedAutomationDialogPolicy::FScopedAutomationDialogPolicy()
+{
+	++GAutomationDialogPolicyDepth;
+}
+
+FDialogHandlers::FScopedAutomationDialogPolicy::~FScopedAutomationDialogPolicy()
+{
+	GAutomationDialogPolicyDepth = FMath::Max(0, GAutomationDialogPolicyDepth - 1);
+}
+
+bool FDialogHandlers::IsAutomationDialogPolicyActive()
+{
+	return GAutomationDialogPolicyDepth > 0;
+}
+
+EAppReturnType::Type FDialogHandlers::OpenUnrealModalDialog(EAppMsgType::Type MsgType, const FText& Text, const FText& Title)
+{
+	const bool bShouldRestoreHook = bHookInstalled;
+	if (bShouldRestoreHook)
+	{
+		FCoreDelegates::ModalMessageDialog.Unbind();
+		bHookInstalled = false;
+	}
+
+	const EAppReturnType::Type Response = FMessageDialog::Open(MsgType, Text, Title);
+
+	if (bShouldRestoreHook)
+	{
+		InstallDialogHook();
+	}
+	return Response;
+}
+
 EAppReturnType::Type FDialogHandlers::HandleModalDialog(EAppMsgType::Type MsgType, const FText& Text, const FText& Title)
 {
 	FString MessageStr = Text.ToString();
 	FString TitleStr = Title.ToString();
+
+	if (!IsAutomationDialogPolicyActive())
+	{
+		UE_LOG(LogMCPBridge, Verbose, TEXT("[UE-MCP] Dialog forwarded to Unreal: title='%s' message='%s'"),
+			*TitleStr, *MessageStr.Left(200));
+		return OpenUnrealModalDialog(MsgType, Text, Title);
+	}
 
 	// Check policies for a match
 	for (const FDialogPolicy& Policy : Policies)

@@ -97,4 +97,8 @@ All non-coordination bridge requests are counted while executing. Once nontermin
 
 Direct bridge handlers such as `hot_reload` and `live_coding_compile` remain available for manual diagnostics, but agent C++ verification should use `editor_reload_hot_reload` so source fingerprint coverage and duplicate suppression stay centralized.
 
+## Dialog Policy
+
+`UE_MCP_Bridge` installs a modal-dialog hook so bridge-owned automation can answer prompts that would otherwise block the game thread. Automatic dialog policies are active only while a bridge handler is executing on the game thread. User-driven editor actions, such as dragging assets into the Content Drawer, are forwarded back to Unreal's normal modal UI.
+
 Known diagnostic non-failures: WBP_BaseIcon can capture blank when no default icon content is configured, WBP_BaseSwitch.SwitchRoot may keep fixed internal overrides, XGE license warnings indicate standalone build mode, and XAudio2 device warnings are unrelated unless audio behavior is under test.

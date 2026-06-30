@@ -42,6 +42,9 @@ struct ODIROSIM_API FScenarioCityBlockMaterializationResult
 
 	// Candidate building frontage blocks skipped because their authored bounds overlap an accepted frontage footprint.
 	int32 SkippedBuildingOverlapCount = 0;
+
+	// Building semantic collision components available for runtime grid classification.
+	int32 SpawnedBuildingCollisionProxyCount = 0;
 };
 
 // Caller-supplied labels used to keep shared materializer diagnostics readable.
@@ -52,6 +55,9 @@ struct ODIROSIM_API FScenarioCityBlockMaterializationOptions
 
 	// Catalog path or source label shown when the catalog is missing.
 	FString CatalogDebugName;
+
+	// Preserves BP-authored building blockers or creates fallback proxies while visual mesh collision stays disabled.
+	bool bCreateBuildingCollisionProxies = false;
 };
 
 // Shared CityBuildings visual materializer for Scenario Editor and Simulation Map parity.

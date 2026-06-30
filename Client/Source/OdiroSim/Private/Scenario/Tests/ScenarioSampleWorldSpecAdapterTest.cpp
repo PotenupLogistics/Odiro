@@ -314,9 +314,10 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 		TestEqual(
 			TEXT("generated curb region type"),
 			static_cast<int32>(GeneratedCurbRegion->RegionType),
-			static_cast<int32>(EScenarioGroundRegionType::Blocked));
+			static_cast<int32>(EScenarioGroundRegionType::Penalty));
 		TestEqual(TEXT("generated curb surface"), GeneratedCurbRegion->SurfaceId, FString(TEXT("road")));
 		TestEqual(TEXT("generated curb collision tag"), GeneratedCurbRegion->CollisionTag, FString(TEXT("curb")));
+		TestEqual(TEXT("generated curb penalty kind"), GeneratedCurbRegion->PenaltyKind, FString(TEXT("curb")));
 		TestEqual(TEXT("generated curb width cm"), GeneratedCurbRegion->Size.Y, 50.0);
 		TestEqual(TEXT("generated curb top z cm"), GeneratedCurbRegion->Center.Z, 0.0);
 	}

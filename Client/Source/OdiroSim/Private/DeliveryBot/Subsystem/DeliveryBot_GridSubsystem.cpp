@@ -9,6 +9,7 @@
 #include "EngineUtils.h"
 #include "Dom/JsonObject.h"
 #include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
+#include "Scenario/Actors/ScenarioGroundRegion.h"
 #include "Scenario/Actors/ScenarioStaticObstacle.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -82,6 +83,90 @@ namespace
 		default:
 			return 1.0f;
 		}
+	}
+
+	int32 ResolveScenarioRegionPriority(EScenarioGroundRegionType regionType)
+	{
+		switch (regionType)
+		{
+		case EScenarioGroundRegionType::Blocked:
+			return 3;
+		case EScenarioGroundRegionType::Penalty:
+			return 2;
+		case EScenarioGroundRegionType::Walkable:
+		default:
+			return 1;
+		}
+	}
+
+	// Resolves a semantic floor surface from corridor lanes or generated GroundRegions before physics fallback.
+	bool TryFindScenarioSemanticSurfaceAtWorldLocation2D(
+		const UWorld& world,
+		const FVector& worldLocation,
+		FScenarioRuntimeCorridorSurfaceQueryResult& outSurface,
+		const AScenarioCorridorRuntimeActor** outCorridorActor)
+	{
+		outSurface = FScenarioRuntimeCorridorSurfaceQueryResult();
+		if (outCorridorActor)
+		{
+			*outCorridorActor = nullptr;
+		}
+
+		bool bFoundSurface = false;
+		int32 bestPriority = 0;
+		for (TActorIterator<AScenarioCorridorRuntimeActor> actorIt(&world); actorIt; ++actorIt)
+		{
+			AScenarioCorridorRuntimeActor* candidateActor = *actorIt;
+			FScenarioRuntimeCorridorSurfaceQueryResult candidateSurface;
+			if (!IsValid(candidateActor)
+				|| !candidateActor->TryFindSurfaceAtWorldLocation2D(worldLocation, candidateSurface))
+			{
+				continue;
+			}
+
+			const int32 candidatePriority = ResolveScenarioRegionPriority(candidateSurface.RegionType);
+			if (!bFoundSurface || candidatePriority > bestPriority)
+			{
+				outSurface = candidateSurface;
+				bestPriority = candidatePriority;
+				bFoundSurface = true;
+				if (outCorridorActor)
+				{
+					*outCorridorActor = candidateActor;
+				}
+			}
+		}
+
+		for (TActorIterator<AScenarioGroundRegion> actorIt(&world); actorIt; ++actorIt)
+		{
+			const AScenarioGroundRegion* regionActor = *actorIt;
+			if (!IsValid(regionActor)
+				|| !regionActor->ContainsWorldLocation2D(worldLocation))
+			{
+				continue;
+			}
+
+			FScenarioRuntimeCorridorSurfaceQueryResult candidateSurface;
+			candidateSurface.SurfaceInstanceId = regionActor->RegionSpec.RegionId;
+			candidateSurface.SurfaceId = regionActor->RegionSpec.SurfaceId;
+			candidateSurface.RegionType = regionActor->RegionSpec.RegionType;
+			candidateSurface.SurfaceZOffsetCm =
+				regionActor->RegionSpec.Center.Z - AScenarioCorridorRuntimeActor::GetRuntimeSurfaceTopZCm();
+
+			const int32 candidatePriority = ResolveScenarioRegionPriority(candidateSurface.RegionType);
+			if (!bFoundSurface || candidatePriority > bestPriority)
+			{
+				outSurface = candidateSurface;
+				bestPriority = candidatePriority;
+				bFoundSurface = true;
+				if (outCorridorActor)
+				{
+					*outCorridorActor = nullptr;
+				}
+			}
+		}
+
+		return bFoundSurface;
 	}
 
 	// Collects obstacle actors that LiDAR handles outside the static navigation grid.
@@ -663,7 +748,7 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 		return false;
 	}
 
-	if (TryApplyScenarioCorridorSurfaceCell(
+	if (TryApplyScenarioSemanticSurfaceCell(
 		cellCenterLocation,
 		robotBoxExtent,
 		gridTraceChannel,
@@ -756,7 +841,7 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 	return true;
 }
 
-bool UDeliveryBot_GridSubsystem::TryApplyScenarioCorridorSurfaceCell(
+bool UDeliveryBot_GridSubsystem::TryApplyScenarioSemanticSurfaceCell(
 	const FVector& cellCenterLocation,
 	const FVector& robotBoxExtent,
 	const ECollisionChannel gridTraceChannel,
@@ -770,20 +855,9 @@ bool UDeliveryBot_GridSubsystem::TryApplyScenarioCorridorSurfaceCell(
 		return false;
 	}
 
-	FScenarioRuntimeCorridorSurfaceQueryResult surface;
 	const AScenarioCorridorRuntimeActor* corridorActor = nullptr;
-	for (TActorIterator<AScenarioCorridorRuntimeActor> actorIt(world); actorIt; ++actorIt)
-	{
-		AScenarioCorridorRuntimeActor* candidateActor = *actorIt;
-		if (IsValid(candidateActor)
-			&& candidateActor->TryFindSurfaceAtWorldLocation2D(cellCenterLocation, surface))
-		{
-			corridorActor = candidateActor;
-			break;
-		}
-	}
-
-	if (!IsValid(corridorActor))
+	FScenarioRuntimeCorridorSurfaceQueryResult surface;
+	if (!TryFindScenarioSemanticSurfaceAtWorldLocation2D(*world, cellCenterLocation, surface, &corridorActor))
 	{
 		return false;
 	}
@@ -813,7 +887,10 @@ bool UDeliveryBot_GridSubsystem::TryApplyScenarioCorridorSurfaceCell(
 	}
 
 	FName blockingProfileName = NAME_None;
-	if (HasBlockingCorridorFootprintOverlap(*corridorActor, outCellInfo.GroundLocation, robotBoxExtent, blockingProfileName))
+	if (HasBlockingScenarioSurfaceFootprintOverlap(
+		outCellInfo.GroundLocation,
+		robotBoxExtent,
+		blockingProfileName))
 	{
 		ApplyBlockedCell(outCellInfo, blockingProfileName);
 		return true;
@@ -836,13 +913,19 @@ bool UDeliveryBot_GridSubsystem::TryApplyScenarioCorridorSurfaceCell(
 	return true;
 }
 
-bool UDeliveryBot_GridSubsystem::HasBlockingCorridorFootprintOverlap(
-	const AScenarioCorridorRuntimeActor& corridorActor,
+bool UDeliveryBot_GridSubsystem::HasBlockingScenarioSurfaceFootprintOverlap(
 	const FVector& groundLocation,
 	const FVector& robotBoxExtent,
 	FName& outBlockingProfileName) const
 {
 	outBlockingProfileName = NAME_None;
+
+	const UWorld* world = GetWorld();
+	if (!IsValid(world))
+	{
+		outBlockingProfileName = TEXT("InvalidWorld");
+		return true;
+	}
 
 	const FVector2D sampleOffsets[] =
 	{
@@ -859,9 +942,9 @@ bool UDeliveryBot_GridSubsystem::HasBlockingCorridorFootprintOverlap(
 			groundLocation.Y + sampleOffset.Y,
 			groundLocation.Z);
 		FScenarioRuntimeCorridorSurfaceQueryResult surface;
-		if (!corridorActor.TryFindSurfaceAtWorldLocation2D(sampleLocation, surface))
+		if (!TryFindScenarioSemanticSurfaceAtWorldLocation2D(*world, sampleLocation, surface, nullptr))
 		{
-			outBlockingProfileName = TEXT("NoCorridorSurface");
+			outBlockingProfileName = TEXT("NoScenarioSurface");
 			return true;
 		}
 

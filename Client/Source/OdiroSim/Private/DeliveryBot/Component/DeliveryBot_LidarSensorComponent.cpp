@@ -1,6 +1,8 @@
 #include "DeliveryBot/Component/DeliveryBot_LidarSensorComponent.h"
 
 #include "DrawDebugHelpers.h"
+#include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
+#include "Scenario/Actors/ScenarioGroundRegion.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotLidarSensor, Log, All);
@@ -17,6 +19,27 @@ namespace
 
 		const UScenarioPlaceableComponent* placeableComponent = actor->FindComponentByClass<UScenarioPlaceableComponent>();
 		return placeableComponent ? placeableComponent->InstanceId : FString();
+	}
+
+	// Filters floor-like scenario surfaces so LiDAR reports vertical obstacles instead of road/walkway planes.
+	bool ShouldIgnoreScenarioSurfaceLidarHit(const FHitResult& hitResult)
+	{
+		const AActor* hitActor = hitResult.GetActor();
+		if (IsValid(Cast<AScenarioGroundRegion>(hitActor))
+			|| IsValid(Cast<AScenarioCorridorRuntimeActor>(hitActor)))
+		{
+			return true;
+		}
+
+		const UPrimitiveComponent* hitComponent = hitResult.GetComponent();
+		if (!IsValid(hitComponent))
+		{
+			return true;
+		}
+
+		const FName profileName = hitComponent->GetCollisionProfileName();
+		return profileName == FName(TEXT("Walkable"))
+			|| profileName == FName(TEXT("Penalty"));
 	}
 }
 
@@ -135,6 +158,11 @@ bool UDeliveryBot_LidarSensorComponent::TraceLidarRay(
 	{
 		const AActor* hitActor = hitResult.GetActor();
 		if (!IsValid(hitActor))
+		{
+			continue;
+		}
+
+		if (ShouldIgnoreScenarioSurfaceLidarHit(hitResult))
 		{
 			continue;
 		}

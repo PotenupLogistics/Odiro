@@ -43,4 +43,15 @@ struct ODIROSIM_API FDeliveryBotPolicyEventSnapshot
 	FString LastObstacleWarningSource{}; // 마지막 obstacle warning의 source
 	int32 BlockedCorridorCellCount{ 0 }; // corridor에서 막힌 cell 개수
 	int32 DynamicBlockedCellCount{ 0 }; // 동적 장애물로 막힌 cell 개수
+	float PathfindTotalMs{ 0.f }; // Python A* 전체 처리 시간(ms)
+	float PathfindCellLookupMs{ 0.f }; // Python A* cell lookup 생성 시간(ms)
+	float PathfindSoftCostMs{ 0.f }; // Python A* obstacle soft cost 계산 시간(ms)
+	float PathfindSearchMs{ 0.f }; // Python A* open-set 탐색 시간(ms)
+	float PathfindSmoothMs{ 0.f }; // Python A* line-of-sight smoothing 시간(ms)
+	int32 PathfindGridCellCount{ 0 }; // Python A* 입력 grid cell 수
+	int32 PathfindBlockedCellCount{ 0 }; // Python A* 입력 blocked cell 수
+	int32 PathfindSoftCostCellCount{ 0 }; // Python A* soft cost가 적용된 cell 수
+	int32 PathfindVisitedNodeCount{ 0 }; // Python A* pop 처리한 node 수
+	int32 PathfindNeighborCheckCount{ 0 }; // Python A* neighbor 후보 확인 수
+	int32 PathfindOpenPushCount{ 0 }; // Python A* open set push 수
 };

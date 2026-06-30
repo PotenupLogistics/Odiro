@@ -114,6 +114,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bHit{ false };
 
+	// True when this LiDAR hit should affect policy obstacle decisions.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bBlocksPolicy{ false };
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 RayIndex{ INDEX_NONE };
 
@@ -194,6 +198,10 @@ public: // 탐지된 액터
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> TargetTags{};
 
+	// True when this detected object should affect policy obstacle decisions.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bBlocksPolicy{ false };
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bHasBounds{ false };
 
@@ -252,6 +260,10 @@ struct FDeliveryBotLidarObservedObjectInfo
 	// Scenario semantic tags exposed to policy and action-log payloads.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> TargetTags{};
+
+	// True when this observed object should affect policy obstacle decisions.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bBlocksPolicy{ false };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bHasBounds{ false };

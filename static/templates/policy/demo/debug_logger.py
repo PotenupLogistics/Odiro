@@ -41,6 +41,12 @@ WATCH_FIELDS = {
     "repathFrontRayDistanceM",
     "repathDistanceGapM",
     "dynamicBlockedCellCount",
+    "pathfindTotalMs",
+    "pathfindSoftCostMs",
+    "pathfindSearchMs",
+    "pathfindGridCellCount",
+    "pathfindBlockedCellCount",
+    "pathfindVisitedNodeCount",
 }
 
 # 숫자 필드는 이 차이 이상 변했을 때만 출력한다.
@@ -53,6 +59,9 @@ WATCH_THRESHOLDS = {
     "recoveryUntilSeconds": 0.1,
     "repathFrontRayDistanceM": 0.2,
     "repathDistanceGapM": 0.2,
+    "pathfindTotalMs": 1.0,
+    "pathfindSoftCostMs": 1.0,
+    "pathfindSearchMs": 1.0,
 }
 
 # 첫 snapshot에서 이미 이 값보다 커져 있으면 변화로 출력한다.
@@ -78,6 +87,12 @@ WATCH_INITIAL_VALUES = {
     "repathFrontRayDistanceM": None,
     "repathDistanceGapM": None,
     "dynamicBlockedCellCount": 0,
+    "pathfindTotalMs": 0.0,
+    "pathfindSoftCostMs": 0.0,
+    "pathfindSearchMs": 0.0,
+    "pathfindGridCellCount": 0,
+    "pathfindBlockedCellCount": 0,
+    "pathfindVisitedNodeCount": 0,
 }
 
 # 로그 한 줄에 같이 붙여 볼 주변 정보다. 이 필드는 변화 감지 대상이 아니다.
@@ -118,6 +133,19 @@ CONTEXT_FIELDS = (
     "repathFrontAngleDegree",
     "repathBlockRadiusCells",
     "dynamicBlockedCellCount",
+    "pathfindTotalMs",
+    "pathfindCellLookupMs",
+    "pathfindSoftCostMs",
+    "pathfindSearchMs",
+    "pathfindSmoothMs",
+    "pathfindGridCellCount",
+    "pathfindBlockedCellCount",
+    "pathfindSoftCostCellCount",
+    "pathfindVisitedNodeCount",
+    "pathfindNeighborCheckCount",
+    "pathfindOpenPushCount",
+    "pathfindPathCellCount",
+    "pathfindReason",
     "repathDebounceKey",
     "repathDebounceCount",
     "frontMinM",

@@ -41,8 +41,10 @@ public:
 	UDeliveryBot_DriveComponent();
 	// Applies a high-level movement command to the Chaos vehicle movement component.
 	void ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement,	const FDeliveryBotMoveCommandInfo& moveCommandInfo,	float deltaTime);
-	// Applies a full parking stop to the Chaos vehicle movement component.
+	// Applies a configured parking stop without forcing handbrake unless requested.
 	void ApplyParkingStop(UChaosVehicleMovementComponent* vehicleMovement);
+	// Applies a rate-limited stop while waiting for a fresh policy command.
+	void ApplyPolicyTimeoutSlowStop(UChaosVehicleMovementComponent* vehicleMovement, float deltaTime);
 	
 	// Applies stored drive configuration to a Chaos wheeled movement component.
 	void SetupVehicleMovement(UChaosWheeledVehicleMovementComponent* wheeledMovement) const;

@@ -28,7 +28,7 @@ class SlowDownPolicy:
         lidar_rays = select_policy_lidar_rays_2d(request)
 
         for ray in lidar_rays:
-            if not ray.hit:
+            if not ray.hit or not ray.blocksPolicy:
                 continue
 
             if abs(normalize_angle_degree(ray.rayYawDegree)) > self.frontAngleDegree:

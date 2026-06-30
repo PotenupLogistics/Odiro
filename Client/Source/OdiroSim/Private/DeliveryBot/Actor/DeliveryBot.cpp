@@ -531,6 +531,7 @@ TArray<FDeliveryBotLidarObservedObjectInfo> ADeliveryBot::BuildObservedObjectsFo
 		target.ActorTags = source.ActorTags;
 		target.TargetId = source.TargetId;
 		target.TargetTags = source.TargetTags;
+		target.bBlocksPolicy = source.bBlocksPolicy;
 		target.bHasBounds = source.bHasBounds;
 		target.BoundsOriginCm = source.BoundsOriginCm;
 		target.BoundsExtentCm = source.BoundsExtentCm;

@@ -30,6 +30,9 @@ def get_front_lidar_min_distance_text(request: ScenarioDecideRequest, front_angl
 
 # LiDAR 정책 ray가 ground hit으로 무시되어야 하는지 판단한다.
 def is_ignored_lidar_policy_ray(ray) -> bool:
+    if not ray.blocksPolicy:
+        return True
+
     actor_name = ray.actorName or ""
     actor_tags = ray.actorTags or []
     normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
@@ -106,6 +109,27 @@ def build_repath_debug(state: AgentState) -> dict:
         "repathDistanceGapM": state.repathDistanceGapM,
         "repathFrontAngleDegree": state.repathFrontAngleDegree,
         "repathBlockRadiusCells": state.repathBlockRadiusCells,
+        **build_pathfind_debug(state),
+    }
+
+
+# 마지막 A* 길찾기 성능 계측값을 debug/event dict로 만든다.
+def build_pathfind_debug(state: AgentState) -> dict:
+    metrics = state.lastPathfindMetrics or {}
+    return {
+        "pathfindTotalMs": metrics.get("pathfindTotalMs", 0.0),
+        "pathfindCellLookupMs": metrics.get("pathfindCellLookupMs", 0.0),
+        "pathfindSoftCostMs": metrics.get("pathfindSoftCostMs", 0.0),
+        "pathfindSearchMs": metrics.get("pathfindSearchMs", 0.0),
+        "pathfindSmoothMs": metrics.get("pathfindSmoothMs", 0.0),
+        "pathfindGridCellCount": metrics.get("pathfindGridCellCount", 0),
+        "pathfindBlockedCellCount": metrics.get("pathfindBlockedCellCount", 0),
+        "pathfindSoftCostCellCount": metrics.get("pathfindSoftCostCellCount", 0),
+        "pathfindVisitedNodeCount": metrics.get("pathfindVisitedNodeCount", 0),
+        "pathfindNeighborCheckCount": metrics.get("pathfindNeighborCheckCount", 0),
+        "pathfindOpenPushCount": metrics.get("pathfindOpenPushCount", 0),
+        "pathfindPathCellCount": metrics.get("pathfindPathCellCount", 0),
+        "pathfindReason": metrics.get("pathfindReason", ""),
     }
 
 
@@ -236,6 +260,7 @@ class BotPolicy:
             goal=request.goal,
             grid=request.grid,
         )
+        state.lastPathfindMetrics = result.metrics
 
         if not result.success:
             return {
@@ -248,6 +273,11 @@ class BotPolicy:
                 },
                 "decision": build_decision_contract("AStarPathfinder", result.reason),
                 "path": build_path_contract(state),
+                "debug": {
+                    "selectedPolicy": "AStarPathfinder",
+                    "reason": result.reason,
+                    **build_pathfind_debug(state),
+                },
                 "events": [],
                 "captures": [],
             }
@@ -262,6 +292,11 @@ class BotPolicy:
             "pathStatus": "valid",
             "decision": build_decision_contract("AStarPathfinder", "initial_path_ready"),
             "path": build_path_contract(state),
+            "debug": {
+                "selectedPolicy": "AStarPathfinder",
+                "reason": "initial_path_ready",
+                **build_pathfind_debug(state),
+            },
             "events": [],
             "captures": [],
         }
@@ -299,15 +334,14 @@ class BotPolicy:
             action_dict = action.to_dict()
             state.remember_action(action_dict, reason)
 
-            self.decisionLogWatcher.emit_if_changed(
-                build_decision_log_snapshot(
-                    request=request,
-                    state=state,
-                    policy_name=policy.name,
-                    reason=reason,
-                    action_dict=action_dict,
-                )
+            debug_snapshot = build_decision_log_snapshot(
+                request=request,
+                state=state,
+                policy_name=policy.name,
+                reason=reason,
+                action_dict=action_dict,
             )
+            self.decisionLogWatcher.emit_if_changed(debug_snapshot)
 
             return {
                 "sequence": request.sequence,
@@ -315,19 +349,19 @@ class BotPolicy:
                 "action": action_dict,
                 "decision": build_decision_contract(policy.name, reason),
                 "path": build_path_contract(state),
+                "debug": debug_snapshot,
                 "events": policy_events,
                 "captures": capture_refs,
             }
 
-        self.decisionLogWatcher.emit_if_changed(
-            build_decision_log_snapshot(
-                request=request,
-                state=state,
-                policy_name="None",
-                reason=last_reason or "no_action",
-                action_dict=None,
-            )
+        debug_snapshot = build_decision_log_snapshot(
+            request=request,
+            state=state,
+            policy_name="None",
+            reason=last_reason or "no_action",
+            action_dict=None,
         )
+        self.decisionLogWatcher.emit_if_changed(debug_snapshot)
 
         return {
             "sequence": request.sequence,
@@ -339,6 +373,7 @@ class BotPolicy:
             },
             "decision": build_decision_contract("None", last_reason or "no_action"),
             "path": build_path_contract(state),
+            "debug": debug_snapshot,
             "events": policy_events,
             "captures": capture_refs,
         }

@@ -222,6 +222,7 @@ class RePathPolicy:
             goal=state.goal,
             grid=state.grid,
         )
+        state.lastPathfindMetrics = result.metrics
 
         state.lastRepathTimeSeconds = request.runTimeSeconds
         if front_ray is not None and bFrontObstacleRepath:
@@ -425,16 +426,16 @@ class RePathPolicy:
 
         return []
 
-    # actorTags가 없는 hit과 corridor wall은 RePath 장애물 후보에서 제외한다.
+    # blocksPolicy가 false인 hit과 정적 맵 geometry는 RePath 장애물 후보에서 제외한다.
     def is_ignored_lidar_policy_ray(self, ray: LidarRay) -> bool:
+        if not ray.blocksPolicy:
+            return True
+
         actor_name = ray.actorName or ""
         actor_tags = ray.actorTags or []
-        normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
         return (
-            len(actor_tags) == 0
-            or actor_name.startswith("ScenarioCorridorRuntimeActor")
-            or "wall" in normalized_tags
-            or any(tag.endswith(".wall") for tag in normalized_tags)
+            self.is_static_map_actor_name(actor_name)
+            or self.has_static_map_tags(actor_tags)
         )
 
     # LiDAR hit 위치 주변 cell을 동적 장애물로 막는다.
@@ -573,16 +574,41 @@ class RePathPolicy:
             self.mark_cell_blocked(grid_cell, ray.actorName or "DynamicLidarObstacle")
             state.dynamicBlockedCells.add(cell)
 
-    # actorTags가 없는 object와 corridor wall은 RePath bounds marking에서 제외한다.
+    # blocksPolicy가 false인 object와 정적 맵 geometry는 RePath bounds marking에서 제외한다.
     def is_ignored_observed_object(self, observed_object: dict) -> bool:
+        if not bool(observed_object.get("blocksPolicy", observed_object.get("blocks_policy", True))):
+            return True
+
         actor_name = str(observed_object.get("actorName") or "")
-        actor_tags = observed_object.get("actorTags") or []
-        normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
+        actor_tags = list(observed_object.get("actorTags") or [])
+        target_tags = list(observed_object.get("targetTags") or [])
         return (
-            len(actor_tags) == 0
-            or actor_name.startswith("ScenarioCorridorRuntimeActor")
-            or "wall" in normalized_tags
-            or any(tag.endswith(".wall") for tag in normalized_tags)
+            self.is_static_map_actor_name(actor_name)
+            or self.has_static_map_tags(actor_tags + target_tags)
+        )
+
+    # 정적 맵 actor 이름이면 동적 RePath 장애물에서 제외한다.
+    def is_static_map_actor_name(self, actor_name: str) -> bool:
+        normalized_name = str(actor_name or "").strip().lower()
+        return (
+            normalized_name.startswith("scenariocorridorruntimeactor")
+            or normalized_name.startswith("generated_city_")
+        )
+
+    # 정적 맵 태그이면 동적 RePath 장애물에서 제외한다.
+    def has_static_map_tags(self, actor_tags: list[str]) -> bool:
+        normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
+        return any(self.is_static_map_tag(tag) for tag in normalized_tags)
+
+    # 정적 맵 geometry 태그인지 확인한다.
+    def is_static_map_tag(self, tag: str) -> bool:
+        return (
+            tag == "city_block"
+            or tag == "building"
+            or tag == "wall"
+            or tag.startswith("city_block_role_")
+            or tag.endswith(".building")
+            or tag.endswith(".wall")
         )
 
     # LiDAR ray 거리와 각도로 world hit 위치를 계산한다.

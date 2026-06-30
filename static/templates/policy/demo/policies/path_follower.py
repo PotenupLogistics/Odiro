@@ -880,14 +880,39 @@ class PathFollower:
         return not (ray.distanceM <= self.stopDistanceM and self.is_collision_stop_ray(ray))
 
     def is_ignored_lidar_policy_ray(self, ray) -> bool:
+        if not ray.blocksPolicy:
+            return True
+
         actor_name = ray.actorName or ""
         actor_tags = ray.actorTags or []
-        normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
         return (
             (actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0)
-            or actor_name.startswith("ScenarioCorridorRuntimeActor")
-            or "wall" in normalized_tags
-            or any(tag.endswith(".wall") for tag in normalized_tags)
+            or self.is_static_map_actor_name(actor_name)
+            or self.has_static_map_tags(actor_tags)
+        )
+
+    # 정적 맵 actor 이름이면 주행 정책 장애물에서 제외한다.
+    def is_static_map_actor_name(self, actor_name: str) -> bool:
+        normalized_name = str(actor_name or "").strip().lower()
+        return (
+            normalized_name.startswith("scenariocorridorruntimeactor")
+            or normalized_name.startswith("generated_city_")
+        )
+
+    # 정적 맵 태그이면 주행 정책 장애물에서 제외한다.
+    def has_static_map_tags(self, actor_tags: list[str]) -> bool:
+        normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
+        return any(self.is_static_map_tag(tag) for tag in normalized_tags)
+
+    # 정적 맵 geometry 태그인지 확인한다.
+    def is_static_map_tag(self, tag: str) -> bool:
+        return (
+            tag == "city_block"
+            or tag == "building"
+            or tag == "wall"
+            or tag.startswith("city_block_role_")
+            or tag.endswith(".building")
+            or tag.endswith(".wall")
         )
 
     # 로봇과 전체 경로 선분 사이의 최소 거리를 계산한다.

@@ -160,6 +160,7 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 	}
 }
 
+// Applies a stop command that keeps the drivetrain out of reverse unless a later command requests it.
 void UDeliveryBot_DriveComponent::ApplyParkingStop(UChaosVehicleMovementComponent* vehicleMovement)
 {
 	if (!IsValid(vehicleMovement))
@@ -170,10 +171,50 @@ void UDeliveryBot_DriveComponent::ApplyParkingStop(UChaosVehicleMovementComponen
 	CurrentSteeringInput = 0.f;
 	CurrentTargetSpeedKmh = 0.f;
 
+	vehicleMovement->SetUseAutomaticGears(false);
+	vehicleMovement->SetTargetGear(1, true);
 	vehicleMovement->SetThrottleInput(0.f);
 	vehicleMovement->SetSteeringInput(0.f);
 	vehicleMovement->SetBrakeInput(1.f);
-	vehicleMovement->SetHandbrakeInput(true);
+	vehicleMovement->SetHandbrakeInput(DriveConfigInfo.bUseHandbrakeWhenBrake);
+}
+
+// Applies a gentle forward-gear stop for stale policy commands without engaging the handbrake.
+void UDeliveryBot_DriveComponent::ApplyPolicyTimeoutSlowStop(
+	UChaosVehicleMovementComponent* vehicleMovement,
+	float deltaTime)
+{
+	if (!IsValid(vehicleMovement))
+		return;
+
+	const float safeDeltaTime = FMath::Max(deltaTime, 0.f);
+	const int32 targetGear = 1;
+	const bool bBrakeBeforeGearSwitch = ShouldBrakeBeforeGearSwitch(vehicleMovement, targetGear);
+
+	CurrentTargetSpeedKmh = FMath::FInterpConstantTo(
+		CurrentTargetSpeedKmh,
+		0.f,
+		safeDeltaTime,
+		DriveConfigInfo.DecelerationRateKmhPerSecond);
+
+	vehicleMovement->SetUseAutomaticGears(false);
+	if (!bBrakeBeforeGearSwitch)
+	{
+		vehicleMovement->SetTargetGear(targetGear, true);
+	}
+
+	const float targetBrake = bBrakeBeforeGearSwitch
+		? DriveConfigInfo.GearSwitchBrakeInput
+		: 1.f;
+
+	ApplyDriveInput(
+		vehicleMovement,
+		0.f,
+		0.f,
+		targetBrake,
+		false,
+		DriveConfigInfo.MaxSpeedKmh,
+		safeDeltaTime);
 }
 
 // Chaos Wheeled Vehicle의 엔진과 변속기 기본 설정을 적용한다.

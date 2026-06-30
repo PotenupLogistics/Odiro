@@ -190,6 +190,11 @@ def parse_actor_tags(data: dict) -> list[str]:
     return [str(actor_tag) for actor_tag in actor_tags]
 
 
+def parse_blocks_policy(data: dict) -> bool:
+    """Return whether a LiDAR hit should affect policy obstacle decisions."""
+    return bool(data.get("blocksPolicy", data.get("blocks_policy", True)))
+
+
 def parse_vector_cm(data: object) -> dict[str, float] | None:
     """Parse an Unreal vector object into a cm-unit dict."""
     if not isinstance(data, dict):
@@ -308,6 +313,7 @@ def parse_legacy_lidar_ray(data: dict):
         {
             "hit": bool(data.get("hit", False)),
             "distanceM": safe_float(data.get("distanceM", 0.0)),
+            "blocksPolicy": parse_blocks_policy(data),
             "rayIndex": data.get("rayIndex"),
             "rayYawDegree": safe_float(data.get("rayYawDegree", data.get("yawDegree", 0.0))),
             "actorName": data.get("actorName"),
@@ -323,6 +329,7 @@ def parse_lidar_ray_1d(data: dict):
         {
             "hit": bool(data.get("hit", False)),
             "distanceM": safe_float(data.get("distanceM", 0.0)),
+            "blocksPolicy": parse_blocks_policy(data),
             "rayIndex": data.get("rayIndex"),
             "actorName": data.get("actorName"),
             "actorTags": parse_actor_tags(data),
@@ -337,6 +344,7 @@ def parse_lidar_ray_2d(data: dict):
         {
             "hit": bool(data.get("hit", False)),
             "distanceM": safe_float(data.get("distanceM", 0.0)),
+            "blocksPolicy": parse_blocks_policy(data),
             "yawDegree": safe_float(data.get("yawDegree", data.get("rayYawDegree", 0.0))),
             "rayIndex": data.get("rayIndex"),
             "actorName": data.get("actorName"),
@@ -352,6 +360,7 @@ def parse_lidar_ray_3d(data: dict):
         {
             "hit": bool(data.get("hit", False)),
             "distanceM": safe_float(data.get("distanceM", 0.0)),
+            "blocksPolicy": parse_blocks_policy(data),
             "yawDegree": safe_float(data.get("yawDegree", data.get("rayYawDegree", 0.0))),
             "pitchDegree": safe_float(data.get("pitchDegree", data.get("rayPitchDegree", 0.0))),
             "rayIndex": data.get("rayIndex"),

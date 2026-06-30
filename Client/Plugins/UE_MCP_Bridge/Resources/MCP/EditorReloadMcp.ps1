@@ -230,6 +230,65 @@ function Get-PortState {
     return $state
 }
 
+# Returns whether a forced rebuild may safely start without bridge coordination.
+function Get-ColdStartEligibility {
+    $portState = Get-PortState
+    $projectRoot = (Get-ProjectRootFromPlugin).TrimEnd([char[]] @('\', '/'))
+    $projectFile = Get-ReloadProjectFile -ProjectRoot $projectRoot
+    $normalizedRoot = [System.IO.Path]::GetFullPath($projectRoot).TrimEnd([char[]] @('\', '/')).ToLowerInvariant()
+    $normalizedProjectFile = [System.IO.Path]::GetFullPath($projectFile).ToLowerInvariant()
+    $blockingProcesses = @()
+
+    try {
+        $editorProcesses = @(Get-CimInstance Win32_Process -Filter "Name LIKE 'UnrealEditor%'" -ErrorAction Stop)
+        foreach ($process in $editorProcesses) {
+            $commandLine = [string] (Get-ObjectProperty -Object $process -Name "CommandLine" -DefaultValue "")
+            $normalizedCommandLine = $commandLine.Replace('/', '\').ToLowerInvariant()
+            $ownsProject = $normalizedCommandLine.Contains($normalizedProjectFile.Replace('/', '\')) -or
+                $normalizedCommandLine.Contains($normalizedRoot.Replace('/', '\'))
+            $unknownOwner = -not $commandLine
+            if ($ownsProject -or $unknownOwner) {
+                $blockingProcesses += [pscustomobject]@{
+                    pid = [int] $process.ProcessId
+                    name = [string] $process.Name
+                    ownsProject = $ownsProject
+                    unknownOwner = $unknownOwner
+                    commandLine = $commandLine
+                }
+            }
+        }
+    }
+    catch {
+        $fallbackProcesses = @(Get-Process | Where-Object { $_.ProcessName -like "UnrealEditor*" })
+        foreach ($process in $fallbackProcesses) {
+            $blockingProcesses += [pscustomobject]@{
+                pid = [int] $process.Id
+                name = [string] $process.ProcessName
+                ownsProject = $false
+                unknownOwner = $true
+                commandLine = ""
+            }
+        }
+    }
+
+    $portAlive = [bool] (Get-ObjectProperty -Object $portState -Name "processAlive" -DefaultValue $false)
+    $allowed = (-not $portAlive) -and $blockingProcesses.Count -eq 0
+    $reason = "safe_no_live_editor"
+    if ($portAlive) {
+        $reason = "bridge_port_process_alive"
+    }
+    elseif ($blockingProcesses.Count -gt 0) {
+        $reason = "editor_process_alive"
+    }
+
+    return [pscustomobject]@{
+        allowed = $allowed
+        reason = $reason
+        portState = $portState
+        blockingEditorProcesses = $blockingProcesses
+    }
+}
+
 # Sends one JSON-RPC request to the editor's WebSocket bridge.
 function Invoke-BridgeMethod {
     param(
@@ -821,6 +880,7 @@ function Start-RebuildAndRestart {
         [int] $TimeoutMs = 60000,
         [bool] $Force = $false,
         [string[]] $EditorArgs = @(),
+        [int] $MaxParallelActions = 0,
         [bool] $McpSafeLaunch = $false
     )
     $stateDir = Get-ReloadStateDirectory
@@ -909,18 +969,45 @@ function Start-RebuildAndRestart {
                     $sourceFingerprint = $sourceFingerprintBeforeCheck
                 }
 
+                $coldStart = $false
+                $coldStartEligibility = $null
                 try {
                     $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_get_status" -TimeoutMs 5000)
                 }
                 catch {
+                    $coldStartEligibility = Get-ColdStartEligibility
+                    if ($Force -and (Get-ObjectProperty -Object $coldStartEligibility -Name "allowed" -DefaultValue $false)) {
+                        $coldStart = $true
+                        Write-ReloadLog "coordination_get_status unavailable; force rebuild/restart will use verified cold start: $($_.Exception.Message)"
+                    }
+                    else {
+                        return [pscustomobject]@{
+                            success = $false
+                            accepted = $false
+                            code = "coordination_unavailable"
+                            error = $_.Exception.Message
+                            maintenancePath = $maintenancePath
+                            sourceFingerprint = $sourceFingerprint
+                            upToDateCheck = $upToDateCheck
+                            coldStartEligibility = $coldStartEligibility
+                        }
+                    }
+                }
+
+                if ($coldStart -and $null -eq $coldStartEligibility) {
+                    $coldStartEligibility = Get-ColdStartEligibility
+                }
+
+                if ($coldStart -and -not (Get-ObjectProperty -Object $coldStartEligibility -Name "allowed" -DefaultValue $false)) {
                     return [pscustomobject]@{
                         success = $false
                         accepted = $false
                         code = "coordination_unavailable"
-                        error = $_.Exception.Message
+                        error = "Cold start was requested but a live editor process was detected."
                         maintenancePath = $maintenancePath
                         sourceFingerprint = $sourceFingerprint
                         upToDateCheck = $upToDateCheck
+                        coldStartEligibility = $coldStartEligibility
                     }
                 }
 
@@ -946,8 +1033,11 @@ function Start-RebuildAndRestart {
                     requestedAt = $now
                     updatedAt = $now
                     force = $Force
+                    coldStart = $coldStart
+                    coldStartEligibility = $coldStartEligibility
                     editorArgs = $EditorArgs
                     mcpSafeLaunch = $McpSafeLaunch
+                    maxParallelActions = $MaxParallelActions
                     sourceFingerprintAtStart = $sourceFingerprint
                     upToDateCheck = $upToDateCheck
                 }
@@ -974,8 +1064,14 @@ function Start-RebuildAndRestart {
                     "-JobId", $jobId,
                     "-EditorArgsJson", $editorArgsJson
                 )
+                if ($MaxParallelActions -gt 0) {
+                    $arguments += @("-MaxParallelActions", $MaxParallelActions)
+                }
                 if ($McpSafeLaunch) {
                     $arguments += "-McpSafeLaunch"
+                }
+                if ($coldStart) {
+                    $arguments += "-ColdStart"
                 }
                 try {
                     Start-Process -FilePath (Get-PowerShellExe) -ArgumentList (Join-ReloadProcessArguments -Arguments $arguments) -WindowStyle Hidden | Out-Null
@@ -1437,6 +1533,7 @@ function Get-ToolList {
                     timeoutMs = @{ type = "number" }
                     force = @{ type = "boolean" }
                     editorArgs = @{ type = "array"; items = @{ type = "string" } }
+                    maxParallelActions = @{ type = "number" }
                     mcpSafeLaunch = @{ type = "boolean" }
                 }
             }
@@ -1505,6 +1602,7 @@ function Invoke-ToolCall {
                 -TimeoutMs ([int] (Get-ObjectProperty -Object $Arguments -Name "timeoutMs" -DefaultValue 60000)) `
                 -Force ([bool] (Get-ObjectProperty -Object $Arguments -Name "force" -DefaultValue $false)) `
                 -EditorArgs @((Get-ObjectProperty -Object $Arguments -Name "editorArgs" -DefaultValue @())) `
+                -MaxParallelActions ([int] (Get-ObjectProperty -Object $Arguments -Name "maxParallelActions" -DefaultValue 0)) `
                 -McpSafeLaunch ([bool] (Get-ObjectProperty -Object $Arguments -Name "mcpSafeLaunch" -DefaultValue $false)))
         }
         "editor_reload_hot_reload" {

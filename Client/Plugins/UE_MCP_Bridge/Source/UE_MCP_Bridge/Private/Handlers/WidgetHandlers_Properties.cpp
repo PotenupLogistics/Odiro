@@ -61,8 +61,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetProperties(const TSharedPtr<FJs
 	FString WidgetName;
 	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -265,8 +264,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetFullProperties(const TSharedPtr
 
 	const bool bIncludeSubtree = OptionalBool(Params, TEXT("includeSubtree"), false);
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -369,7 +367,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetBindings(const TSharedPtr<FJso
 	const FString FilterWidget = OptionalString(Params, TEXT("filterWidgetName"));
 	const FString FilterProperty = OptionalString(Params, TEXT("filterProperty"));
 
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -411,7 +409,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ClearWidgetBinding(const TSharedPtr<FJso
 
 	const FString PropertyName = OptionalString(Params, TEXT("propertyName"));
 
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -456,8 +454,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	FString PropertyValue;
 	if (auto Err = RequireStringAlt(Params, TEXT("propertyValue"), TEXT("value"), PropertyValue)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -1047,8 +1044,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetAnimations(const TSharedPtr<FJ
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));

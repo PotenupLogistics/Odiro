@@ -8,6 +8,7 @@
 #include "IAssetTools.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/Package.h"
+#include "UObject/StrongObjectPtr.h"
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
@@ -825,8 +826,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::EnsureWidgetRenderOpacityAnimations(cons
 		return MCPError(TEXT("Missing 'animations' array."));
 	}
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP || !WidgetBP->WidgetTree)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -1174,8 +1174,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetTree(const TSharedPtr<FJsonObj
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -1239,8 +1238,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJs
 		return MCPError(TEXT("Missing 'root' widget spec object."));
 	}
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP || !WidgetBP->WidgetTree)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -2176,8 +2174,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	FString ParentWidgetName = OptionalString(Params, TEXT("parentWidgetName"));
 
 	// ── Load the WidgetBlueprint ──
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -2322,8 +2319,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReplaceWidgetClasses(const TSharedPtr<FJ
 		return MCPError(TEXT("Missing required array: replacements"));
 	}
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP || !WidgetBP->WidgetTree)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -2902,8 +2898,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetNamedSlotContent(const TSharedPtr<FJs
 	FString SlotName;
 	if (auto Err = RequireString(Params, TEXT("slotName"), SlotName)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP || !WidgetBP->WidgetTree)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -3332,8 +3327,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	FString WidgetName;
 	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -3415,8 +3409,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RenameWidget(const TSharedPtr<FJsonObjec
 		return MCPResult(Noop);
 	}
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP || !WidgetBP->WidgetTree)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -3535,8 +3528,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	FString NewParentName;
 	if (auto Err = RequireStringAlt(Params, TEXT("newParentWidgetName"), TEXT("parentWidgetName"), NewParentName)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP || !WidgetBP->WidgetTree)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -3650,8 +3642,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RepairWidgetBlueprint(const TSharedPtr<F
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP || !WidgetBP->WidgetTree)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -3693,8 +3684,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 	FString WidgetName;
 	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP || !WidgetBP->WidgetTree)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -3789,8 +3779,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 	FString WrapperClassName;
 	if (auto Err = RequireStringAlt(Params, TEXT("wrapperClass"), TEXT("widgetClass"), WrapperClassName)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 	if (!WidgetBP || !WidgetBP->WidgetTree)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
@@ -3909,6 +3898,44 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetClasses(const TSharedPtr<FJson
 namespace WidgetRuntime_Internal
 {
 	constexpr int32 DefaultRuntimeTreeMaxDepth = 6;
+	static TMap<FString, TStrongObjectPtr<UUserWidget>> SpawnedPreviewWidgets;
+	static FDelegateHandle SpawnedPreviewCleanupHandle;
+
+	static void ClearSpawnedPreviewWidgets()
+	{
+		for (TPair<FString, TStrongObjectPtr<UUserWidget>>& Preview : SpawnedPreviewWidgets)
+		{
+			if (Preview.Value.IsValid())
+			{
+				Preview.Value->RemoveFromParent();
+			}
+		}
+		SpawnedPreviewWidgets.Empty();
+	}
+
+	static void HandleEndPIE(const bool)
+	{
+		ClearSpawnedPreviewWidgets();
+	}
+
+	static void EnsureSpawnedPreviewCleanupRegistered()
+	{
+		if (!SpawnedPreviewCleanupHandle.IsValid())
+		{
+			SpawnedPreviewCleanupHandle = FEditorDelegates::EndPIE.AddStatic(&HandleEndPIE);
+		}
+	}
+
+	static void PruneSpawnedPreviewWidgets()
+	{
+		for (auto It = SpawnedPreviewWidgets.CreateIterator(); It; ++It)
+		{
+			if (!It.Value().IsValid())
+			{
+				It.RemoveCurrent();
+			}
+		}
+	}
 
 	static UWorld* ResolveRuntimeWorld()
 	{
@@ -4057,6 +4084,7 @@ namespace WidgetRuntime_Internal
 
 		return Obj;
 	}
+
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::ListRuntimeWidgets(const TSharedPtr<FJsonObject>& Params)
@@ -4272,9 +4300,31 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SpawnRuntimeWidgetPreview(const TSharedP
 		return MCPError(FString::Printf(TEXT("Not a UserWidget class: %s"), *WidgetClassName));
 	}
 
+	PruneSpawnedPreviewWidgets();
+
 	const FString InstanceName = OptionalString(Params, TEXT("instanceName"), TEXT(""));
 	if (!InstanceName.IsEmpty())
 	{
+		if (TStrongObjectPtr<UUserWidget>* ExistingPreview = SpawnedPreviewWidgets.Find(InstanceName))
+		{
+			if (ExistingPreview->IsValid())
+			{
+				UUserWidget* Existing = ExistingPreview->Get();
+				if (Existing->GetWorld() == World)
+				{
+					auto Result = MCPSuccess();
+					MCPSetExisted(Result);
+					Result->SetStringField(TEXT("name"), Existing->GetName());
+					Result->SetStringField(TEXT("class"), Existing->GetClass()->GetName());
+					Result->SetBoolField(TEXT("inViewport"), Existing->IsInViewport());
+					return MCPResult(Result);
+				}
+
+				Existing->RemoveFromParent();
+			}
+			SpawnedPreviewWidgets.Remove(InstanceName);
+		}
+
 		for (TObjectIterator<UUserWidget> It; It; ++It)
 		{
 			UUserWidget* Existing = *It;
@@ -4323,6 +4373,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SpawnRuntimeWidgetPreview(const TSharedP
 	{
 		FSlateApplication::Get().Tick();
 	}
+
+	const FString PreviewKey = InstanceName.IsEmpty() ? Widget->GetName() : InstanceName;
+	EnsureSpawnedPreviewCleanupRegistered();
+	SpawnedPreviewWidgets.FindOrAdd(PreviewKey) = TStrongObjectPtr<UUserWidget>(Widget);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -4442,6 +4496,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::DispatchRuntimeWidgetPointerEvent(const 
 		FSlateApplication::Get().SetCursorPos(ScreenPosition);
 	}
 
+	const FString TargetName = TargetWidget->GetName();
+	const bool bTargetIsUserWidget = TargetWidget->IsA<UUserWidget>();
 	FReply Reply = FReply::Unhandled();
 	if (EventType == TEXT("hover") || EventType == TEXT("enter") || EventType == TEXT("mouseenter"))
 	{
@@ -4479,8 +4535,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::DispatchRuntimeWidgetPointerEvent(const 
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("widgetName"), Found->GetName());
-	Result->SetStringField(TEXT("targetName"), TargetWidget->GetName());
-	Result->SetBoolField(TEXT("targetIsUserWidget"), TargetWidget->IsA<UUserWidget>());
+	Result->SetStringField(TEXT("targetName"), TargetName);
+	Result->SetBoolField(TEXT("targetIsUserWidget"), bTargetIsUserWidget);
 	Result->SetStringField(TEXT("event"), EventType);
 	Result->SetStringField(TEXT("button"), EffectingButton.GetFName().ToString());
 	Result->SetBoolField(TEXT("handled"), Reply.IsEventHandled());

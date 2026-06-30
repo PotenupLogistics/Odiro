@@ -3,7 +3,9 @@ param(
     [Parameter(Mandatory = $true)][string] $ProjectRoot,
     [Parameter(Mandatory = $true)][string] $JobId,
     [string] $EditorArgsJson = "[]",
-    [switch] $McpSafeLaunch
+    [int] $MaxParallelActions = 0,
+    [switch] $McpSafeLaunch,
+    [switch] $ColdStart
 )
 
 $ErrorActionPreference = "Stop"
@@ -236,6 +238,26 @@ function Get-PortState {
     return Read-JsonFile -Path (Join-Path (Get-ReloadStateDirectory) "port.json")
 }
 
+# Returns the requested UBT parallel action cap from explicit args, environment, or the job reason.
+function Get-RequestedMaxParallelActions {
+    if ($MaxParallelActions -gt 0) {
+        return $MaxParallelActions
+    }
+
+    if ($env:UE_MCP_MAX_PARALLEL_ACTIONS -and $env:UE_MCP_MAX_PARALLEL_ACTIONS -match '^\d+$') {
+        return [int] $env:UE_MCP_MAX_PARALLEL_ACTIONS
+    }
+
+    $jobPath = Join-Path (Join-Path (Get-ReloadStateDirectory) "jobs") "$JobId.json"
+    $job = Read-JsonFile -Path $jobPath
+    $reason = [string] (Get-ObjectProperty -Object $job -Name "reason" -DefaultValue "")
+    if ($reason -match '(?i)MaxParallel(?:Actions|Count)\s*=\s*(\d+)') {
+        return [int] $Matches[1]
+    }
+
+    return 0
+}
+
 # Sends one JSON-RPC request to the editor's WebSocket bridge.
 function Invoke-BridgeMethod {
     param(
@@ -340,6 +362,7 @@ function Wait-EditorExit {
 function Invoke-ClientEditorBuild {
     $projectFile = Get-ReloadProjectFile -ProjectRoot $projectRootPath
     $buildBat = Resolve-ReloadUnrealBuildBatch -ProjectFile $projectFile
+    $requestedMaxParallelActions = Get-RequestedMaxParallelActions
     $logDir = Join-Path (Get-ReloadStateDirectory) "logs"
     if (-not (Test-Path -LiteralPath $logDir -PathType Container)) {
         New-Item -ItemType Directory -Path $logDir -Force | Out-Null
@@ -354,6 +377,9 @@ function Invoke-ClientEditorBuild {
         "-WaitMutex",
         "-FromMsBuild"
     )
+    if ($requestedMaxParallelActions -gt 0) {
+        $arguments += "-MaxParallelActions=$requestedMaxParallelActions"
+    }
 
     $process = Start-Process `
         -FilePath $buildBat `
@@ -373,6 +399,7 @@ function Invoke-ClientEditorBuild {
         stderr = $stderrPath
         buildPid = $process.Id
         exitCode = $exitCode
+        maxParallelActions = $requestedMaxParallelActions
         completedAt = [DateTime]::UtcNow.ToString("o")
     }
 }
@@ -443,19 +470,25 @@ $editorLock = $null
 try {
     $editorLock = Enter-EditorLock
 
-    Update-ReloadJob -Phase "draining" -Properties @{ helperPid = [System.Diagnostics.Process]::GetCurrentProcess().Id }
-    Update-MaintenancePhase -Phase "draining"
-    $status = Wait-BridgeDrain
+    if ($ColdStart) {
+        Update-ReloadJob -Phase "cold_start" -Properties @{ helperPid = [System.Diagnostics.Process]::GetCurrentProcess().Id }
+        Update-MaintenancePhase -Phase "cold_start"
+    }
+    else {
+        Update-ReloadJob -Phase "draining" -Properties @{ helperPid = [System.Diagnostics.Process]::GetCurrentProcess().Id }
+        Update-MaintenancePhase -Phase "draining"
+        $status = Wait-BridgeDrain
 
-    Update-ReloadJob -Phase "saving"
-    Update-MaintenancePhase -Phase "saving"
-    $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_save_dirty" -Params @{ includeMaps = $true; includeContent = $true } -TimeoutMs 120000)
+        Update-ReloadJob -Phase "saving"
+        Update-MaintenancePhase -Phase "saving"
+        $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_save_dirty" -Params @{ includeMaps = $true; includeContent = $true } -TimeoutMs 120000)
 
-    Update-ReloadJob -Phase "closing"
-    Update-MaintenancePhase -Phase "closing"
-    $editorPid = [int] (Get-ObjectProperty -Object $status -Name "editorPid" -DefaultValue 0)
-    $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_request_exit" -Params @{ delaySeconds = 0.5; force = $false } -TimeoutMs 10000)
-    Wait-EditorExit -EditorPid $editorPid
+        Update-ReloadJob -Phase "closing"
+        Update-MaintenancePhase -Phase "closing"
+        $editorPid = [int] (Get-ObjectProperty -Object $status -Name "editorPid" -DefaultValue 0)
+        $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_request_exit" -Params @{ delaySeconds = 0.5; force = $false } -TimeoutMs 10000)
+        Wait-EditorExit -EditorPid $editorPid
+    }
 
     Update-ReloadJob -Phase "building"
     Update-MaintenancePhase -Phase "building"

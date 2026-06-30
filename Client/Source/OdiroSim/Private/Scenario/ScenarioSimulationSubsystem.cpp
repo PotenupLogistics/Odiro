@@ -1504,19 +1504,28 @@ void UScenarioSimulationSubsystem::BuildPedestrianPlanContext(
 			continue;
 		}
 
-		AActor* obstacleActor = FindRuntimeActor(placeableSpec.InstanceId);
-		if (!IsValid(obstacleActor))
-		{
-			continue;
-		}
-
 		FVector boundsOrigin = FVector::ZeroVector;
 		FVector boundsExtent = FVector::ZeroVector;
-		obstacleActor->GetActorBounds(true, boundsOrigin, boundsExtent);
+		FScenarioStaticObstaclePropEntry propEntry;
+		if (TryFindStaticObstacleProp(FName(*placeableSpec.AssetId), propEntry))
+		{
+			boundsOrigin = placeableSpec.Transform.TransformPosition(propEntry.ResolveBoundsCenterOffsetCm());
+			boundsExtent = propEntry.ResolveBoundsExtentCm();
+		}
+		else
+		{
+			AActor* obstacleActor = FindRuntimeActor(placeableSpec.InstanceId);
+			if (!IsValid(obstacleActor))
+			{
+				continue;
+			}
+
+			obstacleActor->GetActorBounds(true, boundsOrigin, boundsExtent);
+		}
 
 		if (boundsExtent.IsNearlyZero())
 		{
-			boundsOrigin = obstacleActor->GetActorLocation();
+			boundsOrigin = placeableSpec.Transform.GetLocation();
 			boundsExtent = FVector(50.0, 50.0, 100.0);
 		}
 

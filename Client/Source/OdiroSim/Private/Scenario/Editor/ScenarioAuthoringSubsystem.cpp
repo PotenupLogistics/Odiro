@@ -992,9 +992,9 @@ bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacleInternal(
 		return false;
 	}
 
-	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp);
 	const FTransform candidateTransform = ResolveStaticObstaclePlacementTransform(transform);
-	const FVector candidateLocation = candidateTransform.GetLocation();
+	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp, candidateTransform);
+	const FVector candidateLocation = ComputePlacementBoundsCenter(candidateProp, candidateTransform);
 	double surfaceTopZCm = 0.0;
 	if (!TryResolveCorridorSurfaceTopZCm(transform.GetLocation(), surfaceTopZCm)
 		&& (candidateLocation.Z < -KINDA_SMALL_NUMBER || candidateLocation.Z > StaticObstacleGroundZToleranceCm))
@@ -1202,6 +1202,13 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 	*placement = MakeStaticObstaclePlacement(instanceId, propId, resolvedTransform);
 	placement->bAllowBlocking = bAllowBlocking;
 	record->Transform = resolvedTransform;
+	FScenarioStaticObstaclePropEntry propEntry;
+	if (TryFindStaticObstacleProp(propId, propEntry))
+	{
+		record->PlacementBoundsCenter = ComputePlacementBoundsCenter(propEntry, resolvedTransform);
+		record->PlacementRadius2D = ComputePlacementRadius2D(propEntry);
+		record->PlacementHalfExtent2D = ComputePlacementHalfExtent2D(propEntry, resolvedTransform);
+	}
 	actor->SetActorTransform(resolvedTransform, false, nullptr, ETeleportType::TeleportPhysics);
 
 	bDirty = true;
@@ -3244,15 +3251,17 @@ double UScenarioAuthoringSubsystem::ComputePlacementRadius2D(const FScenarioStat
 		return propEntry.SafetyRadius;
 	}
 
-	return FMath::Sqrt(FMath::Square(propEntry.FallbackBoxExtent.X) + FMath::Square(propEntry.FallbackBoxExtent.Y));
+	const FVector boundsExtentCm = propEntry.ResolveBoundsExtentCm();
+	return FMath::Sqrt(FMath::Square(boundsExtentCm.X) + FMath::Square(boundsExtentCm.Y));
 }
 
 FVector2D UScenarioAuthoringSubsystem::ComputePlacementHalfExtent2D(
 	const FScenarioStaticObstaclePropEntry& propEntry) const
 {
+	const FVector boundsExtentCm = propEntry.ResolveBoundsExtentCm();
 	const FVector2D halfExtent(
-		FMath::Max(propEntry.FallbackBoxExtent.X, 0.0),
-		FMath::Max(propEntry.FallbackBoxExtent.Y, 0.0));
+		FMath::Max(boundsExtentCm.X, 0.0),
+		FMath::Max(boundsExtentCm.Y, 0.0));
 
 	if (halfExtent.X > KINDA_SMALL_NUMBER || halfExtent.Y > KINDA_SMALL_NUMBER)
 	{
@@ -3263,12 +3272,38 @@ FVector2D UScenarioAuthoringSubsystem::ComputePlacementHalfExtent2D(
 	return FVector2D(fallbackRadius, fallbackRadius);
 }
 
+FVector2D UScenarioAuthoringSubsystem::ComputePlacementHalfExtent2D(
+	const FScenarioStaticObstaclePropEntry& propEntry,
+	const FTransform& transform) const
+{
+	FVector2D localHalfExtent = ComputePlacementHalfExtent2D(propEntry);
+	const FVector scale = transform.GetScale3D();
+	localHalfExtent.X *= FMath::Abs(scale.X);
+	localHalfExtent.Y *= FMath::Abs(scale.Y);
+
+	const double yawRadians = FMath::DegreesToRadians(transform.GetRotation().Rotator().Yaw);
+	const double cosYaw = FMath::Abs(FMath::Cos(yawRadians));
+	const double sinYaw = FMath::Abs(FMath::Sin(yawRadians));
+	return FVector2D(
+		cosYaw * localHalfExtent.X + sinYaw * localHalfExtent.Y,
+		sinYaw * localHalfExtent.X + cosYaw * localHalfExtent.Y);
+}
+
+FVector UScenarioAuthoringSubsystem::ComputePlacementBoundsCenter(
+	const FScenarioStaticObstaclePropEntry& propEntry,
+	const FTransform& transform) const
+{
+	return transform.TransformPosition(propEntry.ResolveBoundsCenterOffsetCm());
+}
+
 bool UScenarioAuthoringSubsystem::StaticObstacleFootprintsOverlap(
 	const FVector& candidateLocation,
 	const FVector2D& candidateHalfExtent,
 	const FScenarioAuthoringStaticObstacleRecord& record) const
 {
-	const FVector recordLocation = record.Transform.GetLocation();
+	const FVector recordLocation = record.PlacementBoundsCenter.IsNearlyZero()
+		? record.Transform.GetLocation()
+		: record.PlacementBoundsCenter;
 	FVector2D recordHalfExtent = record.PlacementHalfExtent2D;
 	if (recordHalfExtent.X <= KINDA_SMALL_NUMBER && recordHalfExtent.Y <= KINDA_SMALL_NUMBER)
 	{
@@ -4465,8 +4500,9 @@ void UScenarioAuthoringSubsystem::AddStaticObstacleViewRecord(
 	record.InstanceId = spec.InstanceId;
 	record.PropId = FName(*spec.AssetId);
 	record.Transform = spec.Transform;
+	record.PlacementBoundsCenter = ComputePlacementBoundsCenter(propEntry, spec.Transform);
 	record.PlacementRadius2D = ComputePlacementRadius2D(propEntry);
-	record.PlacementHalfExtent2D = ComputePlacementHalfExtent2D(propEntry);
+	record.PlacementHalfExtent2D = ComputePlacementHalfExtent2D(propEntry, spec.Transform);
 
 	StaticObstacleRecords.Add(record);
 	StaticObstacleActors.Add(spec.InstanceId, actor);

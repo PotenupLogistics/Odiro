@@ -21,7 +21,9 @@ paths:
   - Client/Content/Input/**
   - Client/Content/Maps/ScenarioEditorMap.umap
   - Client/Content/Maps/ScenarioSimulationMap.umap
+  - Client/Content/Blueprints/Scenario/Obstacles/**
   - Client/Content/Templates/CityBuildings/**
+  - Client/Tools/Editor/MigrateStaticObstaclePropsToActorBlueprints.py
   - Client/Json/**
   - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Docs/PreviewAgent.local.md
@@ -57,6 +59,7 @@ entry:
       - Client/Source/OdiroSim/Public/Scenario/Llm
       - Client/Source/OdiroSim/Private/Scenario/Llm
       - Client/Content/Input
+      - Client/Tools/Editor/MigrateStaticObstaclePropsToActorBlueprints.py
   - id: scenario-runtime
     description: Scenario sampling, world-spec adaptation, simulation, evaluation, runner lifecycle, and episode logs.
     read:
@@ -109,6 +112,7 @@ guardrails:
   - Final user project input uses one editable `<UserProject>/scenario.json`; generated episode scenarios are derived run artifacts.
   - Public project-run execution accepts direct scenario/profile inputs, not legacy RunQueue start helpers.
   - Client/Json prompt-facing schemas and catalogs must stay aligned with shared user-project contracts.
+  - ScenarioStaticObstaclePropCatalog owns static obstacle actor-class binding and manual bounds; keep generated BP wrappers under Client/Content/Blueprints/Scenario/Obstacles aligned with catalog prop ids.
   - Corridor authoring surface ids are intentionally limited to `walkway`, `road`, and `building`; update Client/Json/environment-catalog.md and ScenarioCorridorSurfaceCatalog defaults together when adding one.
   - ScenarioDocument and ScenarioSample surfaces remain internal editor/materialization shapes unless the task targets them.
   - ScenarioSimulationSubsystem owns runtime grid rebuild after scenario surfaces spawn.
@@ -119,6 +123,7 @@ guardrails:
   - ScenarioGroundRegion renders non-road generated city expansion surfaces as flat procedural visual meshes while keeping hidden bounds components as collision/query proxies; generated road/curb visual ownership belongs to CityBuildings composite meshes.
   - DeliveryBot runtime grid classifies generated Corridor surfaces through ScenarioCorridorRuntimeActor semantic lane lookup before applying procedural mesh collision overlap.
   - DeliveryBot runtime grid treats ScenarioStaticObstacle-owned collision components as blocking cells independently of collision profile names.
+  - Static obstacle placement, collision, pedestrian-planner footprints, and transient preview bounds use ScenarioStaticObstaclePropCatalog manual bounds rather than visual mesh actor bounds when present.
   - ScenarioRunnerSubsystem owns project episode lifecycle, policy start/end coordination, cancellation, late callbacks, and cleanup.
   - User project run output is written through typed UserProjectData JSON writers.
   - ScenarioEditorUiSubsystem owns ScenarioEditorMap UI ViewModel lifecycle and stores no widget pointers.

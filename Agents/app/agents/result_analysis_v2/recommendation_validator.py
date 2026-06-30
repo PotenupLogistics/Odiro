@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.agents.result_analysis_v2.public_text_guardrail import (
+    PUBLIC_RECOMMENDATION_TEXT_FIELDS,
+    record_contains_forbidden_public_text,
+)
+
 
 class RecommendationValidator:
     """Validates and normalizes recommendation items before response persistence."""
@@ -16,6 +21,8 @@ class RecommendationValidator:
             if recommendation.get("target") not in {"policy", "environment"}:
                 continue
             if not isinstance(recommendation.get("recommendation"), str) or not recommendation["recommendation"]:
+                continue
+            if record_contains_forbidden_public_text(recommendation, PUBLIC_RECOMMENDATION_TEXT_FIELDS):
                 continue
             proposed_change = recommendation.get("proposed_change")
             if not isinstance(proposed_change, dict) or not isinstance(proposed_change.get("content"), dict):

@@ -53,8 +53,11 @@ guardrails:
   - V2 LLM prompt context is loaded only through the SpecContextLoader allowlist.
   - V2 LLM prompt context reads the Client environment catalog at Client/Json/environment-catalog.md for scenario vocabulary and static obstacle bounding boxes.
   - `/api/v2/analysis/run` always executes `ResultAnalysisGraphRunnerV2`; do not add runtime settings that switch it to another analysis path.
+  - Result analysis reads `prompts/system_prompt.md` only on the LLM-enabled path; `V2_AGENT_LLM_ENABLED=true` from `Agents/.env` or process env can enable that path during local runs.
+  - `Settings(_env_file=None)` is for checking code fallback defaults without reading `.env`; do not treat it as the local runtime value when `Agents/.env` is present.
   - Review artifacts are stored under `<UserProject>/runs/<RunId>/review/<ReviewId>/`.
   - Result analysis public responses expose display fields only; keep detailed recommendation ids, proposed changes, and modified candidate payloads in `recommendations.json`.
+  - Result analysis LLM recommendations must pass public text guardrails; internal RAG/source markers never belong in public summary, insight, reason, or recommendation text.
   - Recommendation output uses the public `recommendation` field; normalize legacy internal names before API/artifact output.
   - UI-facing finding/evidence text may be Korean; stable metric/type codes remain English.
 verify:
@@ -76,6 +79,7 @@ verify:
   - when: LLM prompt context changes
     run:
       - focused v2 spec-context prompt tests
+      - cd Agents; uv run pytest tests/test_result_analysis_system_prompt.py -q
   - when: LLM provider settings or legacy WorldConfig provider behavior changes
     run:
       - cd Agents; uv run pytest tests/test_llm_provider_policy.py -q

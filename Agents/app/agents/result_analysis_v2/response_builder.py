@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.agents.result_analysis_v2.public_text_guardrail import (
+    PUBLIC_INSIGHT_TEXT_FIELDS,
+    PUBLIC_RECOMMENDATION_TEXT_FIELDS,
+    contains_forbidden_public_text,
+    record_contains_forbidden_public_text,
+)
 from app.agents.result_analysis_v2.review_text import INSUFFICIENT_DATA_SUMMARY_MESSAGE
 from app.models.analysis_v2 import (
     AnalysisEpisodeV2,
@@ -50,6 +56,7 @@ class ResponseBuilder:
             message = "반복적인 실패 패턴이 확인되지 않아 정책 또는 환경 수정 추천을 생성하지 않았습니다."
             recommendation_type = "none"
 
+        message = self._safe_summary_message(message)
         return AnalysisRunV2Response(
             run_id=run_id,
             review_id=review_id,
@@ -79,10 +86,13 @@ class ResponseBuilder:
             if severity not in {"high", "medium", "low"}:
                 severity = "medium"
             description = str(insight.get("description") or insight.get("detail") or "")
+            public_record = {"title": str(insight.get("title") or ""), "description": description}
+            if record_contains_forbidden_public_text(public_record, PUBLIC_INSIGHT_TEXT_FIELDS):
+                continue
             public_items.append(
                 AnalysisInsightV2(
                     severity=severity,
-                    title=str(insight.get("title") or ""),
+                    title=public_record["title"],
                     description=description,
                 )
             )
@@ -94,14 +104,21 @@ class ResponseBuilder:
         for recommendation in recommendations:
             if not isinstance(recommendation, dict):
                 continue
-            public_items.append(
-                {
-                    key: recommendation.get(key)
-                    for key in ("target", "priority", "title", "reason", "recommendation")
-                    if recommendation.get(key) is not None
-                }
-            )
+            public_item = {
+                key: recommendation.get(key)
+                for key in ("target", "priority", "title", "reason", "recommendation")
+                if recommendation.get(key) is not None
+            }
+            if record_contains_forbidden_public_text(public_item, PUBLIC_RECOMMENDATION_TEXT_FIELDS):
+                continue
+            public_items.append(public_item)
         return public_items
+
+    def _safe_summary_message(self, message: str) -> str:
+        """Replace summary text only if an internal source marker reaches the public boundary."""
+        if not contains_forbidden_public_text(message):
+            return message
+        return "제공된 실행 요약을 기준으로 결과를 확인했습니다."
 
     def modified_candidate_payloads(self, *, recommendations: list[dict[str, Any]], target: str) -> list[dict[str, Any]]:
         """Build legacy modified_*_json payloads from normalized recommendation items."""

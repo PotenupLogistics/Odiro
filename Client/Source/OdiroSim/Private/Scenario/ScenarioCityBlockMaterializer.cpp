@@ -33,11 +33,14 @@ namespace
 	const double GeneratedCornerStraightReserveGapCm = 500.0;
 	// RoadStraight chunks whose endpoints are this close are treated as one continuous spline strip.
 	const double GeneratedRoadStraightSplineJoinToleranceCm = 750.0;
+	// Projection tolerance for selecting the corridor-facing edge of a generated polygon expansion.
+	const double GeneratedBuildingFrontageCorridorEdgeProjectionToleranceCm = 50.0;
 
 	// Generated city band markers encode the side needed for corridor-relative edge anchoring.
 	const TCHAR* GeneratedLowerSideMarkers[] =
 	{
 		TEXT("_lower_walkway_extension_"),
+		TEXT("_lower_building_expansion_"),
 		TEXT("_lower_building_"),
 		TEXT("_lower_curb_"),
 		TEXT("_lower_road_2lane_")
@@ -47,6 +50,7 @@ namespace
 	const TCHAR* GeneratedUpperSideMarkers[] =
 	{
 		TEXT("_upper_walkway_extension_"),
+		TEXT("_upper_building_expansion_"),
 		TEXT("_upper_building_"),
 		TEXT("_upper_curb_"),
 		TEXT("_upper_road_2lane_")
@@ -217,11 +221,49 @@ namespace
 		FString DebugSourceId;
 	};
 
+	// One expansion edge that can receive repeated building frontage blocks.
+	struct FGeneratedBuildingFrontageSpan
+	{
+		// Start point of the usable frontage edge in world centimeters.
+		FVector StartCm = FVector::ZeroVector;
+
+		// End point of the usable frontage edge in world centimeters.
+		FVector EndCm = FVector::ZeroVector;
+
+		// Normalized direction from the frontage edge toward the building bounds center.
+		FVector Outward = FVector::RightVector;
+
+		// Stable source label used for overlap diagnostics.
+		FString DebugSourceId;
+	};
+
+	// Building catalog entry prepared for sequential frontage placement.
+	struct FGeneratedBuildingFrontageCandidate
+	{
+		// Catalog entry copied from the DA so spawn-time math is stable while planning a span.
+		FScenarioCityBlockCatalogEntry BlockEntry;
+
+		// Loaded actor class for this specific building entry.
+		UClass* BlockClass = nullptr;
+
+		// Authored frontage length in world centimeters.
+		double LengthCm = 0.0;
+
+		// Half of the authored building depth in world centimeters.
+		double HalfWidthCm = 0.0;
+	};
+
 	// Filters the materializer to generated straight city padding without touching authored GroundRegions.
 	bool IsGeneratedCityVisualRegion(const FScenarioGroundRegionSpec& regionSpec)
 	{
+		if (!regionSpec.RegionId.StartsWith(GeneratedCityRegionIdPrefix))
+		{
+			return false;
+		}
+
 		return regionSpec.ShapeType == EScenarioGroundShapeType::Rectangle
-			&& regionSpec.RegionId.StartsWith(GeneratedCityRegionIdPrefix);
+			|| (regionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon
+				&& regionSpec.PolygonVertices.Num() >= 3);
 	}
 
 	// Detects the generated curb band used as road-side seam metadata.
@@ -264,6 +306,23 @@ namespace
 			&& surfaceId == CityBlockBuildingSurfaceId
 			&& regionSpec.RegionType == EScenarioGroundRegionType::Blocked
 			&& regionSpec.RegionId.Contains(TEXT("_building_"));
+	}
+
+	// Detects the walkable expansion area whose corridor-facing edge receives Building catalog entries.
+	bool IsGeneratedBuildingExpansionRegion(const FScenarioGroundRegionSpec& regionSpec)
+	{
+		const FName surfaceId(*regionSpec.SurfaceId);
+		return IsGeneratedCityVisualRegion(regionSpec)
+			&& surfaceId == CityBlockWalkwaySurfaceId
+			&& regionSpec.RegionType == EScenarioGroundRegionType::Walkable
+			&& regionSpec.RegionId.Contains(TEXT("_building_expansion_"));
+	}
+
+	// Detects generated regions that can produce building frontage visual actors.
+	bool IsGeneratedBuildingFrontageSourceRegion(const FScenarioGroundRegionSpec& regionSpec)
+	{
+		return IsGeneratedBuildingRegion(regionSpec)
+			|| IsGeneratedBuildingExpansionRegion(regionSpec);
 	}
 
 	// Returns a normalized XY-plane axis for overlap tests.
@@ -341,6 +400,12 @@ namespace
 			return;
 		}
 
+		if (IsGeneratedBuildingExpansionRegion(regionSpec))
+		{
+			outRoles.Add(EScenarioCityBlockRole::Building);
+			return;
+		}
+
 		if (IsGeneratedRoadPenaltyRegion(regionSpec)
 			|| (surfaceId == CityBlockRoadSurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Penalty))
 		{
@@ -390,6 +455,28 @@ namespace
 			return blockEntry.SemanticProfile.PenaltyKind.Equals(
 				regionSpec.PenaltyKind,
 				ESearchCase::IgnoreCase);
+		}
+
+		return true;
+	}
+
+	// Building frontage BPs may still declare the logical building surface while the source area is walkable.
+	bool IsCityBlockEntryCompatibleWithBuildingFrontageSource(
+		const FScenarioCityBlockCatalogEntry& blockEntry,
+		const FScenarioGroundRegionSpec& regionSpec)
+	{
+		if (!IsGeneratedBuildingExpansionRegion(regionSpec))
+		{
+			const FName surfaceId(*regionSpec.SurfaceId);
+			return IsCityBlockEntrySurfaceCompatible(blockEntry, surfaceId)
+				&& IsCityBlockEntryDetailCompatible(blockEntry, regionSpec);
+		}
+
+		if (!blockEntry.SemanticProfile.SurfaceIds.IsEmpty()
+			&& !blockEntry.SemanticProfile.SurfaceIds.Contains(CityBlockBuildingSurfaceId)
+			&& !blockEntry.SemanticProfile.SurfaceIds.Contains(CityBlockWalkwaySurfaceId))
+		{
+			return false;
 		}
 
 		return true;
@@ -589,14 +676,13 @@ namespace
 		return false;
 	}
 
-	// Collects building frontage candidates ordered by priority, then by larger authored frontage length.
+	// Collects building frontage candidates in DA order so authored building variety is deterministic.
 	void FindCityBlockEntriesForBuildingRegion(
 		const UScenarioCityBlockCatalog& catalog,
 		const FScenarioGroundRegionSpec& regionSpec,
 		TArray<FScenarioCityBlockCatalogEntry>& outBlockEntries)
 	{
 		outBlockEntries.Reset();
-		const FName surfaceId(*regionSpec.SurfaceId);
 		for (const FScenarioCityBlockCatalogEntry& blockEntry : catalog.GetEntries())
 		{
 			if (blockEntry.Role != EScenarioCityBlockRole::Building)
@@ -604,31 +690,13 @@ namespace
 				continue;
 			}
 
-			if (!IsCityBlockEntrySurfaceCompatible(blockEntry, surfaceId)
-				|| !IsCityBlockEntryDetailCompatible(blockEntry, regionSpec))
+			if (!IsCityBlockEntryCompatibleWithBuildingFrontageSource(blockEntry, regionSpec))
 			{
 				continue;
 			}
 
 			outBlockEntries.Add(blockEntry);
 		}
-
-		outBlockEntries.Sort([](
-			const FScenarioCityBlockCatalogEntry& lhs,
-			const FScenarioCityBlockCatalogEntry& rhs)
-		{
-			if (lhs.PlacementProfile.Priority != rhs.PlacementProfile.Priority)
-			{
-				return lhs.PlacementProfile.Priority > rhs.PlacementProfile.Priority;
-			}
-
-			if (!FMath::IsNearlyEqual(lhs.BoundsMeters.LengthMeters, rhs.BoundsMeters.LengthMeters))
-			{
-				return lhs.BoundsMeters.LengthMeters > rhs.BoundsMeters.LengthMeters;
-			}
-
-			return lhs.BlockId.ToString() < rhs.BlockId.ToString();
-		});
 	}
 
 	// Selects the preferred visual entry for an inferred road-side corner.
@@ -1792,6 +1860,174 @@ namespace
 			options);
 	}
 
+	// Transforms one polygon vertex from region-local centimeters into world centimeters.
+	FVector ResolveGroundRegionPolygonVertexWorldCm(
+		const FScenarioGroundRegionSpec& regionSpec,
+		const FVector2D& localVertexCm)
+	{
+		const FRotator regionRotation(0.0, regionSpec.YawDegrees, 0.0);
+		FVector worldVertexCm = regionSpec.Center
+			+ regionRotation.RotateVector(FVector(localVertexCm.X, localVertexCm.Y, 0.0));
+		worldVertexCm.Z = ResolveCityBlockSurfaceTopZCm(regionSpec);
+		return worldVertexCm;
+	}
+
+	// Builds the frontage span for a rectangular legacy building band or walkable expansion.
+	bool TryBuildRectangleBuildingFrontageSpan(
+		const FScenarioGroundRegionSpec& regionSpec,
+		FGeneratedBuildingFrontageSpan& outSpan)
+	{
+		outSpan = FGeneratedBuildingFrontageSpan();
+		if (regionSpec.Size.X <= KINDA_SMALL_NUMBER || regionSpec.Size.Y <= KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+
+		double sideSign = 0.0;
+		if (!TryResolveGeneratedCitySideSign(regionSpec.RegionId, sideSign))
+		{
+			return false;
+		}
+
+		const FRotator regionRotation(0.0, regionSpec.YawDegrees, 0.0);
+		const FVector forward = Normalize2DAxis(regionRotation.RotateVector(FVector::ForwardVector));
+		const FVector outward = Normalize2DAxis(regionRotation.RotateVector(FVector::RightVector) * sideSign);
+		if (forward.IsNearlyZero() || outward.IsNearlyZero())
+		{
+			return false;
+		}
+
+		FVector edgeCenterCm =
+			regionSpec.Center - (outward * regionSpec.Size.Y * 0.5);
+		edgeCenterCm.Z = ResolveCityBlockSurfaceTopZCm(regionSpec);
+
+		outSpan.StartCm = edgeCenterCm - (forward * regionSpec.Size.X * 0.5);
+		outSpan.EndCm = edgeCenterCm + (forward * regionSpec.Size.X * 0.5);
+		outSpan.Outward = outward;
+		outSpan.DebugSourceId = regionSpec.RegionId;
+		return true;
+	}
+
+	// Builds frontage spans from the corridor-facing edge of a generated convex walkable expansion.
+	bool BuildPolygonBuildingFrontageSpans(
+		const FScenarioGroundRegionSpec& regionSpec,
+		TArray<FGeneratedBuildingFrontageSpan>& outSpans)
+	{
+		outSpans.Reset();
+		if (!IsGeneratedBuildingExpansionRegion(regionSpec)
+			|| regionSpec.PolygonVertices.Num() < 3)
+		{
+			return false;
+		}
+
+		double sideSign = 0.0;
+		if (!TryResolveGeneratedCitySideSign(regionSpec.RegionId, sideSign))
+		{
+			return false;
+		}
+
+		const FRotator regionRotation(0.0, regionSpec.YawDegrees, 0.0);
+		const FVector preferredForward =
+			Normalize2DAxis(regionRotation.RotateVector(FVector::ForwardVector));
+		const FVector outward =
+			Normalize2DAxis(regionRotation.RotateVector(FVector::RightVector) * sideSign);
+		if (preferredForward.IsNearlyZero() || outward.IsNearlyZero())
+		{
+			return false;
+		}
+
+		TArray<FVector> worldVerticesCm;
+		worldVerticesCm.Reserve(regionSpec.PolygonVertices.Num());
+		for (const FVector2D& localVertexCm : regionSpec.PolygonVertices)
+		{
+			worldVerticesCm.Add(ResolveGroundRegionPolygonVertexWorldCm(regionSpec, localVertexCm));
+		}
+
+		double minCorridorProjectionCm = MAX_dbl;
+		for (int32 vertexIndex = 0; vertexIndex < worldVerticesCm.Num(); ++vertexIndex)
+		{
+			const FVector& startCm = worldVerticesCm[vertexIndex];
+			const FVector& endCm = worldVerticesCm[(vertexIndex + 1) % worldVerticesCm.Num()];
+			const FVector edgeVectorCm = endCm - startCm;
+			if (Normalize2DAxis(edgeVectorCm).IsNearlyZero())
+			{
+				continue;
+			}
+
+			const FVector midpointCm = (startCm + endCm) * 0.5;
+			minCorridorProjectionCm = FMath::Min(minCorridorProjectionCm, Dot2D(midpointCm, outward));
+		}
+
+		if (minCorridorProjectionCm >= MAX_dbl * 0.5)
+		{
+			return false;
+		}
+
+		for (int32 vertexIndex = 0; vertexIndex < worldVerticesCm.Num(); ++vertexIndex)
+		{
+			FVector startCm = worldVerticesCm[vertexIndex];
+			FVector endCm = worldVerticesCm[(vertexIndex + 1) % worldVerticesCm.Num()];
+			FVector edgeForward = Normalize2DAxis(endCm - startCm);
+			if (edgeForward.IsNearlyZero())
+			{
+				continue;
+			}
+
+			const FVector midpointCm = (startCm + endCm) * 0.5;
+			const double edgeProjectionCm = Dot2D(midpointCm, outward);
+			if (edgeProjectionCm > minCorridorProjectionCm + GeneratedBuildingFrontageCorridorEdgeProjectionToleranceCm)
+			{
+				continue;
+			}
+
+			if (Dot2D(edgeForward, preferredForward) < 0.0)
+			{
+				const FVector previousStartCm = startCm;
+				startCm = endCm;
+				endCm = previousStartCm;
+				edgeForward *= -1.0;
+			}
+
+			FGeneratedBuildingFrontageSpan span;
+			span.StartCm = startCm;
+			span.EndCm = endCm;
+			span.Outward = outward;
+			span.DebugSourceId = FString::Printf(
+				TEXT("%s_edge_%d"),
+				*regionSpec.RegionId,
+				vertexIndex);
+			outSpans.Add(span);
+		}
+
+		return !outSpans.IsEmpty();
+	}
+
+	// Resolves one or more building frontage spans from a generated source region.
+	bool BuildBuildingFrontageSpansForRegion(
+		const FScenarioGroundRegionSpec& regionSpec,
+		TArray<FGeneratedBuildingFrontageSpan>& outSpans)
+	{
+		outSpans.Reset();
+		if (regionSpec.ShapeType == EScenarioGroundShapeType::Rectangle)
+		{
+			FGeneratedBuildingFrontageSpan span;
+			if (!TryBuildRectangleBuildingFrontageSpan(regionSpec, span))
+			{
+				return false;
+			}
+
+			outSpans.Add(span);
+			return true;
+		}
+
+		if (regionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon)
+		{
+			return BuildPolygonBuildingFrontageSpans(regionSpec, outSpans);
+		}
+
+		return false;
+	}
+
 	// Spawns building frontage blocks using authored bounds rather than fixed 10m modular spacing.
 	int32 SpawnBuildingFrontageVisualsForRegion(
 		UWorld& world,
@@ -1803,20 +2039,27 @@ namespace
 		const FScenarioCityBlockMaterializationOptions& options)
 	{
 		outSkippedOverlapCount = 0;
-		double sideSign = 0.0;
-		if (!TryResolveGeneratedCitySideSign(regionSpec.RegionId, sideSign))
+		TArray<FGeneratedBuildingFrontageSpan> frontageSpans;
+		if (!BuildBuildingFrontageSpansForRegion(regionSpec, frontageSpans))
 		{
 			UE_LOG(
 				LogScenarioCityBlockMaterializer,
 				Warning,
-				TEXT("%s generated building frontage skipped for region '%s' because the generated side is unknown."),
+				TEXT("%s generated building frontage skipped for region '%s' because no valid frontage span could be resolved."),
 				*options.LogContext,
 				*regionSpec.RegionId);
 			return 0;
 		}
 
-		const FScenarioCityBlockCatalogEntry* selectedBlockEntry = nullptr;
-		UClass* selectedBlockClass = nullptr;
+		double maxSpanLengthCm = 0.0;
+		for (const FGeneratedBuildingFrontageSpan& frontageSpan : frontageSpans)
+		{
+			maxSpanLengthCm = FMath::Max(
+				maxSpanLengthCm,
+				FVector::Dist2D(frontageSpan.StartCm, frontageSpan.EndCm));
+		}
+
+		TArray<FGeneratedBuildingFrontageCandidate> buildingCandidates;
 		for (const FScenarioCityBlockCatalogEntry& blockEntry : blockEntries)
 		{
 			const double blockLengthCm = blockEntry.BoundsMeters.LengthMeters * 100.0;
@@ -1845,7 +2088,7 @@ namespace
 				continue;
 			}
 
-			if (blockLengthCm > regionSpec.Size.X + KINDA_SMALL_NUMBER)
+			if (blockLengthCm > maxSpanLengthCm + KINDA_SMALL_NUMBER)
 			{
 				continue;
 			}
@@ -1856,102 +2099,143 @@ namespace
 				continue;
 			}
 
-			selectedBlockEntry = &blockEntry;
-			selectedBlockClass = blockClass;
-			break;
+			FGeneratedBuildingFrontageCandidate candidate;
+			candidate.BlockEntry = blockEntry;
+			candidate.BlockClass = blockClass;
+			candidate.LengthCm = blockLengthCm;
+			candidate.HalfWidthCm = blockWidthCm * 0.5;
+			buildingCandidates.Add(candidate);
 		}
 
-		if (!selectedBlockEntry || !selectedBlockClass)
+		if (buildingCandidates.IsEmpty())
 		{
 			UE_LOG(
 				LogScenarioCityBlockMaterializer,
 				Warning,
-				TEXT("%s generated building frontage skipped for region '%s' because no building block fits the region length %.2f cm."),
+				TEXT("%s generated building frontage skipped for region '%s' because no building block fits the longest frontage span %.2f cm."),
 				*options.LogContext,
 				*regionSpec.RegionId,
-				regionSpec.Size.X);
+				maxSpanLengthCm);
 			return 0;
 		}
 
-		const double blockLengthCm = selectedBlockEntry->BoundsMeters.LengthMeters * 100.0;
-		const double blockHalfWidthCm = selectedBlockEntry->BoundsMeters.WidthMeters * 50.0;
-		const int32 blockCount = FMath::FloorToInt((regionSpec.Size.X + KINDA_SMALL_NUMBER) / blockLengthCm);
-		if (blockCount <= 0)
-		{
-			return 0;
-		}
-
-		const FRotator blockRotation(0.0, regionSpec.YawDegrees, 0.0);
-		const FVector forward = Normalize2DAxis(blockRotation.RotateVector(FVector::ForwardVector));
-		const FVector outward = Normalize2DAxis(blockRotation.RotateVector(FVector::RightVector) * sideSign);
-		FVector innerEdgeCenterCm =
-			regionSpec.Center - (outward * regionSpec.Size.Y * 0.5);
-		innerEdgeCenterCm.Z = ResolveCityBlockSurfaceTopZCm(regionSpec);
-
-		const double usedLengthCm = static_cast<double>(blockCount) * blockLengthCm;
-		const double centeredUnusedLengthCm = (regionSpec.Size.X - usedLengthCm) * 0.5;
-		const double firstAlongOffsetCm =
-			(-regionSpec.Size.X * 0.5) + centeredUnusedLengthCm + (blockLengthCm * 0.5);
-		const double outwardOffsetCm =
-			blockHalfWidthCm + (selectedBlockEntry->PlacementProfile.LateralOffsetMeters * 100.0);
-
+		int32 nextCandidateIndex = 0;
 		int32 spawnedActorCount = 0;
-		for (int32 blockIndex = 0; blockIndex < blockCount; ++blockIndex)
+		for (const FGeneratedBuildingFrontageSpan& frontageSpan : frontageSpans)
 		{
-			const double alongOffsetCm =
-				firstAlongOffsetCm + (static_cast<double>(blockIndex) * blockLengthCm);
-			const FVector desiredBoundsCenter =
-				innerEdgeCenterCm
-				+ (forward * alongOffsetCm)
-				+ (outward * outwardOffsetCm);
-
-			FGeneratedBuildingFootprint candidateFootprint;
-			candidateFootprint.CenterCm = desiredBoundsCenter;
-			candidateFootprint.Forward = forward;
-			candidateFootprint.Outward = outward;
-			candidateFootprint.HalfLengthCm = blockLengthCm * 0.5;
-			candidateFootprint.HalfWidthCm = blockHalfWidthCm;
-			candidateFootprint.DebugSourceId = FString::Printf(
-				TEXT("%s#%d"),
-				*regionSpec.RegionId,
-				blockIndex);
-
-			bool bOverlapsAcceptedFootprint = false;
-			for (const FGeneratedBuildingFootprint& acceptedFootprint : inOutAcceptedFootprints)
+			const double spanLengthCm = FVector::Dist2D(frontageSpan.StartCm, frontageSpan.EndCm);
+			const FVector forward = Normalize2DAxis(frontageSpan.EndCm - frontageSpan.StartCm);
+			const FVector outward = Normalize2DAxis(frontageSpan.Outward);
+			if (spanLengthCm <= KINDA_SMALL_NUMBER || forward.IsNearlyZero() || outward.IsNearlyZero())
 			{
-				if (DoBuildingFootprintsOverlap2D(candidateFootprint, acceptedFootprint))
+				continue;
+			}
+
+			TArray<int32> plannedCandidateIndices;
+			double plannedLengthCm = 0.0;
+			int32 spanNextCandidateIndex = nextCandidateIndex;
+			while (plannedLengthCm < spanLengthCm - KINDA_SMALL_NUMBER)
+			{
+				bool bFoundFittingCandidate = false;
+				for (int32 candidateAttemptIndex = 0;
+					candidateAttemptIndex < buildingCandidates.Num();
+					++candidateAttemptIndex)
 				{
-					bOverlapsAcceptedFootprint = true;
-					UE_LOG(
-						LogScenarioCityBlockMaterializer,
-						Verbose,
-						TEXT("%s generated building block '%s' skipped for '%s' because it overlaps accepted footprint '%s'."),
-						*options.LogContext,
-						*selectedBlockEntry->BlockId.ToString(),
-						*candidateFootprint.DebugSourceId,
-						*acceptedFootprint.DebugSourceId);
+					const int32 candidateIndex =
+						(spanNextCandidateIndex + candidateAttemptIndex) % buildingCandidates.Num();
+					const FGeneratedBuildingFrontageCandidate& candidate =
+						buildingCandidates[candidateIndex];
+					if (plannedLengthCm + candidate.LengthCm > spanLengthCm + KINDA_SMALL_NUMBER)
+					{
+						continue;
+					}
+
+					plannedCandidateIndices.Add(candidateIndex);
+					plannedLengthCm += candidate.LengthCm;
+					spanNextCandidateIndex = (candidateIndex + 1) % buildingCandidates.Num();
+					bFoundFittingCandidate = true;
+					break;
+				}
+
+				if (!bFoundFittingCandidate)
+				{
 					break;
 				}
 			}
 
-			if (bOverlapsAcceptedFootprint)
+			if (plannedCandidateIndices.IsEmpty())
 			{
-				++outSkippedOverlapCount;
 				continue;
 			}
 
-			if (SpawnCityBlockActorAtBoundsCenter(
-				world,
-				*selectedBlockClass,
-				*selectedBlockEntry,
-				blockRotation,
-				desiredBoundsCenter,
-				regionSpec.RegionId,
-				outSpawnedActors,
-				options))
+			nextCandidateIndex = spanNextCandidateIndex;
+			const FRotator blockRotation(
+				0.0,
+				FMath::RadiansToDegrees(FMath::Atan2(forward.Y, forward.X)),
+				0.0);
+			double alongCursorCm = (spanLengthCm - plannedLengthCm) * 0.5;
+
+			for (int32 blockIndex = 0; blockIndex < plannedCandidateIndices.Num(); ++blockIndex)
 			{
-				inOutAcceptedFootprints.Add(candidateFootprint);
-				++spawnedActorCount;
+				const FGeneratedBuildingFrontageCandidate& candidate =
+					buildingCandidates[plannedCandidateIndices[blockIndex]];
+				const double alongOffsetCm = alongCursorCm + (candidate.LengthCm * 0.5);
+				alongCursorCm += candidate.LengthCm;
+				const double outwardOffsetCm =
+					candidate.HalfWidthCm + (candidate.BlockEntry.PlacementProfile.LateralOffsetMeters * 100.0);
+				const FVector desiredBoundsCenter =
+					frontageSpan.StartCm
+					+ (forward * alongOffsetCm)
+					+ (outward * outwardOffsetCm);
+
+				FGeneratedBuildingFootprint candidateFootprint;
+				candidateFootprint.CenterCm = desiredBoundsCenter;
+				candidateFootprint.Forward = forward;
+				candidateFootprint.Outward = outward;
+				candidateFootprint.HalfLengthCm = candidate.LengthCm * 0.5;
+				candidateFootprint.HalfWidthCm = candidate.HalfWidthCm;
+				candidateFootprint.DebugSourceId = FString::Printf(
+					TEXT("%s#%d"),
+					*frontageSpan.DebugSourceId,
+					blockIndex);
+
+				bool bOverlapsAcceptedFootprint = false;
+				for (const FGeneratedBuildingFootprint& acceptedFootprint : inOutAcceptedFootprints)
+				{
+					if (DoBuildingFootprintsOverlap2D(candidateFootprint, acceptedFootprint))
+					{
+						bOverlapsAcceptedFootprint = true;
+						UE_LOG(
+							LogScenarioCityBlockMaterializer,
+							Verbose,
+							TEXT("%s generated building block '%s' skipped for '%s' because it overlaps accepted footprint '%s'."),
+							*options.LogContext,
+							*candidate.BlockEntry.BlockId.ToString(),
+							*candidateFootprint.DebugSourceId,
+							*acceptedFootprint.DebugSourceId);
+						break;
+					}
+				}
+
+				if (bOverlapsAcceptedFootprint)
+				{
+					++outSkippedOverlapCount;
+					continue;
+				}
+
+				if (SpawnCityBlockActorAtBoundsCenter(
+					world,
+					*candidate.BlockClass,
+					candidate.BlockEntry,
+					blockRotation,
+					desiredBoundsCenter,
+					candidateFootprint.DebugSourceId,
+					outSpawnedActors,
+					options))
+				{
+					inOutAcceptedFootprints.Add(candidateFootprint);
+					++spawnedActorCount;
+				}
 			}
 		}
 
@@ -2221,7 +2505,7 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 		}
 
 		++result.CandidateRegionCount;
-		if (IsGeneratedBuildingRegion(regionSpec))
+		if (IsGeneratedBuildingFrontageSourceRegion(regionSpec))
 		{
 			TArray<FScenarioCityBlockCatalogEntry> buildingBlockEntries;
 			FindCityBlockEntriesForBuildingRegion(*catalog, regionSpec, buildingBlockEntries);

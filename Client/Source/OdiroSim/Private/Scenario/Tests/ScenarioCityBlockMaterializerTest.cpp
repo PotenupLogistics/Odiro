@@ -113,6 +113,41 @@ namespace
 		return regionSpec;
 	}
 
+	// Creates a generated walkable building-side expansion rectangle used as a frontage source.
+	FScenarioGroundRegionSpec MakeGeneratedBuildingExpansionRegion(
+		const FString& regionId,
+		const FVector& center,
+		const FVector2D& size,
+		double yawDegrees = 0.0)
+	{
+		FScenarioGroundRegionSpec regionSpec;
+		regionSpec.RegionId = regionId;
+		regionSpec.RegionType = EScenarioGroundRegionType::Walkable;
+		regionSpec.SurfaceId = TEXT("walkway");
+		regionSpec.ShapeType = EScenarioGroundShapeType::Rectangle;
+		regionSpec.Center = center;
+		regionSpec.Size = size;
+		regionSpec.YawDegrees = yawDegrees;
+		return regionSpec;
+	}
+
+	// Creates a generated walkable building-side expansion polygon used as a frontage source.
+	FScenarioGroundRegionSpec MakeGeneratedBuildingExpansionPolygonRegion(
+		const FString& regionId,
+		const FVector& center,
+		const TArray<FVector2D>& localVerticesCm)
+	{
+		FScenarioGroundRegionSpec regionSpec;
+		regionSpec.RegionId = regionId;
+		regionSpec.RegionType = EScenarioGroundRegionType::Walkable;
+		regionSpec.SurfaceId = TEXT("walkway");
+		regionSpec.ShapeType = EScenarioGroundShapeType::ConvexPolygon;
+		regionSpec.Center = center;
+		regionSpec.Size = FVector2D(10000.0, 3000.0);
+		regionSpec.PolygonVertices = localVerticesCm;
+		return regionSpec;
+	}
+
 	// Creates a root-backed engine actor entry so tests do not depend on project content assets.
 	FScenarioCityBlockCatalogEntry MakeMaterializerTestEntry(
 		FName blockId,
@@ -732,6 +767,265 @@ bool FScenarioCityBlockMaterializerBuildingFrontageTest::RunTest(const FString& 
 	TestTrue(TEXT("first bounds-fitted building frontage actor is placed"), bFoundFirst);
 	TestTrue(TEXT("second bounds-fitted building frontage actor is placed"), bFoundSecond);
 	TestTrue(TEXT("third bounds-fitted building frontage actor is placed"), bFoundThird);
+
+	spawnedActors.Reset();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioCityBlockMaterializerBuildingExpansionFrontageTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.BuildingFrontageUsesExpansionCorridorEdge",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioCityBlockMaterializerBuildingExpansionFrontageTest::RunTest(const FString& Parameters)
+{
+	FScenarioCityBlockMaterializerTestWorld testWorld;
+	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
+	if (!testWorld.World)
+	{
+		return false;
+	}
+
+	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
+	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
+	if (!catalog)
+	{
+		return false;
+	}
+
+	FScenarioCityBlockCatalogEntry buildingBlock = MakeMaterializerTestEntry(
+		TEXT("city.building_frontage_20m"),
+		EScenarioCityBlockRole::Building,
+		EScenarioGroundRegionType::Blocked,
+		10.0);
+	buildingBlock.BoundsMeters.LengthMeters = 20.0;
+	buildingBlock.SemanticProfile.SurfaceIds = { TEXT("building") };
+	buildingBlock.SemanticProfile.CollisionTag = TEXT("building");
+	catalog->Entries.Add(buildingBlock);
+
+	TArray<FScenarioGroundRegionSpec> groundRegions;
+	groundRegions.Add(MakeGeneratedBuildingExpansionRegion(
+		TEXT("generated_city_lower_building_expansion_00_00"),
+		FVector(3000.0, 2000.0, FScenarioCorridorGeometry::DefaultSurfaceTopZCm),
+		FVector2D(6000.0, 4000.0)));
+
+	TArray<TObjectPtr<AActor>> spawnedActors;
+	FScenarioCityBlockMaterializationOptions options;
+	options.LogContext = TEXT("ScenarioCityBlockMaterializerTest");
+	const FScenarioCityBlockMaterializationResult result =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			testWorld.World,
+			catalog,
+			groundRegions,
+			spawnedActors,
+			options);
+
+	TestEqual(TEXT("building expansion is a materializer candidate"), result.CandidateRegionCount, 1);
+	TestEqual(TEXT("building frontage uses the expansion corridor-facing edge"), result.SpawnedActorCount, 3);
+	TestEqual(TEXT("three building actors remain owned by the materializer"), spawnedActors.Num(), 3);
+
+	bool bFoundFirst = false;
+	bool bFoundSecond = false;
+	bool bFoundThird = false;
+	for (const TObjectPtr<AActor>& spawnedActor : spawnedActors)
+	{
+		if (!spawnedActor)
+		{
+			continue;
+		}
+
+		const FVector location = spawnedActor->GetActorLocation();
+		bFoundFirst |= FMath::IsNearlyEqual(location.X, 1000.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 3500.0, 0.1);
+		bFoundSecond |= FMath::IsNearlyEqual(location.X, 3000.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 3500.0, 0.1);
+		bFoundThird |= FMath::IsNearlyEqual(location.X, 5000.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 3500.0, 0.1);
+		TestEqual(
+			TEXT("building expansion frontage snaps to walkway surface height"),
+			location.Z,
+			FScenarioCorridorGeometry::DefaultSurfaceTopZCm);
+	}
+
+	TestTrue(TEXT("first expansion frontage actor is placed"), bFoundFirst);
+	TestTrue(TEXT("second expansion frontage actor is placed"), bFoundSecond);
+	TestTrue(TEXT("third expansion frontage actor is placed"), bFoundThird);
+
+	spawnedActors.Reset();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioCityBlockMaterializerBuildingFrontageCatalogOrderTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.BuildingFrontageUsesCatalogOrder",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioCityBlockMaterializerBuildingFrontageCatalogOrderTest::RunTest(const FString& Parameters)
+{
+	FScenarioCityBlockMaterializerTestWorld testWorld;
+	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
+	if (!testWorld.World)
+	{
+		return false;
+	}
+
+	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
+	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
+	if (!catalog)
+	{
+		return false;
+	}
+
+	FScenarioCityBlockCatalogEntry firstBuildingBlock = MakeMaterializerTestEntry(
+		TEXT("city.building_frontage_first"),
+		EScenarioCityBlockRole::Building,
+		EScenarioGroundRegionType::Blocked,
+		10.0);
+	firstBuildingBlock.BoundsMeters.LengthMeters = 20.0;
+	firstBuildingBlock.SemanticProfile.SurfaceIds = { TEXT("building") };
+	firstBuildingBlock.SemanticProfile.CollisionTag = TEXT("building");
+	firstBuildingBlock.PlacementProfile.Priority = 0;
+	catalog->Entries.Add(firstBuildingBlock);
+
+	FScenarioCityBlockCatalogEntry secondBuildingBlock = firstBuildingBlock;
+	secondBuildingBlock.BlockId = TEXT("city.building_frontage_second");
+	secondBuildingBlock.PlacementProfile.Priority = 100;
+	secondBuildingBlock.PlacementProfile.LateralOffsetMeters = 1.0;
+	catalog->Entries.Add(secondBuildingBlock);
+
+	FScenarioCityBlockCatalogEntry thirdBuildingBlock = firstBuildingBlock;
+	thirdBuildingBlock.BlockId = TEXT("city.building_frontage_third");
+	thirdBuildingBlock.PlacementProfile.Priority = 50;
+	thirdBuildingBlock.PlacementProfile.LateralOffsetMeters = 2.0;
+	catalog->Entries.Add(thirdBuildingBlock);
+
+	TArray<FScenarioGroundRegionSpec> groundRegions;
+	groundRegions.Add(MakeGeneratedBuildingExpansionRegion(
+		TEXT("generated_city_lower_building_expansion_00_00"),
+		FVector(3000.0, 2000.0, FScenarioCorridorGeometry::DefaultSurfaceTopZCm),
+		FVector2D(6000.0, 4000.0)));
+
+	TArray<TObjectPtr<AActor>> spawnedActors;
+	FScenarioCityBlockMaterializationOptions options;
+	options.LogContext = TEXT("ScenarioCityBlockMaterializerTest");
+	const FScenarioCityBlockMaterializationResult result =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			testWorld.World,
+			catalog,
+			groundRegions,
+			spawnedActors,
+			options);
+
+	TestEqual(TEXT("building expansion is a materializer candidate"), result.CandidateRegionCount, 1);
+	TestEqual(TEXT("building frontage uses every catalog entry in DA order"), result.SpawnedActorCount, 3);
+	TestEqual(TEXT("three ordered building actors remain owned by the materializer"), spawnedActors.Num(), 3);
+
+	bool bFoundFirst = false;
+	bool bFoundSecond = false;
+	bool bFoundThird = false;
+	for (const TObjectPtr<AActor>& spawnedActor : spawnedActors)
+	{
+		if (!spawnedActor)
+		{
+			continue;
+		}
+
+		const FVector location = spawnedActor->GetActorLocation();
+		bFoundFirst |= FMath::IsNearlyEqual(location.X, 1000.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 3500.0, 0.1);
+		bFoundSecond |= FMath::IsNearlyEqual(location.X, 3000.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 3400.0, 0.1);
+		bFoundThird |= FMath::IsNearlyEqual(location.X, 5000.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 3300.0, 0.1);
+	}
+
+	TestTrue(TEXT("first catalog building is placed first along the frontage"), bFoundFirst);
+	TestTrue(TEXT("second catalog building is placed second despite higher priority"), bFoundSecond);
+	TestTrue(TEXT("third catalog building is placed third along the frontage"), bFoundThird);
+
+	spawnedActors.Reset();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioCityBlockMaterializerPolygonBuildingExpansionFrontageTest,
+	"OdiroSim.Scenario.CityBlockMaterializer.BuildingFrontageUsesConvexExpansionCorridorEdge",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioCityBlockMaterializerPolygonBuildingExpansionFrontageTest::RunTest(const FString& Parameters)
+{
+	FScenarioCityBlockMaterializerTestWorld testWorld;
+	TestNotNull(TEXT("Transient test world is available"), testWorld.World);
+	if (!testWorld.World)
+	{
+		return false;
+	}
+
+	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
+	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
+	if (!catalog)
+	{
+		return false;
+	}
+
+	FScenarioCityBlockCatalogEntry buildingBlock = MakeMaterializerTestEntry(
+		TEXT("city.building_frontage_20m"),
+		EScenarioCityBlockRole::Building,
+		EScenarioGroundRegionType::Blocked,
+		10.0);
+	buildingBlock.BoundsMeters.LengthMeters = 20.0;
+	buildingBlock.SemanticProfile.SurfaceIds = { TEXT("building") };
+	buildingBlock.SemanticProfile.CollisionTag = TEXT("building");
+	catalog->Entries.Add(buildingBlock);
+
+	TArray<FScenarioGroundRegionSpec> groundRegions;
+	groundRegions.Add(MakeGeneratedBuildingExpansionPolygonRegion(
+		TEXT("generated_city_lower_building_expansion_00_00"),
+		FVector(5000.0, 2500.0, FScenarioCorridorGeometry::DefaultSurfaceTopZCm),
+		{
+			FVector2D(-1000.0, -1500.0),
+			FVector2D(5000.0, -1500.0),
+			FVector2D(1000.0, 1500.0),
+			FVector2D(-5000.0, 1500.0)
+		}));
+
+	TArray<TObjectPtr<AActor>> spawnedActors;
+	FScenarioCityBlockMaterializationOptions options;
+	options.LogContext = TEXT("ScenarioCityBlockMaterializerTest");
+	const FScenarioCityBlockMaterializationResult result =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			testWorld.World,
+			catalog,
+			groundRegions,
+			spawnedActors,
+			options);
+
+	TestEqual(TEXT("convex building expansion is a materializer candidate"), result.CandidateRegionCount, 1);
+	TestEqual(TEXT("convex building frontage uses the corridor-facing edge"), result.SpawnedActorCount, 3);
+	TestEqual(TEXT("three building actors remain owned by the materializer"), spawnedActors.Num(), 3);
+
+	bool bFoundFirst = false;
+	bool bFoundSecond = false;
+	bool bFoundThird = false;
+	for (const TObjectPtr<AActor>& spawnedActor : spawnedActors)
+	{
+		if (!spawnedActor)
+		{
+			continue;
+		}
+
+		const FVector location = spawnedActor->GetActorLocation();
+		bFoundFirst |= FMath::IsNearlyEqual(location.X, 1000.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 3500.0, 0.1);
+		bFoundSecond |= FMath::IsNearlyEqual(location.X, 3000.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 3500.0, 0.1);
+		bFoundThird |= FMath::IsNearlyEqual(location.X, 5000.0, 0.1)
+			&& FMath::IsNearlyEqual(location.Y, 3500.0, 0.1);
+	}
+
+	TestTrue(TEXT("first convex expansion frontage actor is placed"), bFoundFirst);
+	TestTrue(TEXT("second convex expansion frontage actor is placed"), bFoundSecond);
+	TestTrue(TEXT("third convex expansion frontage actor is placed"), bFoundThird);
 
 	spawnedActors.Reset();
 	return true;

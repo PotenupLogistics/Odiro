@@ -79,8 +79,8 @@ public:
 	// Width of the generated fixed two-lane road band in meters.
 	static constexpr double GeneratedCityTwoLaneRoadWidthMeters = 6.4;
 
-	// Depth of the generated blocked building footprint beyond the walkable extension in meters.
-	static constexpr double GeneratedCityBuildingDepthMeters = 10.0;
+	// Depth reserved for generated building frontage footprints beyond the walkable extension in meters.
+	static constexpr double GeneratedCityBuildingDepthMeters = 25.0;
 
 	// Rotates a 2D point around the origin by a scenario heading in degrees.
 	static FVector2D RotatePointMeters(const FVector2D& pointMeters, double headingDegrees);

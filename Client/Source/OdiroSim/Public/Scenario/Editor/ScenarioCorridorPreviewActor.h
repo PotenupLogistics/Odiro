@@ -44,15 +44,15 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProceduralMeshComponent>> LaneMeshComponents;
 
-	// Material used for walkable lane strips such as sidewalk and walkway.
+	// Material used for walkable lane strips such as walkway.
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> WalkableGroundMaterial;
 
-	// Material used for penalty lane strips such as road, grass, or curb.
+	// Material used for penalty lane strips such as road.
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> PenaltyGroundMaterial;
 
-	// Material used for blocked lane strips such as building or wall.
+	// Material used for blocked lane strips such as building.
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> BlockedGroundMaterial;
 

@@ -681,6 +681,17 @@ bool ADeliveryBotPointCloudReviewActor::BuildTopDownSphereInstances()
 		TopDownUnknownPointInstances->MarkRenderStateDirty();
 	}
 
+	UE_LOG(
+		LogDeliveryBotPointCloudReview,
+		Log,
+		TEXT("TopDown point cloud instances rebuilt | total=%d ground=%d wall=%d obstacle=%d unknown=%d sphereSizeCm=%.2f"),
+		AddedPointCount,
+		GroundCount,
+		WallCount,
+		ObstacleCount,
+		UnknownCount,
+		TopDownSphereSizeCm);
+
 	return AddedPointCount > 0;
 }
 

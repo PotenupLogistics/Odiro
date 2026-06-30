@@ -8,6 +8,7 @@
 #include "Scenario/Components/ScenarioPathFollowerComponent.h"
 #include "Scenario/Components/ScenarioPedestrianRuntimeComponent.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
+#include "Scenario/ScenarioCityBlockMaterializer.h"
 #include "Scenario/ScenarioPedestrianPlanSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorRouteMarkerOverlayWidget.h"
 #include "Shared/ScenarioPedestrianPlanTypes.h"
@@ -18,10 +19,10 @@
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/BoxComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/PostProcessVolume.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
-
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioSimulation, Log, All);
 
@@ -29,6 +30,7 @@ UScenarioSimulationSubsystem::UScenarioSimulationSubsystem()
 {
 	StaticObstacleClass = AScenarioStaticObstacle::StaticClass();
 	StaticObstaclePropCatalog = UScenarioStaticObstaclePropCatalog::MakeDefaultCatalogReference();
+	CityBlockCatalog = UScenarioCityBlockCatalog::MakeDefaultCatalogReference();
 
 	static ConstructorHelpers::FClassFinder<ADeliveryBot> robotBlueprintClass(
 		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot"));
@@ -57,6 +59,7 @@ void UScenarioSimulationSubsystem::ClearScenario()
 {
 	// 정리 결과 로그에 사용할 현재 runtime object 수를 보관한다.
 	const int32 actorCount = RuntimeActors.Num();
+	const int32 cityBlockActorCount = RuntimeCityBlockActors.Num();
 	const int32 actorIdCount = RuntimeActorsById.Num();
 	const int32 groundRegionCount = RuntimeGroundRegions.Num();
 	const int32 corridorCount = RuntimeCorridors.Num();
@@ -77,6 +80,9 @@ void UScenarioSimulationSubsystem::ClearScenario()
 		RuntimeGreyBackgroundPostProcessVolume->Destroy();
 	}
 	RuntimeGreyBackgroundPostProcessVolume = nullptr;
+
+	// CityBuildings visual actors are cleaned separately because they are intentionally excluded from RuntimeActors.
+	FScenarioCityBlockMaterializer::DestroySpawnedActors(RuntimeCityBlockActors);
 
 	// SimulationSubsystem이 소유한 모든 runtime actor를 제거한다.
 	for (int32 index = RuntimeActors.Num() - 1; index >= 0; --index)
@@ -109,6 +115,7 @@ void UScenarioSimulationSubsystem::ClearScenario()
 
 	// 실제로 정리한 runtime object가 있을 때만 cleanup 결과를 기록한다.
 	if (actorCount > 0
+		|| cityBlockActorCount > 0
 		|| actorIdCount > 0
 		|| groundRegionCount > 0
 		|| corridorCount > 0
@@ -119,9 +126,10 @@ void UScenarioSimulationSubsystem::ClearScenario()
 			Warning,
 			TEXT(
 				"Scenario runtime cleanup complete | "
-				"Actors: %d, ActorIds: %d, GroundRegions: %d, "
+				"Actors: %d, CityBlockActors: %d, ActorIds: %d, GroundRegions: %d, "
 				"Corridors: %d, Paths: %d"),
 			actorCount,
+			cityBlockActorCount,
 			actorIdCount,
 			groundRegionCount,
 			corridorCount,
@@ -248,8 +256,11 @@ bool UScenarioSimulationSubsystem::TryBuildGroundRegionXYBounds(
 
 	for (const FScenarioGroundRegionSpec& regionSpec : groundRegionSpecs)
 	{
-		if (regionSpec.ShapeType != EScenarioGroundShapeType::Rectangle)
+		if (regionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon
+			&& regionSpec.PolygonVertices.Num() < 3)
+		{
 			continue;
+		}
 
 		ExpandXYBoundsWithGroundRegion(regionSpec, outXYBounds);
 		zSum += regionSpec.Center.Z;
@@ -433,11 +444,22 @@ void UScenarioSimulationSubsystem::ExpandXYBoundsWithGroundRegion(
 	const FScenarioGroundRegionSpec& regionSpec,
 	FBox2D& inOutXYBounds)
 {
-	const FVector2D halfSize = regionSpec.Size * 0.5;
 	const FTransform regionTransform(
 		FRotator(0.0, regionSpec.YawDegrees, 0.0),
 		regionSpec.Center
 	);
+
+	if (regionSpec.ShapeType == EScenarioGroundShapeType::ConvexPolygon)
+	{
+		for (const FVector2D& localVertex : regionSpec.PolygonVertices)
+		{
+			const FVector worldCorner = regionTransform.TransformPosition(FVector(localVertex.X, localVertex.Y, 0.0));
+			inOutXYBounds += FVector2D(worldCorner.X, worldCorner.Y);
+		}
+		return;
+	}
+
+	const FVector2D halfSize = regionSpec.Size * 0.5;
 
 	const FVector localCorners[4] =
 	{
@@ -598,6 +620,20 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 		}
 	}
 
+	const UScenarioCityBlockCatalog* cityBlockCatalog = CityBlockCatalog.LoadSynchronous();
+	FScenarioCityBlockMaterializationOptions cityBlockOptions;
+	cityBlockOptions.LogContext = TEXT("ScenarioSimulation");
+	cityBlockOptions.CatalogDebugName = CityBlockCatalog.ToSoftObjectPath().ToString();
+	cityBlockOptions.bCreateBuildingCollisionProxies = true;
+	const FScenarioCityBlockMaterializationResult cityBlockResult =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			GetWorld(),
+			cityBlockCatalog,
+			setupSpec.GroundRegions,
+			RuntimeCityBlockActors,
+			cityBlockOptions);
+	const int32 cityBlockActorCount = cityBlockResult.SpawnedActorCount;
+
 	const bool bHasDeliveryBotPlaceable = setupSpec.Placeables.ContainsByPredicate(
 		[](const FScenarioPlaceableInstanceSpec& placeableSpec)
 		{
@@ -671,10 +707,11 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("Scenario world setup complete | Scenario: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Corridors: %d, Paths: %d"),
+		TEXT("Scenario world setup complete | Scenario: %s, Success: %s, RuntimeActors: %d, CityBlockActors: %d, ActorIds: %d, GroundRegions: %d, Corridors: %d, Paths: %d"),
 		*setupSpec.EpisodeId,
 		bAllSpawned ? TEXT("true") : TEXT("false"),
 		RuntimeActors.Num(),
+		cityBlockActorCount,
 		RuntimeActorsById.Num(),
 		RuntimeGroundRegions.Num(),
 		RuntimeCorridors.Num(),
@@ -1467,19 +1504,28 @@ void UScenarioSimulationSubsystem::BuildPedestrianPlanContext(
 			continue;
 		}
 
-		AActor* obstacleActor = FindRuntimeActor(placeableSpec.InstanceId);
-		if (!IsValid(obstacleActor))
-		{
-			continue;
-		}
-
 		FVector boundsOrigin = FVector::ZeroVector;
 		FVector boundsExtent = FVector::ZeroVector;
-		obstacleActor->GetActorBounds(true, boundsOrigin, boundsExtent);
+		FScenarioStaticObstaclePropEntry propEntry;
+		if (TryFindStaticObstacleProp(FName(*placeableSpec.AssetId), propEntry))
+		{
+			boundsOrigin = placeableSpec.Transform.TransformPosition(propEntry.ResolveBoundsCenterOffsetCm());
+			boundsExtent = propEntry.ResolveBoundsExtentCm();
+		}
+		else
+		{
+			AActor* obstacleActor = FindRuntimeActor(placeableSpec.InstanceId);
+			if (!IsValid(obstacleActor))
+			{
+				continue;
+			}
+
+			obstacleActor->GetActorBounds(true, boundsOrigin, boundsExtent);
+		}
 
 		if (boundsExtent.IsNearlyZero())
 		{
-			boundsOrigin = obstacleActor->GetActorLocation();
+			boundsOrigin = placeableSpec.Transform.GetLocation();
 			boundsExtent = FVector(50.0, 50.0, 100.0);
 		}
 

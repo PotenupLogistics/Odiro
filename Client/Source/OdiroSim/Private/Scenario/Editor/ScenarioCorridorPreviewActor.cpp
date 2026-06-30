@@ -10,9 +10,9 @@
 
 namespace
 {
-	// Thin surface tops stay slightly above the ground to avoid z-fighting.
-	const double PreviewSurfaceTopZCm = 1.0;
-	// Non-blocking surfaces are thick enough to overlap 15cm side offsets without vertical holes.
+	// Preview corridor surface top follows the shared scenario base plane.
+	const double PreviewSurfaceTopZCm = FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
+	// Non-blocking surfaces are thick enough to overlap curb-side height offsets without vertical holes.
 	const double MinimumSurfacePreviewHeightCm = 20.0;
 	// Blocked corridor surfaces match the legacy blocked ground-region collision height.
 	const double BlockedPreviewHeightCm = 200.0;
@@ -142,7 +142,7 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 	for (int32 segmentIndex = 0; segmentIndex < renderSegments.Num(); ++segmentIndex)
 	{
 		const FScenarioTemplateSegment& segment = renderSegments[segmentIndex];
-		const FString walkwaySurfaceId = ResolvePreviewString(segment.ReplacedBySurfaceId, TEXT("sidewalk"));
+		const FString walkwaySurfaceId = ResolvePreviewString(segment.ReplacedBySurfaceId, TEXT("walkway"));
 		AddOrMergePreviewVisualLane(
 			visualLaneSpecs,
 			FPreviewCorridorVisualLaneSpec{
@@ -152,50 +152,6 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 				-halfWalkwayWidthMeters,
 				halfWalkwayWidthMeters,
 				0.0 });
-
-		double buildingMaxOffsetMeters = -halfWalkwayWidthMeters;
-		for (int32 index = 0; index < corridor.BuildingSide.Num(); ++index)
-		{
-			const FScenarioTemplateLaneRule& laneRule = corridor.BuildingSide[index];
-			const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
-			if (widthMeters <= KINDA_SMALL_NUMBER)
-			{
-				continue;
-			}
-
-			AddOrMergePreviewVisualLane(
-				visualLaneSpecs,
-				FPreviewCorridorVisualLaneSpec{
-					segment.AlongRangeMeters,
-					index == 0 ? FString(TEXT("building_edge")) : FString::Printf(TEXT("building_%d"), index),
-					laneRule.SurfaceId,
-					buildingMaxOffsetMeters - widthMeters,
-					buildingMaxOffsetMeters,
-					0.0 });
-			buildingMaxOffsetMeters -= widthMeters;
-		}
-
-		double curbMinOffsetMeters = halfWalkwayWidthMeters;
-		for (int32 index = 0; index < corridor.CurbSide.Num(); ++index)
-		{
-			const FScenarioTemplateLaneRule& laneRule = corridor.CurbSide[index];
-			const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
-			if (widthMeters <= KINDA_SMALL_NUMBER)
-			{
-				continue;
-			}
-
-			AddOrMergePreviewVisualLane(
-				visualLaneSpecs,
-				FPreviewCorridorVisualLaneSpec{
-					segment.AlongRangeMeters,
-					index == 0 ? FString(TEXT("curb_edge")) : FString::Printf(TEXT("curb_%d"), index),
-					laneRule.SurfaceId,
-					curbMinOffsetMeters,
-					curbMinOffsetMeters + widthMeters,
-					FScenarioCorridorGeometry::DefaultCurbSideSurfaceZOffsetCm });
-			curbMinOffsetMeters += widthMeters;
-		}
 	}
 
 	double cornerFilletRadiusMeters = 0.0;

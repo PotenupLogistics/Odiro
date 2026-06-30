@@ -5,8 +5,10 @@
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
 #include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
+#include "Scenario/Actors/ScenarioGroundRegion.h"
 #include "Scenario/Actors/ScenarioStaticObstacle.h"
 #include "Scenario/Data/ScenarioStaticObstaclePropCatalog.h"
+#include "Scenario/ScenarioCityBlockMaterializer.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/SceneCapture2D.h"
@@ -1337,6 +1339,33 @@ bool UScenarioReplaySubsystem::SpawnReplayScenarioWorld(
 		RegisterReplayScenarioActor(CorridorActor);
 	}
 
+	TArray<FScenarioGroundRegionSpec> ReplayGroundRegionSpecs;
+	ReplayGroundRegionSpecs.Reserve(WorldSpec.GroundRegions.Num());
+	for (const FScenarioGroundRegionSpec& GroundRegionSpec : WorldSpec.GroundRegions)
+	{
+		FScenarioGroundRegionSpec ReplayGroundRegionSpec = GroundRegionSpec;
+		ReplayGroundRegionSpec.Center += ReplayWorldOffset;
+		ReplayGroundRegionSpecs.Add(ReplayGroundRegionSpec);
+
+		FString FailureReason;
+		AScenarioGroundRegion* GroundRegion = AScenarioGroundRegion::SpawnConfigured(
+			World,
+			AScenarioGroundRegion::StaticClass(),
+			ReplayGroundRegionSpec,
+			FailureReason);
+		if (!IsValid(GroundRegion))
+		{
+			OutDiagnostics.Add(FString::Printf(
+				TEXT("Failed to spawn replay ground region '%s': %s"),
+				*GroundRegionSpec.RegionId,
+				*FailureReason));
+			bAllSpawned = false;
+			continue;
+		}
+
+		RegisterReplayScenarioActor(GroundRegion);
+	}
+
 	for (const FScenarioPlaceableInstanceSpec& PlaceableSpec : WorldSpec.Placeables)
 	{
 		if (PlaceableSpec.Category != EScenarioActorCategory::StaticObstacle)
@@ -1349,6 +1378,35 @@ bool UScenarioReplaySubsystem::SpawnReplayScenarioWorld(
 			bAllSpawned = false;
 		}
 	}
+
+	const TSoftObjectPtr<UScenarioCityBlockCatalog> CityBlockCatalogRef =
+		UScenarioCityBlockCatalog::MakeDefaultCatalogReference();
+	const UScenarioCityBlockCatalog* CityBlockCatalog = CityBlockCatalogRef.LoadSynchronous();
+	FScenarioCityBlockMaterializationOptions CityBlockOptions;
+	CityBlockOptions.LogContext = TEXT("ScenarioReplay");
+	CityBlockOptions.CatalogDebugName = CityBlockCatalogRef.ToSoftObjectPath().ToString();
+	TArray<TObjectPtr<AActor>> SpawnedCityBlockActors;
+	const FScenarioCityBlockMaterializationResult CityBlockResult =
+		FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+			World,
+			CityBlockCatalog,
+			ReplayGroundRegionSpecs,
+			SpawnedCityBlockActors,
+			CityBlockOptions);
+	for (const TObjectPtr<AActor>& CityBlockActor : SpawnedCityBlockActors)
+	{
+		RegisterReplayScenarioActor(CityBlockActor.Get());
+	}
+
+	UE_LOG(
+		LogScenarioReplay,
+		Log,
+		TEXT("Replay scenario city blocks materialized | CandidateRegions=%d SpawnedActors=%d RoadSideComposites=%d Corners=%d SkippedNoEntry=%d"),
+		CityBlockResult.CandidateRegionCount,
+		CityBlockResult.SpawnedActorCount,
+		CityBlockResult.SpawnedRoadSideCompositeCount,
+		CityBlockResult.CornerCandidateCount,
+		CityBlockResult.SkippedNoEntryCount);
 
 	return bAllSpawned;
 }
@@ -1858,7 +1916,8 @@ ASceneCapture2D* UScenarioReplaySubsystem::SpawnReplayCaptureActor()
 	CaptureComponent->bAlwaysPersistRenderingState = false;
 	CaptureComponent->bExcludeFromSceneTextureExtents = true;
 	CaptureComponent->bUseRayTracingIfEnabled = false;
-	if (!FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(CaptureComponent, 1.0f))
+	if (FScenarioViewportPresentation::bUseGreyBackgroundPostProcess
+		&& !FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(CaptureComponent, 1.0f))
 	{
 		UE_LOG(
 			LogScenarioReplay,

@@ -62,13 +62,13 @@ namespace
 				TEXT("{")
 				TEXT("\"schema\":\"scenario\",")
 				TEXT("\"version\":1,")
-				TEXT("\"scenario_id\":\"adapter_sidewalk\",")
+				TEXT("\"scenario_id\":\"adapter_walkway\",")
 				TEXT("\"intent\":\"Adapter test\",")
 				TEXT("\"corridor\":{")
 				TEXT("\"axis\":{\"type\":\"polyline\",\"points_m\":[[0.0,0.0],[12.0,0.0]]},")
 				TEXT("\"walkway_width_m\":3.0,")
 				TEXT("\"segments\":[{\"id\":\"main\",\"type\":\"straight\",\"along_range_m\":[0.0,12.0]}],")
-				TEXT("\"building_side\":[{\"surface\":\"wall\",\"width_m\":0.5}],")
+				TEXT("\"building_side\":[{\"surface\":\"building\",\"width_m\":0.5}],")
 				TEXT("\"curb_side\":[{\"surface\":\"road\",\"width_m\":4.0}]")
 				TEXT("},")
 				TEXT("\"obstacles\":{\"min_clear_width_m\":0.9,\"placements\":[{\"kind\":\"fixed\",\"id\":\"cone_01\",\"prop\":\"obstacle.road_cone_01\",\"at\":{\"segment\":\"main\",\"along_m\":6.0,\"offset_m\":0.75,\"lane\":\"curb_edge\"},\"yaw_deg\":10.0}]},")
@@ -95,6 +95,22 @@ namespace
 		}
 
 		return false;
+	}
+
+	// Checks generated city padding emitted by the sample-to-world adapter.
+	bool HasGeneratedGroundRegion(
+		const TArray<FScenarioGroundRegionSpec>& groundRegions,
+		const FString& regionIdFragment,
+		const FString& surfaceId,
+		EScenarioGroundRegionType regionType)
+	{
+		return groundRegions.ContainsByPredicate(
+			[&regionIdFragment, &surfaceId, regionType](const FScenarioGroundRegionSpec& region)
+			{
+				return region.RegionId.Contains(regionIdFragment)
+					&& region.SurfaceId == surfaceId
+					&& region.RegionType == regionType;
+			});
 	}
 }
 
@@ -135,7 +151,7 @@ bool FUserProjectScenarioSampleWorldSpecAdapterTest::RunTest(const FString& para
 	const FScenarioCompileResult compileResult =
 		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(sampleParseResult.Document);
 	TestTrue(TEXT("scenario sample adapts"), compileResult.bSuccess);
-	TestEqual(TEXT("sample scenario id"), compileResult.WorldSpec.RunConfig.TemplateId, FString(TEXT("adapter_sidewalk_000001")));
+	TestEqual(TEXT("sample scenario id"), compileResult.WorldSpec.RunConfig.TemplateId, FString(TEXT("adapter_walkway_000001")));
 	TestEqual(TEXT("seed"), compileResult.WorldSpec.RunConfig.BaseSeed, static_cast<int64>(2000));
 	TestEqual(TEXT("max duration seconds"), compileResult.WorldSpec.RunConfig.MaxDurationSeconds, 60.0);
 	const FScenarioParamValue* maxDurationParam = compileResult.WorldSpec.RunConfig.Parameters.Find(TEXT("max_duration_s"));
@@ -160,9 +176,37 @@ bool FUserProjectScenarioSampleWorldSpecAdapterTest::RunTest(const FString& para
 	}
 
 	const FScenarioRuntimeCorridorSpec& runtimeCorridor = compileResult.WorldSpec.Corridors[0];
-	TestEqual(TEXT("generated ground region count"), compileResult.WorldSpec.GroundRegions.Num(), 0);
-	TestTrue(TEXT("runtime sidewalk surface preserved"), HasRuntimeCorridorSurface(runtimeCorridor, TEXT("sidewalk")));
-	TestTrue(TEXT("runtime wall surface preserved"), HasRuntimeCorridorSurface(runtimeCorridor, TEXT("wall")));
+	TestEqual(TEXT("generated ground region count"), compileResult.WorldSpec.GroundRegions.Num(), 3);
+	TestTrue(
+		TEXT("generated building-side expansion"),
+		HasGeneratedGroundRegion(
+			compileResult.WorldSpec.GroundRegions,
+			TEXT("building_expansion"),
+			TEXT("walkway"),
+			EScenarioGroundRegionType::Walkable));
+	TestFalse(
+		TEXT("generated building footprint is not a GroundRegion"),
+		HasGeneratedGroundRegion(
+			compileResult.WorldSpec.GroundRegions,
+			TEXT("building"),
+			TEXT("building"),
+			EScenarioGroundRegionType::Blocked));
+	TestTrue(
+		TEXT("generated curb band"),
+		HasGeneratedGroundRegion(
+			compileResult.WorldSpec.GroundRegions,
+			TEXT("curb"),
+			TEXT("road"),
+			EScenarioGroundRegionType::Blocked));
+	TestTrue(
+		TEXT("generated road band"),
+		HasGeneratedGroundRegion(
+			compileResult.WorldSpec.GroundRegions,
+			TEXT("road_2lane"),
+			TEXT("road"),
+			EScenarioGroundRegionType::Penalty));
+	TestTrue(TEXT("runtime walkway surface preserved"), HasRuntimeCorridorSurface(runtimeCorridor, TEXT("walkway")));
+	TestTrue(TEXT("runtime building surface preserved"), HasRuntimeCorridorSurface(runtimeCorridor, TEXT("building")));
 	TestTrue(TEXT("runtime road surface preserved"), HasRuntimeCorridorSurface(runtimeCorridor, TEXT("road")));
 	TestTrue(TEXT("spec hash populated"), !compileResult.WorldSpec.SpecHash.IsEmpty());
 

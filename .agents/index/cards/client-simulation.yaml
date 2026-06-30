@@ -21,6 +21,9 @@ paths:
   - Client/Content/Input/**
   - Client/Content/Maps/ScenarioEditorMap.umap
   - Client/Content/Maps/ScenarioSimulationMap.umap
+  - Client/Content/Blueprints/Scenario/Obstacles/**
+  - Client/Content/Templates/CityBuildings/**
+  - Client/Tools/Editor/MigrateStaticObstaclePropsToActorBlueprints.py
   - Client/Json/**
   - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Docs/PreviewAgent.local.md
@@ -56,6 +59,7 @@ entry:
       - Client/Source/OdiroSim/Public/Scenario/Llm
       - Client/Source/OdiroSim/Private/Scenario/Llm
       - Client/Content/Input
+      - Client/Tools/Editor/MigrateStaticObstaclePropsToActorBlueprints.py
   - id: scenario-runtime
     description: Scenario sampling, world-spec adaptation, simulation, evaluation, runner lifecycle, and episode logs.
     read:
@@ -108,10 +112,18 @@ guardrails:
   - Final user project input uses one editable `<UserProject>/scenario.json`; generated episode scenarios are derived run artifacts.
   - Public project-run execution accepts direct scenario/profile inputs, not legacy RunQueue start helpers.
   - Client/Json prompt-facing schemas and catalogs must stay aligned with shared user-project contracts.
+  - ScenarioStaticObstaclePropCatalog owns static obstacle actor-class binding and manual bounds; keep generated BP wrappers under Client/Content/Blueprints/Scenario/Obstacles aligned with catalog prop ids.
+  - Corridor authoring surface ids are intentionally limited to `walkway`, `road`, and `building`; update Client/Json/environment-catalog.md and ScenarioCorridorSurfaceCatalog defaults together when adding one.
   - ScenarioDocument and ScenarioSample surfaces remain internal editor/materialization shapes unless the task targets them.
   - ScenarioSimulationSubsystem owns runtime grid rebuild after scenario surfaces spawn.
+  - ScenarioSampler accepts corridor side-lane width_m values as resolved params, but generated city semantics use fixed building-extension, curb, and 2-lane road widths for editor/runtime parity.
+  - ScenarioSampleWorldSpecAdapter may derive generated city GroundRegions from sampled Corridor layout; generated side bands remain fixed-width even when authored side-lane width_m values differ.
+  - ScenarioCityBlockCatalog owns CityBuildings visual block metadata plus catalog-authored anchor/priority placement hints; generated GroundRegions remain the evaluation/preview backing geometry while runtime grid classification comes from ScenarioCorridorRuntimeActor semantic lanes.
+  - ScenarioCityBlockMaterializer owns shared generated CityBuildings visual placement for ScenarioEditorMap and ScenarioSimulationMap, including center/continuous-edge seam anchor interpretation, surface-height snapping, start-center-rooted segment-stretched RoadStraight road-side curb+road placement, corner/crossroad bounds-based straight-road attachment, right-angle road-side seam corner inference, and overlap-filtered bounds-fit building frontage placement; generated curb bands are seam metadata rather than block-selection inputs.
+  - ScenarioGroundRegion renders non-road generated city expansion surfaces as flat procedural visual meshes while keeping hidden bounds components as collision/query proxies; generated road/curb visual ownership belongs to CityBuildings composite meshes.
   - DeliveryBot runtime grid classifies generated Corridor surfaces through ScenarioCorridorRuntimeActor semantic lane lookup before applying procedural mesh collision overlap.
   - DeliveryBot runtime grid treats ScenarioStaticObstacle-owned collision components as blocking cells independently of collision profile names.
+  - Static obstacle placement, collision, pedestrian-planner footprints, and transient preview bounds use ScenarioStaticObstaclePropCatalog manual bounds rather than visual mesh actor bounds when present.
   - ScenarioRunnerSubsystem owns project episode lifecycle, policy start/end coordination, cancellation, late callbacks, and cleanup.
   - User project run output is written through typed UserProjectData JSON writers.
   - ScenarioEditorUiSubsystem owns ScenarioEditorMap UI ViewModel lifecycle and stores no widget pointers.
@@ -120,7 +132,7 @@ guardrails:
   - Scenario editor viewport navigation input is owned by ScenarioEditorController with Enhanced Input assets under Client/Content/Input; keep mouse capture, selection, and cancel bindings explicit.
   - ScenarioEditorLaunchSubsystem owns ScenarioEditorMap travel gating for shared visual asset preload before the viewport becomes visible.
   - SimulatorProcessSubsystem gates project-run ScenarioSimulationMap travel behind the same shared visual asset preload when launching from StartupMap.
-  - ScenarioViewportPresentation owns shared scenario map preload assets and grey background post-process application for editor cameras, runtime unbound post-process volumes, and preview SceneCapture components.
+  - ScenarioViewportPresentation owns shared scenario map preload assets, the global grey-background enable switch, and grey background post-process application for editor cameras, runtime unbound post-process volumes, and preview SceneCapture components.
   - Scenario editor robot Start/Goal markers use authoring-subsystem proxy actors for selection and a ScenarioEditorController-owned viewport overlay below WBP_MainMenu for visible markers.
   - Scenario editor Corridor vertex/segment handles use invisible proxy actors for selection and transform gizmo ownership, with ScenarioEditorRouteMarkerOverlayWidget painting and hit-testing the visible screen-space grips.
   - Scenario simulation robot Start/Goal markers are runtime overlay items owned by ScenarioSimulationSubsystem; simulation no longer spawns visible BP_StartPoint/BP_GoalPoint marker actors.

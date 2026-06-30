@@ -13,6 +13,7 @@
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Scenario/Editor/ScenarioCorridorHandleActor.h"
 #include "Scenario/Editor/ScenarioCorridorPreviewActor.h"
+#include "Scenario/ScenarioCityBlockMaterializer.h"
 #include "Scenario/ScenarioCorridorGeometry.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSampler.h"
@@ -48,6 +49,10 @@ namespace
 	const FVector DefaultRobotGoalLocationCm(600.0, 0.0, 0.0);
 	const FString CorridorVertexHandleIdPrefix(TEXT("corridor_vertex_"));
 	const FString CorridorSegmentHandleIdPrefix(TEXT("corridor_segment_"));
+	// Prefix reserved for side-band GroundRegions emitted by the scenario sample compiler.
+	const FString AuthoringGeneratedCityRegionIdPrefix(TEXT("generated_city_"));
+	// Generated road visuals are delegated to CityBuildings meshes in editor preview.
+	const FString AuthoringGeneratedRoadSurfaceId(TEXT("road"));
 	const double CorridorVertexHandleHeightCm = 0.0;
 	const double CorridorSegmentHandleHeightCm = CorridorVertexHandleHeightCm;
 	const double CorridorVertexHandleScale = 0.28;
@@ -67,6 +72,25 @@ namespace
 		paramValue.BoolValue = value;
 		return paramValue;
 	}
+
+	// Keeps generated city side bands visible while authored spline preview owns the core Corridor strip.
+	bool ShouldSpawnEditorPreviewGroundRegion(
+		const FScenarioGroundRegionSpec& regionSpec,
+		bool bHasSplineCorridorPreview,
+		bool bIsAuthoredGroundRegion)
+	{
+		if (!bHasSplineCorridorPreview || bIsAuthoredGroundRegion)
+		{
+			return true;
+		}
+
+		if (!regionSpec.RegionId.StartsWith(AuthoringGeneratedCityRegionIdPrefix))
+		{
+			return false;
+		}
+
+		return !regionSpec.SurfaceId.Equals(AuthoringGeneratedRoadSurfaceId, ESearchCase::IgnoreCase);
+	}
 }
 
 UScenarioAuthoringSubsystem::UScenarioAuthoringSubsystem()
@@ -75,6 +99,7 @@ UScenarioAuthoringSubsystem::UScenarioAuthoringSubsystem()
 	PedestrianClass = AScenarioPedestrian::StaticClass();
 	StaticObstaclePropCatalog = UScenarioStaticObstaclePropCatalog::MakeDefaultCatalogReference();
 	CorridorSurfaceCatalog = UScenarioCorridorSurfaceCatalog::MakeDefaultCatalogReference();
+	CityBlockCatalog = UScenarioCityBlockCatalog::MakeDefaultCatalogReference();
 
 	static ConstructorHelpers::FClassFinder<AScenarioPedestrian> pedestrianBlueprintClass(
 		TEXT("/Game/Blueprints/Scenario/BP_ScenarioPedestrian"));
@@ -264,12 +289,8 @@ void UScenarioAuthoringSubsystem::GetCorridorSurfaceEntries(TArray<FScenarioCorr
 				if (surfaceCatalog->FindSurfaceEntryById(entry.SurfaceId, resolvedEntry))
 				{
 					outEntries.Add(resolvedEntry);
+					seenSurfaceIds.Add(entry.SurfaceId);
 				}
-				else
-				{
-					outEntries.Add(entry);
-				}
-				seenSurfaceIds.Add(entry.SurfaceId);
 			}
 		}
 	}
@@ -884,7 +905,7 @@ FTransform UScenarioAuthoringSubsystem::ResolveEditorGroundActorPlacementTransfo
 			locationCm.X = pointMeters.X / CentimetersToMeters;
 			locationCm.Y = pointMeters.Y / CentimetersToMeters;
 		}
-		locationCm.Z = ResolveCorridorSurfaceZOffsetCm(offsetMeters);
+		locationCm.Z = ResolveCorridorSurfaceTopZCm(offsetMeters);
 		resolvedTransform.SetLocation(locationCm);
 	}
 	return resolvedTransform;
@@ -897,18 +918,22 @@ bool UScenarioAuthoringSubsystem::CanPlaceEditorGroundActor(
 	outFailureReason.Reset();
 
 	const double locationZ = transform.GetLocation().Z;
-	if (locationZ < -KINDA_SMALL_NUMBER)
+	double surfaceTopZCm = 0.0;
+	const bool bHasCorridorSurface =
+		TryResolveCorridorSurfaceTopZCm(transform.GetLocation(), surfaceTopZCm);
+	const double minAllowedZCm = bHasCorridorSurface
+		? surfaceTopZCm - StaticObstacleGroundZToleranceCm
+		: 0.0;
+	const double maxAllowedZCm = bHasCorridorSurface
+		? surfaceTopZCm + StaticObstacleGroundZToleranceCm
+		: StaticObstacleGroundZToleranceCm;
+	if (locationZ < minAllowedZCm - KINDA_SMALL_NUMBER
+		|| locationZ > maxAllowedZCm + KINDA_SMALL_NUMBER)
 	{
 		outFailureReason = FString::Printf(
-			TEXT("Placement location Z must be 0.00 cm or higher. Current Z: %.2f."),
-			locationZ);
-		return false;
-	}
-	if (locationZ > StaticObstacleGroundZToleranceCm)
-	{
-		outFailureReason = FString::Printf(
-			TEXT("Placement location Z must be %.2f cm or lower. Current Z: %.2f."),
-			StaticObstacleGroundZToleranceCm,
+			TEXT("Placement location Z must be between %.2f cm and %.2f cm. Current Z: %.2f."),
+			minAllowedZCm,
+			maxAllowedZCm,
 			locationZ);
 		return false;
 	}
@@ -967,11 +992,11 @@ bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacleInternal(
 		return false;
 	}
 
-	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp);
 	const FTransform candidateTransform = ResolveStaticObstaclePlacementTransform(transform);
-	const FVector candidateLocation = candidateTransform.GetLocation();
-	double surfaceZOffsetCm = 0.0;
-	if (!TryResolveCorridorSurfaceZOffsetCm(transform.GetLocation(), surfaceZOffsetCm)
+	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp, candidateTransform);
+	const FVector candidateLocation = ComputePlacementBoundsCenter(candidateProp, candidateTransform);
+	double surfaceTopZCm = 0.0;
+	if (!TryResolveCorridorSurfaceTopZCm(transform.GetLocation(), surfaceTopZCm)
 		&& (candidateLocation.Z < -KINDA_SMALL_NUMBER || candidateLocation.Z > StaticObstacleGroundZToleranceCm))
 	{
 		outFailureReason = FString::Printf(
@@ -1019,7 +1044,8 @@ bool UScenarioAuthoringSubsystem::AddPedestrian(
 	outActor = nullptr;
 	outFailureReason.Reset();
 
-	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	const FTransform resolvedTransform = ResolveEditorGroundActorPlacementTransform(transform);
+	if (!CanPlaceEditorGroundActor(resolvedTransform, outFailureReason))
 	{
 		return false;
 	}
@@ -1030,7 +1056,7 @@ bool UScenarioAuthoringSubsystem::AddPedestrian(
 	}
 
 	const FString instanceId = GeneratePedestrianInstanceId();
-	outSpec = MakePedestrianSpec(instanceId, archetypeId, transform);
+	outSpec = MakePedestrianSpec(instanceId, archetypeId, resolvedTransform);
 
 	if (!SpawnEditorPedestrianActor(outSpec, outActor, outFailureReason))
 	{
@@ -1047,7 +1073,7 @@ bool UScenarioAuthoringSubsystem::AddPedestrian(
 		TEXT("Added pedestrian | InstanceId: %s | AssetId: %s | Location: %s"),
 		*outSpec.InstanceId,
 		*outSpec.AssetId,
-		*transform.GetLocation().ToCompactString());
+		*resolvedTransform.GetLocation().ToCompactString());
 
 	return true;
 }
@@ -1176,6 +1202,13 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 	*placement = MakeStaticObstaclePlacement(instanceId, propId, resolvedTransform);
 	placement->bAllowBlocking = bAllowBlocking;
 	record->Transform = resolvedTransform;
+	FScenarioStaticObstaclePropEntry propEntry;
+	if (TryFindStaticObstacleProp(propId, propEntry))
+	{
+		record->PlacementBoundsCenter = ComputePlacementBoundsCenter(propEntry, resolvedTransform);
+		record->PlacementRadius2D = ComputePlacementRadius2D(propEntry);
+		record->PlacementHalfExtent2D = ComputePlacementHalfExtent2D(propEntry, resolvedTransform);
+	}
 	actor->SetActorTransform(resolvedTransform, false, nullptr, ETeleportType::TeleportPhysics);
 
 	bDirty = true;
@@ -3122,32 +3155,17 @@ bool UScenarioAuthoringSubsystem::TryResolveCorridorPoseMeters(
 	return true;
 }
 
-double UScenarioAuthoringSubsystem::ResolveCorridorSurfaceZOffsetCm(double offsetMeters) const
+double UScenarioAuthoringSubsystem::ResolveCorridorSurfaceTopZCm(double offsetMeters) const
 {
-	const double walkwayWidthMeters = GetFixedTemplateNumber(DraftScenario.Corridor.WalkwayWidthMeters, 3.0);
-	const double halfWalkwayWidthMeters = FMath::Max(walkwayWidthMeters, 0.0) * 0.5;
-	if (offsetMeters <= halfWalkwayWidthMeters + KINDA_SMALL_NUMBER)
-	{
-		return 0.0;
-	}
-
-	double curbSideWidthMeters = 0.0;
-	for (const FScenarioTemplateLaneRule& laneRule : DraftScenario.Corridor.CurbSide)
-	{
-		curbSideWidthMeters += FMath::Max(GetFixedTemplateNumber(laneRule.WidthMeters, 0.0), 0.0);
-	}
-
-	return FScenarioCorridorGeometry::ResolveSurfaceZOffsetForOffsetMeters(
-		offsetMeters,
-		halfWalkwayWidthMeters,
-		curbSideWidthMeters);
+	(void)offsetMeters;
+	return FScenarioCorridorGeometry::DefaultSurfaceTopZCm;
 }
 
-bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceZOffsetCm(
+bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceTopZCm(
 	const FVector& locationCm,
-	double& outSurfaceZOffsetCm) const
+	double& outSurfaceTopZCm) const
 {
-	outSurfaceZOffsetCm = 0.0;
+	outSurfaceTopZCm = 0.0;
 
 	double alongMeters = 0.0;
 	double offsetMeters = 0.0;
@@ -3157,7 +3175,7 @@ bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceZOffsetCm(
 		return false;
 	}
 
-	outSurfaceZOffsetCm = ResolveCorridorSurfaceZOffsetCm(offsetMeters);
+	outSurfaceTopZCm = ResolveCorridorSurfaceTopZCm(offsetMeters);
 	return true;
 }
 
@@ -3233,15 +3251,17 @@ double UScenarioAuthoringSubsystem::ComputePlacementRadius2D(const FScenarioStat
 		return propEntry.SafetyRadius;
 	}
 
-	return FMath::Sqrt(FMath::Square(propEntry.FallbackBoxExtent.X) + FMath::Square(propEntry.FallbackBoxExtent.Y));
+	const FVector boundsExtentCm = propEntry.ResolveBoundsExtentCm();
+	return FMath::Sqrt(FMath::Square(boundsExtentCm.X) + FMath::Square(boundsExtentCm.Y));
 }
 
 FVector2D UScenarioAuthoringSubsystem::ComputePlacementHalfExtent2D(
 	const FScenarioStaticObstaclePropEntry& propEntry) const
 {
+	const FVector boundsExtentCm = propEntry.ResolveBoundsExtentCm();
 	const FVector2D halfExtent(
-		FMath::Max(propEntry.FallbackBoxExtent.X, 0.0),
-		FMath::Max(propEntry.FallbackBoxExtent.Y, 0.0));
+		FMath::Max(boundsExtentCm.X, 0.0),
+		FMath::Max(boundsExtentCm.Y, 0.0));
 
 	if (halfExtent.X > KINDA_SMALL_NUMBER || halfExtent.Y > KINDA_SMALL_NUMBER)
 	{
@@ -3252,12 +3272,38 @@ FVector2D UScenarioAuthoringSubsystem::ComputePlacementHalfExtent2D(
 	return FVector2D(fallbackRadius, fallbackRadius);
 }
 
+FVector2D UScenarioAuthoringSubsystem::ComputePlacementHalfExtent2D(
+	const FScenarioStaticObstaclePropEntry& propEntry,
+	const FTransform& transform) const
+{
+	FVector2D localHalfExtent = ComputePlacementHalfExtent2D(propEntry);
+	const FVector scale = transform.GetScale3D();
+	localHalfExtent.X *= FMath::Abs(scale.X);
+	localHalfExtent.Y *= FMath::Abs(scale.Y);
+
+	const double yawRadians = FMath::DegreesToRadians(transform.GetRotation().Rotator().Yaw);
+	const double cosYaw = FMath::Abs(FMath::Cos(yawRadians));
+	const double sinYaw = FMath::Abs(FMath::Sin(yawRadians));
+	return FVector2D(
+		cosYaw * localHalfExtent.X + sinYaw * localHalfExtent.Y,
+		sinYaw * localHalfExtent.X + cosYaw * localHalfExtent.Y);
+}
+
+FVector UScenarioAuthoringSubsystem::ComputePlacementBoundsCenter(
+	const FScenarioStaticObstaclePropEntry& propEntry,
+	const FTransform& transform) const
+{
+	return transform.TransformPosition(propEntry.ResolveBoundsCenterOffsetCm());
+}
+
 bool UScenarioAuthoringSubsystem::StaticObstacleFootprintsOverlap(
 	const FVector& candidateLocation,
 	const FVector2D& candidateHalfExtent,
 	const FScenarioAuthoringStaticObstacleRecord& record) const
 {
-	const FVector recordLocation = record.Transform.GetLocation();
+	const FVector recordLocation = record.PlacementBoundsCenter.IsNearlyZero()
+		? record.Transform.GetLocation()
+		: record.PlacementBoundsCenter;
 	FVector2D recordHalfExtent = record.PlacementHalfExtent2D;
 	if (recordHalfExtent.X <= KINDA_SMALL_NUMBER && recordHalfExtent.Y <= KINDA_SMALL_NUMBER)
 	{
@@ -3544,18 +3590,18 @@ FVector UScenarioAuthoringSubsystem::ResolveRobotAnchorLocationCm(
 		const double offsetMeters = GetFixedTemplateNumber(
 			anchor.OffsetMeters,
 			bGoalAnchor ? DefaultRobotGoalLocationCm.Y * CentimetersToMeters : DefaultRobotStartLocationCm.Y * CentimetersToMeters);
-		const double surfaceZOffsetCm = ResolveCorridorSurfaceZOffsetCm(offsetMeters);
+		const double surfaceTopZCm = ResolveCorridorSurfaceTopZCm(offsetMeters);
 		FVector2D pointMeters;
 		double yawDegrees = 0.0;
 		if (TryResolveCorridorPoseMeters(alongMeters, offsetMeters, pointMeters, yawDegrees))
 		{
-			return FVector(pointMeters.X / CentimetersToMeters, pointMeters.Y / CentimetersToMeters, surfaceZOffsetCm);
+			return FVector(pointMeters.X / CentimetersToMeters, pointMeters.Y / CentimetersToMeters, surfaceTopZCm);
 		}
 
 		return FVector(
 			alongMeters / CentimetersToMeters,
 			offsetMeters / CentimetersToMeters,
-			surfaceZOffsetCm);
+			surfaceTopZCm);
 	}
 
 	if (DraftScenario.Corridor.Axis.PointsMeters.Num() >= 2)
@@ -3616,7 +3662,7 @@ FScenarioPlaceableInstanceSpec UScenarioAuthoringSubsystem::MakeStaticObstacleSp
 		locationCm = FVector(
 			pointMeters.X / CentimetersToMeters,
 			pointMeters.Y / CentimetersToMeters,
-			ResolveCorridorSurfaceZOffsetCm(offsetMeters));
+			ResolveCorridorSurfaceTopZCm(offsetMeters));
 	}
 	spec.Transform = FTransform(FRotator(0.0, FRotator::ClampAxis(axisYawDegrees + localYawDegrees), 0.0), locationCm);
 	return spec;
@@ -3725,6 +3771,9 @@ void UScenarioAuthoringSubsystem::ClearGeneratedEditorPreviewActors()
 		}
 	}
 
+	// Generated CityBuildings preview actors are visual-only and share cleanup with other preview actors.
+	FScenarioCityBlockMaterializer::DestroySpawnedActors(CityBlockPreviewActors);
+
 	if (IsValid(CorridorPreviewActor))
 	{
 		CorridorPreviewActor->Destroy();
@@ -3737,6 +3786,7 @@ void UScenarioAuthoringSubsystem::ClearGeneratedEditorPreviewActors()
 	StaticObstacleActors.Reset();
 	PedestrianActors.Reset();
 	GroundRegionActors.Reset();
+	CityBlockPreviewActors.Reset();
 	NextStaticObstacleIndex = 1;
 	NextPedestrianIndex = 1;
 	NextGroundRegionIndex = 1;
@@ -3857,7 +3907,10 @@ bool UScenarioAuthoringSubsystem::RefreshGeneratedEditorPreviewActorsFromDraft(T
 
 	for (const FScenarioGroundRegionSpec& regionSpec : previewWorldSpec.GroundRegions)
 	{
-		if (bHasSplineCorridorPreview && !ContainsGroundRegionId(regionSpec.RegionId))
+		if (!ShouldSpawnEditorPreviewGroundRegion(
+				regionSpec,
+				bHasSplineCorridorPreview,
+				ContainsGroundRegionId(regionSpec.RegionId)))
 		{
 			continue;
 		}
@@ -3873,6 +3926,17 @@ bool UScenarioAuthoringSubsystem::RefreshGeneratedEditorPreviewActorsFromDraft(T
 			bSucceeded = false;
 		}
 	}
+
+	const UScenarioCityBlockCatalog* cityBlockCatalog = CityBlockCatalog.LoadSynchronous();
+	FScenarioCityBlockMaterializationOptions cityBlockOptions;
+	cityBlockOptions.LogContext = TEXT("ScenarioEditor");
+	cityBlockOptions.CatalogDebugName = CityBlockCatalog.ToSoftObjectPath().ToString();
+	FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+		GetWorld(),
+		cityBlockCatalog,
+		previewWorldSpec.GroundRegions,
+		CityBlockPreviewActors,
+		cityBlockOptions);
 
 	return bSucceeded;
 }
@@ -4436,8 +4500,9 @@ void UScenarioAuthoringSubsystem::AddStaticObstacleViewRecord(
 	record.InstanceId = spec.InstanceId;
 	record.PropId = FName(*spec.AssetId);
 	record.Transform = spec.Transform;
+	record.PlacementBoundsCenter = ComputePlacementBoundsCenter(propEntry, spec.Transform);
 	record.PlacementRadius2D = ComputePlacementRadius2D(propEntry);
-	record.PlacementHalfExtent2D = ComputePlacementHalfExtent2D(propEntry);
+	record.PlacementHalfExtent2D = ComputePlacementHalfExtent2D(propEntry, spec.Transform);
 
 	StaticObstacleRecords.Add(record);
 	StaticObstacleActors.Add(spec.InstanceId, actor);

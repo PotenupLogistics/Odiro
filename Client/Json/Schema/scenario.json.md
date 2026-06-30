@@ -43,7 +43,7 @@ Numeric field는 고정값 또는 range를 쓸 수 있다.
 String field는 고정값 또는 choices를 쓸 수 있다.
 
 ```json
-"replaced_by": { "choices": ["grass", "road"] }
+"replaced_by": { "choices": ["walkway", "road"] }
 ```
 
 Range와 choices는 `runs/<RunId>/episodes/<EpisodeId>/scenario.json` 생성 시 seed로 확정된다.
@@ -70,7 +70,7 @@ Range와 choices는 `runs/<RunId>/episodes/<EpisodeId>/scenario.json` 생성 시
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
 | `surface` | string | 예 | `environment-catalog.md`의 surface id. |
-| `width_m` | number or range | 예 | Lane 폭. 단위 m. |
+| `width_m` | number or range | 예 | Lane 폭 hint. 현재 generated city에서는 값을 수용하지만 고정 building/curb/2-lane road 폭을 사용한다. |
 
 ### corridor.segments[]
 

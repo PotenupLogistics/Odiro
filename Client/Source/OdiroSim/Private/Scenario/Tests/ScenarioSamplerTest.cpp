@@ -86,7 +86,7 @@ namespace
 		Placement.PropId = TEXT("crate");
 		Placement.At.SegmentId = TEXT("main");
 		Placement.At.AlongMeters = MakeSamplerTestFixedNumber(4.0);
-		Placement.At.OffsetMeters = MakeSamplerTestFixedNumber(0.25);
+		Placement.At.OffsetMeters = MakeSamplerTestFixedNumber(0.75);
 		Placement.At.LaneId = TEXT("curb_edge");
 		Placement.YawDegrees = MakeSamplerTestFixedNumber(15.0);
 		Document.Obstacles.Placements.Add(Placement);
@@ -132,7 +132,7 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("sampler succeeds"), Result.bSuccess);
 	TestEqual(TEXT("layout count"), Result.Document.Scenario.Semantic.Layout.Num(), 1);
-	TestEqual(TEXT("layout lane count"), Result.Document.Scenario.Semantic.Layout[0].Lanes.Num(), 3);
+	TestEqual(TEXT("layout lane count"), Result.Document.Scenario.Semantic.Layout[0].Lanes.Num(), 5);
 	TestEqual(TEXT("robot start along"), Result.Document.Scenario.Semantic.Robot.Start.AlongMeters, 0.0);
 	TestEqual(TEXT("robot goal along"), Result.Document.Scenario.Semantic.Robot.Goal.AlongMeters, 10.0);
 	TestEqual(TEXT("static obstacle count"), Result.Document.Scenario.Semantic.StaticObstacles.Num(), 1);
@@ -140,7 +140,7 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 	const FScenarioSampleStaticObstacle& Obstacle = Result.Document.Scenario.Semantic.StaticObstacles[0];
 	TestEqual(TEXT("obstacle id"), Obstacle.ObstacleId, FString(TEXT("crate_curb")));
 	TestEqual(TEXT("obstacle placed_by"), Obstacle.PlacedBy, FString(TEXT("crate_curb")));
-	TestEqual(TEXT("curb edge relative offset resolves to axis offset"), Obstacle.OffsetMeters, 1.25);
+	TestEqual(TEXT("curb edge relative offset resolves to axis offset"), Obstacle.OffsetMeters, 1.75);
 	TestEqual(TEXT("obstacle yaw"), Obstacle.YawDegrees, 15.0);
 	TestEqual(TEXT("clear width profile count"), Result.Document.Scenario.Semantic.ClearWidthProfile.Num(), 1);
 	TestEqual(TEXT("min clear width"), Result.Document.Scenario.Semantic.Summary.GlobalMinClearWidthMeters, 1.5);
@@ -165,12 +165,33 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 		return false;
 	}
 
-	TestEqual(TEXT("runtime corridor lane count"), RuntimeCorridor.Layout[0].Lanes.Num(), 3);
-	TestEqual(TEXT("generated ground regions"), CompileResult.WorldSpec.GroundRegions.Num(), 0);
-	TestTrue(TEXT("runtime sidewalk surface preserved"), RuntimeCorridor.Layout[0].Lanes.ContainsByPredicate(
+	TestEqual(TEXT("runtime corridor lane count"), RuntimeCorridor.Layout[0].Lanes.Num(), 5);
+	TestEqual(TEXT("generated ground regions"), CompileResult.WorldSpec.GroundRegions.Num(), 3);
+	TestTrue(TEXT("generated building-side expansion"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& Region)
+		{
+			return Region.RegionId.Contains(TEXT("building_expansion"))
+				&& Region.SurfaceId == TEXT("walkway")
+				&& Region.RegionType == EScenarioGroundRegionType::Walkable;
+		}));
+	TestFalse(TEXT("generated building footprint is not a GroundRegion"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& Region)
+		{
+			return Region.RegionId.Contains(TEXT("building"))
+				&& Region.SurfaceId == TEXT("building")
+				&& Region.RegionType == EScenarioGroundRegionType::Blocked;
+		}));
+	TestTrue(TEXT("generated road band"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& Region)
+		{
+			return Region.RegionId.Contains(TEXT("road_2lane"))
+				&& Region.SurfaceId == TEXT("road")
+				&& Region.RegionType == EScenarioGroundRegionType::Penalty;
+		}));
+	TestTrue(TEXT("runtime walkway surface preserved"), RuntimeCorridor.Layout[0].Lanes.ContainsByPredicate(
 		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
 		{
-			return Lane.SurfaceId == TEXT("sidewalk");
+			return Lane.SurfaceId == TEXT("walkway");
 		}));
 	TestTrue(TEXT("runtime road surface preserved"), RuntimeCorridor.Layout[0].Lanes.ContainsByPredicate(
 		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
@@ -181,6 +202,12 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
 		{
 			return Lane.SurfaceId == TEXT("building");
+		}));
+	TestTrue(TEXT("runtime fixed road lane width"), RuntimeCorridor.Layout[0].Lanes.ContainsByPredicate(
+		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
+		{
+			return Lane.LaneId == TEXT("road_2lane")
+				&& FMath::IsNearlyEqual(Lane.OffsetRangeMeters.MaxMeters - Lane.OffsetRangeMeters.MinMeters, 6.4);
 		}));
 	TestEqual(TEXT("runtime placeables"), CompileResult.WorldSpec.Placeables.Num(), 2);
 	const FScenarioPlaceableInstanceSpec* RobotSpec = CompileResult.WorldSpec.Placeables.FindByPredicate(
@@ -333,7 +360,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FScenarioSamplerRejectsObstacleOutsideCorridorSurfaceTest::RunTest(const FString& Parameters)
 {
 	FScenarioDocument ScenarioDocument = MakeSamplerTestScenario();
-	ScenarioDocument.Obstacles.Placements[0].At.OffsetMeters = MakeSamplerTestFixedNumber(2.5);
+	ScenarioDocument.Obstacles.Placements[0].At.OffsetMeters = MakeSamplerTestFixedNumber(8.0);
 
 	const FScenarioSamplerResult Result =
 		FScenarioSampler::GenerateSample(ScenarioDocument, MakeSamplerTestRequest());

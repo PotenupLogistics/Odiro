@@ -95,7 +95,7 @@ struct ODIROSIM_API FScenarioTemplateLaneRule
 {
 	GENERATED_BODY()
 
-	// Surface catalog id such as sidewalk, grass, road, wall, or building.
+	// Surface catalog id such as walkway, road, or building.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
 	FString SurfaceId;
 

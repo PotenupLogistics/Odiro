@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Scenario/Data/ScenarioCityBlockCatalog.h"
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Scenario/Data/ScenarioStaticObstaclePropCatalog.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
@@ -73,6 +74,10 @@ public:
 	// Catalog that resolves Corridor surface ids into editor-preview and semantic surface metadata.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Catalog")
 	TSoftObjectPtr<UScenarioCorridorSurfaceCatalog> CorridorSurfaceCatalog;
+
+	// Catalog of visual CityBuildings blocks spawned from generated city GroundRegions for editor preview parity.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Catalog")
+	TSoftObjectPtr<UScenarioCityBlockCatalog> CityBlockCatalog;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "0.0"))
 	double StaticObstacleGroundZToleranceCm = 5.0;
@@ -439,8 +444,18 @@ private:
 		const FTransform& transform,
 		const FString& ignoredInstanceId,
 		FString& outFailureReason) const;
+	// Returns the 2D safety radius used for editor static-obstacle preview and records.
 	double ComputePlacementRadius2D(const FScenarioStaticObstaclePropEntry& propEntry) const;
+	// Returns the unrotated 2D half extent from the prop catalog bounds.
 	FVector2D ComputePlacementHalfExtent2D(const FScenarioStaticObstaclePropEntry& propEntry) const;
+	// Returns the transformed 2D half extent used by overlap checks.
+	FVector2D ComputePlacementHalfExtent2D(
+		const FScenarioStaticObstaclePropEntry& propEntry,
+		const FTransform& transform) const;
+	// Returns the world center of the prop catalog bounds for one transform.
+	FVector ComputePlacementBoundsCenter(
+		const FScenarioStaticObstaclePropEntry& propEntry,
+		const FTransform& transform) const;
 	bool StaticObstacleFootprintsOverlap(
 		const FVector& candidateLocation,
 		const FVector2D& candidateHalfExtent,
@@ -546,10 +561,10 @@ private:
 		double offsetMeters,
 		FVector2D& outPointMeters,
 		double& outYawDegrees) const;
-	// Corridor offset이 속한 surface band의 Z offset을 계산.
-	double ResolveCorridorSurfaceZOffsetCm(double offsetMeters) const;
-	// World 위치가 놓일 Corridor surface의 Z offset을 계산.
-	bool TryResolveCorridorSurfaceZOffsetCm(const FVector& locationCm, double& outSurfaceZOffsetCm) const;
+	// Resolves the world Z height of the Corridor surface at an offset from the route axis.
+	double ResolveCorridorSurfaceTopZCm(double offsetMeters) const;
+	// Resolves the world Z height of the Corridor surface under a world location.
+	bool TryResolveCorridorSurfaceTopZCm(const FVector& locationCm, double& outSurfaceTopZCm) const;
 	// Draft template을 editor preview용 world spec으로 투영함.
 	FScenarioWorldSpec BuildDraftWorldSpecForPreview(TArray<FString>* outDiagnostics = nullptr) const;
 	// Editor preview projection이 사용하는 run config와 seed 값을 draft state로 맞춤.
@@ -655,6 +670,10 @@ private:
 
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AScenarioGroundRegion>> GroundRegionActors;
+
+	// Visual CityBuildings actors generated for the editor preview but excluded from authoring selection state.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AActor>> CityBlockPreviewActors;
 
 	// Editor-only spline preview for Corridor lane surfaces.
 	UPROPERTY(Transient)

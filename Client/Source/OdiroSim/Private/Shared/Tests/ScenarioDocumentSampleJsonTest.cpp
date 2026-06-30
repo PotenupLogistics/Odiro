@@ -98,7 +98,7 @@ namespace
 		Lane.LaneId = TEXT("walkway");
 		Lane.OffsetRangeMeters.MinMeters = -1.0;
 		Lane.OffsetRangeMeters.MaxMeters = 1.0;
-		Lane.SurfaceId = TEXT("sidewalk");
+		Lane.SurfaceId = TEXT("walkway");
 		Lane.Type = EScenarioSampleLaneType::Walkable;
 
 		FScenarioSampleLayoutEntry LayoutEntry;
@@ -182,7 +182,7 @@ bool FScenarioDocumentJsonInvalidProjectScenarioRejectedTest::RunTest(const FStr
 {
   "schema": "scenario",
   "version": 1,
-  "scenario_id": "invalid_blank_sidewalk",
+  "scenario_id": "invalid_blank_walkway",
   "intent": "Invalid project scenario.",
   "corridor": {
     "segments": [
@@ -191,7 +191,7 @@ bool FScenarioDocumentJsonInvalidProjectScenarioRejectedTest::RunTest(const FStr
         "along_range_m": [0.0, 12.0]
       }
     ],
-    "building_side": [{ "surface": "wall", "width_m": 0.5 }],
+    "building_side": [{ "surface": "building", "width_m": 0.5 }],
     "curb_side": [{ "surface": "road", "width_m": 4.0 }]
   },
   "obstacles": { "min_clear_width_m": 0.9, "placements": [] },
@@ -342,7 +342,7 @@ bool FScenarioSampleJsonParseValidTest::RunTest(const FString& Parameters)
         {
           "along_range_m": [0, 10],
           "segment": "entry",
-          "lanes": [{ "lane": "walkway", "offset_range_m": [-1, 1], "surface": "sidewalk", "type": "walkable" }]
+          "lanes": [{ "lane": "walkway", "offset_range_m": [-1, 1], "surface": "walkway", "type": "walkable" }]
         }
       ],
       "static_obstacles": [],

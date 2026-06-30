@@ -3,6 +3,7 @@
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 
 #include "Misc/AutomationTest.h"
+#include "Scenario/ScenarioCorridorGeometry.h"
 #include "Shared/ScenarioSampleJson.h"
 
 namespace
@@ -49,15 +50,22 @@ namespace
 		WalkwayLane.LaneId = TEXT("walkway");
 		WalkwayLane.OffsetRangeMeters.MinMeters = -1.0;
 		WalkwayLane.OffsetRangeMeters.MaxMeters = 1.0;
-		WalkwayLane.SurfaceId = TEXT("sidewalk");
+		WalkwayLane.SurfaceId = TEXT("walkway");
 		WalkwayLane.Type = EScenarioSampleLaneType::Walkable;
 
 		FScenarioSampleLayoutLane CurbLane;
 		CurbLane.LaneId = TEXT("curb_edge");
 		CurbLane.OffsetRangeMeters.MinMeters = 1.0;
-		CurbLane.OffsetRangeMeters.MaxMeters = 2.0;
+		CurbLane.OffsetRangeMeters.MaxMeters = 1.5;
 		CurbLane.SurfaceId = TEXT("road");
-		CurbLane.Type = EScenarioSampleLaneType::Penalty;
+		CurbLane.Type = EScenarioSampleLaneType::Blocked;
+
+		FScenarioSampleLayoutLane RoadLane;
+		RoadLane.LaneId = TEXT("road_2lane");
+		RoadLane.OffsetRangeMeters.MinMeters = 1.5;
+		RoadLane.OffsetRangeMeters.MaxMeters = 7.9;
+		RoadLane.SurfaceId = TEXT("road");
+		RoadLane.Type = EScenarioSampleLaneType::Penalty;
 
 		FScenarioSampleLayoutEntry LayoutEntry;
 		LayoutEntry.AlongRangeMeters.StartMeters = 0.0;
@@ -65,6 +73,7 @@ namespace
 		LayoutEntry.SegmentId = TEXT("main");
 		LayoutEntry.Lanes.Add(WalkwayLane);
 		LayoutEntry.Lanes.Add(CurbLane);
+		LayoutEntry.Lanes.Add(RoadLane);
 		Semantic.Layout.Add(LayoutEntry);
 
 		FScenarioSampleStaticObstacle Obstacle;
@@ -74,7 +83,7 @@ namespace
 		Obstacle.ObstacleClass = EScenarioSampleObstacleClass::Blocking;
 		Obstacle.SensorProfile = TEXT("solid");
 		Obstacle.AlongMeters = 4.0;
-		Obstacle.OffsetMeters = 1.5;
+		Obstacle.OffsetMeters = 1.75;
 		Obstacle.YawDegrees = 15.0;
 		Obstacle.FootprintMeters = FVector2D(0.5, 0.5);
 		Obstacle.PlacedBy = TEXT("crate_fixed");
@@ -93,6 +102,163 @@ namespace
 		return Document;
 	}
 
+	// Creates a two-segment right-angle sample whose building side encloses one rectangular city block.
+	FScenarioSampleDocument MakeRightAngleBuildingExpansionSampleDocument()
+	{
+		FScenarioSampleDocument Document;
+		Document.Sample.SampleId = TEXT("000043");
+		Document.Sample.ScenarioId = TEXT("right_angle_building_expansion_sample_000043");
+		Document.Sample.Source.TemplateRef = TEXT("templates/right_angle_building_expansion.template.json");
+		Document.Sample.Source.TemplateHash = TEXT("sha256:templatehash0043");
+		Document.Sample.Source.ProfileRef = TEXT("experiments/right_angle/profile.json");
+		Document.Sample.Source.ProfileHash = TEXT("sha256:profilehash0043");
+		Document.Sample.Source.SettingRef = TEXT("experiments/right_angle/setting.json");
+		Document.Sample.Source.SettingHash = TEXT("sha256:settinghash0043");
+		Document.Sample.Source.Seed = 4343;
+		Document.Sample.Source.GeneratorVersion = TEXT("0.1.0");
+
+		FScenarioSampleParamValue TimeLimit;
+		TimeLimit.Type = EScenarioSampleParamValueType::Float;
+		TimeLimit.FloatValue = 45.0;
+		Document.Scenario.Params.Add(TEXT("max_duration_s"), TimeLimit);
+
+		FScenarioSampleSemantic& Semantic = Document.Scenario.Semantic;
+		Semantic.RouteAxis.OriginXYMeters = FVector2D::ZeroVector;
+		Semantic.RouteAxis.HeadingDegrees = 0.0;
+		Semantic.RouteAxis.PointsMeters = {
+			FVector2D(0.0, 40.0),
+			FVector2D(60.0, 40.0),
+			FVector2D(60.0, 0.0)
+		};
+		Semantic.RouteAxis.LengthMeters = 100.0;
+
+		Semantic.Robot.Start.SegmentId = TEXT("east_straight");
+		Semantic.Robot.Start.AlongMeters = 1.0;
+		Semantic.Robot.Start.OffsetMeters = 0.0;
+		Semantic.Robot.Start.LaneId = TEXT("walkway");
+		Semantic.Robot.Start.HeadingDegrees = 0.0;
+		Semantic.Robot.Start.SourceAnchorType = EScenarioTemplateRobotAnchorType::Entry;
+		Semantic.Robot.Goal.SegmentId = TEXT("south_straight");
+		Semantic.Robot.Goal.AlongMeters = 99.0;
+		Semantic.Robot.Goal.OffsetMeters = 0.0;
+		Semantic.Robot.Goal.LaneId = TEXT("walkway");
+		Semantic.Robot.Goal.HeadingDegrees = -90.0;
+		Semantic.Robot.Goal.SourceAnchorType = EScenarioTemplateRobotAnchorType::Exit;
+
+		FScenarioSampleLayoutLane WalkwayLane;
+		WalkwayLane.LaneId = TEXT("walkway");
+		WalkwayLane.OffsetRangeMeters.MinMeters = -1.5;
+		WalkwayLane.OffsetRangeMeters.MaxMeters = 1.5;
+		WalkwayLane.SurfaceId = TEXT("walkway");
+		WalkwayLane.Type = EScenarioSampleLaneType::Walkable;
+
+		FScenarioSampleLayoutLane BuildingExpansionLane;
+		BuildingExpansionLane.LaneId = TEXT("building_walkway_extension");
+		BuildingExpansionLane.OffsetRangeMeters.MinMeters = -6.5;
+		BuildingExpansionLane.OffsetRangeMeters.MaxMeters = -1.5;
+		BuildingExpansionLane.SurfaceId = TEXT("walkway");
+		BuildingExpansionLane.Type = EScenarioSampleLaneType::Walkable;
+
+		FScenarioSampleLayoutLane BuildingLane;
+		BuildingLane.LaneId = TEXT("building_edge");
+		BuildingLane.OffsetRangeMeters.MinMeters = -16.5;
+		BuildingLane.OffsetRangeMeters.MaxMeters = -6.5;
+		BuildingLane.SurfaceId = TEXT("building");
+		BuildingLane.Type = EScenarioSampleLaneType::Blocked;
+
+		FScenarioSampleLayoutEntry EastLayoutEntry;
+		EastLayoutEntry.AlongRangeMeters.StartMeters = 0.0;
+		EastLayoutEntry.AlongRangeMeters.EndMeters = 60.0;
+		EastLayoutEntry.SegmentId = TEXT("east_straight");
+		EastLayoutEntry.Lanes.Add(WalkwayLane);
+		EastLayoutEntry.Lanes.Add(BuildingExpansionLane);
+		EastLayoutEntry.Lanes.Add(BuildingLane);
+		Semantic.Layout.Add(EastLayoutEntry);
+
+		FScenarioSampleLayoutEntry SouthLayoutEntry;
+		SouthLayoutEntry.AlongRangeMeters.StartMeters = 60.0;
+		SouthLayoutEntry.AlongRangeMeters.EndMeters = 100.0;
+		SouthLayoutEntry.SegmentId = TEXT("south_straight");
+		SouthLayoutEntry.Lanes.Add(WalkwayLane);
+		SouthLayoutEntry.Lanes.Add(BuildingExpansionLane);
+		SouthLayoutEntry.Lanes.Add(BuildingLane);
+		Semantic.Layout.Add(SouthLayoutEntry);
+
+		Semantic.Summary.TotalLengthMeters = 100.0;
+		return Document;
+	}
+
+	// Creates a two-segment skew sample whose building side is represented by one convex polygon.
+	FScenarioSampleDocument MakeSkewBuildingExpansionSampleDocument()
+	{
+		FScenarioSampleDocument Document = MakeRightAngleBuildingExpansionSampleDocument();
+		Document.Sample.SampleId = TEXT("000044");
+		Document.Sample.ScenarioId = TEXT("skew_building_expansion_sample_000044");
+		Document.Sample.Source.TemplateRef = TEXT("templates/skew_building_expansion.template.json");
+		Document.Sample.Source.TemplateHash = TEXT("sha256:templatehash0044");
+		Document.Sample.Source.ProfileRef = TEXT("experiments/skew/profile.json");
+		Document.Sample.Source.ProfileHash = TEXT("sha256:profilehash0044");
+		Document.Sample.Source.SettingRef = TEXT("experiments/skew/setting.json");
+		Document.Sample.Source.SettingHash = TEXT("sha256:settinghash0044");
+		Document.Sample.Source.Seed = 4444;
+
+		FScenarioSampleSemantic& Semantic = Document.Scenario.Semantic;
+		Semantic.RouteAxis.PointsMeters = {
+			FVector2D(0.0, 40.0),
+			FVector2D(60.0, 40.0),
+			FVector2D(100.0, 10.0)
+		};
+		Semantic.RouteAxis.LengthMeters = 110.0;
+		Semantic.Robot.Goal.AlongMeters = 109.0;
+		Semantic.Robot.Goal.HeadingDegrees = -36.8698976458;
+		Semantic.Layout[1].AlongRangeMeters.EndMeters = 110.0;
+		Semantic.Summary.TotalLengthMeters = 110.0;
+		return Document;
+	}
+
+	// Creates a right-angle sample whose first arm is split across two layout entries.
+	FScenarioSampleDocument MakeSplitRightAngleBuildingExpansionSampleDocument()
+	{
+		FScenarioSampleDocument Document = MakeRightAngleBuildingExpansionSampleDocument();
+		FScenarioSampleSemantic& Semantic = Document.Scenario.Semantic;
+		const FScenarioSampleLayoutEntry EastLayoutEntry = Semantic.Layout[0];
+		const FScenarioSampleLayoutEntry SouthLayoutEntry = Semantic.Layout[1];
+
+		Semantic.Layout.Reset();
+
+		FScenarioSampleLayoutEntry EastFirstLayoutEntry = EastLayoutEntry;
+		EastFirstLayoutEntry.SegmentId = TEXT("east_straight_a");
+		EastFirstLayoutEntry.AlongRangeMeters.StartMeters = 0.0;
+		EastFirstLayoutEntry.AlongRangeMeters.EndMeters = 30.0;
+		Semantic.Layout.Add(EastFirstLayoutEntry);
+
+		FScenarioSampleLayoutEntry EastSecondLayoutEntry = EastLayoutEntry;
+		EastSecondLayoutEntry.SegmentId = TEXT("east_straight_b");
+		EastSecondLayoutEntry.AlongRangeMeters.StartMeters = 30.0;
+		EastSecondLayoutEntry.AlongRangeMeters.EndMeters = 60.0;
+		Semantic.Layout.Add(EastSecondLayoutEntry);
+
+		Semantic.Layout.Add(SouthLayoutEntry);
+		return Document;
+	}
+
+	// Creates a right-angle sample whose return arm is shorter than the reserved building frontage depth.
+	FScenarioSampleDocument MakeShortReturnBuildingExpansionSampleDocument()
+	{
+		FScenarioSampleDocument Document = MakeRightAngleBuildingExpansionSampleDocument();
+		FScenarioSampleSemantic& Semantic = Document.Scenario.Semantic;
+		Semantic.RouteAxis.PointsMeters = {
+			FVector2D(0.0, 10.0),
+			FVector2D(60.0, 10.0),
+			FVector2D(60.0, 0.0)
+		};
+		Semantic.RouteAxis.LengthMeters = 70.0;
+		Semantic.Robot.Goal.AlongMeters = 69.0;
+		Semantic.Layout[1].AlongRangeMeters.EndMeters = 70.0;
+		Semantic.Summary.TotalLengthMeters = 70.0;
+		return Document;
+	}
+
 	// Checks whether adapter validation emitted the expected diagnostic code.
 	bool HasAdapterDiagnostic(
 		const FScenarioCompileResult& Result,
@@ -103,6 +269,18 @@ namespace
 			{
 				return Diagnostic.Code == Code
 					&& Diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error;
+			});
+	}
+
+	// Finds one generated city GroundRegion by its deterministic adapter id.
+	const FScenarioGroundRegionSpec* FindGeneratedCityRegion(
+		const FScenarioCompileResult& Result,
+		const FString& RegionId)
+	{
+		return Result.WorldSpec.GroundRegions.FindByPredicate(
+			[&RegionId](const FScenarioGroundRegionSpec& Region)
+			{
+				return Region.RegionId == RegionId;
 			});
 	}
 }
@@ -127,14 +305,43 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	{
 		return false;
 	}
-	TestEqual(TEXT("generated ground region count"), Result.WorldSpec.GroundRegions.Num(), 0);
+	TestEqual(TEXT("generated ground region count"), Result.WorldSpec.GroundRegions.Num(), 2);
+	const FScenarioGroundRegionSpec* GeneratedCurbRegion =
+		FindGeneratedCityRegion(Result, TEXT("generated_city_main_upper_curb_00_00"));
+	TestNotNull(TEXT("generated curb region"), GeneratedCurbRegion);
+	if (GeneratedCurbRegion)
+	{
+		TestEqual(
+			TEXT("generated curb region type"),
+			static_cast<int32>(GeneratedCurbRegion->RegionType),
+			static_cast<int32>(EScenarioGroundRegionType::Penalty));
+		TestEqual(TEXT("generated curb surface"), GeneratedCurbRegion->SurfaceId, FString(TEXT("road")));
+		TestEqual(TEXT("generated curb collision tag"), GeneratedCurbRegion->CollisionTag, FString(TEXT("curb")));
+		TestEqual(TEXT("generated curb penalty kind"), GeneratedCurbRegion->PenaltyKind, FString(TEXT("curb")));
+		TestEqual(TEXT("generated curb width cm"), GeneratedCurbRegion->Size.Y, 50.0);
+		TestEqual(TEXT("generated curb top z cm"), GeneratedCurbRegion->Center.Z, 0.0);
+	}
+	const FScenarioGroundRegionSpec* GeneratedRoadRegion =
+		FindGeneratedCityRegion(Result, TEXT("generated_city_main_upper_road_2lane_00_00"));
+	TestNotNull(TEXT("generated road region"), GeneratedRoadRegion);
+	if (GeneratedRoadRegion)
+	{
+		TestEqual(
+			TEXT("generated road region type"),
+			static_cast<int32>(GeneratedRoadRegion->RegionType),
+			static_cast<int32>(EScenarioGroundRegionType::Penalty));
+		TestEqual(TEXT("generated road surface"), GeneratedRoadRegion->SurfaceId, FString(TEXT("road")));
+		TestEqual(TEXT("generated road penalty kind"), GeneratedRoadRegion->PenaltyKind, FString(TEXT("road")));
+		TestEqual(TEXT("generated road width cm"), GeneratedRoadRegion->Size.Y, 640.0);
+		TestEqual(TEXT("generated road top z cm"), GeneratedRoadRegion->Center.Z, 0.0);
+	}
 	const FScenarioRuntimeCorridorSpec& RuntimeCorridor = Result.WorldSpec.Corridors[0];
 	TestEqual(TEXT("runtime corridor layout count"), RuntimeCorridor.Layout.Num(), 1);
 	if (RuntimeCorridor.Layout.IsEmpty() || RuntimeCorridor.Layout[0].Lanes.IsEmpty())
 	{
 		return false;
 	}
-	TestEqual(TEXT("runtime corridor lane surface"), RuntimeCorridor.Layout[0].Lanes[0].SurfaceId, FString(TEXT("sidewalk")));
+	TestEqual(TEXT("runtime corridor lane surface"), RuntimeCorridor.Layout[0].Lanes[0].SurfaceId, FString(TEXT("walkway")));
 	const FScenarioRuntimeCorridorLaneSpec* CurbRuntimeLane = RuntimeCorridor.Layout[0].Lanes.FindByPredicate(
 		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
 		{
@@ -143,11 +350,11 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestNotNull(TEXT("runtime curb lane"), CurbRuntimeLane);
 	if (CurbRuntimeLane)
 	{
-		TestEqual(TEXT("runtime curb lane z offset"), CurbRuntimeLane->SurfaceZOffsetCm, -15.0);
+		TestEqual(TEXT("runtime curb lane z offset"), CurbRuntimeLane->SurfaceZOffsetCm, 0.0);
 		TestEqual(
 			TEXT("runtime curb lane region type"),
 			static_cast<int32>(CurbRuntimeLane->RegionType),
-			static_cast<int32>(EScenarioGroundRegionType::Penalty));
+			static_cast<int32>(EScenarioGroundRegionType::Blocked));
 	}
 	TestEqual(TEXT("placeable count"), Result.WorldSpec.Placeables.Num(), 2);
 	TestEqual(TEXT("static obstacle count"), Result.WorldSpec.Placeables.FilterByPredicate(
@@ -163,7 +370,7 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestNotNull(TEXT("static obstacle spec"), StaticObstacleSpec);
 	if (StaticObstacleSpec)
 	{
-		TestEqual(TEXT("static obstacle surface z"), StaticObstacleSpec->Transform.GetLocation().Z, -15.0);
+		TestEqual(TEXT("static obstacle surface z"), StaticObstacleSpec->Transform.GetLocation().Z, 0.0);
 	}
 
 	const FScenarioPlaceableInstanceSpec* RobotSpec = Result.WorldSpec.Placeables.FindByPredicate(
@@ -176,6 +383,8 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	{
 		TestEqual(TEXT("robot start x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 100.0);
 		TestEqual(TEXT("robot goal x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 900.0);
+		TestEqual(TEXT("robot start surface z"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.Z, 0.0);
+		TestEqual(TEXT("robot goal surface z"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.Z, 0.0);
 		TestTrue(TEXT("robot has route"), RobotSpec->DeliveryBot.bHasStartLocation && RobotSpec->DeliveryBot.bHasGoalLocation);
 		TestTrue(TEXT("robot setup has goal"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal);
 
@@ -201,6 +410,147 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSampleWorldSpecAdapterRightAngleBuildingExpansionTest,
+	"OdiroSim.ScenarioSample.WorldSpecAdapter.RightAngleBuildingExpansion",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSampleWorldSpecAdapterRightAngleBuildingExpansionTest::RunTest(const FString& Parameters)
+{
+	const FScenarioSampleDocument Document = MakeRightAngleBuildingExpansionSampleDocument();
+	const FScenarioCompileResult Result =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);
+
+	TestTrue(TEXT("right-angle sample adapts"), Result.bSuccess);
+	TestEqual(TEXT("one generated building-side expansion"), Result.WorldSpec.GroundRegions.Num(), 1);
+	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	{
+		return false;
+	}
+
+	const FScenarioGroundRegionSpec& ExpansionRegion = Result.WorldSpec.GroundRegions[0];
+	TestEqual(
+		TEXT("building-side expansion id"),
+		ExpansionRegion.RegionId,
+		FString(TEXT("generated_city_lower_building_expansion_00_00")));
+	TestEqual(TEXT("building-side expansion surface"), ExpansionRegion.SurfaceId, FString(TEXT("walkway")));
+	TestEqual(
+		TEXT("building-side expansion region type"),
+		static_cast<int32>(ExpansionRegion.RegionType),
+		static_cast<int32>(EScenarioGroundRegionType::Walkable));
+	TestEqual(TEXT("building-side expansion center x cm"), ExpansionRegion.Center.X, 3000.0);
+	TestEqual(TEXT("building-side expansion center y cm"), ExpansionRegion.Center.Y, 2000.0);
+	TestEqual(TEXT("building-side expansion length cm"), ExpansionRegion.Size.X, 6000.0);
+	TestEqual(TEXT("building-side expansion width cm"), ExpansionRegion.Size.Y, 4000.0);
+	TestEqual(TEXT("building-side expansion yaw"), ExpansionRegion.YawDegrees, 0.0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSampleWorldSpecAdapterSplitRightAngleBuildingExpansionTest,
+	"OdiroSim.ScenarioSample.WorldSpecAdapter.SplitRightAngleBuildingExpansion",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSampleWorldSpecAdapterSplitRightAngleBuildingExpansionTest::RunTest(const FString& Parameters)
+{
+	const FScenarioSampleDocument Document = MakeSplitRightAngleBuildingExpansionSampleDocument();
+	const FScenarioCompileResult Result =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);
+
+	TestTrue(TEXT("split right-angle sample adapts"), Result.bSuccess);
+	TestEqual(TEXT("split chunks still produce one generated building-side expansion"), Result.WorldSpec.GroundRegions.Num(), 1);
+	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	{
+		return false;
+	}
+
+	const FScenarioGroundRegionSpec& ExpansionRegion = Result.WorldSpec.GroundRegions[0];
+	TestEqual(TEXT("split expansion stays rectangular"), static_cast<int32>(ExpansionRegion.ShapeType), static_cast<int32>(EScenarioGroundShapeType::Rectangle));
+	TestEqual(TEXT("split expansion center x cm"), ExpansionRegion.Center.X, 3000.0);
+	TestEqual(TEXT("split expansion center y cm"), ExpansionRegion.Center.Y, 2000.0);
+	TestEqual(TEXT("split expansion length cm"), ExpansionRegion.Size.X, 6000.0);
+	TestEqual(TEXT("split expansion width cm"), ExpansionRegion.Size.Y, 4000.0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSampleWorldSpecAdapterShortReturnBuildingExpansionTest,
+	"OdiroSim.ScenarioSample.WorldSpecAdapter.ShortReturnBuildingExpansion",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSampleWorldSpecAdapterShortReturnBuildingExpansionTest::RunTest(const FString& Parameters)
+{
+	const FScenarioSampleDocument Document = MakeShortReturnBuildingExpansionSampleDocument();
+	const FScenarioCompileResult Result =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);
+
+	TestTrue(TEXT("short-return right-angle sample adapts"), Result.bSuccess);
+	TestEqual(TEXT("short return still produces one generated building-side expansion"), Result.WorldSpec.GroundRegions.Num(), 1);
+	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	{
+		return false;
+	}
+
+	const double ExpectedMinimumWidthCm =
+		(FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters
+			+ FScenarioCorridorGeometry::GeneratedCityBuildingDepthMeters)
+		* 100.0;
+	const FScenarioGroundRegionSpec& ExpansionRegion = Result.WorldSpec.GroundRegions[0];
+	TestEqual(TEXT("short return expansion stays rectangular"), static_cast<int32>(ExpansionRegion.ShapeType), static_cast<int32>(EScenarioGroundShapeType::Rectangle));
+	TestEqual(TEXT("short return expansion center x cm"), ExpansionRegion.Center.X, 3000.0);
+	TestEqual(TEXT("short return expansion center y cm"), ExpansionRegion.Center.Y, -500.0);
+	TestEqual(TEXT("short return expansion length cm"), ExpansionRegion.Size.X, 6000.0);
+	TestEqual(TEXT("short return expansion uses minimum width cm"), ExpansionRegion.Size.Y, ExpectedMinimumWidthCm);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSampleWorldSpecAdapterSkewBuildingExpansionTest,
+	"OdiroSim.ScenarioSample.WorldSpecAdapter.SkewBuildingExpansion",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSampleWorldSpecAdapterSkewBuildingExpansionTest::RunTest(const FString& Parameters)
+{
+	const FScenarioSampleDocument Document = MakeSkewBuildingExpansionSampleDocument();
+	const FScenarioCompileResult Result =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);
+
+	TestTrue(TEXT("skew sample adapts"), Result.bSuccess);
+	TestEqual(TEXT("one generated building-side expansion"), Result.WorldSpec.GroundRegions.Num(), 1);
+	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	{
+		return false;
+	}
+
+	const FScenarioGroundRegionSpec& ExpansionRegion = Result.WorldSpec.GroundRegions[0];
+	TestEqual(
+		TEXT("skew expansion id"),
+		ExpansionRegion.RegionId,
+		FString(TEXT("generated_city_lower_building_expansion_00_00")));
+	TestEqual(
+		TEXT("skew expansion shape"),
+		static_cast<int32>(ExpansionRegion.ShapeType),
+		static_cast<int32>(EScenarioGroundShapeType::ConvexPolygon));
+	TestEqual(TEXT("skew expansion surface"), ExpansionRegion.SurfaceId, FString(TEXT("walkway")));
+	TestEqual(
+		TEXT("skew expansion region type"),
+		static_cast<int32>(ExpansionRegion.RegionType),
+		static_cast<int32>(EScenarioGroundRegionType::Walkable));
+	TestEqual(TEXT("skew expansion center x cm"), ExpansionRegion.Center.X, 5000.0);
+	TestEqual(TEXT("skew expansion center y cm"), ExpansionRegion.Center.Y, 2500.0);
+	TestEqual(TEXT("skew expansion bounds width x cm"), ExpansionRegion.Size.X, 10000.0);
+	TestEqual(TEXT("skew expansion bounds width y cm"), ExpansionRegion.Size.Y, 3000.0);
+	TestEqual(TEXT("skew expansion vertex count"), ExpansionRegion.PolygonVertices.Num(), 4);
+	if (ExpansionRegion.PolygonVertices.Num() == 4)
+	{
+		TestEqual(TEXT("skew expansion first vertex x cm"), ExpansionRegion.PolygonVertices[0].X, -1000.0);
+		TestEqual(TEXT("skew expansion first vertex y cm"), ExpansionRegion.PolygonVertices[0].Y, -1500.0);
+		TestEqual(TEXT("skew expansion third vertex x cm"), ExpansionRegion.PolygonVertices[2].X, 1000.0);
+		TestEqual(TEXT("skew expansion third vertex y cm"), ExpansionRegion.PolygonVertices[2].Y, 1500.0);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FScenarioSampleWorldSpecAdapterRejectsObstacleOutsideSurfaceTest,
 	"OdiroSim.ScenarioSample.WorldSpecAdapter.RejectsObstacleOutsideSurface",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -208,7 +558,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FScenarioSampleWorldSpecAdapterRejectsObstacleOutsideSurfaceTest::RunTest(const FString& Parameters)
 {
 	FScenarioSampleDocument Document = MakeAdapterTestSampleDocument();
-	Document.Scenario.Semantic.StaticObstacles[0].OffsetMeters = 4.0;
+	Document.Scenario.Semantic.StaticObstacles[0].OffsetMeters = 8.5;
 
 	const FScenarioCompileResult Result =
 		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);

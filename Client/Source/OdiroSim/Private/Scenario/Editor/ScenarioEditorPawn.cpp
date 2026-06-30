@@ -180,7 +180,9 @@ void AScenarioEditorPawn::ApplyTopDownOrthoPlanes()
 
 void AScenarioEditorPawn::ApplyGreyBackgroundPostProcessMaterial()
 {
-	if (!CameraComponent || GreyBackgroundBlendWeight <= 0.0f)
+	if (!FScenarioViewportPresentation::bUseGreyBackgroundPostProcess
+		|| !CameraComponent
+		|| GreyBackgroundBlendWeight <= 0.0f)
 	{
 		return;
 	}

@@ -2906,6 +2906,7 @@ void AScenarioEditorController::UpdatePlacementPreview()
 
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if ((SelectedPlacementItemType == EScenarioPaletteItemType::StaticObstacle
+			|| SelectedPlacementItemType == EScenarioPaletteItemType::Pedestrian
 			|| SelectedPlacementItemType == EScenarioPaletteItemType::RobotStart
 			|| SelectedPlacementItemType == EScenarioPaletteItemType::RobotGoal)
 		&& authoringSubsystem)
@@ -2937,6 +2938,8 @@ bool AScenarioEditorController::ConfigurePlacementPreviewForSelectedItem(
 		CurrentPlacementFailureReason = TEXT("Scenario authoring subsystem is unavailable.");
 		return false;
 	}
+
+	PlacementPreviewActor->ClearPreview();
 
 	switch (SelectedPlacementItemType)
 	{
@@ -3237,6 +3240,7 @@ void AScenarioEditorController::DestroyPlacementPreview()
 {
 	if (IsValid(PlacementPreviewActor))
 	{
+		PlacementPreviewActor->ClearPreview();
 		PlacementPreviewActor->Destroy();
 	}
 

@@ -107,9 +107,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Catalog")
 	TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> StaticObstaclePropCatalog;
 
+	// Catalog actor class that produced this obstacle instance.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Actor")
+	TSoftClassPtr<AScenarioStaticObstacle> ObstacleActorClass;
+
 	// Mesh asset configured by the selected catalog entry.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Mesh", meta = (AllowedClasses = "/Script/Engine.StaticMesh"))
 	TSoftObjectPtr<UStaticMesh> StaticMeshAsset;
+
+	// Full authored bounds size in meters; non-zero values override mesh-derived placement bounds.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Placement", meta = (ClampMin = "0.0"))
+	FVector BoundsSizeMeters = FVector::ZeroVector;
+
+	// Bounds center offset from SceneRoot in meters; zero defaults to half-height above SceneRoot.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Placement")
+	FVector BoundsCenterOffsetMeters = FVector::ZeroVector;
 
 	// Local half extent used for fallback bounds and collision.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Placement", meta = (ClampMin = "0.0"))
@@ -134,9 +146,24 @@ private:
 	// Refreshes collision primitives from current prop settings.
 	void ApplyCollisionSettings();
 
+	// Applies visual primitive collision state while leaving the canonical bounds component owned by this actor.
+	void ApplyVisualPrimitiveCollisionSettings(ECollisionEnabled::Type meshRootCollisionEnabled);
+
 	// Maintains the actor tag used by semantic object queries.
 	void ApplyObjectTypeActorTag();
 
 	// Offsets the visual mesh so actor Z remains the ground-contact plane.
 	void ApplyMeshGroundAlignment();
+
+	// Returns true when this actor has a configured visual mesh component.
+	bool HasConfiguredVisualMesh() const;
+
+	// Returns true when catalog-authored bounds are available for this obstacle.
+	bool HasAuthoredBoundsSize() const;
+
+	// Resolves the half extent used by collision, placement, and planner footprints.
+	FVector ResolveBoundsExtentCm() const;
+
+	// Resolves the local center offset used by the canonical bounds box.
+	FVector ResolveBoundsCenterOffsetCm() const;
 };

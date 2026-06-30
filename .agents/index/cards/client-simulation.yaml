@@ -80,6 +80,8 @@ entry:
     description: Robot configuration left preview stage, fixed SceneCapture camera, profile-driven visual and sensor updates.
     read:
       - Client/Docs/RobotPreviewAgent.local.md
+      - Client/Source/OdiroSim/Public/Platform/Preview
+      - Client/Source/OdiroSim/Private/Platform/Preview
       - Client/Source/OdiroSim/Public/Platform/Widget/RobotConfigEditorWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/RobotConfigEditorWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/ViewModel/RobotProfileViewModel.h

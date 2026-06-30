@@ -5,11 +5,36 @@
 #include "Components/CheckBox.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableText.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/World.h"
+#include "InputCoreTypes.h"
 #include "Platform/PlatformUiSubsystem.h"
+#include "Platform/Preview/RobotPreviewSubsystem.h"
+#include "Platform/RobotProfileSettings.h"
 #include "Platform/ViewModel/RobotProfileViewModel.h"
+#include "Styling/SlateBrush.h"
 #include "UI/BaseSliderWidget.h"
+
+namespace
+{
+	// Maps WBP combo-box text to preview-only LiDAR display density.
+	ERobotPreviewLidarDisplayDensity ResolveRobotPreviewLidarDensity(const FString& RawDensity)
+	{
+		const FString NormalizedDensity = RawDensity.TrimStartAndEnd().ToLower();
+		if (NormalizedDensity == TEXT("간략") || NormalizedDensity == TEXT("sparse"))
+		{
+			return ERobotPreviewLidarDisplayDensity::Sparse;
+		}
+		if (NormalizedDensity == TEXT("정밀") || NormalizedDensity == TEXT("dense"))
+		{
+			return ERobotPreviewLidarDisplayDensity::Dense;
+		}
+		return ERobotPreviewLidarDisplayDensity::Standard;
+	}
+}
 
 void URobotConfigEditorWidget::NativeConstruct()
 {
@@ -25,6 +50,79 @@ void URobotConfigEditorWidget::NativeConstruct()
 		SaveProfileButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleSaveProfileClicked);
 		SaveProfileButton->OnClicked.AddDynamic(this, &URobotConfigEditorWidget::HandleSaveProfileClicked);
 	}
+	if (RotateLeftButton)
+	{
+		RotateLeftButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleRotatePreviewLeftClicked);
+		RotateLeftButton->OnClicked.AddDynamic(this, &URobotConfigEditorWidget::HandleRotatePreviewLeftClicked);
+	}
+	if (ResetPreviewRotationButton)
+	{
+		ResetPreviewRotationButton->OnClicked.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleResetPreviewRotationClicked);
+		ResetPreviewRotationButton->OnClicked.AddDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleResetPreviewRotationClicked);
+	}
+	if (RotateRightButton)
+	{
+		RotateRightButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleRotatePreviewRightClicked);
+		RotateRightButton->OnClicked.AddDynamic(this, &URobotConfigEditorWidget::HandleRotatePreviewRightClicked);
+	}
+	if (DrawLidarRaysButton)
+	{
+		DrawLidarRaysButton->OnClicked.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked);
+		DrawLidarRaysButton->OnClicked.AddDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked);
+	}
+	if (ClearLidarRaysButton)
+	{
+		ClearLidarRaysButton->OnClicked.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleClearLidarPreviewRaysClicked);
+		ClearLidarRaysButton->OnClicked.AddDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleClearLidarPreviewRaysClicked);
+	}
+	if (ShowLidarRaysCheckBox)
+	{
+		ShowLidarRaysCheckBox->OnCheckStateChanged.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewOptionChanged);
+		ShowLidarRaysCheckBox->OnCheckStateChanged.AddDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewOptionChanged);
+	}
+	if (ShowLidarRangeCheckBox)
+	{
+		ShowLidarRangeCheckBox->OnCheckStateChanged.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewOptionChanged);
+		ShowLidarRangeCheckBox->OnCheckStateChanged.AddDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewOptionChanged);
+	}
+	if (ShowLidarPointsCheckBox)
+	{
+		ShowLidarPointsCheckBox->OnCheckStateChanged.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewOptionChanged);
+		ShowLidarPointsCheckBox->OnCheckStateChanged.AddDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewOptionChanged);
+	}
+	if (LidarPreviewDensityComboBox)
+	{
+		LidarPreviewDensityComboBox->OnSelectionChanged.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewDensitySelectionChanged);
+		LidarPreviewDensityComboBox->OnSelectionChanged.AddDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewDensitySelectionChanged);
+	}
 	BindProfileSlider(BodyLengthSlider.Get(), this);
 	BindProfileSlider(BodyWidthSlider.Get(), this);
 	BindProfileSlider(BodyHeightSlider.Get(), this);
@@ -38,10 +136,13 @@ void URobotConfigEditorWidget::NativeConstruct()
 	BindProfileSlider(DriveMassSlider.Get(), this);
 	BindProfileSlider(LidarRangeSlider.Get(), this);
 	BindProfileSlider(LidarSensorHeightSlider.Get(), this);
+	BindProfileSlider(LidarSensorForwardOffsetSlider.Get(), this);
+	BindProfileSlider(LidarSensorRightOffsetSlider.Get(), this);
 	BindProfileSlider(LidarFrontAngleSlider.Get(), this);
 	BindProfileSlider(LidarStopDistanceSlider.Get(), this);
 	BindProfileSlider(LidarSlowDownDistanceSlider.Get(), this);
 	BindProfileSlider(LidarAngleStepSlider.Get(), this);
+	BindProfileSlider(LidarVerticalStepSlider.Get(), this);
 	BindProfileSlider(LidarScanRateSlider.Get(), this);
 	BindProfileInput(BodyLengthInput.Get(), this);
 	BindProfileInput(BodyWidthInput.Get(), this);
@@ -56,10 +157,13 @@ void URobotConfigEditorWidget::NativeConstruct()
 	BindProfileInput(DriveMassInput.Get(), this);
 	BindProfileInput(LidarRangeInput.Get(), this);
 	BindProfileInput(LidarSensorHeightInput.Get(), this);
+	BindProfileInput(LidarSensorForwardOffsetInput.Get(), this);
+	BindProfileInput(LidarSensorRightOffsetInput.Get(), this);
 	BindProfileInput(LidarFrontAngleInput.Get(), this);
 	BindProfileInput(LidarStopDistanceInput.Get(), this);
 	BindProfileInput(LidarSlowDownDistanceInput.Get(), this);
 	BindProfileInput(LidarAngleStepInput.Get(), this);
+	BindProfileInput(LidarVerticalStepInput.Get(), this);
 	BindProfileInput(LidarScanRateInput.Get(), this);
 	if (LidarModeComboBox)
 	{
@@ -82,6 +186,7 @@ void URobotConfigEditorWidget::NativeConstruct()
 
 	LoadProfileFromViewModel();
 	ShowAllProfileSections();
+	StartRobotPreview();
 }
 
 void URobotConfigEditorWidget::NativeDestruct()
@@ -93,6 +198,56 @@ void URobotConfigEditorWidget::NativeDestruct()
 	if (SaveProfileButton)
 	{
 		SaveProfileButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleSaveProfileClicked);
+	}
+	if (RotateLeftButton)
+	{
+		RotateLeftButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleRotatePreviewLeftClicked);
+	}
+	if (ResetPreviewRotationButton)
+	{
+		ResetPreviewRotationButton->OnClicked.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleResetPreviewRotationClicked);
+	}
+	if (RotateRightButton)
+	{
+		RotateRightButton->OnClicked.RemoveDynamic(this, &URobotConfigEditorWidget::HandleRotatePreviewRightClicked);
+	}
+	if (DrawLidarRaysButton)
+	{
+		DrawLidarRaysButton->OnClicked.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked);
+	}
+	if (ClearLidarRaysButton)
+	{
+		ClearLidarRaysButton->OnClicked.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleClearLidarPreviewRaysClicked);
+	}
+	if (ShowLidarRaysCheckBox)
+	{
+		ShowLidarRaysCheckBox->OnCheckStateChanged.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewOptionChanged);
+	}
+	if (ShowLidarRangeCheckBox)
+	{
+		ShowLidarRangeCheckBox->OnCheckStateChanged.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewOptionChanged);
+	}
+	if (ShowLidarPointsCheckBox)
+	{
+		ShowLidarPointsCheckBox->OnCheckStateChanged.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewOptionChanged);
+	}
+	if (LidarPreviewDensityComboBox)
+	{
+		LidarPreviewDensityComboBox->OnSelectionChanged.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewDensitySelectionChanged);
 	}
 	UnbindProfileSlider(BodyLengthSlider.Get(), this);
 	UnbindProfileSlider(BodyWidthSlider.Get(), this);
@@ -107,10 +262,13 @@ void URobotConfigEditorWidget::NativeDestruct()
 	UnbindProfileSlider(DriveMassSlider.Get(), this);
 	UnbindProfileSlider(LidarRangeSlider.Get(), this);
 	UnbindProfileSlider(LidarSensorHeightSlider.Get(), this);
+	UnbindProfileSlider(LidarSensorForwardOffsetSlider.Get(), this);
+	UnbindProfileSlider(LidarSensorRightOffsetSlider.Get(), this);
 	UnbindProfileSlider(LidarFrontAngleSlider.Get(), this);
 	UnbindProfileSlider(LidarStopDistanceSlider.Get(), this);
 	UnbindProfileSlider(LidarSlowDownDistanceSlider.Get(), this);
 	UnbindProfileSlider(LidarAngleStepSlider.Get(), this);
+	UnbindProfileSlider(LidarVerticalStepSlider.Get(), this);
 	UnbindProfileSlider(LidarScanRateSlider.Get(), this);
 	UnbindProfileInput(BodyLengthInput.Get(), this);
 	UnbindProfileInput(BodyWidthInput.Get(), this);
@@ -125,10 +283,13 @@ void URobotConfigEditorWidget::NativeDestruct()
 	UnbindProfileInput(DriveMassInput.Get(), this);
 	UnbindProfileInput(LidarRangeInput.Get(), this);
 	UnbindProfileInput(LidarSensorHeightInput.Get(), this);
+	UnbindProfileInput(LidarSensorForwardOffsetInput.Get(), this);
+	UnbindProfileInput(LidarSensorRightOffsetInput.Get(), this);
 	UnbindProfileInput(LidarFrontAngleInput.Get(), this);
 	UnbindProfileInput(LidarStopDistanceInput.Get(), this);
 	UnbindProfileInput(LidarSlowDownDistanceInput.Get(), this);
 	UnbindProfileInput(LidarAngleStepInput.Get(), this);
+	UnbindProfileInput(LidarVerticalStepInput.Get(), this);
 	UnbindProfileInput(LidarScanRateInput.Get(), this);
 	if (LidarModeComboBox)
 	{
@@ -143,7 +304,74 @@ void URobotConfigEditorWidget::NativeDestruct()
 			&URobotConfigEditorWidget::HandleLidarDrawDebugChanged);
 	}
 
+	ClearRobotPreviewOrbitInput();
+	StopRobotPreview();
+
 	Super::NativeDestruct();
+}
+
+FReply URobotConfigEditorWidget::NativeOnMouseButtonDown(
+	const FGeometry& InGeometry,
+	const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton
+		&& IsPointerOverRobotPreviewImage(InMouseEvent.GetScreenSpacePosition())
+		&& ResolveRobotPreviewSubsystem())
+	{
+		bRobotPreviewOrbitHeld = true;
+		return FReply::Handled().CaptureMouse(TakeWidget());
+	}
+
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply URobotConfigEditorWidget::NativeOnMouseButtonUp(
+	const FGeometry& InGeometry,
+	const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton && bRobotPreviewOrbitHeld)
+	{
+		ClearRobotPreviewOrbitInput();
+		return FReply::Handled().ReleaseMouseCapture();
+	}
+
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
+}
+
+FReply URobotConfigEditorWidget::NativeOnMouseMove(
+	const FGeometry& InGeometry,
+	const FPointerEvent& InMouseEvent)
+{
+	if (bRobotPreviewOrbitHeld)
+	{
+		if (URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem())
+		{
+			PreviewSubsystem->AddCameraOrbit(InMouseEvent.GetCursorDelta());
+			SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+			return FReply::Handled();
+		}
+
+		ClearRobotPreviewOrbitInput();
+	}
+
+	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+}
+
+FReply URobotConfigEditorWidget::NativeOnMouseWheel(
+	const FGeometry& InGeometry,
+	const FPointerEvent& InMouseEvent)
+{
+	if (IsPointerOverRobotPreviewImage(InMouseEvent.GetScreenSpacePosition()))
+	{
+		if (URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem())
+		{
+			PreviewSubsystem->AddCameraZoom(InMouseEvent.GetWheelDelta());
+			SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+			return FReply::Handled();
+		}
+	}
+
+	return Super::NativeOnMouseWheel(InGeometry, InMouseEvent);
 }
 
 void URobotConfigEditorWidget::HandleResetProfileClicked()
@@ -156,6 +384,7 @@ void URobotConfigEditorWidget::HandleResetProfileClicked()
 	}
 
 	ApplyViewModelToFields();
+	RefreshRobotPreviewFromFields();
 	SetProfileStatus(TEXT("수정 취소됨"));
 	SetProfileStateSaved(TEXT("변경 취소됨"));
 }
@@ -185,6 +414,7 @@ void URobotConfigEditorWidget::HandleSaveProfileClicked()
 	SetProfilePathText(viewModel->GetProfilePath());
 	SetProfileStatus(TEXT("저장 완료"));
 	SetProfileStateSaved(TEXT("최근 저장 방금 전"));
+	RefreshRobotPreviewFromFields();
 }
 
 void URobotConfigEditorWidget::HandleProfileSliderChanged(UWidget* widget, const float value)
@@ -242,6 +472,14 @@ void URobotConfigEditorWidget::HandleProfileSliderChanged(UWidget* widget, const
 	{
 		SetInputText(LidarSensorHeightInput.Get(), value);
 	}
+	else if (widget == LidarSensorForwardOffsetSlider.Get())
+	{
+		SetInputText(LidarSensorForwardOffsetInput.Get(), value);
+	}
+	else if (widget == LidarSensorRightOffsetSlider.Get())
+	{
+		SetInputText(LidarSensorRightOffsetInput.Get(), value);
+	}
 	else if (widget == LidarFrontAngleSlider.Get())
 	{
 		SetInputText(LidarFrontAngleInput.Get(), value);
@@ -257,6 +495,10 @@ void URobotConfigEditorWidget::HandleProfileSliderChanged(UWidget* widget, const
 	else if (widget == LidarAngleStepSlider.Get())
 	{
 		SetInputText(LidarAngleStepInput.Get(), value);
+	}
+	else if (widget == LidarVerticalStepSlider.Get())
+	{
+		SetInputText(LidarVerticalStepInput.Get(), value);
 	}
 	else if (widget == LidarScanRateSlider.Get())
 	{
@@ -294,6 +536,88 @@ void URobotConfigEditorWidget::HandleLidarDrawDebugChanged(const bool bIsChecked
 	MarkProfileDirty();
 }
 
+void URobotConfigEditorWidget::HandleLidarPreviewOptionChanged(const bool bIsChecked)
+{
+	(void)bIsChecked;
+	ApplyRobotPreviewDisplayOptions();
+}
+
+void URobotConfigEditorWidget::HandleLidarPreviewDensitySelectionChanged(
+	FString selectedItem,
+	ESelectInfo::Type selectionType)
+{
+	(void)selectedItem;
+	(void)selectionType;
+	ApplyRobotPreviewDisplayOptions();
+}
+
+void URobotConfigEditorWidget::HandleRotatePreviewLeftClicked()
+{
+	if (URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem())
+	{
+		PreviewSubsystem->AddRobotYawDegrees(-15.0f);
+		SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+	}
+}
+
+void URobotConfigEditorWidget::HandleResetPreviewRotationClicked()
+{
+	if (URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem())
+	{
+		PreviewSubsystem->ResetRobotYaw();
+		SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+	}
+}
+
+void URobotConfigEditorWidget::HandleRotatePreviewRightClicked()
+{
+	if (URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem())
+	{
+		PreviewSubsystem->AddRobotYawDegrees(15.0f);
+		SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+	}
+}
+
+void URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked()
+{
+	FRobotProfileSettings previewSettings;
+	if (!TryReadFieldsIntoPreviewSettings(previewSettings))
+	{
+		SetRobotPreviewStatus(TEXT("Preview input is not ready"));
+		return;
+	}
+
+	URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem();
+	if (!PreviewSubsystem)
+	{
+		SetRobotPreviewStatus(TEXT("Preview subsystem is unavailable"));
+		return;
+	}
+
+	if (!PreviewSubsystem->ApplyPreviewSettings(previewSettings))
+	{
+		if (!PreviewSubsystem->StartPreview(this, previewSettings))
+		{
+			SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+			return;
+		}
+		ApplyRobotPreviewRenderTarget();
+	}
+
+	ApplyRobotPreviewDisplayOptions();
+	PreviewSubsystem->DrawLidarPreviewRays();
+	SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+}
+
+void URobotConfigEditorWidget::HandleClearLidarPreviewRaysClicked()
+{
+	if (URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem())
+	{
+		PreviewSubsystem->ClearLidarPreviewRays();
+		SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+	}
+}
+
 URobotProfileViewModel* URobotConfigEditorWidget::ResolveViewModel()
 {
 	if (RobotProfileViewModel)
@@ -304,6 +628,12 @@ URobotProfileViewModel* URobotConfigEditorWidget::ResolveViewModel()
 	UPlatformUiSubsystem* platformUiSubsystem = UPlatformUiSubsystem::ResolveForWorldContext(this);
 	RobotProfileViewModel = platformUiSubsystem ? platformUiSubsystem->GetRobotProfileViewModel() : nullptr;
 	return RobotProfileViewModel;
+}
+
+URobotPreviewSubsystem* URobotConfigEditorWidget::ResolveRobotPreviewSubsystem() const
+{
+	UWorld* World = GetWorld();
+	return World ? World->GetSubsystem<URobotPreviewSubsystem>() : nullptr;
 }
 
 bool URobotConfigEditorWidget::LoadProfileFromViewModel()
@@ -354,10 +684,13 @@ bool URobotConfigEditorWidget::ReadFieldsIntoViewModel()
 	float driveMassKg = 0.0f;
 	float lidarScanRangeM = 0.0f;
 	float lidarSensorHeightM = 0.0f;
+	float lidarSensorForwardOffsetM = viewModel->GetLidarSensorForwardOffsetM();
+	float lidarSensorRightOffsetM = viewModel->GetLidarSensorRightOffsetM();
 	float lidarFrontHalfAngleDegree = 0.0f;
 	float lidarStopDistanceM = 0.0f;
 	float lidarSlowDownDistanceM = 0.0f;
 	float lidarAngleStepDegree = 0.0f;
+	float lidarVerticalStepDegree = viewModel->GetLidarVerticalStepDegree();
 	float lidarScanRateHz = 0.0f;
 	if (!TryReadFloatField(BodyLengthInput.Get(), TEXT("Body Length"), bodyLengthM)
 		|| !TryReadFloatField(BodyWidthInput.Get(), TEXT("Body Width"), bodyWidthM)
@@ -377,6 +710,21 @@ bool URobotConfigEditorWidget::ReadFieldsIntoViewModel()
 		|| !TryReadFloatField(LidarSlowDownDistanceInput.Get(), TEXT("LiDAR Slowdown Distance"), lidarSlowDownDistanceM)
 		|| !TryReadFloatField(LidarAngleStepInput.Get(), TEXT("LiDAR Angle Step"), lidarAngleStepDegree)
 		|| !TryReadFloatField(LidarScanRateInput.Get(), TEXT("LiDAR Scan Rate"), lidarScanRateHz))
+	{
+		return false;
+	}
+	if (!TryReadOptionalFloatField(
+			LidarSensorForwardOffsetInput.Get(),
+			TEXT("LiDAR Sensor Forward Offset"),
+			lidarSensorForwardOffsetM)
+		|| !TryReadOptionalFloatField(
+			LidarSensorRightOffsetInput.Get(),
+			TEXT("LiDAR Sensor Right Offset"),
+			lidarSensorRightOffsetM)
+		|| !TryReadOptionalFloatField(
+			LidarVerticalStepInput.Get(),
+			TEXT("LiDAR Vertical Step"),
+			lidarVerticalStepDegree))
 	{
 		return false;
 	}
@@ -402,10 +750,13 @@ bool URobotConfigEditorWidget::ReadFieldsIntoViewModel()
 	}
 	viewModel->SetLidarScanRangeM(lidarScanRangeM);
 	viewModel->SetLidarSensorHeightM(lidarSensorHeightM);
+	viewModel->SetLidarSensorForwardOffsetM(lidarSensorForwardOffsetM);
+	viewModel->SetLidarSensorRightOffsetM(lidarSensorRightOffsetM);
 	viewModel->SetLidarFrontHalfAngleDegree(lidarFrontHalfAngleDegree);
 	viewModel->SetLidarStopDistanceM(lidarStopDistanceM);
 	viewModel->SetLidarSlowDownDistanceM(lidarSlowDownDistanceM);
 	viewModel->SetLidarAngleStepDegree(lidarAngleStepDegree);
+	viewModel->SetLidarVerticalStepDegree(lidarVerticalStepDegree);
 	viewModel->SetLidarScanRateHz(lidarScanRateHz);
 	return true;
 }
@@ -432,6 +783,88 @@ bool URobotConfigEditorWidget::TryReadFloatField(
 	}
 
 	return true;
+}
+
+bool URobotConfigEditorWidget::TryReadOptionalFloatField(
+	UEditableText* input,
+	const FString& label,
+	float& outValue)
+{
+	return !input || TryReadFloatField(input, label, outValue);
+}
+
+bool URobotConfigEditorWidget::TryReadFieldsIntoPreviewSettings(FRobotProfileSettings& outSettings) const
+{
+	FRobotProfileSettings previewSettings;
+	if (!TryReadPreviewFloatField(BodyLengthInput.Get(), previewSettings.Body.LengthM)
+		|| !TryReadPreviewFloatField(BodyWidthInput.Get(), previewSettings.Body.WidthM)
+		|| !TryReadPreviewFloatField(BodyHeightInput.Get(), previewSettings.Body.HeightM)
+		|| !TryReadPreviewFloatField(BodyWheelBaseInput.Get(), previewSettings.Body.WheelBaseM)
+		|| !TryReadPreviewFloatField(BodyTurningRadiusInput.Get(), previewSettings.Body.TurningRadiusM)
+		|| !TryReadPreviewFloatField(DriveMaxSpeedInput.Get(), previewSettings.Drive.MaxSpeedKmh)
+		|| !TryReadPreviewFloatField(DriveReverseSpeedInput.Get(), previewSettings.Drive.MaxReverseSpeedKmh)
+		|| !TryReadPreviewFloatField(
+			DriveAccelerationInput.Get(),
+			previewSettings.Drive.AccelerationRateKmhPerSecond)
+		|| !TryReadPreviewFloatField(
+			DriveDecelerationInput.Get(),
+			previewSettings.Drive.DecelerationRateKmhPerSecond)
+		|| !TryReadPreviewFloatField(DriveSteeringGainInput.Get(), previewSettings.Drive.SteeringRatePerS)
+		|| !TryReadPreviewFloatField(DriveMassInput.Get(), previewSettings.Drive.MassKg)
+		|| !TryReadPreviewFloatField(LidarRangeInput.Get(), previewSettings.Lidar.ScanRangeM)
+		|| !TryReadPreviewFloatField(LidarSensorHeightInput.Get(), previewSettings.Lidar.SensorHeightM)
+		|| !TryReadPreviewFloatField(LidarFrontAngleInput.Get(), previewSettings.Lidar.FrontHalfAngleDegree)
+		|| !TryReadPreviewFloatField(LidarStopDistanceInput.Get(), previewSettings.Lidar.StopDistanceM)
+		|| !TryReadPreviewFloatField(LidarSlowDownDistanceInput.Get(), previewSettings.Lidar.SlowDownDistanceM)
+		|| !TryReadPreviewFloatField(LidarAngleStepInput.Get(), previewSettings.Lidar.AngleStepDegree)
+		|| !TryReadPreviewFloatField(LidarScanRateInput.Get(), previewSettings.Lidar.ScanRateHz))
+	{
+		return false;
+	}
+	if (!TryReadOptionalPreviewFloatField(
+			LidarSensorForwardOffsetInput.Get(),
+			previewSettings.Lidar.SensorForwardOffsetM)
+		|| !TryReadOptionalPreviewFloatField(
+			LidarSensorRightOffsetInput.Get(),
+			previewSettings.Lidar.SensorRightOffsetM)
+		|| !TryReadOptionalPreviewFloatField(
+			LidarVerticalStepInput.Get(),
+			previewSettings.Lidar.VerticalStepDegree))
+	{
+		return false;
+	}
+
+	if (LidarModeComboBox)
+	{
+		const FString selectedMode = LidarModeComboBox->GetSelectedOption().TrimStartAndEnd();
+		if (!selectedMode.IsEmpty())
+		{
+			previewSettings.Lidar.LidarMode = selectedMode;
+		}
+	}
+	if (LidarDrawDebugCheckBox)
+	{
+		previewSettings.Lidar.bDrawDebug = LidarDrawDebugCheckBox->IsChecked();
+	}
+
+	outSettings = previewSettings;
+	return true;
+}
+
+bool URobotConfigEditorWidget::TryReadPreviewFloatField(UEditableText* input, float& outValue)
+{
+	if (!input)
+	{
+		return false;
+	}
+
+	const FString rawText = input->GetText().ToString().TrimStartAndEnd();
+	return LexTryParseString(outValue, *rawText);
+}
+
+bool URobotConfigEditorWidget::TryReadOptionalPreviewFloatField(UEditableText* input, float& outValue)
+{
+	return !input || TryReadPreviewFloatField(input, outValue);
 }
 
 void URobotConfigEditorWidget::ApplyViewModelToFields()
@@ -480,6 +913,14 @@ void URobotConfigEditorWidget::ApplyViewModelToFields()
 		LidarSensorHeightSlider.Get(),
 		viewModel->GetLidarSensorHeightM());
 	SetLinkedSliderFieldValue(
+		LidarSensorForwardOffsetInput.Get(),
+		LidarSensorForwardOffsetSlider.Get(),
+		viewModel->GetLidarSensorForwardOffsetM());
+	SetLinkedSliderFieldValue(
+		LidarSensorRightOffsetInput.Get(),
+		LidarSensorRightOffsetSlider.Get(),
+		viewModel->GetLidarSensorRightOffsetM());
+	SetLinkedSliderFieldValue(
 		LidarFrontAngleInput.Get(),
 		LidarFrontAngleSlider.Get(),
 		viewModel->GetLidarFrontHalfAngleDegree());
@@ -495,6 +936,10 @@ void URobotConfigEditorWidget::ApplyViewModelToFields()
 		LidarAngleStepInput.Get(),
 		LidarAngleStepSlider.Get(),
 		viewModel->GetLidarAngleStepDegree());
+	SetLinkedSliderFieldValue(
+		LidarVerticalStepInput.Get(),
+		LidarVerticalStepSlider.Get(),
+		viewModel->GetLidarVerticalStepDegree());
 	SetLinkedSliderFieldValue(LidarScanRateInput.Get(), LidarScanRateSlider.Get(), viewModel->GetLidarScanRateHz());
 }
 
@@ -531,6 +976,142 @@ void URobotConfigEditorWidget::ShowAllProfileSections() const
 	}
 }
 
+void URobotConfigEditorWidget::StartRobotPreview()
+{
+	FRobotProfileSettings previewSettings;
+	if (!TryReadFieldsIntoPreviewSettings(previewSettings))
+	{
+		SetRobotPreviewStatus(TEXT("Preview 입력값 확인 중"));
+		return;
+	}
+
+	URobotPreviewSubsystem* previewSubsystem = ResolveRobotPreviewSubsystem();
+	if (!previewSubsystem)
+	{
+		SetRobotPreviewStatus(TEXT("Preview subsystem 없음"));
+		return;
+	}
+
+	if (!previewSubsystem->StartPreview(this, previewSettings))
+	{
+		SetRobotPreviewStatus(previewSubsystem->GetStatusText());
+		return;
+	}
+
+	ApplyRobotPreviewRenderTarget();
+	ApplyRobotPreviewDisplayOptions();
+	SetRobotPreviewStatus(previewSubsystem->GetStatusText());
+}
+
+void URobotConfigEditorWidget::StopRobotPreview()
+{
+	if (RobotPreviewImage)
+	{
+		RobotPreviewImage->SetBrush(FSlateBrush());
+	}
+
+	if (URobotPreviewSubsystem* previewSubsystem = ResolveRobotPreviewSubsystem())
+	{
+		previewSubsystem->StopPreview(this);
+	}
+}
+
+void URobotConfigEditorWidget::RefreshRobotPreviewFromFields()
+{
+	FRobotProfileSettings previewSettings;
+	if (!TryReadFieldsIntoPreviewSettings(previewSettings))
+	{
+		SetRobotPreviewStatus(TEXT("Preview 입력값 확인 중"));
+		return;
+	}
+
+	URobotPreviewSubsystem* previewSubsystem = ResolveRobotPreviewSubsystem();
+	if (!previewSubsystem)
+	{
+		SetRobotPreviewStatus(TEXT("Preview subsystem 없음"));
+		return;
+	}
+
+	if (!previewSubsystem->ApplyPreviewSettings(previewSettings))
+	{
+		if (!previewSubsystem->StartPreview(this, previewSettings))
+		{
+			SetRobotPreviewStatus(previewSubsystem->GetStatusText());
+			return;
+		}
+		ApplyRobotPreviewRenderTarget();
+	}
+
+	ApplyRobotPreviewDisplayOptions();
+	SetRobotPreviewStatus(previewSubsystem->GetStatusText());
+}
+
+void URobotConfigEditorWidget::ApplyRobotPreviewDisplayOptions()
+{
+	URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem();
+	if (!PreviewSubsystem)
+	{
+		return;
+	}
+
+	FRobotPreviewLidarDisplayOptions DisplayOptions;
+	DisplayOptions.bShowRays = ShowLidarRaysCheckBox ? ShowLidarRaysCheckBox->IsChecked() : true;
+	DisplayOptions.bShowRange = ShowLidarRangeCheckBox ? ShowLidarRangeCheckBox->IsChecked() : true;
+	DisplayOptions.bShowPoints = ShowLidarPointsCheckBox ? ShowLidarPointsCheckBox->IsChecked() : false;
+
+	if (LidarPreviewDensityComboBox)
+	{
+		const FString SelectedDensity = LidarPreviewDensityComboBox->GetSelectedOption().TrimStartAndEnd();
+		if (!SelectedDensity.IsEmpty())
+		{
+			DisplayOptions.Density = ResolveRobotPreviewLidarDensity(SelectedDensity);
+		}
+	}
+
+	PreviewSubsystem->SetLidarDisplayOptions(DisplayOptions);
+	SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+}
+
+void URobotConfigEditorWidget::ApplyRobotPreviewRenderTarget()
+{
+	if (!RobotPreviewImage)
+	{
+		return;
+	}
+
+	URobotPreviewSubsystem* previewSubsystem = ResolveRobotPreviewSubsystem();
+	UTextureRenderTarget2D* renderTarget = previewSubsystem ? previewSubsystem->GetRenderTarget() : nullptr;
+	if (!renderTarget)
+	{
+		RobotPreviewImage->SetBrush(FSlateBrush());
+		return;
+	}
+
+	FSlateBrush previewBrush;
+	previewBrush.SetResourceObject(renderTarget);
+	previewBrush.ImageSize = FVector2D(renderTarget->SizeX, renderTarget->SizeY);
+	RobotPreviewImage->SetBrush(previewBrush);
+}
+
+void URobotConfigEditorWidget::SetRobotPreviewStatus(const FString& statusText) const
+{
+	if (RobotPreviewStatusText)
+	{
+		RobotPreviewStatusText->SetText(FText::FromString(statusText));
+	}
+}
+
+bool URobotConfigEditorWidget::IsPointerOverRobotPreviewImage(const FVector2D& ScreenSpacePosition) const
+{
+	return RobotPreviewImage
+		&& RobotPreviewImage->GetCachedGeometry().IsUnderLocation(ScreenSpacePosition);
+}
+
+void URobotConfigEditorWidget::ClearRobotPreviewOrbitInput()
+{
+	bRobotPreviewOrbitHeld = false;
+}
+
 void URobotConfigEditorWidget::MarkProfileDirty()
 {
 	if (bApplyingProfileFields)
@@ -540,6 +1121,7 @@ void URobotConfigEditorWidget::MarkProfileDirty()
 
 	SetProfileStatus(TEXT("변경사항이 있습니다"));
 	SetProfileStateDirty();
+	RefreshRobotPreviewFromFields();
 }
 
 void URobotConfigEditorWidget::SetProfileStateSaved(const FString& detailText) const

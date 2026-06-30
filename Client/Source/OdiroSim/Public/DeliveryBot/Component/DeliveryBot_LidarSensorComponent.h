@@ -37,6 +37,9 @@ public:
 		FDeliveryBotLidarDetectedObjectInfo& outObjectInfo) const;
 
 private:
+	// Resolves the world-space LiDAR origin from the owner transform and configured local offset.
+	FVector GetSensorWorldLocationCm(const AActor& owner) const;
+
 	// 레이와 닿은 물체 판단
 	bool TraceLidarRay(
 		const FVector& startLocationCm,

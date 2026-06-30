@@ -467,6 +467,8 @@ void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDe
 	ReadOptionalFloatField(*lidarObject, TEXT("angle_step_degree"), path, result, lidarSensorConfigInfo.AngleStepDegree, 1.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("sensor_height_m"), path, result, lidarSensorConfigInfo.SensorHeightM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("height_m"), path, result, lidarSensorConfigInfo.SensorHeightM, 0.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("sensor_forward_offset_m"), path, result, lidarSensorConfigInfo.SensorForwardOffsetM, -10.0f, 10.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("sensor_right_offset_m"), path, result, lidarSensorConfigInfo.SensorRightOffsetM, -10.0f, 10.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("front_half_angle_degree"), path, result, lidarSensorConfigInfo.FrontHalfAngleDegree, 0.0f, 180.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("stop_distance_m"), path, result, lidarSensorConfigInfo.StopDistanceM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("near_miss_distance_m"), path, result, lidarSensorConfigInfo.ObstacleWarningDistanceM, 0.0f);

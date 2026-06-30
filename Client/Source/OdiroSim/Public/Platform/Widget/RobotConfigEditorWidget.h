@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Input/Reply.h"
 #include "Platform/Widget/OdiroCommonUserWidget.h"
 #include "Types/SlateEnums.h"
 #include "RobotConfigEditorWidget.generated.h"
@@ -11,9 +12,12 @@ class UBaseSliderWidget;
 class UCheckBox;
 class UComboBoxString;
 class UEditableText;
+class UImage;
+class URobotPreviewSubsystem;
 class URobotProfileViewModel;
 class UTextBlock;
 class UWidget;
+struct FRobotProfileSettings;
 
 // Native adapter for WBP_RobotConfigEditor profile controls.
 UCLASS(BlueprintType, Blueprintable)
@@ -27,6 +31,27 @@ public:
 
 	// Releases profile editor button bindings.
 	virtual void NativeDestruct() override;
+
+protected:
+	// Starts preview camera orbit when right mouse is pressed over the preview image.
+	virtual FReply NativeOnMouseButtonDown(
+		const FGeometry& InGeometry,
+		const FPointerEvent& InMouseEvent) override;
+
+	// Stops preview camera orbit when right mouse is released.
+	virtual FReply NativeOnMouseButtonUp(
+		const FGeometry& InGeometry,
+		const FPointerEvent& InMouseEvent) override;
+
+	// Applies preview camera orbit while right mouse is held.
+	virtual FReply NativeOnMouseMove(
+		const FGeometry& InGeometry,
+		const FPointerEvent& InMouseEvent) override;
+
+	// Applies preview camera zoom from mouse wheel over the preview image.
+	virtual FReply NativeOnMouseWheel(
+		const FGeometry& InGeometry,
+		const FPointerEvent& InMouseEvent) override;
 
 private:
 	// Reset button command.
@@ -53,13 +78,67 @@ private:
 	UFUNCTION()
 	void HandleLidarDrawDebugChanged(bool bIsChecked);
 
+	// LiDAR preview layer checkbox edit command.
+	UFUNCTION()
+	void HandleLidarPreviewOptionChanged(bool bIsChecked);
+
+	// LiDAR preview density selection edit command.
+	UFUNCTION()
+	void HandleLidarPreviewDensitySelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+
+	// Preview left-rotation command.
+	UFUNCTION()
+	void HandleRotatePreviewLeftClicked();
+
+	// Preview front-view reset command.
+	UFUNCTION()
+	void HandleResetPreviewRotationClicked();
+
+	// Preview right-rotation command.
+	UFUNCTION()
+	void HandleRotatePreviewRightClicked();
+
+	// Draws LiDAR rays in the preview from the current editable values.
+	UFUNCTION()
+	void HandleDrawLidarPreviewRaysClicked();
+
+	// Clears LiDAR rays from the preview.
+	UFUNCTION()
+	void HandleClearLidarPreviewRaysClicked();
+
 	URobotProfileViewModel* ResolveViewModel();
+	// Resolves the world-scoped robot preview subsystem for this widget.
+	URobotPreviewSubsystem* ResolveRobotPreviewSubsystem() const;
 	bool LoadProfileFromViewModel();
 	bool ReadFieldsIntoViewModel();
 	bool TryReadFloatField(UEditableText* input, const FString& label, float& outValue);
+	// Reads an optional numeric field when the matching WBP widget exists.
+	bool TryReadOptionalFloatField(UEditableText* input, const FString& label, float& outValue);
+	// Reads the current UI values into a preview-only settings snapshot.
+	bool TryReadFieldsIntoPreviewSettings(FRobotProfileSettings& outSettings) const;
+	// Reads one numeric field for preview updates without changing save validation state.
+	static bool TryReadPreviewFloatField(UEditableText* input, float& outValue);
+	// Reads an optional numeric field for preview updates when the matching WBP widget exists.
+	static bool TryReadOptionalPreviewFloatField(UEditableText* input, float& outValue);
 	void ApplyViewModelToFields();
 	void ShowAllProfileSections() const;
 	void MarkProfileDirty();
+	// Starts the transient robot preview owned by this widget.
+	void StartRobotPreview();
+	// Stops the transient robot preview owned by this widget.
+	void StopRobotPreview();
+	// Pushes current UI input values into the active robot preview.
+	void RefreshRobotPreviewFromFields();
+	// Pushes current LiDAR preview display options into the active robot preview.
+	void ApplyRobotPreviewDisplayOptions();
+	// Applies the subsystem render target to the preview image brush.
+	void ApplyRobotPreviewRenderTarget();
+	// Updates the preview overlay status text.
+	void SetRobotPreviewStatus(const FString& statusText) const;
+	// Returns true when a screen-space pointer location is inside RobotPreviewImage.
+	bool IsPointerOverRobotPreviewImage(const FVector2D& ScreenSpacePosition) const;
+	// Clears right-mouse preview orbit state.
+	void ClearRobotPreviewOrbitInput();
 	void SetProfileStateSaved(const FString& detailText) const;
 	void SetProfileStateDirty() const;
 	void SetProfileStateError(const FString& detailText) const;
@@ -118,6 +197,50 @@ private:
 	// Validation and save/load status display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ProfileStatusText;
+
+	// Render target image for the transient robot preview scene.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> RobotPreviewImage;
+
+	// Overlay status text for robot preview lifecycle and input state.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> RobotPreviewStatusText;
+
+	// Rotates the preview robot left without changing the camera.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> RotateLeftButton;
+
+	// Restores the preview robot to the front-facing yaw.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ResetPreviewRotationButton;
+
+	// Rotates the preview robot right without changing the camera.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> RotateRightButton;
+
+	// Draws current LiDAR ray mode/range in the preview.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> DrawLidarRaysButton;
+
+	// Clears currently drawn LiDAR rays from the preview.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ClearLidarRaysButton;
+
+	// Toggles sampled LiDAR ray beams in the preview.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UCheckBox> ShowLidarRaysCheckBox;
+
+	// Toggles LiDAR range rings and front boundary lines in the preview.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UCheckBox> ShowLidarRangeCheckBox;
+
+	// Toggles sampled LiDAR end point markers in the preview.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UCheckBox> ShowLidarPointsCheckBox;
+
+	// Selects how many logical LiDAR rays are sampled into the preview.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> LidarPreviewDensityComboBox;
 
 	// Restores fields to the last loaded ViewModel values.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -251,6 +374,22 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseSliderWidget> LidarSensorHeightSlider;
 
+	// robot.lidar.sensor_forward_offset_m input.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableText> LidarSensorForwardOffsetInput;
+
+	// robot.lidar.sensor_forward_offset_m slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> LidarSensorForwardOffsetSlider;
+
+	// robot.lidar.sensor_right_offset_m input.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableText> LidarSensorRightOffsetInput;
+
+	// robot.lidar.sensor_right_offset_m slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> LidarSensorRightOffsetSlider;
+
 	// robot.lidar.front_half_angle_degree input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableText> LidarFrontAngleInput;
@@ -283,6 +422,14 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseSliderWidget> LidarAngleStepSlider;
 
+	// robot.lidar.vertical_step_degree input.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableText> LidarVerticalStepInput;
+
+	// robot.lidar.vertical_step_degree slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> LidarVerticalStepSlider;
+
 	// robot.lidar.scan_rate_hz input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableText> LidarScanRateInput;
@@ -293,4 +440,7 @@ private:
 
 	// True while code is applying ViewModel values into widgets.
 	bool bApplyingProfileFields = false;
+
+	// True while right mouse is held over the robot preview image for orbit control.
+	bool bRobotPreviewOrbitHeld = false;
 };

@@ -44,6 +44,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SensorHeightM{ 0.07f };
+
+	// Robot-local forward offset of the LiDAR origin in meters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SensorForwardOffsetM{ 0.f };
+
+	// Robot-local right offset of the LiDAR origin in meters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SensorRightOffsetM{ 0.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float FrontHalfAngleDegree{ 20.f };

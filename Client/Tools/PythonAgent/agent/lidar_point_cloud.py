@@ -706,7 +706,7 @@ def _classify_lidar_ray(ray: LidarRay3D) -> str:
     if _has_lidar_marker(actor_name, actor_tags, ("obstacle", "pedestrian", "vehicle", "prop")):
         return "obstacle"
 
-    if _has_lidar_marker(actor_name, actor_tags, ("wall", "barrier", "fence")):
+    if _has_lidar_marker(actor_name, actor_tags, ("wall", "barrier", "fence", "building")):
         return "wall"
 
     if _has_lidar_marker(actor_name, actor_tags, ("ground", "floor", "road", "walkable", "lane")):

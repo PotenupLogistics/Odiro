@@ -1810,7 +1810,6 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 
 	requestObject->SetArrayField(TEXT("observedObjects"), observedObjectValues);
 
-	const bool bPayloadBuilt = BuildMessagePayload(TEXT("scenario_decide"), requestObject, outPayload);
 	robotStateObject->SetStringField(TEXT("collisionTargetId"), observation.RobotState.CollisionTargetId);
 	robotStateObject->SetArrayField(TEXT("collisionTargetTags"), MakeJsonStringArrayFromNames(observation.RobotState.CollisionTargetTags));
 	AddJsonLidarRayTargetFields(lidarRay1DValues, observation.LidarScanInfo.RayInfos, EDeliveryBotLidarRayDimensionType::OneD);
@@ -1826,6 +1825,7 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 			lidarRay2DValues.Num(),
 			lidarRay3DValues.Num(),
 			legacyLidarRayValues.Num()));
+	const bool bPayloadBuilt = BuildMessagePayload(TEXT("scenario_decide"), requestObject, outPayload);
 	LastDecisionRequestObject = requestObject;
 	return bPayloadBuilt;
 }

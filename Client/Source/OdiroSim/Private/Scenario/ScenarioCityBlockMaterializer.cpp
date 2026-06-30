@@ -169,6 +169,11 @@ namespace
 	// Prevents generated visual blocks from receiving projected runtime/editor decals.
 	void SetActorReceivesDecals(AActor& blockActor, bool bReceivesDecals);
 
+	// Adds lightweight semantic markers used by LiDAR policy payloads and point cloud classification.
+	void ApplyCityBlockSemanticTags(
+		AActor& blockActor,
+		const FScenarioCityBlockCatalogEntry& blockEntry);
+
 	// Converts a catalog role to a stable diagnostic label.
 	const TCHAR* CityBlockRoleToString(EScenarioCityBlockRole role)
 	{
@@ -1388,6 +1393,40 @@ namespace
 		}
 	}
 
+	// Adds catalog semantics to generated actors without making visual mesh collision authoritative.
+	void ApplyCityBlockSemanticTags(
+		AActor& blockActor,
+		const FScenarioCityBlockCatalogEntry& blockEntry)
+	{
+		blockActor.Tags.AddUnique(FName(TEXT("city_block")));
+		blockActor.Tags.AddUnique(FName(*FString::Printf(
+			TEXT("city_block_role_%s"),
+			CityBlockRoleToString(blockEntry.Role))));
+
+		for (const FName& surfaceId : blockEntry.SemanticProfile.SurfaceIds)
+		{
+			if (!surfaceId.IsNone())
+			{
+				blockActor.Tags.AddUnique(surfaceId);
+			}
+		}
+
+		if (!blockEntry.SemanticProfile.CollisionTag.IsEmpty())
+		{
+			blockActor.Tags.AddUnique(FName(*blockEntry.SemanticProfile.CollisionTag));
+		}
+		if (!blockEntry.SemanticProfile.PenaltyKind.IsEmpty())
+		{
+			blockActor.Tags.AddUnique(FName(*blockEntry.SemanticProfile.PenaltyKind));
+		}
+
+		if (blockEntry.Role == EScenarioCityBlockRole::Building)
+		{
+			blockActor.Tags.AddUnique(FName(TEXT("building")));
+			blockActor.Tags.AddUnique(FName(TEXT("wall")));
+		}
+	}
+
 	// Loads and validates the configured actor class for one catalog entry.
 	UClass* LoadCityBlockActorClass(
 		const FScenarioCityBlockCatalogEntry& blockEntry,
@@ -1860,6 +1899,7 @@ namespace
 			sceneRoot->RegisterComponent();
 			sceneRoot->SetWorldLocation(chainOriginCm);
 			roadActor->SetActorEnableCollision(false);
+			ApplyCityBlockSemanticTags(*roadActor, chain.Pieces[0].BlockEntry);
 
 			for (int32 pieceIndex = 0; pieceIndex < chain.Pieces.Num(); ++pieceIndex)
 			{
@@ -1945,6 +1985,7 @@ namespace
 		const int32 preservedSemanticBlockingComponentCount = DisableCityBlockActorCollision(
 			*blockActor,
 			options.bCreateBuildingCollisionProxies && blockEntry.Role == EScenarioCityBlockRole::Building);
+		ApplyCityBlockSemanticTags(*blockActor, blockEntry);
 		if (preservedSemanticBlockingComponentCount > 0)
 		{
 			UE_LOG(

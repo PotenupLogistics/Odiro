@@ -20,111 +20,125 @@ namespace
 			|| variant == EBaseWidgetVariant::Info;
 	}
 
-	// Blends a color toward another token color for derived interaction states.
-	FLinearColor MixColor(const FLinearColor& from, const FLinearColor& to, const float amount)
+	// Blends a semantic color toward another token color for derived interaction states.
+	FLinearColor MixTokenColor(const FLinearColor& from, const FLinearColor& to, const float amount)
 	{
 		return FMath::Lerp(from, to, FMath::Clamp(amount, 0.0f, 1.0f));
 	}
 
-	// Resolves a button fill without falling back to the neutral secondary palette.
+	// Neutral/secondary controls darken when pressed and brighten only on hover.
+	FLinearColor ResolveNeutralPressedSurfaceColor(
+		const UBaseWidgetColorCatalog& colors,
+		const EBaseWidgetVariant variant)
+	{
+		return variant == EBaseWidgetVariant::Secondary
+			? colors.SurfaceHoverColor
+			: colors.SurfacePanelColor;
+	}
+
+	// Resolves the DA-driven button fill for the current variant and interaction state.
 	FLinearColor ResolveButtonSurfaceColor(
-		const UBaseWidgetTokenCatalog& tokens,
+		const UBaseWidgetColorCatalog& colors,
 		const EBaseWidgetVariant variant,
 		const EBaseWidgetState state,
 		const bool bSelected)
 	{
 		if (state == EBaseWidgetState::Disabled)
 		{
-			return tokens.SurfaceControlColor;
+			return colors.SurfaceControlColor;
 		}
 
 		if (bSelected || state == EBaseWidgetState::Selected)
 		{
 			if (state == EBaseWidgetState::Hovered)
 			{
-				return tokens.AccentHoverColor;
+				return colors.AccentHoverColor;
 			}
 			if (state == EBaseWidgetState::Pressed)
 			{
-				return tokens.AccentActiveColor;
+				return colors.AccentActiveColor;
 			}
-			return tokens.AccentColor;
+			return colors.AccentColor;
 		}
 
 		if (variant == EBaseWidgetVariant::Primary)
 		{
 			if (state == EBaseWidgetState::Hovered)
 			{
-				return tokens.AccentHoverColor;
+				return colors.AccentHoverColor;
 			}
 			if (state == EBaseWidgetState::Pressed)
 			{
-				return tokens.AccentActiveColor;
+				return colors.AccentActiveColor;
 			}
-			return tokens.AccentColor;
+			return colors.AccentColor;
 		}
 
 		if (variant == EBaseWidgetVariant::Ghost)
 		{
 			if (state == EBaseWidgetState::Hovered)
 			{
-				return tokens.SurfaceControlHoverColor;
+				return colors.SurfaceControlHoverColor;
 			}
 			if (state == EBaseWidgetState::Pressed)
 			{
-				return tokens.SurfaceControlActiveColor;
+				return colors.SurfaceHoverColor;
 			}
 			return FLinearColor::Transparent;
 		}
 
 		if (IsColoredActionVariant(variant))
 		{
-			const FLinearColor baseColor = tokens.GetVariantColor(variant);
+			const FLinearColor baseColor = colors.GetVariantColor(variant);
 			if (state == EBaseWidgetState::Hovered)
 			{
-				return MixColor(baseColor, tokens.TextStrongColor, 0.12f);
+				return MixTokenColor(baseColor, colors.TextStrongColor, 0.12f);
 			}
 			if (state == EBaseWidgetState::Pressed)
 			{
-				return MixColor(baseColor, tokens.SurfaceWellColor, 0.18f);
+				return MixTokenColor(baseColor, colors.SurfaceWellColor, 0.18f);
 			}
 			return baseColor;
 		}
 
 		if (state == EBaseWidgetState::Hovered)
 		{
-			return tokens.SurfaceControlHoverColor;
+			return variant == EBaseWidgetVariant::Neutral
+				? colors.SurfaceControlActiveColor
+				: colors.SurfaceControlHoverColor;
 		}
 		if (state == EBaseWidgetState::Pressed)
 		{
-			return tokens.SurfaceControlActiveColor;
+			return ResolveNeutralPressedSurfaceColor(colors, variant);
 		}
 		if (state != EBaseWidgetState::Default)
 		{
-			return tokens.GetStateColor(state);
+			return colors.GetStateColor(state);
 		}
-		return tokens.GetVariantColor(variant);
+		if (variant == EBaseWidgetVariant::Neutral)
+		{
+			return colors.SurfaceControlHoverColor;
+		}
+		return colors.GetVariantColor(variant);
 	}
 
-	// Resolves the button outline in the same palette as the fill.
+	// Resolves the DA-driven button outline for the current variant and interaction state.
 	FLinearColor ResolveButtonFrameColor(
-		const UBaseWidgetTokenCatalog& tokens,
+		const UBaseWidgetColorCatalog& colors,
 		const EBaseWidgetVariant variant,
 		const EBaseWidgetState state,
 		const bool bSelected)
 	{
 		if (state == EBaseWidgetState::Disabled)
 		{
-			return tokens.LineSubtleColor;
+			return colors.LineSubtleColor;
 		}
 
 		if (bSelected || state == EBaseWidgetState::Selected)
 		{
-			return state == EBaseWidgetState::Pressed ? tokens.AccentActiveColor : tokens.AccentColor;
+			return state == EBaseWidgetState::Pressed ? colors.AccentActiveColor : colors.AccentColor;
 		}
 
-		// Ghost is chrome-free until selected, so its idle/hover frame is invisible.
-		// Segmented controls use this so only the active segment shows a border.
 		if (variant == EBaseWidgetVariant::Ghost)
 		{
 			return FLinearColor::Transparent;
@@ -132,24 +146,38 @@ namespace
 
 		if (variant == EBaseWidgetVariant::Primary)
 		{
-			return state == EBaseWidgetState::Pressed ? tokens.AccentActiveColor : tokens.AccentColor;
+			return state == EBaseWidgetState::Pressed ? colors.AccentActiveColor : colors.AccentColor;
 		}
 
 		if (IsColoredActionVariant(variant))
 		{
-			const FLinearColor baseColor = tokens.GetVariantColor(variant);
+			const FLinearColor baseColor = colors.GetVariantColor(variant);
 			return state == EBaseWidgetState::Pressed
-				? MixColor(baseColor, tokens.SurfaceWellColor, 0.24f)
+				? MixTokenColor(baseColor, colors.SurfaceWellColor, 0.24f)
 				: baseColor;
 		}
 
 		if (state == EBaseWidgetState::Hovered || state == EBaseWidgetState::Pressed)
 		{
-			return tokens.LineFieldHoverColor;
+			return colors.LineFieldHoverColor;
 		}
-		return tokens.LineInsetColor;
+		return colors.LineInsetColor;
 	}
 
+	// Maps base button alignment to text justification for label-only buttons.
+	ETextJustify::Type ToTextJustify(const EBaseHorizontalContentAlign alignment)
+	{
+		switch (alignment)
+		{
+		case EBaseHorizontalContentAlign::Left:
+			return ETextJustify::Left;
+		case EBaseHorizontalContentAlign::Right:
+			return ETextJustify::Right;
+		case EBaseHorizontalContentAlign::Center:
+		default:
+			return ETextJustify::Center;
+		}
+	}
 }
 
 UBaseTransparentButtonStyle::UBaseTransparentButtonStyle()
@@ -177,26 +205,31 @@ UBaseButtonWidget::UBaseButtonWidget(const FObjectInitializer& objectInitializer
 	UseTransparentCommonStyle();
 }
 
-const UBaseWidgetTokenCatalog* UBaseButtonWidget::GetResolvedBaseTokens() const
+const UBaseWidgetColorCatalog* UBaseButtonWidget::GetResolvedBaseColors() const
 {
-	return BaseWidgetPrivate::ResolveBaseTokenCatalog(BaseTokens);
+	return BaseWidgetPrivate::ResolveBaseColorCatalog(ColorsOverride);
+}
+
+const UBaseWidgetSizeCatalog* UBaseButtonWidget::GetResolvedBaseSizes() const
+{
+	return BaseWidgetPrivate::ResolveBaseSizeCatalog(SizesOverride);
 }
 
 FBaseTextStyleToken UBaseButtonWidget::ResolveTextStyle(const EBaseTextRole role) const
 {
-	return BaseWidgetPrivate::ResolveTextStyle(
-		BaseTokens,
-		BaseWidgetPrivate::ResolveSizedTextRole(role, Size));
+	FBaseTextStyleToken style;
+	BaseWidgetPrivate::ResolveTextStyle(ColorsOverride, SizesOverride, role, style);
+	return style;
 }
 
 FLinearColor UBaseButtonWidget::ResolveVariantColor(const EBaseWidgetVariant variant) const
 {
-	return BaseWidgetPrivate::ResolveVariantColor(BaseTokens, variant);
+	return BaseWidgetPrivate::ResolveVariantColor(ColorsOverride, variant);
 }
 
 FLinearColor UBaseButtonWidget::ResolveStateColor(const EBaseWidgetState state) const
 {
-	return BaseWidgetPrivate::ResolveStateColor(BaseTokens, state);
+	return BaseWidgetPrivate::ResolveStateColor(ColorsOverride, state);
 }
 
 void UBaseButtonWidget::SynchronizeBaseProperties()
@@ -208,7 +241,8 @@ void UBaseButtonWidget::SynchronizeBaseProperties()
 	}
 
 	const bool bEnabled = !bDisabled && State != EBaseWidgetState::Disabled;
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
 	const EBaseWidgetVariant effectiveVariant = GetEffectiveVariant();
 	const EBaseWidgetState effectiveState = GetEffectiveState();
 	const bool bHighContrastForeground = effectiveVariant == EBaseWidgetVariant::Primary
@@ -217,39 +251,57 @@ void UBaseButtonWidget::SynchronizeBaseProperties()
 		|| effectiveVariant == EBaseWidgetVariant::Info
 		|| bSelected
 		|| effectiveState == EBaseWidgetState::Selected;
-	FLinearColor foregroundColor = tokens ? tokens->TextPrimaryColor : FLinearColor::White;
-	if (!bEnabled)
+	FLinearColor foregroundColor = FLinearColor::Transparent;
+	if (colors)
 	{
-		foregroundColor = ResolveStateColor(EBaseWidgetState::Disabled);
-	}
-	else if (tokens
-		&& effectiveVariant == EBaseWidgetVariant::Warning
-		&& !bSelected
-		&& effectiveState != EBaseWidgetState::Selected)
-	{
-		foregroundColor = tokens->SurfaceWellColor;
-	}
-	else if (tokens && bHighContrastForeground)
-	{
-		foregroundColor = tokens->TextStrongColor;
+		foregroundColor = colors->TextPrimaryColor;
+		if (!bEnabled)
+		{
+			foregroundColor = colors->GetStateColor(EBaseWidgetState::Disabled);
+		}
+		else if (effectiveVariant == EBaseWidgetVariant::Warning
+			&& !bSelected
+			&& effectiveState != EBaseWidgetState::Selected)
+		{
+			foregroundColor = colors->SurfaceWellColor;
+		}
+		else if (bHighContrastForeground)
+		{
+			foregroundColor = colors->TextStrongColor;
+		}
 	}
 	SetIsEnabled(bEnabled);
 	if (GetSelected() != bSelected)
 	{
 		SetIsSelected(bSelected, false);
 	}
+	if (SurfaceBorder)
+	{
+		SurfaceBorder->SetHorizontalAlignment(BaseWidgetPrivate::ToSlateHorizontalAlignment(ContentAlign));
+	}
 
-	const bool bHasVisibleLabel = LabelTextBlock && !Label.IsEmpty();
 	if (LabelTextBlock)
 	{
 		LabelTextBlock->SetText(Label);
+		LabelTextBlock->SetJustification(ToTextJustify(ContentAlign));
+		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
+		if (colors)
+		{
+			LabelTextBlock->SetColorAndOpacity(FSlateColor(foregroundColor));
+		}
+	}
+	const bool bHasVisibleLabel = LabelTextBlock && !Label.IsEmpty();
+	if (LabelTextBlock)
+	{
 		LabelTextBlock->SetVisibility(bHasVisibleLabel
 			? ESlateVisibility::SelfHitTestInvisible
 			: ESlateVisibility::Collapsed);
-		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
-		LabelTextBlock->SetColorAndOpacity(FSlateColor(foregroundColor));
 	}
-	BaseWidgetPrivate::ApplyIconSize(IconBox.Get(), IconImage.Get(), IconSize);
+	const float resolvedIconSize = IconSize > 0.0f ? IconSize : (sizes ? sizes->IconSize : 0.0f);
+	if (resolvedIconSize > 0.0f)
+	{
+		BaseWidgetPrivate::ApplyIconSize(IconBox.Get(), IconImage.Get(), resolvedIconSize);
+	}
 	bool bHasIconImage = false;
 	if (IconImage)
 	{
@@ -258,22 +310,28 @@ void UBaseButtonWidget::SynchronizeBaseProperties()
 			IconImage->SetBrushFromTexture(Icon, false);
 		}
 		bHasIconImage = Icon != nullptr;
-		IconImage->SetColorAndOpacity(foregroundColor);
+		if (colors)
+		{
+			IconImage->SetColorAndOpacity(foregroundColor);
+		}
 		IconImage->SetVisibility(bHasIconImage
 			? ESlateVisibility::SelfHitTestInvisible
 			: ESlateVisibility::Collapsed);
 	}
+	if (IconGlyph)
+	{
+		IconGlyph->SetText(IconGlyphText);
+	}
 	const bool bHasFallbackGlyph = IconGlyph && !IconGlyphText.IsEmpty();
 	if (IconGlyph)
 	{
-		if (bHasFallbackGlyph)
-		{
-			IconGlyph->SetText(IconGlyphText);
-		}
 		IconGlyph->SetVisibility(!bHasIconImage && bHasFallbackGlyph
 			? ESlateVisibility::SelfHitTestInvisible
 			: ESlateVisibility::Collapsed);
-		IconGlyph->SetColorAndOpacity(foregroundColor);
+		if (colors)
+		{
+			IconGlyph->SetColorAndOpacity(FSlateColor(foregroundColor));
+		}
 	}
 	if (IconBox)
 	{
@@ -289,19 +347,15 @@ void UBaseButtonWidget::SynchronizeBaseProperties()
 			: ESlateVisibility::Collapsed);
 	}
 
-	if (tokens)
+	if (colors && sizes)
 	{
-		const FLinearColor surfaceColor =
-			ResolveButtonSurfaceColor(*tokens, effectiveVariant, effectiveState, bSelected);
-		const FLinearColor frameColor =
-			ResolveButtonFrameColor(*tokens, effectiveVariant, effectiveState, bSelected);
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			BorderFrame.Get(),
 			SurfaceBorder.Get(),
-			surfaceColor,
-			frameColor,
-			tokens->Radius,
-			tokens->BorderWidth);
+			ResolveButtonSurfaceColor(*colors, effectiveVariant, effectiveState, bSelected),
+			ResolveButtonFrameColor(*colors, effectiveVariant, effectiveState, bSelected),
+			sizes->Radius,
+			sizes->BorderWidth);
 	}
 
 	InvalidateLayoutAndVolatility();
@@ -333,7 +387,7 @@ void UBaseButtonWidget::SetIconGlyphText(const FText inIconGlyphText)
 
 void UBaseButtonWidget::SetIconSize(const float inIconSize)
 {
-	IconSize = FMath::Max(inIconSize, 1.0f);
+	IconSize = FMath::Max(inIconSize, 0.0f);
 	SynchronizeBaseProperties();
 }
 
@@ -353,9 +407,15 @@ void UBaseButtonWidget::SetPrimary(const bool bInPrimary)
 	SynchronizeBaseProperties();
 }
 
-void UBaseButtonWidget::SetBaseSize(const EBaseWidgetSize inSize)
+void UBaseButtonWidget::SetColorsOverride(const TSoftObjectPtr<UBaseWidgetColorCatalog> inColorsOverride)
 {
-	Size = inSize;
+	ColorsOverride = inColorsOverride;
+	SynchronizeBaseProperties();
+}
+
+void UBaseButtonWidget::SetSizesOverride(const TSoftObjectPtr<UBaseWidgetSizeCatalog> inSizesOverride)
+{
+	SizesOverride = inSizesOverride;
 	SynchronizeBaseProperties();
 }
 
@@ -369,17 +429,26 @@ void UBaseButtonWidget::SetBaseState(const EBaseWidgetState inState)
 {
 	State = inState;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged();
 }
 
 void UBaseButtonWidget::SetSelected(const bool bInSelected)
 {
 	bSelected = bInSelected;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged();
 }
 
 void UBaseButtonWidget::SetDisabled(const bool bInDisabled)
 {
 	bDisabled = bInDisabled;
+	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged();
+}
+
+void UBaseButtonWidget::SetContentAlign(const EBaseHorizontalContentAlign inContentAlign)
+{
+	ContentAlign = inContentAlign;
 	SynchronizeBaseProperties();
 }
 
@@ -395,6 +464,7 @@ void UBaseButtonWidget::OnWidgetRebuilt()
 	Super::OnWidgetRebuilt();
 	UseTransparentCommonStyle();
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(true);
 }
 
 void UBaseButtonWidget::NativePreConstruct()
@@ -429,6 +499,7 @@ void UBaseButtonWidget::NativeOnHovered()
 	Super::NativeOnHovered();
 	InteractionState = EBaseWidgetState::Hovered;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged();
 	OnBaseHovered.Broadcast(this);
 }
 
@@ -437,6 +508,7 @@ void UBaseButtonWidget::NativeOnUnhovered()
 	Super::NativeOnUnhovered();
 	InteractionState = EBaseWidgetState::Default;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged();
 	OnBaseUnhovered.Broadcast(this);
 }
 
@@ -445,6 +517,7 @@ void UBaseButtonWidget::NativeOnPressed()
 	Super::NativeOnPressed();
 	InteractionState = EBaseWidgetState::Pressed;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged();
 	OnBasePressed.Broadcast(this);
 }
 
@@ -453,6 +526,7 @@ void UBaseButtonWidget::NativeOnReleased()
 	Super::NativeOnReleased();
 	InteractionState = EBaseWidgetState::Hovered;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged();
 	OnBaseReleased.Broadcast(this);
 }
 
@@ -461,6 +535,7 @@ void UBaseButtonWidget::NativeOnSelected(const bool bBroadcast)
 	Super::NativeOnSelected(bBroadcast);
 	bSelected = true;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged();
 }
 
 void UBaseButtonWidget::NativeOnDeselected(const bool bBroadcast)
@@ -468,11 +543,16 @@ void UBaseButtonWidget::NativeOnDeselected(const bool bBroadcast)
 	Super::NativeOnDeselected(bBroadcast);
 	bSelected = false;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged();
 }
 
 void UBaseButtonWidget::ApplyTextStyle(UTextBlock* textBlock, const EBaseTextRole role) const
 {
-	BaseWidgetPrivate::ApplyTextStyle(textBlock, ResolveTextStyle(role));
+	FBaseTextStyleToken style;
+	if (BaseWidgetPrivate::ResolveTextStyle(ColorsOverride, SizesOverride, role, style))
+	{
+		BaseWidgetPrivate::ApplyTextStyle(textBlock, style);
+	}
 }
 
 void UBaseButtonWidget::ApplyBorderColor(UBorder* border, const FLinearColor& color) const
@@ -500,6 +580,19 @@ EBaseWidgetState UBaseButtonWidget::GetEffectiveState() const
 		return EBaseWidgetState::Selected;
 	}
 	return State;
+}
+
+void UBaseButtonWidget::NotifyBaseVisualStateChanged(const bool bForce)
+{
+	const EBaseWidgetState effectiveState = GetEffectiveState();
+	if (!bForce && bHasBroadcastVisualState && LastBroadcastVisualState == effectiveState)
+	{
+		return;
+	}
+
+	LastBroadcastVisualState = effectiveState;
+	bHasBroadcastVisualState = true;
+	ReceiveBaseVisualStateChanged(effectiveState);
 }
 
 void UBaseButtonWidget::UseTransparentCommonStyle()

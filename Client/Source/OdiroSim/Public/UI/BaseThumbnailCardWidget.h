@@ -75,27 +75,27 @@ protected:
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
 	// Media texture shown in the 4:3 media area.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetMediaTexture", Setter = "SetMediaTexture", BlueprintGetter = "GetMediaTexture", BlueprintSetter = "SetMediaTexture", Category = "UI|Base Thumbnail Card", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetMediaTexture", Setter = "SetMediaTexture", BlueprintGetter = "GetMediaTexture", BlueprintSetter = "SetMediaTexture", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	TObjectPtr<UTexture2D> MediaTexture;
 
 	// Whether the media area is shown; when false the card is content-only.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "ShouldShowMedia", Setter = "SetShowMedia", BlueprintGetter = "ShouldShowMedia", BlueprintSetter = "SetShowMedia", Category = "UI|Base Thumbnail Card", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "ShouldShowMedia", Setter = "SetShowMedia", BlueprintGetter = "ShouldShowMedia", BlueprintSetter = "SetShowMedia", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	bool bShowMedia = true;
 
 	// Media padding policy.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetMediaPaddingMode", Setter = "SetMediaPaddingMode", BlueprintGetter = "GetMediaPaddingMode", BlueprintSetter = "SetMediaPaddingMode", Category = "UI|Base Thumbnail Card", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetMediaPaddingMode", Setter = "SetMediaPaddingMode", BlueprintGetter = "GetMediaPaddingMode", BlueprintSetter = "SetMediaPaddingMode", Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
 	EBaseThumbnailMediaPaddingMode MediaPaddingMode = EBaseThumbnailMediaPaddingMode::FullBleed;
 
 	// When true, the card hides named content and lets the media area fill the assigned slot.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsMediaOnly", Setter = "SetMediaOnly", BlueprintGetter = "IsMediaOnly", BlueprintSetter = "SetMediaOnly", Category = "UI|Base Thumbnail Card", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsMediaOnly", Setter = "SetMediaOnly", BlueprintGetter = "IsMediaOnly", BlueprintSetter = "SetMediaOnly", Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
 	bool bMediaOnly = false;
 
 	// Selected card state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsBaseSelected", Setter = "SetSelected", BlueprintGetter = "IsBaseSelected", BlueprintSetter = "SetSelected", Category = "UI|Base Thumbnail Card", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsBaseSelected", Setter = "SetSelected", BlueprintGetter = "IsBaseSelected", BlueprintSetter = "SetSelected", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bSelected = false;
 
 	// Disabled card state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Thumbnail Card", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
 
 	// Rounded card surface owned by the Widget Blueprint.

@@ -4,6 +4,7 @@
 #include "Blueprint/SlateBlueprintLibrary.h"
 #include "Components/Border.h"
 #include "Components/Image.h"
+#include "Components/OverlaySlot.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Engine/World.h"
@@ -12,19 +13,54 @@
 
 using namespace BaseFormElementPrivate;
 
+namespace
+{
+	void ApplyDropdownOverlaySlotPadding(UWidget* widget, const FMargin& padding)
+	{
+		if (widget)
+		{
+			if (UOverlaySlot* overlaySlot = Cast<UOverlaySlot>(widget->Slot))
+			{
+				overlaySlot->SetPadding(padding);
+			}
+		}
+	}
+}
+
 void UBaseDropdownWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	FBaseWidgetSizeConstraints effectiveSizeConstraints = SizeConstraints;
+	if (effectiveSizeConstraints.MinWidth <= 0.0f)
+	{
+		effectiveSizeConstraints.MinWidth = 80.0f;
+	}
+	if (sizes && sizes->ControlHeight > 0.0f && effectiveSizeConstraints.MinHeight <= 0.0f)
+	{
+		effectiveSizeConstraints.MinHeight = sizes->ControlHeight;
+	}
+	BaseWidgetPrivate::ApplySizeConstraints(RootSize.Get(), effectiveSizeConstraints);
+	if (RootSizeBox.Get() != RootSize.Get())
+	{
+		BaseWidgetPrivate::ApplySizeConstraints(RootSizeBox.Get(), effectiveSizeConstraints);
+	}
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
 	const FBaseDropdownItem* selectedItem = FindDropdownItemById(Items, SelectedId);
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
 	if (SelectedTextBlock)
 	{
-		SetTextBlockValue(SelectedTextBlock.Get(), selectedItem ? selectedItem->Label : FText::GetEmpty(), false);
-		ApplyTextStyle(SelectedTextBlock.Get(), EBaseTextRole::Label);
-		if (tokens && bDisabled)
+		const FText selectedText = selectedItem ? selectedItem->Label : PlaceholderText;
+		if (!selectedText.IsEmpty())
 		{
-			ApplyTextColor(SelectedTextBlock.Get(), tokens->TextFaintColor);
+			SetTextBlockValue(SelectedTextBlock.Get(), selectedText, false);
+		}
+		ApplyTextStyle(SelectedTextBlock.Get(), EBaseTextRole::Label);
+		if (colors)
+		{
+			ApplyTextColor(SelectedTextBlock.Get(), bDisabled
+				? colors->TextFaintColor
+				: (selectedItem ? colors->TextPrimaryColor : colors->TextMutedColor));
 		}
 	}
 	if (SelectedIconImage)
@@ -35,39 +71,58 @@ void UBaseDropdownWidget::SynchronizeBaseProperties()
 	{
 		SetOptionalWidgetVisible(CaretImage.Get(), true);
 		CaretImage->SetRenderTransformAngle(bOpen ? 180.0f : 0.0f);
-		if (tokens)
+		if (colors)
 		{
-			CaretImage->SetColorAndOpacity(bDisabled ? tokens->TextFaintColor : tokens->TextSecondaryColor);
+			CaretImage->SetColorAndOpacity(bDisabled ? colors->TextFaintColor : colors->TextSecondaryColor);
 		}
 	}
 	const bool bUseEmbeddedOptions = UsesEmbeddedOptionList();
+	const bool bShowEmbeddedOptions = bUseEmbeddedOptions && (bOpen || IsDesignTime());
 	if (OptionListSurface)
 	{
 		// One rounded panel wraps the whole option list; individual rows are
 		// borderless so the list reads as a single surface.
-		SetOptionalWidgetVisible(OptionListSurface.Get(), bOpen && bUseEmbeddedOptions, ESlateVisibility::Visible);
-		if (tokens)
+		SetOptionalWidgetVisible(OptionListSurface.Get(), bShowEmbeddedOptions, ESlateVisibility::Visible);
+		if (colors && sizes)
 		{
 			BaseWidgetPrivate::ApplyRoundedSurface(
 				nullptr,
 				OptionListSurface.Get(),
-				tokens->SurfacePanelColor,
-				tokens->LineFieldColor,
-				tokens->Radius,
-				tokens->BorderWidth);
+				colors->SurfacePanelColor,
+				colors->LineFieldColor,
+				sizes->Radius,
+				sizes->BorderWidth);
 		}
 	}
-	if (tokens)
+	if (EmptyOptionsTextBlock)
 	{
-		const FLinearColor fillColor = bDisabled ? tokens->SurfaceChromeColor : tokens->SurfaceWellColor;
-		const FLinearColor strokeColor = bDisabled ? tokens->LineSubtleColor : (bOpen ? tokens->AccentFocusColor : tokens->LineFieldColor);
+		BaseWidgetPrivate::ApplyTextIfSet(EmptyOptionsTextBlock.Get(), EmptyOptionsText);
+		ApplyTextStyle(EmptyOptionsTextBlock.Get(), EBaseTextRole::Caption);
+		if (colors)
+		{
+			ApplyTextColor(EmptyOptionsTextBlock.Get(), colors->TextMutedColor);
+		}
+		SetOptionalWidgetVisible(EmptyOptionsTextBlock.Get(), Items.IsEmpty() && bShowEmbeddedOptions);
+	}
+	if (colors && sizes)
+	{
+		if (SurfaceBorder)
+		{
+			const FMargin controlPadding(sizes->Space4, sizes->Space2);
+			SurfaceBorder->SetPadding(controlPadding);
+			ApplyDropdownOverlaySlotPadding(ClosedContent.Get(), controlPadding);
+		}
+		const FLinearColor fillColor = bDisabled ? colors->SurfaceChromeColor : colors->SurfaceWellColor;
+		const FLinearColor strokeColor = bDisabled
+			? colors->LineSubtleColor
+			: (bOpen ? colors->AccentFocusColor : colors->LineFieldColor);
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			BorderFrame.Get(),
 			SurfaceBorder.Get(),
 			fillColor,
 			strokeColor,
-			tokens->Radius,
-			tokens->BorderWidth);
+			sizes->Radius,
+			sizes->BorderWidth);
 	}
 
 	if (OptionContainer && OptionContainer->GetChildrenCount() != Items.Num())
@@ -98,6 +153,8 @@ void UBaseDropdownWidget::NativeConstruct()
 void UBaseDropdownWidget::NativeDestruct()
 {
 	CloseOptionList();
+	UnbindGeneratedOptions();
+	OptionIdsByChildIndex.Reset();
 	Super::NativeDestruct();
 }
 
@@ -115,6 +172,7 @@ FReply UBaseDropdownWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry,
 			CloseOptionList();
 		}
 		SynchronizeBaseProperties();
+		NotifyBaseVisualStateChanged(bOpen ? EBaseWidgetState::Selected : EBaseWidgetState::Default);
 		return FReply::Handled();
 	}
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
@@ -139,6 +197,18 @@ void UBaseDropdownWidget::SetItems(const TArray<FBaseDropdownItem>& inItems)
 		ActiveMenuWidget->SetItems(Items);
 	}
 	RebuildOptions();
+	SynchronizeBaseProperties();
+}
+
+void UBaseDropdownWidget::SetPlaceholderText(const FText inPlaceholderText)
+{
+	PlaceholderText = inPlaceholderText;
+	SynchronizeBaseProperties();
+}
+
+void UBaseDropdownWidget::SetEmptyOptionsText(const FText inEmptyOptionsText)
+{
+	EmptyOptionsText = inEmptyOptionsText;
 	SynchronizeBaseProperties();
 }
 
@@ -177,6 +247,7 @@ void UBaseDropdownWidget::SetOpen(const bool bInOpen)
 		CloseOptionList();
 	}
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(bOpen ? EBaseWidgetState::Selected : EBaseWidgetState::Default);
 }
 
 void UBaseDropdownWidget::SetDisabled(const bool bInDisabled)
@@ -188,6 +259,7 @@ void UBaseDropdownWidget::SetDisabled(const bool bInDisabled)
 		return;
 	}
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(bDisabled ? EBaseWidgetState::Disabled : EBaseWidgetState::Default);
 }
 
 bool UBaseDropdownWidget::UsesEmbeddedOptionList() const
@@ -216,8 +288,8 @@ void UBaseDropdownWidget::OpenOptionListAt(const FGeometry& anchorGeometry)
 	ActiveMenuWidget->bOpen = true;
 	ActiveMenuWidget->bDisabled = bDisabled;
 	ActiveMenuWidget->OptionWidgetClass = OptionWidgetClass;
-	ActiveMenuWidget->BaseTokens = BaseTokens;
-	ActiveMenuWidget->Size = Size;
+	ActiveMenuWidget->SetColorsOverride(ColorsOverride);
+	ActiveMenuWidget->SetSizesOverride(SizesOverride);
 	ActiveMenuWidget->OnSelectionChanged.RemoveDynamic(this, &UBaseDropdownWidget::HandlePopupSelectionChanged);
 	ActiveMenuWidget->OnSelectionChanged.AddDynamic(this, &UBaseDropdownWidget::HandlePopupSelectionChanged);
 	ActiveMenuWidget->AddToViewport(MenuZOrder);
@@ -250,7 +322,8 @@ void UBaseDropdownWidget::RebuildOptions()
 		return;
 	}
 
-	OptionIdByWidget.Reset();
+	UnbindGeneratedOptions();
+	OptionIdsByChildIndex.Reset();
 	OptionContainer->ClearChildren();
 	for (const FBaseDropdownItem& item : Items)
 	{
@@ -262,8 +335,10 @@ void UBaseDropdownWidget::RebuildOptions()
 
 		option->OnBaseClicked.RemoveDynamic(this, &UBaseDropdownWidget::HandleOptionClicked);
 		option->OnBaseClicked.AddDynamic(this, &UBaseDropdownWidget::HandleOptionClicked);
-		OptionIdByWidget.Add(TWeakObjectPtr<UBaseButtonWidget>(option), item.Id);
+		option->SetColorsOverride(ColorsOverride);
+		option->SetSizesOverride(SizesOverride);
 		OptionContainer->AddChild(option);
+		OptionIdsByChildIndex.Add(item.Id);
 	}
 	RefreshOptions();
 }
@@ -275,7 +350,8 @@ void UBaseDropdownWidget::RefreshOptions()
 		return;
 	}
 
-	OptionIdByWidget.Reset();
+	OptionIdsByChildIndex.Reset();
+	OptionIdsByChildIndex.SetNum(OptionContainer->GetChildrenCount());
 	const int32 childCount = FMath::Min(OptionContainer->GetChildrenCount(), Items.Num());
 	for (int32 itemIndex = 0; itemIndex < childCount; ++itemIndex)
 	{
@@ -286,20 +362,48 @@ void UBaseDropdownWidget::RefreshOptions()
 		}
 
 		const FBaseDropdownItem& item = Items[itemIndex];
+		option->SetColorsOverride(ColorsOverride);
+		option->SetSizesOverride(SizesOverride);
 		option->SetLabel(item.Label);
 		option->SetIcon(item.Icon);
 		option->SetSelected(item.Id == SelectedId);
 		option->SetDisabled(bDisabled || item.bDisabled);
-		OptionIdByWidget.Add(TWeakObjectPtr<UBaseButtonWidget>(option), item.Id);
+		OptionIdsByChildIndex[itemIndex] = item.Id;
+	}
+}
+
+void UBaseDropdownWidget::UnbindGeneratedOptions()
+{
+	if (!OptionContainer)
+	{
+		return;
+	}
+
+	for (int32 childIndex = 0; childIndex < OptionContainer->GetChildrenCount(); ++childIndex)
+	{
+		if (UBaseButtonWidget* option = Cast<UBaseButtonWidget>(OptionContainer->GetChildAt(childIndex)))
+		{
+			option->OnBaseClicked.RemoveDynamic(this, &UBaseDropdownWidget::HandleOptionClicked);
+		}
 	}
 }
 
 void UBaseDropdownWidget::HandleOptionClicked(UBaseButtonWidget* button)
 {
-	const TWeakObjectPtr<UBaseButtonWidget> optionKey(button);
-	if (const FName* itemId = OptionIdByWidget.Find(optionKey))
+	if (!OptionContainer || !button)
 	{
-		SelectItemById(*itemId);
+		return;
+	}
+
+	for (int32 childIndex = 0; childIndex < OptionContainer->GetChildrenCount(); ++childIndex)
+	{
+		if (OptionContainer->GetChildAt(childIndex) == button
+			&& OptionIdsByChildIndex.IsValidIndex(childIndex)
+			&& !OptionIdsByChildIndex[childIndex].IsNone())
+		{
+			SelectItemById(OptionIdsByChildIndex[childIndex]);
+			return;
+		}
 	}
 }
 

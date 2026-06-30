@@ -7,13 +7,14 @@ void UBaseTextWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
 	if (TextBlock)
 	{
 		BaseWidgetPrivate::ApplyTextIfSet(TextBlock.Get(), Text);
 		ApplyTextStyle(TextBlock.Get(), TextRole);
-		if (bDisabled)
+		if (bDisabled && colors)
 		{
-			TextBlock->SetColorAndOpacity(FSlateColor(ResolveStateColor(EBaseWidgetState::Disabled)));
+			TextBlock->SetColorAndOpacity(FSlateColor(colors->GetStateColor(EBaseWidgetState::Disabled)));
 		}
 	}
 }
@@ -34,4 +35,5 @@ void UBaseTextWidget::SetDisabled(const bool bInDisabled)
 {
 	bDisabled = bInDisabled;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(bDisabled ? EBaseWidgetState::Disabled : EBaseWidgetState::Default);
 }

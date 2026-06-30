@@ -8,16 +8,21 @@ void UBaseProgressRowWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
-	if (tokens)
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	if (colors && sizes)
 	{
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			BorderFrame.Get(),
 			SurfaceBorder.Get(),
-			tokens->SurfacePanelColor,
-			tokens->LineFieldColor,
-			tokens->Radius,
-			tokens->BorderWidth);
+			colors->SurfacePanelColor,
+			colors->LineFieldColor,
+			sizes->Radius,
+			sizes->BorderWidth);
+	}
+	if (SurfaceBorder)
+	{
+		SurfaceBorder->SetVerticalAlignment(BaseWidgetPrivate::ToSlateVerticalAlignment(ContentVAlign));
 	}
 
 	if (LabelTextBlock)
@@ -35,15 +40,15 @@ void UBaseProgressRowWidget::SynchronizeBaseProperties()
 		BaseWidgetPrivate::ApplyTextIfSet(ValueTextBlock.Get(), ValueText);
 		ApplyTextStyle(ValueTextBlock.Get(), EBaseTextRole::Caption);
 	}
-	if (ProgressTrack && tokens)
+	if (ProgressTrack && colors && sizes)
 	{
 		const float clampedPercent = FMath::Clamp(ProgressPercent, 0.0f, 100.0f) / 100.0f;
 		BaseWidgetPrivate::ApplyProgressSurface(
 			ProgressTrack.Get(),
-			tokens->SurfaceWellColor,
-			ResolveStateColor(State),
+			colors->SurfaceWellColor,
+			colors->GetStateColor(State),
 			clampedPercent,
-			tokens->RadiusPill);
+			sizes->RadiusPill);
 	}
 }
 
@@ -81,5 +86,11 @@ void UBaseProgressRowWidget::SetValueText(const FText inValueText)
 void UBaseProgressRowWidget::SetBaseState(const EBaseWidgetState inState)
 {
 	State = inState;
+	SynchronizeBaseProperties();
+}
+
+void UBaseProgressRowWidget::SetContentVAlign(const EBaseVerticalContentAlign inContentVAlign)
+{
+	ContentVAlign = inContentVAlign;
 	SynchronizeBaseProperties();
 }

@@ -5,7 +5,7 @@ Codex ↔ Claude를 오가며 진행하므로, 이 문서가 단일 기준점이
 
 ## 목표
 spec.md의 폼 요소를 기존 독립 base WBP 컴포넌트 패턴으로 구현한다.
-신규 토큰/추상화 없이 `DA_BaseTokens` 위에서 재사용 가능한 위젯을 만든다.
+색과 size/typography는 split DA(`DA_BaseColors`, `DA_{Small,Medium,Large}Sizes`)에서 해석한다.
 
 ## 접근
 - 컴포넌트 = C++ `UBaseXxxWidget` + WBP, 서브위젯 `BindWidget`.
@@ -17,10 +17,10 @@ spec.md의 폼 요소를 기존 독립 base WBP 컴포넌트 패턴으로 구현
 배치마다 사이클: 구현 → 컴파일 → 에디터 비주얼 확인 → (가능하면) 스모크 테스트 → PR.
 
 ### Batch A — 입력
-- `BaseTextInputWidget`: single / number(stepper) / number-range(단일 필드, `–`) / multiline.
+- `BaseTextInputWidget`: text(Text Wrap 옵션) / number(stepper) / number-range(단일 필드, `–`).
   상태 default·hover·focused·error·disabled.
-- `BaseSliderWidget`: 얇은 핸들, value+number field 동기화, range(dual handle)+paired
-  number-range field(Text Input range와 동일 사양), disabled(필드 없음).
+- `BaseSliderWidget`: 얇은 핸들, single/range(dual handle), disabled.
+- `BaseSliderComboWidget`: Label + Slider + Input 조합. Compact(한 줄) / Modern(상단 label+input, 하단 slider).
 - `BaseSwitcherWidget`: segmented, 단일 active, 2/3분할·아이콘·disabled.
 - `BaseDropdownWidget`: text-only / icon+text / open(hover+selected ✓) / disabled, caret 아이콘.
 
@@ -33,7 +33,8 @@ spec.md의 폼 요소를 기존 독립 base WBP 컴포넌트 패턴으로 구현
   media full-bleed(기본)/inset(옵션), selected=accent border.
 - `BaseTreeRowWidget` (+ 제네릭 tree view): 1줄 row, 슬롯 expander/icon/label+inline sublabel/right label.
   base는 row/슬롯까지; hierarchy·선택 상태는 Scenario Editor 도메인에서 소유.
-- Tooltip: 흰 배경 + dark 텍스트, 커서 좌하단 앵커(우상단 전개). 공용 tooltip 위젯/스타일.
+- Tooltip: 흰 배경 + dark 텍스트. 일반 사용은 대상 위젯의 Behavior.ToolTipWidget에
+  `WBP_BaseTooltip` 지정. Anchor 위젯은 runtime hover/delay 예제용.
 - `BaseContextMenuWidget`: 포인터 위치 top-left 시작, 임의 child NamedSlot 컨테이너,
   danger 항목·단축키·서브메뉴 caret.
 
@@ -43,7 +44,7 @@ spec.md의 폼 요소를 기존 독립 base WBP 컴포넌트 패턴으로 구현
 토큰/타입/헬퍼 헤더 (spec.md "참고 구현/검증 자산").
 
 - 둥근 모서리는 `ApplyRoundedSurface`(SDF) 사용, 런타임에서 `FSlateRoundedBoxBrush` 금지.
-- 색/폰트/간격/반경/높이는 `DA_BaseTokens`에서 해석, 하드코딩 hex 금지.
+- 색/폰트/간격/반경/높이는 split DA에서 해석, 하드코딩 hex 금지.
 - `EBaseWidgetVariant/Size/State`, `EBaseTextRole` 재사용. 신규 enum은 불가피할 때만.
 - 네이밍/구조는 기존 `UBaseXxxWidget`(+WBP, BindWidget) 답습. caret = `T_Icon_CaretDown/Right`.
 - 주석: 모든 non-local 함수/멤버에 의도 주석(동작 나열 금지). 경계에서만 입력 검증.

@@ -34,7 +34,7 @@ public:
 	FBaseContextMenuItem GetItem() const { return Item; }
 
 	// Broadcasts after this row command is selected.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Context Menu|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseContextMenuItemSelectedEvent OnItemSelected;
 
 protected:
@@ -42,7 +42,7 @@ protected:
 	virtual void NativeOnClicked() override;
 
 	// Context menu row data.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetItem", Setter = "SetItem", BlueprintGetter = "GetItem", BlueprintSetter = "SetItem", Category = "UI|Base Context Menu", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetItem", Setter = "SetItem", BlueprintGetter = "GetItem", BlueprintSetter = "SetItem", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FBaseContextMenuItem Item;
 
 	// Shortcut label owned by the Widget Blueprint.
@@ -84,8 +84,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Context Menu")
 	const TArray<FBaseContextMenuItem>& GetItems() const { return Items; }
 
+	// Updates text shown when no generated items are available.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Context Menu")
+	void SetPlaceholderText(FText inPlaceholderText);
+
+	// Returns text shown when no generated items are available.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Context Menu")
+	FText GetPlaceholderText() const { return PlaceholderText; }
+
 	// Broadcasts after a generated item row is selected.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Context Menu|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseContextMenuItemSelectedEvent OnItemSelected;
 
 protected:
@@ -103,11 +111,15 @@ protected:
 	void HandleGeneratedItemSelected(UWidget* widget, FName itemId);
 
 	// Menu item data for generated rows.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	TArray<FBaseContextMenuItem> Items;
 
+	// Placeholder text for empty generated menus.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetPlaceholderText", Setter = "SetPlaceholderText", BlueprintGetter = "GetPlaceholderText", BlueprintSetter = "SetPlaceholderText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
+	FText PlaceholderText = NSLOCTEXT("BaseContextMenuWidget", "PlaceholderText", "No menu items");
+
 	// Widget class used for generated item rows.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Classes")
 	TSubclassOf<UBaseContextMenuItemWidget> ItemWidgetClass;
 
 	// Rounded menu surface owned by the Widget Blueprint.
@@ -121,6 +133,10 @@ protected:
 	// Panel that receives generated standard item rows.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UPanelWidget> ItemContainer;
+
+	// Optional empty-menu text owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> PlaceholderTextBlock;
 };
 
 // Right-click anchor that opens a base context menu at the pointer position.
@@ -130,6 +146,12 @@ class ODIROSIM_API UBaseContextMenuAnchorWidget : public UBaseWidget
 	GENERATED_BODY()
 
 public:
+	// Creates example menu items so a dropped anchor has visible purpose.
+	UBaseContextMenuAnchorWidget(const FObjectInitializer& objectInitializer = FObjectInitializer::Get());
+
+	// Applies design-time placeholder text.
+	virtual void SynchronizeBaseProperties() override;
+
 	// Replaces menu items passed to spawned menu widgets.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Context Menu")
 	void SetItems(const TArray<FBaseContextMenuItem>& inItems);
@@ -139,7 +161,7 @@ public:
 	const TArray<FBaseContextMenuItem>& GetItems() const { return Items; }
 
 	// Broadcasts after a spawned menu item is selected.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Context Menu|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseContextMenuItemSelectedEvent OnItemSelected;
 
 protected:
@@ -166,16 +188,24 @@ protected:
 	void HandleMenuItemSelected(UWidget* widget, FName itemId);
 
 	// Menu widget class to spawn on right click.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Classes")
 	TSubclassOf<UBaseContextMenuWidget> MenuWidgetClass;
 
 	// Items passed to spawned menu widgets.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	TArray<FBaseContextMenuItem> Items;
 
 	// Viewport layer used for spawned context menu widgets.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
 	int32 MenuZOrder = 0;
+
+	// Designer-visible hint rendered by the WBP when present.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
+	FText PlaceholderText = NSLOCTEXT("BaseContextMenuAnchorWidget", "PlaceholderText", "Right-click for context menu");
+
+	// Optional anchor hint text owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> PlaceholderTextBlock;
 
 	// Active menu widget owned by this anchor while visible.
 	UPROPERTY(Transient)

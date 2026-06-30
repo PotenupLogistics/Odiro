@@ -12,8 +12,9 @@ void UBaseTabWidget::SynchronizeBaseProperties()
 
 	Super::SynchronizeBaseProperties();
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
-	if (!tokens)
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	if (!colors || !sizes)
 	{
 		return;
 	}
@@ -30,14 +31,14 @@ void UBaseTabWidget::SynchronizeBaseProperties()
 	if (bActive)
 	{
 		surfaceColor = effectiveState == EBaseWidgetState::Pressed
-			? tokens->SurfaceControlActiveColor
-			: tokens->SurfacePanelColor;
-		frameColor = tokens->LineSubtleColor;
-		borderWidth = tokens->BorderWidth;
+			? colors->SurfaceControlActiveColor
+			: colors->SurfacePanelColor;
+		frameColor = colors->LineSubtleColor;
+		borderWidth = sizes->BorderWidth;
 	}
 	else if ((effectiveState == EBaseWidgetState::Hovered || effectiveState == EBaseWidgetState::Pressed) && bEnabled)
 	{
-		surfaceColor = tokens->SurfaceHoverSoftColor;
+		surfaceColor = colors->SurfaceHoverSoftColor;
 	}
 
 	BaseWidgetPrivate::ApplyTopRoundedSurface(
@@ -45,25 +46,24 @@ void UBaseTabWidget::SynchronizeBaseProperties()
 		SurfaceBorder.Get(),
 		surfaceColor,
 		frameColor,
-		tokens->Radius,
+		sizes->Radius,
 		borderWidth);
 
+	const FLinearColor labelColor = !bEnabled
+		? colors->TextFaintColor
+		: (bActive ? colors->TextStrongColor : colors->TextSecondaryColor);
 	if (LabelTextBlock)
 	{
-		const FLinearColor labelColor = !bEnabled
-			? tokens->TextFaintColor
-			: (bActive ? tokens->TextStrongColor : tokens->TextSecondaryColor);
 		LabelTextBlock->SetColorAndOpacity(FSlateColor(labelColor));
-		if (IconImage)
-		{
-			IconImage->SetColorAndOpacity(labelColor);
-		}
-		if (IconGlyph)
-		{
-			IconGlyph->SetColorAndOpacity(FSlateColor(labelColor));
-		}
 	}
-
+	if (IconImage)
+	{
+		IconImage->SetColorAndOpacity(labelColor);
+	}
+	if (IconGlyph)
+	{
+		IconGlyph->SetColorAndOpacity(FSlateColor(labelColor));
+	}
 	if (SelectedIndicator)
 	{
 		SelectedIndicator->SetVisibility(ESlateVisibility::Collapsed);

@@ -13,26 +13,27 @@ void UBaseTooltipWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
 	if (MessageTextBlock)
 	{
 		SetTextBlockValue(MessageTextBlock.Get(), Message, false);
 		ApplyTextStyle(MessageTextBlock.Get(), EBaseTextRole::Caption);
-		if (tokens)
+		if (colors)
 		{
-			ApplyTextColor(MessageTextBlock.Get(), tokens->BackgroundColor);
+			ApplyTextColor(MessageTextBlock.Get(), colors->BackgroundColor);
 		}
 	}
-	if (tokens)
+	if (colors && sizes)
 	{
 		// Tooltips invert the dark theme using existing base tokens.
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			BorderFrame.Get(),
 			SurfaceBorder.Get(),
-			tokens->TextStrongColor,
-			tokens->TextStrongColor,
-			tokens->Radius,
-			tokens->BorderWidth);
+			colors->TextStrongColor,
+			colors->TextStrongColor,
+			sizes->Radius,
+			sizes->BorderWidth);
 	}
 }
 
@@ -46,6 +47,22 @@ void UBaseTooltipWidget::SetMessage(const FText inMessage)
 {
 	Message = inMessage;
 	SynchronizeBaseProperties();
+}
+
+void UBaseTooltipAnchorWidget::SynchronizeBaseProperties()
+{
+	Super::SynchronizeBaseProperties();
+	if (!PlaceholderTextBlock)
+	{
+		return;
+	}
+
+	SetTextBlockValue(PlaceholderTextBlock.Get(), PlaceholderText, false);
+	ApplyTextStyle(PlaceholderTextBlock.Get(), EBaseTextRole::Caption);
+	if (const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors())
+	{
+		ApplyTextColor(PlaceholderTextBlock.Get(), colors->TextMutedColor);
+	}
 }
 
 void UBaseTooltipAnchorWidget::SetTooltipMessage(const FText inMessage)
@@ -132,6 +149,8 @@ void UBaseTooltipAnchorWidget::ShowTooltip()
 		return;
 	}
 
+	ActiveTooltipWidget->SetColorsOverride(ColorsOverride);
+	ActiveTooltipWidget->SetSizesOverride(SizesOverride);
 	ActiveTooltipWidget->SetMessage(TooltipMessage);
 	ActiveTooltipWidget->AddToViewport(TooltipZOrder);
 	ActiveTooltipWidget->ForceLayoutPrepass();

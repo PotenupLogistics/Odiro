@@ -2,11 +2,41 @@
 #include "UI/BaseFormElementPrivate.h"
 #include "UI/BaseSwitchWidget.h"
 #include "Components/Border.h"
+#include "Components/OverlaySlot.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "UI/BaseWidgetPrivate.h"
 
 using namespace BaseFormElementPrivate;
+
+namespace
+{
+	void ApplyToggleOverlaySlotPadding(UWidget* widget, const FMargin& padding)
+	{
+		if (widget)
+		{
+			if (UOverlaySlot* overlaySlot = Cast<UOverlaySlot>(widget->Slot))
+			{
+				overlaySlot->SetPadding(padding);
+			}
+		}
+	}
+
+	// Maps base horizontal alignment to label justification.
+	ETextJustify::Type ToToggleTextJustify(const EBaseHorizontalContentAlign alignment)
+	{
+		switch (alignment)
+		{
+		case EBaseHorizontalContentAlign::Left:
+			return ETextJustify::Left;
+		case EBaseHorizontalContentAlign::Right:
+			return ETextJustify::Right;
+		case EBaseHorizontalContentAlign::Center:
+		default:
+			return ETextJustify::Center;
+		}
+	}
+}
 
 void UBaseToggleButtonWidget::SynchronizeBaseProperties()
 {
@@ -15,7 +45,27 @@ void UBaseToggleButtonWidget::SynchronizeBaseProperties()
 	bSelected = !bSwitchStyle && bChecked;
 	Super::SynchronizeBaseProperties();
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	if (!bSwitchStyle && sizes)
+	{
+		FBaseWidgetSizeConstraints effectiveSizeConstraints = SizeConstraints;
+		if (sizes->ControlHeight > 0.0f && effectiveSizeConstraints.MinHeight <= 0.0f)
+		{
+			effectiveSizeConstraints.MinHeight = sizes->ControlHeight;
+		}
+		BaseWidgetPrivate::ApplySizeConstraints(RootSize.Get(), effectiveSizeConstraints);
+		if (RootSizeBox.Get() != RootSize.Get())
+		{
+			BaseWidgetPrivate::ApplySizeConstraints(RootSizeBox.Get(), effectiveSizeConstraints);
+		}
+		if (SurfaceBorder)
+		{
+			const FMargin controlPadding(sizes->Space4, sizes->Space2);
+			SurfaceBorder->SetPadding(controlPadding);
+			ApplyToggleOverlaySlotPadding(ToggleContent.Get(), controlPadding);
+		}
+	}
 	SetOptionalWidgetVisible(ButtonVisualRoot.Get(), !bSwitchStyle);
 	SetOptionalWidgetVisible(SwitchVisualRoot.Get(), bSwitchStyle);
 	SetOptionalWidgetVisible(SwitchVisual.Get(), bSwitchStyle, ESlateVisibility::HitTestInvisible);
@@ -47,22 +97,24 @@ void UBaseToggleButtonWidget::SynchronizeBaseProperties()
 	}
 	else if (LabelTextBlock)
 	{
-		LabelTextBlock->SetJustification(bShowStateText ? ETextJustify::Left : ETextJustify::Center);
+		LabelTextBlock->SetJustification(bShowStateText ? ETextJustify::Left : ToToggleTextJustify(ContentAlign));
 	}
 	if (SwitchVisual)
 	{
+		SwitchVisual->SetColorsOverride(ColorsOverride);
+		SwitchVisual->SetSizesOverride(SizesOverride);
 		SwitchVisual->SetCheckState(CheckState);
 		SwitchVisual->SetDisabled(bDisabled);
 	}
-	if (!bSwitchStyle && CheckState == ECheckBoxState::Undetermined && tokens)
+	if (!bSwitchStyle && CheckState == ECheckBoxState::Undetermined && colors && sizes)
 	{
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			BorderFrame.Get(),
 			SurfaceBorder.Get(),
-			tokens->SurfaceControlColor,
-			tokens->AccentColor,
-			tokens->Radius,
-			tokens->BorderWidth);
+			colors->SurfaceControlColor,
+			colors->AccentColor,
+			sizes->Radius,
+			sizes->BorderWidth);
 	}
 }
 
@@ -76,6 +128,7 @@ void UBaseToggleButtonWidget::SetCheckState(const ECheckBoxState inCheckState)
 {
 	CheckState = inCheckState;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged();
 }
 
 void UBaseToggleButtonWidget::SetShowStateText(const bool bInShowStateText)
@@ -93,6 +146,7 @@ void UBaseToggleButtonWidget::NativeOnClicked()
 			: ECheckBoxState::Checked;
 		CheckState = nextState;
 		SynchronizeBaseProperties();
+		NotifyBaseVisualStateChanged();
 		OnCheckStateChanged.Broadcast(this, CheckState);
 	}
 	Super::NativeOnClicked();

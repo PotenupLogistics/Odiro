@@ -1,7 +1,7 @@
 #include "UI/BaseCheckBoxWidget.h"
 #include "UI/BaseFormElementPrivate.h"
 #include "Components/Border.h"
-#include "Components/CheckBox.h"
+#include "Components/Image.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
@@ -11,48 +11,70 @@
 
 using namespace BaseFormElementPrivate;
 
+namespace
+{
+	// Applies the checked mark color to common WBP-authored decorative mark types.
+	void TintCheckMark(UWidget* markWidget, const FLinearColor& color)
+	{
+		if (UTextBlock* textBlock = Cast<UTextBlock>(markWidget))
+		{
+			textBlock->SetColorAndOpacity(FSlateColor(color));
+			return;
+		}
+		if (UImage* image = Cast<UImage>(markWidget))
+		{
+			image->SetColorAndOpacity(color);
+			return;
+		}
+		if (UBorder* border = Cast<UBorder>(markWidget))
+		{
+			BaseWidgetPrivate::ApplyBorderBrushTint(border, color);
+		}
+	}
+}
+
 void UBaseCheckBoxWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
-	TGuardValue<bool> synchronizingGuard(bSynchronizing, true);
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
 	const bool bEnabled = !bDisabled;
-	if (NativeCheckBox)
-	{
-		NativeCheckBox->SetCheckedState(CheckState);
-		NativeCheckBox->SetIsEnabled(bEnabled);
-		// The custom box/marks render the state, so the native checkbox is hidden
-		// entirely (no duplicate box); row clicks drive the toggle instead.
-		NativeCheckBox->SetVisibility(ESlateVisibility::Collapsed);
-	}
 	if (LabelTextBlock)
 	{
-		SetTextBlockValue(LabelTextBlock.Get(), Label, false);
+		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
-		if (tokens && !bEnabled)
+		LabelTextBlock->SetVisibility(LabelTextBlock->GetText().IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
+		if (colors && !bEnabled)
 		{
-			ApplyTextColor(LabelTextBlock.Get(), tokens->TextFaintColor);
+			ApplyTextColor(LabelTextBlock.Get(), colors->TextFaintColor);
 		}
 	}
 	SetOptionalWidgetVisible(CheckMarkWidget.Get(), CheckState == ECheckBoxState::Checked);
 	SetOptionalWidgetVisible(IndeterminateMarkWidget.Get(), CheckState == ECheckBoxState::Undetermined);
-	if (tokens)
+	if (colors)
+	{
+		TintCheckMark(CheckMarkWidget.Get(), colors->TextStrongColor);
+		TintCheckMark(IndeterminateMarkWidget.Get(), colors->TextStrongColor);
+	}
+	if (colors && sizes)
 	{
 		const bool bCheckedLike = IsCheckedLikeState(CheckState);
 		const FLinearColor fillColor = !bEnabled
-			? tokens->SurfaceChromeColor
-			: (bCheckedLike ? tokens->AccentColor : tokens->SurfaceWellColor);
+			? colors->SurfaceChromeColor
+			: (bCheckedLike ? colors->AccentColor : colors->SurfaceWellColor);
 		const FLinearColor strokeColor = !bEnabled
-			? tokens->LineSubtleColor
-			: (bCheckedLike ? tokens->AccentColor : tokens->LineFieldColor);
+			? colors->LineSubtleColor
+			: (bCheckedLike ? colors->AccentColor : colors->LineFieldColor);
 		BaseWidgetPrivate::ApplyRoundedSurface(
-			BorderFrame.Get(),
+			nullptr,
 			BoxSurfaceBorder.Get(),
 			fillColor,
 			strokeColor,
-			tokens->Radius,
-			tokens->BorderWidth);
+			sizes->Radius,
+			sizes->BorderWidth);
 	}
 }
 
@@ -71,12 +93,6 @@ void UBaseCheckBoxWidget::NativeConstruct()
 
 	// Hit-testable so the whole row receives the toggle click.
 	SetVisibility(ESlateVisibility::Visible);
-
-	if (NativeCheckBox)
-	{
-		NativeCheckBox->OnCheckStateChanged.RemoveDynamic(this, &UBaseCheckBoxWidget::HandleNativeCheckStateChanged);
-		NativeCheckBox->OnCheckStateChanged.AddDynamic(this, &UBaseCheckBoxWidget::HandleNativeCheckStateChanged);
-	}
 }
 
 FReply UBaseCheckBoxWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
@@ -93,16 +109,6 @@ FReply UBaseCheckBoxWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry,
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
-void UBaseCheckBoxWidget::NativeDestruct()
-{
-	if (NativeCheckBox)
-	{
-		NativeCheckBox->OnCheckStateChanged.RemoveDynamic(this, &UBaseCheckBoxWidget::HandleNativeCheckStateChanged);
-	}
-
-	Super::NativeDestruct();
-}
-
 void UBaseCheckBoxWidget::SetLabel(const FText inLabel)
 {
 	Label = inLabel;
@@ -113,29 +119,38 @@ void UBaseCheckBoxWidget::SetCheckState(const ECheckBoxState inCheckState)
 {
 	CheckState = inCheckState;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(CheckState == ECheckBoxState::Unchecked
+		? EBaseWidgetState::Default
+		: EBaseWidgetState::Selected);
 }
 
 void UBaseCheckBoxWidget::SetDisabled(const bool bInDisabled)
 {
 	bDisabled = bInDisabled;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(bDisabled ? EBaseWidgetState::Disabled : EBaseWidgetState::Default);
 }
 
-void UBaseCheckBoxWidget::HandleNativeCheckStateChanged(const bool bIsChecked)
+UBaseCheckBoxGroupWidget::UBaseCheckBoxGroupWidget(const FObjectInitializer& objectInitializer)
+	: Super(objectInitializer)
 {
-	if (bSynchronizing)
-	{
-		return;
-	}
+	FBaseCheckBoxGroupItem firstItem;
+	firstItem.Id = TEXT("ExampleA");
+	firstItem.Label = NSLOCTEXT("BaseCheckBoxGroupWidget", "DefaultFirstItem", "First option");
+	firstItem.CheckState = ECheckBoxState::Checked;
 
-	CheckState = bIsChecked ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-	SynchronizeBaseProperties();
-	OnCheckStateChanged.Broadcast(this, CheckState);
+	FBaseCheckBoxGroupItem secondItem;
+	secondItem.Id = TEXT("ExampleB");
+	secondItem.Label = NSLOCTEXT("BaseCheckBoxGroupWidget", "DefaultSecondItem", "Second option");
+	secondItem.CheckState = ECheckBoxState::Unchecked;
+
+	Items = { firstItem, secondItem };
 }
 
 void UBaseCheckBoxGroupWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
+	BaseWidgetPrivate::ApplySlotVerticalAlignment(ItemContainer.Get(), ContentVAlign);
 	if (ItemContainer && ItemContainer->GetChildrenCount() != Items.Num())
 	{
 		RebuildItems();
@@ -192,6 +207,19 @@ ECheckBoxState UBaseCheckBoxGroupWidget::GetItemCheckState(const FName itemId) c
 	return itemIndex == INDEX_NONE ? ECheckBoxState::Unchecked : Items[itemIndex].CheckState;
 }
 
+void UBaseCheckBoxGroupWidget::SetContentVAlign(const EBaseVerticalContentAlign inContentVAlign)
+{
+	ContentVAlign = inContentVAlign;
+	SynchronizeBaseProperties();
+}
+
+void UBaseCheckBoxGroupWidget::NativeDestruct()
+{
+	UnbindGeneratedItems();
+	ItemIdsByChildIndex.Reset();
+	Super::NativeDestruct();
+}
+
 void UBaseCheckBoxGroupWidget::RebuildItems()
 {
 	if (!ItemContainer || !ItemWidgetClass || !GetWorld())
@@ -199,7 +227,8 @@ void UBaseCheckBoxGroupWidget::RebuildItems()
 		return;
 	}
 
-	ItemIdByWidget.Reset();
+	UnbindGeneratedItems();
+	ItemIdsByChildIndex.Reset();
 	ItemContainer->ClearChildren();
 	for (const FBaseCheckBoxGroupItem& item : Items)
 	{
@@ -211,8 +240,10 @@ void UBaseCheckBoxGroupWidget::RebuildItems()
 
 		itemWidget->OnCheckStateChanged.RemoveDynamic(this, &UBaseCheckBoxGroupWidget::HandleItemWidgetCheckStateChanged);
 		itemWidget->OnCheckStateChanged.AddDynamic(this, &UBaseCheckBoxGroupWidget::HandleItemWidgetCheckStateChanged);
-		ItemIdByWidget.Add(TWeakObjectPtr<UBaseCheckBoxWidget>(itemWidget), item.Id);
+		itemWidget->SetColorsOverride(ColorsOverride);
+		itemWidget->SetSizesOverride(SizesOverride);
 		ItemContainer->AddChild(itemWidget);
+		ItemIdsByChildIndex.Add(item.Id);
 	}
 	RefreshItems();
 }
@@ -224,7 +255,8 @@ void UBaseCheckBoxGroupWidget::RefreshItems()
 		return;
 	}
 
-	ItemIdByWidget.Reset();
+	ItemIdsByChildIndex.Reset();
+	ItemIdsByChildIndex.SetNum(ItemContainer->GetChildrenCount());
 	const int32 childCount = FMath::Min(ItemContainer->GetChildrenCount(), Items.Num());
 	for (int32 itemIndex = 0; itemIndex < childCount; ++itemIndex)
 	{
@@ -235,10 +267,28 @@ void UBaseCheckBoxGroupWidget::RefreshItems()
 		}
 
 		const FBaseCheckBoxGroupItem& item = Items[itemIndex];
+		itemWidget->SetColorsOverride(ColorsOverride);
+		itemWidget->SetSizesOverride(SizesOverride);
 		itemWidget->SetLabel(item.Label);
 		itemWidget->SetCheckState(item.CheckState);
 		itemWidget->SetDisabled(item.bDisabled);
-		ItemIdByWidget.Add(TWeakObjectPtr<UBaseCheckBoxWidget>(itemWidget), item.Id);
+		ItemIdsByChildIndex[itemIndex] = item.Id;
+	}
+}
+
+void UBaseCheckBoxGroupWidget::UnbindGeneratedItems()
+{
+	if (!ItemContainer)
+	{
+		return;
+	}
+
+	for (int32 childIndex = 0; childIndex < ItemContainer->GetChildrenCount(); ++childIndex)
+	{
+		if (UBaseCheckBoxWidget* itemWidget = Cast<UBaseCheckBoxWidget>(ItemContainer->GetChildAt(childIndex)))
+		{
+			itemWidget->OnCheckStateChanged.RemoveDynamic(this, &UBaseCheckBoxGroupWidget::HandleItemWidgetCheckStateChanged);
+		}
 	}
 }
 
@@ -295,12 +345,20 @@ void UBaseCheckBoxGroupWidget::RefreshParentStates()
 
 void UBaseCheckBoxGroupWidget::HandleItemWidgetCheckStateChanged(UWidget* widget, const ECheckBoxState inCheckState)
 {
-	if (UBaseCheckBoxWidget* checkBoxWidget = Cast<UBaseCheckBoxWidget>(widget))
+	UBaseCheckBoxWidget* checkBoxWidget = Cast<UBaseCheckBoxWidget>(widget);
+	if (!ItemContainer || !checkBoxWidget)
 	{
-		const TWeakObjectPtr<UBaseCheckBoxWidget> itemKey(checkBoxWidget);
-		if (const FName* itemId = ItemIdByWidget.Find(itemKey))
+		return;
+	}
+
+	for (int32 childIndex = 0; childIndex < ItemContainer->GetChildrenCount(); ++childIndex)
+	{
+		if (ItemContainer->GetChildAt(childIndex) == checkBoxWidget
+			&& ItemIdsByChildIndex.IsValidIndex(childIndex)
+			&& !ItemIdsByChildIndex[childIndex].IsNone())
 		{
-			SetItemCheckState(*itemId, inCheckState);
+			SetItemCheckState(ItemIdsByChildIndex[childIndex], inCheckState);
+			return;
 		}
 	}
 }

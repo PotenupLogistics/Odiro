@@ -1,6 +1,5 @@
 #include "UI/BaseSliderWidget.h"
 #include "UI/BaseFormElementPrivate.h"
-#include "UI/BaseTextInputWidget.h"
 #include "Components/Border.h"
 #include "Components/Widget.h"
 #include "Components/Slider.h"
@@ -33,54 +32,36 @@ void UBaseSliderWidget::SynchronizeBaseProperties()
 		UpperSlider->SetValue(NormalizeValue(UpperValue, MinValue, MaxValue));
 		SetOptionalWidgetVisible(UpperSlider.Get(), bRangeMode, ESlateVisibility::HitTestInvisible);
 	}
-	if (ValueInput)
-	{
-		ValueInput->SetInputMode(EBaseTextInputMode::Number);
-		ValueInput->SetDisplayDecimals(DisplayDecimals);
-		ValueInput->SetValueRange(MinValue, MaxValue);
-		ValueInput->SetNumericValue(Value);
-		ValueInput->SetDisabled(!bEnabled || !bShowValueField);
-		SetOptionalWidgetVisible(ValueInput.Get(), !bRangeMode && bShowValueField, ESlateVisibility::Visible);
-	}
-	if (RangeInput)
-	{
-		RangeInput->SetInputMode(EBaseTextInputMode::NumberRange);
-		RangeInput->SetDisplayDecimals(DisplayDecimals);
-		RangeInput->SetValueRange(MinValue, MaxValue);
-		RangeInput->SetRangeValue(LowerValue, UpperValue);
-		RangeInput->SetDisabled(!bEnabled || !bShowValueField);
-		SetOptionalWidgetVisible(RangeInput.Get(), bRangeMode && bShowValueField, ESlateVisibility::Visible);
-	}
-
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
-	if (tokens && TrackBackground)
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	if (colors && sizes && TrackBackground)
 	{
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			nullptr,
 			TrackBackground.Get(),
-			bEnabled ? tokens->SurfaceControlColor : tokens->SurfaceChromeColor,
-			bEnabled ? tokens->LineInsetColor : tokens->LineSubtleColor,
-			tokens->Radius,
+			bEnabled ? colors->SurfaceControlColor : colors->SurfaceChromeColor,
+			bEnabled ? colors->LineInsetColor : colors->LineSubtleColor,
+			sizes->Radius,
 			0.0f);
 	}
-	if (tokens && TrackFill)
+	if (colors && sizes && TrackFill)
 	{
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			nullptr,
 			TrackFill.Get(),
-			bEnabled ? tokens->AccentColor : tokens->LineInsetColor,
+			bEnabled ? colors->AccentColor : colors->LineInsetColor,
 			FLinearColor::Transparent,
-			tokens->Radius,
+			sizes->Radius,
 			0.0f);
 	}
-	if (tokens && LowerMask)
+	if (colors && sizes && LowerMask)
 	{
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			nullptr,
 			LowerMask.Get(),
-			bEnabled ? tokens->SurfaceControlColor : tokens->SurfaceChromeColor,
+			bEnabled ? colors->SurfaceControlColor : colors->SurfaceChromeColor,
 			FLinearColor::Transparent,
-			tokens->Radius,
+			sizes->Radius,
 			0.0f);
 		SetOptionalWidgetVisible(LowerMask.Get(), false, ESlateVisibility::HitTestInvisible);
 	}
@@ -96,7 +77,7 @@ void UBaseSliderWidget::StyleHandle(USlider* slider) const
 	{
 		return;
 	}
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
 	// The track/fill are drawn by the borders, so the slider contributes only a
 	// thin accent handle over a transparent bar.
 	FSlateBrush noDrawBrush;
@@ -109,7 +90,10 @@ void UBaseSliderWidget::StyleHandle(USlider* slider) const
 	sliderStyle.SetDisabledBarImage(noDrawBrush);
 	slider->SetWidgetStyle(sliderStyle);
 	slider->SetSliderBarColor(FLinearColor::Transparent);
-	slider->SetSliderHandleColor(tokens ? tokens->AccentColor : FLinearColor::White);
+	if (colors)
+	{
+		slider->SetSliderHandleColor(colors->AccentColor);
+	}
 }
 
 int32 UBaseSliderWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, const int32 LayerId, const FWidgetStyle& InWidgetStyle, const bool bParentEnabled) const
@@ -125,8 +109,8 @@ int32 UBaseSliderWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Al
 
 float UBaseSliderWidget::TrackPositionFromCursor(const FVector2D& screenPosition) const
 {
-	// Map against the track geometry (the child sliders fill it) so the value is
-	// correct even though the slider widget also contains the numeric field.
+	// Map against the track geometry so responsive outer width does not affect
+	// value math outside the authored slider lane.
 	const FGeometry trackGeometry = TrackBackground
 		? TrackBackground->GetCachedGeometry()
 		: GetCachedGeometry();
@@ -248,16 +232,6 @@ void UBaseSliderWidget::NativeConstruct()
 		UpperSlider->OnValueChanged.RemoveDynamic(this, &UBaseSliderWidget::HandleUpperSliderChanged);
 		UpperSlider->OnValueChanged.AddDynamic(this, &UBaseSliderWidget::HandleUpperSliderChanged);
 	}
-	if (ValueInput)
-	{
-		ValueInput->OnNumericValueCommitted.RemoveDynamic(this, &UBaseSliderWidget::HandleValueInputCommitted);
-		ValueInput->OnNumericValueCommitted.AddDynamic(this, &UBaseSliderWidget::HandleValueInputCommitted);
-	}
-	if (RangeInput)
-	{
-		RangeInput->OnRangeValueCommitted.RemoveDynamic(this, &UBaseSliderWidget::HandleRangeInputCommitted);
-		RangeInput->OnRangeValueCommitted.AddDynamic(this, &UBaseSliderWidget::HandleRangeInputCommitted);
-	}
 }
 
 void UBaseSliderWidget::NativeDestruct()
@@ -274,27 +248,12 @@ void UBaseSliderWidget::NativeDestruct()
 	{
 		UpperSlider->OnValueChanged.RemoveDynamic(this, &UBaseSliderWidget::HandleUpperSliderChanged);
 	}
-	if (ValueInput)
-	{
-		ValueInput->OnNumericValueCommitted.RemoveDynamic(this, &UBaseSliderWidget::HandleValueInputCommitted);
-	}
-	if (RangeInput)
-	{
-		RangeInput->OnRangeValueCommitted.RemoveDynamic(this, &UBaseSliderWidget::HandleRangeInputCommitted);
-	}
-
 	Super::NativeDestruct();
 }
 
 void UBaseSliderWidget::SetRangeMode(const bool bInRangeMode)
 {
 	bRangeMode = bInRangeMode;
-	SynchronizeBaseProperties();
-}
-
-void UBaseSliderWidget::SetShowValueField(const bool bInShowValueField)
-{
-	bShowValueField = bInShowValueField;
 	SynchronizeBaseProperties();
 }
 
@@ -357,19 +316,5 @@ void UBaseSliderWidget::HandleUpperSliderChanged(const float normalizedValue)
 	}
 
 	SetRangeValue(LowerValue, DenormalizeValue(normalizedValue, MinValue, MaxValue));
-	OnRangeValueChanged.Broadcast(this, LowerValue, UpperValue);
-}
-
-void UBaseSliderWidget::HandleValueInputCommitted(UBaseTextInputWidget* inputWidget, const float inValue)
-{
-	(void)inputWidget;
-	SetValue(inValue);
-	OnValueChanged.Broadcast(this, Value);
-}
-
-void UBaseSliderWidget::HandleRangeInputCommitted(UBaseTextInputWidget* inputWidget, const float inLowerValue, const float inUpperValue)
-{
-	(void)inputWidget;
-	SetRangeValue(inLowerValue, inUpperValue);
 	OnRangeValueChanged.Broadcast(this, LowerValue, UpperValue);
 }

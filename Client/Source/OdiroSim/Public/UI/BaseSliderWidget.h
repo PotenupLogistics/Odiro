@@ -5,19 +5,18 @@
 #include "UI/BaseWidget.h"
 #include "BaseSliderWidget.generated.h"
 
-class UBaseTextInputWidget;
 class UBorder;
 class USlider;
 class UTextBlock;
 
-// Base-token styled single or range slider with optional numeric fields.
+// Base-token styled single or range slider surface.
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UBaseSliderWidget : public UBaseWidget
 {
 	GENERATED_BODY()
 
 public:
-	// Applies value, range, field, and disabled state to bound WBP controls.
+	// Applies value, range, and disabled state to bound WBP controls.
 	virtual void SynchronizeBaseProperties() override;
 
 	// Updates whether this slider uses lower and upper handles.
@@ -27,14 +26,6 @@ public:
 	// Returns whether this slider uses lower and upper handles.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Slider")
 	bool IsRangeMode() const { return bRangeMode; }
-
-	// Updates whether the numeric field should be visible when present.
-	UFUNCTION(BlueprintCallable, Category = "UI|Base Slider")
-	void SetShowValueField(bool bInShowValueField);
-
-	// Returns whether the numeric field should be visible when present.
-	UFUNCTION(BlueprintPure, Category = "UI|Base Slider")
-	bool ShouldShowValueField() const { return bShowValueField; }
 
 	// Updates the accepted value range.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Slider")
@@ -69,28 +60,30 @@ public:
 	bool IsDisabled() const { return bDisabled; }
 
 	// Broadcasts after the single slider value changes.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Slider|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseSliderValueEvent OnValueChanged;
 
 	// Broadcasts after the range slider values change.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Slider|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseSliderRangeEvent OnRangeValueChanged;
 
 protected:
-	// Binds optional slider and field child events after WBP construction.
+	// Binds optional slider child events after WBP construction.
 	virtual void NativeConstruct() override;
 
-	// Unbinds optional slider and field child events before destruction.
+	// Unbinds optional slider child events before destruction.
 	virtual void NativeDestruct() override;
 
 	// Keeps the track/fill material sizes fed and the active fill aligned each paint.
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
-	// Owner-driven drag: the child sliders are visual-only (hit-test invisible),
-	// so the widget itself maps the cursor to the track and moves the value or the
-	// nearest range handle. This avoids the two range handles fighting over clicks.
+	// Starts owner-driven drag because child sliders are visual-only.
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	// Moves the active drag handle along the WBP-authored track.
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	// Releases the active drag handle and mouse capture.
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 	// Applies the accent thin handle + transparent bar style to one slider.
@@ -117,53 +110,37 @@ protected:
 	UFUNCTION()
 	void HandleUpperSliderChanged(float normalizedValue);
 
-	// Handles commits from the optional single-value field.
-	UFUNCTION()
-	void HandleValueInputCommitted(UBaseTextInputWidget* inputWidget, float inValue);
-
-	// Handles commits from the optional range field.
-	UFUNCTION()
-	void HandleRangeInputCommitted(UBaseTextInputWidget* inputWidget, float inLowerValue, float inUpperValue);
-
 	// Whether lower and upper handles are active.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsRangeMode", Setter = "SetRangeMode", BlueprintGetter = "IsRangeMode", BlueprintSetter = "SetRangeMode", Category = "UI|Base Slider", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsRangeMode", Setter = "SetRangeMode", BlueprintGetter = "IsRangeMode", BlueprintSetter = "SetRangeMode", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bRangeMode = false;
 
-	// Whether numeric fields should be shown.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "ShouldShowValueField", Setter = "SetShowValueField", BlueprintGetter = "ShouldShowValueField", BlueprintSetter = "SetShowValueField", Category = "UI|Base Slider", meta = (ExposeOnSpawn = "true"))
-	bool bShowValueField = true;
-
 	// Minimum accepted slider value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Slider", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Range", meta = (ExposeOnSpawn = "true"))
 	float MinValue = 0.0f;
 
 	// Maximum accepted slider value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Slider", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Range", meta = (ExposeOnSpawn = "true"))
 	float MaxValue = 100.0f;
 
 	// Current single slider value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetValue", Setter = "SetValue", BlueprintGetter = "GetValue", BlueprintSetter = "SetValue", Category = "UI|Base Slider", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetValue", Setter = "SetValue", BlueprintGetter = "GetValue", BlueprintSetter = "SetValue", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	float Value = 0.0f;
 
 	// Current lower range value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLowerValue", Category = "UI|Base Slider", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLowerValue", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	float LowerValue = 0.0f;
 
 	// Current upper range value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetUpperValue", Category = "UI|Base Slider", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetUpperValue", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	float UpperValue = 100.0f;
 
 	// Disabled slider state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Slider", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
 
 	// Prevents child value callbacks from echoing synchronization writes.
 	UPROPERTY(Transient)
 	bool bSynchronizing = false;
-
-	// Decimal places for the paired numeric fields; -1 keeps the compact default.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Slider", meta = (ClampMin = "-1", ClampMax = "6", ExposeOnSpawn = "true"))
-	int32 DisplayDecimals = -1;
 
 	// Active drag target: 0 none, 1 single/lower, 2 upper.
 	UPROPERTY(Transient)
@@ -193,11 +170,4 @@ protected:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USlider> UpperSlider;
 
-	// Optional numeric field paired with the single-value slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextInputWidget> ValueInput;
-
-	// Optional numeric range field paired with the range slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextInputWidget> RangeInput;
 };

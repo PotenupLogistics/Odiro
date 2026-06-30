@@ -28,13 +28,18 @@ void UBaseTextInputWidget::SynchronizeBaseProperties()
 	Super::SynchronizeBaseProperties();
 
 	TGuardValue<bool> synchronizingGuard(bSynchronizing, true);
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
 	const bool bHasError = !ErrorText.IsEmpty() || State == EBaseWidgetState::Error;
 	const bool bEnabled = !bDisabled && State != EBaseWidgetState::Disabled;
+	const bool bUsesWrappedText = UsesWrappedTextMode();
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
 
 	if (TextBox)
 	{
-		TextBox->SetHintText(PlaceholderText);
+		if (!PlaceholderText.IsEmpty())
+		{
+			TextBox->SetHintText(PlaceholderText);
+		}
 		TextBox->SetIsReadOnly(!bEnabled);
 		TextBox->SetIsEnabled(bEnabled);
 		// While in error, keep the user's raw text so an invalid value stays
@@ -48,22 +53,26 @@ void UBaseTextInputWidget::SynchronizeBaseProperties()
 				TextBox->SetText(FormatNumberText(NumericValue, DisplayDecimals));
 			}
 		}
-		else if (Mode == EBaseTextInputMode::Text)
+		else if (Mode == EBaseTextInputMode::Text && !bUsesWrappedText)
 		{
 			TextBox->SetText(Text);
 		}
 		SetOptionalWidgetVisible(
 			TextBox.Get(),
-			Mode == EBaseTextInputMode::Text || Mode == EBaseTextInputMode::Number,
+			(Mode == EBaseTextInputMode::Text && !bUsesWrappedText) || Mode == EBaseTextInputMode::Number,
 			ESlateVisibility::Visible);
 	}
 	if (MultiLineTextBox)
 	{
-		MultiLineTextBox->SetHintText(PlaceholderText);
+		if (!PlaceholderText.IsEmpty())
+		{
+			MultiLineTextBox->SetHintText(PlaceholderText);
+		}
 		MultiLineTextBox->SetIsReadOnly(!bEnabled);
 		MultiLineTextBox->SetIsEnabled(bEnabled);
+		MultiLineTextBox->SetAutoWrapText(true);
 		MultiLineTextBox->SetText(Text);
-		SetOptionalWidgetVisible(MultiLineTextBox.Get(), Mode == EBaseTextInputMode::Multiline, ESlateVisibility::Visible);
+		SetOptionalWidgetVisible(MultiLineTextBox.Get(), bUsesWrappedText, ESlateVisibility::Visible);
 	}
 	if (LowerTextBox)
 	{
@@ -103,32 +112,36 @@ void UBaseTextInputWidget::SynchronizeBaseProperties()
 	{
 		SetTextBlockValue(ErrorTextBlock.Get(), ErrorText);
 		ApplyTextStyle(ErrorTextBlock.Get(), EBaseTextRole::Caption);
-		if (tokens)
+		if (colors)
 		{
-			ApplyTextColor(ErrorTextBlock.Get(), tokens->StatusDangerColor);
+			ApplyTextColor(ErrorTextBlock.Get(), colors->StatusDangerColor);
 		}
 	}
 
-	if (tokens)
+	if (SurfaceBorder)
 	{
-		FLinearColor fillColor = tokens->SurfaceWellColor;
-		FLinearColor strokeColor = tokens->LineFieldColor;
+		SurfaceBorder->SetVerticalAlignment(bUsesWrappedText ? VAlign_Top : VAlign_Center);
+	}
+	if (colors && sizes)
+	{
+		FLinearColor fillColor = colors->SurfaceWellColor;
+		FLinearColor strokeColor = colors->LineFieldColor;
 		if (!bEnabled)
 		{
-			fillColor = tokens->SurfaceChromeColor;
-			strokeColor = tokens->LineSubtleColor;
+			fillColor = colors->SurfaceChromeColor;
+			strokeColor = colors->LineSubtleColor;
 		}
 		else if (bHasError)
 		{
-			strokeColor = tokens->StatusDangerColor;
+			strokeColor = colors->StatusDangerColor;
 		}
 		else if (bFocusActive || State == EBaseWidgetState::Selected)
 		{
-			strokeColor = tokens->AccentFocusColor;
+			strokeColor = colors->AccentFocusColor;
 		}
 		else if (bHoverActive || State == EBaseWidgetState::Hovered)
 		{
-			strokeColor = tokens->LineFieldHoverColor;
+			strokeColor = colors->LineFieldHoverColor;
 		}
 
 		BaseWidgetPrivate::ApplyRoundedSurface(
@@ -136,8 +149,8 @@ void UBaseTextInputWidget::SynchronizeBaseProperties()
 			SurfaceBorder.Get(),
 			fillColor,
 			strokeColor,
-			tokens->Radius,
-			tokens->BorderWidth);
+			sizes->Radius,
+			sizes->BorderWidth);
 	}
 }
 
@@ -150,41 +163,33 @@ int32 UBaseTextInputWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 void UBaseTextInputWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
-	if (!bHoverActive)
-	{
-		bHoverActive = true;
-		SynchronizeBaseProperties();
-	}
+	bHoverActive = true;
+	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(EBaseWidgetState::Hovered);
 }
 
 void UBaseTextInputWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
 {
 	Super::NativeOnMouseLeave(InMouseEvent);
-	if (bHoverActive)
-	{
-		bHoverActive = false;
-		SynchronizeBaseProperties();
-	}
+	bHoverActive = false;
+	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(State);
 }
 
 void UBaseTextInputWidget::NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent)
 {
 	Super::NativeOnAddedToFocusPath(InFocusEvent);
-	if (!bFocusActive)
-	{
-		bFocusActive = true;
-		SynchronizeBaseProperties();
-	}
+	bFocusActive = true;
+	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(EBaseWidgetState::Selected);
 }
 
 void UBaseTextInputWidget::NativeOnRemovedFromFocusPath(const FFocusEvent& InFocusEvent)
 {
 	Super::NativeOnRemovedFromFocusPath(InFocusEvent);
-	if (bFocusActive)
-	{
-		bFocusActive = false;
-		SynchronizeBaseProperties();
-	}
+	bFocusActive = false;
+	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(State);
 }
 
 void UBaseTextInputWidget::NativeConstruct()
@@ -264,7 +269,21 @@ void UBaseTextInputWidget::NativeDestruct()
 
 void UBaseTextInputWidget::SetInputMode(const EBaseTextInputMode inMode)
 {
-	Mode = inMode;
+	if (inMode == EBaseTextInputMode::Multiline)
+	{
+		Mode = EBaseTextInputMode::Text;
+		bTextWrap = true;
+	}
+	else
+	{
+		Mode = inMode;
+	}
+	SynchronizeBaseProperties();
+}
+
+void UBaseTextInputWidget::SetTextWrap(const bool bInTextWrap)
+{
+	bTextWrap = bInTextWrap;
 	SynchronizeBaseProperties();
 }
 
@@ -292,7 +311,7 @@ FText UBaseTextInputWidget::GetCurrentText() const
 		return FText::FromString(FString::Printf(TEXT("%s - %s"), *lowerText, *upperText));
 	}
 
-	if (Mode == EBaseTextInputMode::Multiline)
+	if (UsesWrappedTextMode())
 	{
 		return MultiLineTextBox ? MultiLineTextBox->GetText() : Text;
 	}
@@ -391,24 +410,28 @@ void UBaseTextInputWidget::SetBaseState(const EBaseWidgetState inState)
 {
 	State = inState;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(State);
 }
 
 void UBaseTextInputWidget::SetErrorText(const FText inErrorText)
 {
 	ErrorText = inErrorText;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(ErrorText.IsEmpty() ? State : EBaseWidgetState::Error);
 }
 
 void UBaseTextInputWidget::ClearError()
 {
 	ErrorText = FText::GetEmpty();
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(State);
 }
 
 void UBaseTextInputWidget::SetDisabled(const bool bInDisabled)
 {
 	bDisabled = bInDisabled;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(bDisabled ? EBaseWidgetState::Disabled : State);
 }
 
 void UBaseTextInputWidget::HandleEditableTextCommitted(const FText& committedText, ETextCommit::Type commitMethod)
@@ -422,7 +445,7 @@ void UBaseTextInputWidget::HandleEditableTextCommitted(const FText& committedTex
 
 void UBaseTextInputWidget::HandleEditableTextChanged(const FText& changedText)
 {
-	if (!bSynchronizing && Mode == EBaseTextInputMode::Text)
+	if (!bSynchronizing && Mode == EBaseTextInputMode::Text && !UsesWrappedTextMode())
 	{
 		OnTextChanged.Broadcast(this, changedText);
 	}
@@ -439,10 +462,16 @@ void UBaseTextInputWidget::HandleMultiLineTextCommitted(const FText& committedTe
 
 void UBaseTextInputWidget::HandleMultiLineTextChanged(const FText& changedText)
 {
-	if (!bSynchronizing && Mode == EBaseTextInputMode::Multiline)
+	if (!bSynchronizing && UsesWrappedTextMode())
 	{
 		OnTextChanged.Broadcast(this, changedText);
 	}
+}
+
+bool UBaseTextInputWidget::UsesWrappedTextMode() const
+{
+	return Mode == EBaseTextInputMode::Multiline
+		|| (Mode == EBaseTextInputMode::Text && bTextWrap);
 }
 
 void UBaseTextInputWidget::HandleLowerTextCommitted(const FText& committedText, ETextCommit::Type commitMethod)

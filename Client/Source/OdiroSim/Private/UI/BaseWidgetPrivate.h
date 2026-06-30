@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Styling/SlateBrush.h"
+#include "UI/BaseFormElementTypes.h"
 #include "UI/BaseWidgetTokens.h"
 #include "UI/BaseWidgetTypes.h"
 
@@ -13,26 +14,45 @@ class UWidget;
 
 namespace BaseWidgetPrivate
 {
-	// Resolves a nullable token reference through the project default token catalog.
-	const UBaseWidgetTokenCatalog* ResolveBaseTokenCatalog(const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens);
+	// Resolves a nullable color catalog reference through the project default color DA.
+	const UBaseWidgetColorCatalog* ResolveBaseColorCatalog(const TSoftObjectPtr<UBaseWidgetColorCatalog>& baseColors);
 
-	// Returns a text token through the shared base token resolution path.
-	FBaseTextStyleToken ResolveTextStyle(const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens, EBaseTextRole role);
+	// Resolves a nullable size catalog reference through the project default medium-size DA.
+	const UBaseWidgetSizeCatalog* ResolveBaseSizeCatalog(const TSoftObjectPtr<UBaseWidgetSizeCatalog>& baseSizes);
 
-	// Maps a semantic role through the common Small/Medium/Large size preset.
-	EBaseTextRole ResolveSizedTextRole(EBaseTextRole role, EBaseWidgetSize size);
+	// Resolves a text token through the split color and size catalog path.
+	bool ResolveTextStyle(
+		const TSoftObjectPtr<UBaseWidgetColorCatalog>& baseColors,
+		const TSoftObjectPtr<UBaseWidgetSizeCatalog>& baseSizes,
+		EBaseTextRole role,
+		FBaseTextStyleToken& outStyle);
 
 	// Clamps negative desired-size constraints and keeps min/max pairs ordered.
 	FBaseWidgetSizeConstraints NormalizeSizeConstraints(FBaseWidgetSizeConstraints constraints);
 
-	// Applies optional desired-size constraints to a WBP-authored SizeBox wrapper.
+	// Applies responsive root constraints while clearing fixed root size overrides.
 	void ApplySizeConstraints(USizeBox* sizeBox, const FBaseWidgetSizeConstraints& constraints);
 
-	// Returns a variant color through the shared base token resolution path.
-	FLinearColor ResolveVariantColor(const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens, EBaseWidgetVariant variant);
+	// Maps base component horizontal alignment options to Slate alignment values.
+	EHorizontalAlignment ToSlateHorizontalAlignment(EBaseHorizontalContentAlign alignment);
 
-	// Returns a state color through the shared base token resolution path.
-	FLinearColor ResolveStateColor(const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens, EBaseWidgetState state);
+	// Maps base component vertical alignment options to Slate alignment values.
+	EVerticalAlignment ToSlateVerticalAlignment(EBaseVerticalContentAlign alignment);
+
+	// Applies horizontal alignment to common UMG panel slots when present.
+	void ApplySlotHorizontalAlignment(UWidget* widget, EBaseHorizontalContentAlign alignment);
+
+	// Applies vertical alignment to common UMG panel slots when present.
+	void ApplySlotVerticalAlignment(UWidget* widget, EBaseVerticalContentAlign alignment);
+
+	// Applies equal fill sizing to common box panel slots when present.
+	void ApplySlotFill(UWidget* widget, float fillWeight = 1.0f);
+
+	// Returns a variant color through the shared base color resolution path.
+	FLinearColor ResolveVariantColor(const TSoftObjectPtr<UBaseWidgetColorCatalog>& baseColors, EBaseWidgetVariant variant);
+
+	// Returns a state color through the shared base color resolution path.
+	FLinearColor ResolveStateColor(const TSoftObjectPtr<UBaseWidgetColorCatalog>& baseColors, EBaseWidgetState state);
 
 	// Applies one resolved semantic text token to a text block.
 	void ApplyTextStyle(UTextBlock* textBlock, const FBaseTextStyleToken& style);

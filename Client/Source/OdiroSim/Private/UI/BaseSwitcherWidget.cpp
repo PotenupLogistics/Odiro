@@ -4,18 +4,27 @@
 #include "UI/BaseToggleButtonWidget.h"
 #include "Components/PanelWidget.h"
 #include "Engine/World.h"
+#include "UI/BaseWidgetPrivate.h"
 
 using namespace BaseFormElementPrivate;
+
+namespace
+{
+	const TCHAR* IconSegmentClassPath = TEXT("/Game/Widgets/Common/WBP_BaseButton.WBP_BaseButton_C");
+}
 
 void UBaseSwitcherWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
-	if (SegmentContainer && SegmentContainer->GetChildrenCount() != Items.Num())
+	const TArray<FBaseSwitcherItem> renderedItems = BuildRenderedItems();
+	if (SegmentContainer
+		&& (SegmentContainer->GetChildrenCount() != renderedItems.Num()
+			|| SegmentIdsByChildIndex.Num() != renderedItems.Num()))
 	{
-		RebuildSegments();
+		RebuildSegments(renderedItems);
 		return;
 	}
-	RefreshSegments();
+	RefreshSegments(renderedItems);
 }
 
 void UBaseSwitcherWidget::SetItems(const TArray<FBaseSwitcherItem>& inItems)
@@ -32,7 +41,7 @@ void UBaseSwitcherWidget::SetItems(const TArray<FBaseSwitcherItem>& inItems)
 	{
 		SelectedId = NAME_None;
 	}
-	RebuildSegments();
+	RebuildSegments(BuildRenderedItems());
 	SynchronizeBaseProperties();
 }
 
@@ -65,18 +74,66 @@ void UBaseSwitcherWidget::SetDisabled(const bool bInDisabled)
 	SynchronizeBaseProperties();
 }
 
-void UBaseSwitcherWidget::RebuildSegments()
+void UBaseSwitcherWidget::NativeDestruct()
 {
-	if (!SegmentContainer || !SegmentWidgetClass || !GetWorld())
+	UnbindGeneratedSegments();
+	SegmentIdsByChildIndex.Reset();
+	Super::NativeDestruct();
+}
+
+TArray<FBaseSwitcherItem> UBaseSwitcherWidget::BuildRenderedItems() const
+{
+	if (!Items.IsEmpty() || !IsDesignTime())
+	{
+		return Items;
+	}
+
+	FBaseSwitcherItem leftItem;
+	leftItem.Id = TEXT("left");
+	leftItem.Label = NSLOCTEXT("BaseSwitcherWidget", "DesignerPreviewLeft", "Left");
+
+	FBaseSwitcherItem centerItem;
+	centerItem.Id = TEXT("center");
+	centerItem.Label = NSLOCTEXT("BaseSwitcherWidget", "DesignerPreviewCenter", "Center");
+
+	FBaseSwitcherItem rightItem;
+	rightItem.Id = TEXT("right");
+	rightItem.Label = NSLOCTEXT("BaseSwitcherWidget", "DesignerPreviewRight", "Right");
+
+	return { leftItem, centerItem, rightItem };
+}
+
+TSubclassOf<UBaseButtonWidget> UBaseSwitcherWidget::ResolveSegmentWidgetClass(const bool bNeedsIcon) const
+{
+	if (bNeedsIcon)
+	{
+		if (UClass* iconSegmentClass = LoadClass<UBaseButtonWidget>(nullptr, IconSegmentClassPath))
+		{
+			return iconSegmentClass;
+		}
+	}
+	return SegmentWidgetClass;
+}
+
+void UBaseSwitcherWidget::RebuildSegments(const TArray<FBaseSwitcherItem>& renderedItems)
+{
+	if (!SegmentContainer || !GetWorld())
 	{
 		return;
 	}
 
-	SegmentIdByWidget.Reset();
+	UnbindGeneratedSegments();
+	SegmentIdsByChildIndex.Reset();
 	SegmentContainer->ClearChildren();
-	for (const FBaseSwitcherItem& item : Items)
+	for (const FBaseSwitcherItem& item : renderedItems)
 	{
-		UBaseToggleButtonWidget* segment = CreateWidget<UBaseToggleButtonWidget>(GetWorld(), SegmentWidgetClass);
+		const TSubclassOf<UBaseButtonWidget> resolvedSegmentClass = ResolveSegmentWidgetClass(item.Icon != nullptr);
+		if (!resolvedSegmentClass)
+		{
+			continue;
+		}
+
+		UBaseButtonWidget* segment = CreateWidget<UBaseButtonWidget>(GetWorld(), resolvedSegmentClass);
 		if (!segment)
 		{
 			continue;
@@ -84,51 +141,89 @@ void UBaseSwitcherWidget::RebuildSegments()
 
 		segment->OnBaseClicked.RemoveDynamic(this, &UBaseSwitcherWidget::HandleSegmentClicked);
 		segment->OnBaseClicked.AddDynamic(this, &UBaseSwitcherWidget::HandleSegmentClicked);
-		SegmentIdByWidget.Add(TWeakObjectPtr<UBaseToggleButtonWidget>(segment), item.Id);
 		SegmentContainer->AddChild(segment);
+		SegmentIdsByChildIndex.Add(item.Id);
+		BaseWidgetPrivate::ApplySlotFill(segment, 1.0f);
 	}
-	RefreshSegments();
+	RefreshSegments(renderedItems);
 }
 
-void UBaseSwitcherWidget::RefreshSegments()
+void UBaseSwitcherWidget::RefreshSegments(const TArray<FBaseSwitcherItem>& renderedItems)
 {
 	if (!SegmentContainer)
 	{
 		return;
 	}
 
-	SegmentIdByWidget.Reset();
-	const int32 childCount = FMath::Min(SegmentContainer->GetChildrenCount(), Items.Num());
+	SegmentIdsByChildIndex.Reset();
+	SegmentIdsByChildIndex.SetNum(SegmentContainer->GetChildrenCount());
+	const FName effectiveSelectedId = SelectedId.IsNone() && IsDesignTime() && !renderedItems.IsEmpty()
+		? renderedItems[0].Id
+		: SelectedId;
+	const int32 childCount = FMath::Min(SegmentContainer->GetChildrenCount(), renderedItems.Num());
 	for (int32 itemIndex = 0; itemIndex < childCount; ++itemIndex)
 	{
-		UBaseToggleButtonWidget* segment = Cast<UBaseToggleButtonWidget>(SegmentContainer->GetChildAt(itemIndex));
+		UBaseButtonWidget* segment = Cast<UBaseButtonWidget>(SegmentContainer->GetChildAt(itemIndex));
 		if (!segment)
 		{
 			continue;
 		}
 
-		const FBaseSwitcherItem& item = Items[itemIndex];
-		segment->SetToggleStyle(EBaseToggleButtonStyle::Button);
-		segment->SetShowStateText(false);
+		const FBaseSwitcherItem& item = renderedItems[itemIndex];
+		segment->SetContentAlign(EBaseHorizontalContentAlign::Center);
+		segment->SetColorsOverride(ColorsOverride);
+		segment->SetSizesOverride(SizesOverride);
 		// Ghost segments are borderless until selected, so only the active segment
 		// shows the accent rounded surface inside the shared switcher frame.
 		segment->SetVariant(EBaseWidgetVariant::Ghost);
 		segment->SetLabel(item.Label);
 		segment->SetIcon(item.Icon);
-		segment->SetCheckState(item.Id == SelectedId ? ECheckBoxState::Checked : ECheckBoxState::Unchecked);
+		if (UBaseToggleButtonWidget* toggleSegment = Cast<UBaseToggleButtonWidget>(segment))
+		{
+			toggleSegment->SetToggleStyle(EBaseToggleButtonStyle::Button);
+			toggleSegment->SetShowStateText(false);
+			toggleSegment->SetCheckState(item.Id == effectiveSelectedId ? ECheckBoxState::Checked : ECheckBoxState::Unchecked);
+		}
+		else
+		{
+			segment->SetSelected(item.Id == effectiveSelectedId);
+		}
 		segment->SetDisabled(bDisabled || item.bDisabled);
-		SegmentIdByWidget.Add(TWeakObjectPtr<UBaseToggleButtonWidget>(segment), item.Id);
+		SegmentIdsByChildIndex[itemIndex] = item.Id;
+	}
+}
+
+void UBaseSwitcherWidget::UnbindGeneratedSegments()
+{
+	if (!SegmentContainer)
+	{
+		return;
+	}
+
+	for (int32 childIndex = 0; childIndex < SegmentContainer->GetChildrenCount(); ++childIndex)
+	{
+		if (UBaseButtonWidget* segment = Cast<UBaseButtonWidget>(SegmentContainer->GetChildAt(childIndex)))
+		{
+			segment->OnBaseClicked.RemoveDynamic(this, &UBaseSwitcherWidget::HandleSegmentClicked);
+		}
 	}
 }
 
 void UBaseSwitcherWidget::HandleSegmentClicked(UBaseButtonWidget* button)
 {
-	if (UBaseToggleButtonWidget* segment = Cast<UBaseToggleButtonWidget>(button))
+	if (!SegmentContainer || !button)
 	{
-		const TWeakObjectPtr<UBaseToggleButtonWidget> segmentKey(segment);
-		if (const FName* itemId = SegmentIdByWidget.Find(segmentKey))
+		return;
+	}
+
+	for (int32 childIndex = 0; childIndex < SegmentContainer->GetChildrenCount(); ++childIndex)
+	{
+		if (SegmentContainer->GetChildAt(childIndex) == button
+			&& SegmentIdsByChildIndex.IsValidIndex(childIndex)
+			&& !SegmentIdsByChildIndex[childIndex].IsNone())
 		{
-			SelectItemById(*itemId);
+			SelectItemById(SegmentIdsByChildIndex[childIndex]);
+			return;
 		}
 	}
 }

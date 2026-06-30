@@ -17,35 +17,60 @@ void UBaseContextMenuItemWidget::SynchronizeBaseProperties()
 	Label = Item.Label;
 	Icon = Item.Icon;
 	Variant = EBaseWidgetVariant::Ghost;
+	ContentAlign = EBaseHorizontalContentAlign::Left;
 	const bool bCallerDisabled = bDisabled && !bItemForcesDisabled;
 	bItemForcesDisabled = Item.bDisabled || Item.bSeparator;
 	bDisabled = bCallerDisabled || bItemForcesDisabled;
 	Super::SynchronizeBaseProperties();
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
-	if (Item.bDanger && tokens)
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	if (Item.bDanger && colors)
 	{
 		if (LabelTextBlock)
 		{
-			LabelTextBlock->SetColorAndOpacity(FSlateColor(tokens->StatusDangerColor));
+			LabelTextBlock->SetColorAndOpacity(FSlateColor(colors->StatusDangerColor));
 		}
 		if (ShortcutTextBlock)
 		{
-			ShortcutTextBlock->SetColorAndOpacity(FSlateColor(tokens->StatusDangerColor));
+			ShortcutTextBlock->SetColorAndOpacity(FSlateColor(colors->StatusDangerColor));
 		}
 	}
 	if (ShortcutTextBlock)
 	{
 		SetTextBlockValue(ShortcutTextBlock.Get(), Item.Shortcut);
 		ApplyTextStyle(ShortcutTextBlock.Get(), EBaseTextRole::Caption);
-		if (Item.bDanger && tokens)
+		if (Item.bDanger && colors)
 		{
-			ShortcutTextBlock->SetColorAndOpacity(FSlateColor(tokens->StatusDangerColor));
+			ShortcutTextBlock->SetColorAndOpacity(FSlateColor(colors->StatusDangerColor));
 		}
 	}
 	SetOptionalWidgetVisible(SubMenuCaretImage.Get(), Item.bHasSubMenu);
 	SetOptionalWidgetVisible(SeparatorLineWidget.Get(), Item.bSeparator);
 	SetOptionalWidgetVisible(ItemContent.Get(), !Item.bSeparator);
+	if (!Item.bSeparator && colors && sizes)
+	{
+		const EBaseWidgetState effectiveState = GetEffectiveState();
+		FLinearColor fillColor = FLinearColor::Transparent;
+		if (!bDisabled)
+		{
+			if (effectiveState == EBaseWidgetState::Pressed)
+			{
+				fillColor = colors->SurfaceHoverColor;
+			}
+			else if (effectiveState == EBaseWidgetState::Hovered || effectiveState == EBaseWidgetState::Selected || bSelected)
+			{
+				fillColor = colors->SurfaceControlHoverColor;
+			}
+		}
+		BaseWidgetPrivate::ApplyRoundedSurface(
+			BorderFrame.Get(),
+			SurfaceBorder.Get(),
+			fillColor,
+			FLinearColor::Transparent,
+			sizes->Radius,
+			0.0f);
+	}
 	if (Item.bSeparator)
 	{
 		BaseWidgetPrivate::MakeBorderVisualTransparent(BorderFrame.Get());
@@ -72,16 +97,27 @@ void UBaseContextMenuWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
-	if (tokens)
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	if (colors && sizes)
 	{
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			BorderFrame.Get(),
 			SurfaceBorder.Get(),
-			tokens->SurfacePanelColor,
-			tokens->LineFieldColor,
-			tokens->Radius,
-			tokens->BorderWidth);
+			colors->SurfacePanelColor,
+			colors->LineFieldColor,
+			sizes->Radius,
+			sizes->BorderWidth);
+	}
+	if (PlaceholderTextBlock)
+	{
+		SetTextBlockValue(PlaceholderTextBlock.Get(), PlaceholderText, false);
+		ApplyTextStyle(PlaceholderTextBlock.Get(), EBaseTextRole::Caption);
+		SetOptionalWidgetVisible(PlaceholderTextBlock.Get(), Items.IsEmpty());
+		if (colors)
+		{
+			ApplyTextColor(PlaceholderTextBlock.Get(), colors->TextMutedColor);
+		}
 	}
 	if (ItemContainer && ItemContainer->GetChildrenCount() != Items.Num())
 	{
@@ -104,6 +140,12 @@ void UBaseContextMenuWidget::SetItems(const TArray<FBaseContextMenuItem>& inItem
 	SynchronizeBaseProperties();
 }
 
+void UBaseContextMenuWidget::SetPlaceholderText(const FText inPlaceholderText)
+{
+	PlaceholderText = inPlaceholderText;
+	SynchronizeBaseProperties();
+}
+
 void UBaseContextMenuWidget::RebuildItems()
 {
 	if (!ItemContainer || !ItemWidgetClass || !GetWorld())
@@ -122,6 +164,8 @@ void UBaseContextMenuWidget::RebuildItems()
 
 		itemWidget->OnItemSelected.RemoveDynamic(this, &UBaseContextMenuWidget::HandleGeneratedItemSelected);
 		itemWidget->OnItemSelected.AddDynamic(this, &UBaseContextMenuWidget::HandleGeneratedItemSelected);
+		itemWidget->SetColorsOverride(ColorsOverride);
+		itemWidget->SetSizesOverride(SizesOverride);
 		ItemContainer->AddChild(itemWidget);
 	}
 	RefreshItems();
@@ -143,6 +187,8 @@ void UBaseContextMenuWidget::RefreshItems()
 			continue;
 		}
 
+		itemWidget->SetColorsOverride(ColorsOverride);
+		itemWidget->SetSizesOverride(SizesOverride);
 		itemWidget->SetItem(Items[itemIndex]);
 	}
 }
@@ -151,6 +197,37 @@ void UBaseContextMenuWidget::HandleGeneratedItemSelected(UWidget* widget, const 
 {
 	(void)widget;
 	OnItemSelected.Broadcast(this, itemId);
+}
+
+UBaseContextMenuAnchorWidget::UBaseContextMenuAnchorWidget(const FObjectInitializer& objectInitializer)
+	: Super(objectInitializer)
+{
+	FBaseContextMenuItem firstItem;
+	firstItem.Id = TEXT("open");
+	firstItem.Label = NSLOCTEXT("BaseContextMenuAnchorWidget", "DefaultOpenItem", "Open");
+
+	FBaseContextMenuItem secondItem;
+	secondItem.Id = TEXT("rename");
+	secondItem.Label = NSLOCTEXT("BaseContextMenuAnchorWidget", "DefaultRenameItem", "Rename");
+	secondItem.Shortcut = NSLOCTEXT("BaseContextMenuAnchorWidget", "DefaultRenameShortcut", "F2");
+
+	Items = { firstItem, secondItem };
+}
+
+void UBaseContextMenuAnchorWidget::SynchronizeBaseProperties()
+{
+	Super::SynchronizeBaseProperties();
+	if (!PlaceholderTextBlock)
+	{
+		return;
+	}
+
+	SetTextBlockValue(PlaceholderTextBlock.Get(), PlaceholderText, false);
+	ApplyTextStyle(PlaceholderTextBlock.Get(), EBaseTextRole::Caption);
+	if (const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors())
+	{
+		ApplyTextColor(PlaceholderTextBlock.Get(), colors->TextMutedColor);
+	}
 }
 
 void UBaseContextMenuAnchorWidget::SetItems(const TArray<FBaseContextMenuItem>& inItems)
@@ -213,6 +290,8 @@ void UBaseContextMenuAnchorWidget::OpenMenuAt(const FVector2D& screenPosition)
 	}
 
 	ActiveMenuWidget->SetItems(Items);
+	ActiveMenuWidget->SetColorsOverride(ColorsOverride);
+	ActiveMenuWidget->SetSizesOverride(SizesOverride);
 	ActiveMenuWidget->OnItemSelected.RemoveDynamic(this, &UBaseContextMenuAnchorWidget::HandleMenuItemSelected);
 	ActiveMenuWidget->OnItemSelected.AddDynamic(this, &UBaseContextMenuAnchorWidget::HandleMenuItemSelected);
 	ActiveMenuWidget->AddToViewport(MenuZOrder);

@@ -5,26 +5,31 @@
 #include "Components/TextBlock.h"
 #include "UI/BaseWidgetPrivate.h"
 
-const UBaseWidgetTokenCatalog* UBaseWidget::GetResolvedBaseTokens() const
+const UBaseWidgetColorCatalog* UBaseWidget::GetResolvedBaseColors() const
 {
-	return BaseWidgetPrivate::ResolveBaseTokenCatalog(BaseTokens);
+	return BaseWidgetPrivate::ResolveBaseColorCatalog(ColorsOverride);
+}
+
+const UBaseWidgetSizeCatalog* UBaseWidget::GetResolvedBaseSizes() const
+{
+	return BaseWidgetPrivate::ResolveBaseSizeCatalog(SizesOverride);
 }
 
 FBaseTextStyleToken UBaseWidget::ResolveTextStyle(const EBaseTextRole role) const
 {
-	return BaseWidgetPrivate::ResolveTextStyle(
-		BaseTokens,
-		BaseWidgetPrivate::ResolveSizedTextRole(role, Size));
+	FBaseTextStyleToken style;
+	BaseWidgetPrivate::ResolveTextStyle(ColorsOverride, SizesOverride, role, style);
+	return style;
 }
 
 FLinearColor UBaseWidget::ResolveVariantColor(const EBaseWidgetVariant variant) const
 {
-	return BaseWidgetPrivate::ResolveVariantColor(BaseTokens, variant);
+	return BaseWidgetPrivate::ResolveVariantColor(ColorsOverride, variant);
 }
 
 FLinearColor UBaseWidget::ResolveStateColor(const EBaseWidgetState state) const
 {
-	return BaseWidgetPrivate::ResolveStateColor(BaseTokens, state);
+	return BaseWidgetPrivate::ResolveStateColor(ColorsOverride, state);
 }
 
 void UBaseWidget::SynchronizeBaseProperties()
@@ -37,14 +42,35 @@ void UBaseWidget::SynchronizeBaseProperties()
 
 	if (BorderFrame)
 	{
-		const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
-		ApplyBorderColor(BorderFrame.Get(), tokens ? tokens->LineFieldColor : FLinearColor::White);
+		const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+		if (colors)
+		{
+			ApplyBorderColor(BorderFrame.Get(), colors->LineFieldColor);
+		}
 	}
 }
 
-void UBaseWidget::SetBaseSize(const EBaseWidgetSize inSize)
+void UBaseWidget::NotifyBaseVisualStateChanged(const EBaseWidgetState state, const bool bForce)
 {
-	Size = inSize;
+	if (!bForce && bHasBroadcastVisualState && LastBroadcastVisualState == state)
+	{
+		return;
+	}
+
+	LastBroadcastVisualState = state;
+	bHasBroadcastVisualState = true;
+	ReceiveBaseVisualStateChanged(state);
+}
+
+void UBaseWidget::SetColorsOverride(const TSoftObjectPtr<UBaseWidgetColorCatalog> inColorsOverride)
+{
+	ColorsOverride = inColorsOverride;
+	SynchronizeBaseProperties();
+}
+
+void UBaseWidget::SetSizesOverride(const TSoftObjectPtr<UBaseWidgetSizeCatalog> inSizesOverride)
+{
+	SizesOverride = inSizesOverride;
 	SynchronizeBaseProperties();
 }
 
@@ -80,7 +106,11 @@ void UBaseWidget::SynchronizeProperties()
 
 void UBaseWidget::ApplyTextStyle(UTextBlock* textBlock, const EBaseTextRole role) const
 {
-	BaseWidgetPrivate::ApplyTextStyle(textBlock, ResolveTextStyle(role));
+	FBaseTextStyleToken style;
+	if (BaseWidgetPrivate::ResolveTextStyle(ColorsOverride, SizesOverride, role, style))
+	{
+		BaseWidgetPrivate::ApplyTextStyle(textBlock, style);
+	}
 }
 
 void UBaseWidget::ApplyBorderColor(UBorder* border, const FLinearColor& color) const

@@ -8,22 +8,28 @@ void UBaseStatusBadgeWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
-	const FLinearColor badgeColor = bDisabled
-		? ResolveStateColor(EBaseWidgetState::Disabled)
-		: ResolveStateColor(State);
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
 	if (LabelTextBlock)
 	{
 		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Caption);
-		LabelTextBlock->SetColorAndOpacity(FSlateColor(bDisabled && tokens
-			? tokens->TextFaintColor
-			: badgeColor));
 	}
 
 	BaseWidgetPrivate::MakeBorderVisualTransparent(BorderFrame.Get());
 	BaseWidgetPrivate::MakeBorderVisualTransparent(SurfaceBorder.Get());
-	ApplyBorderColor(StatusDot.Get(), badgeColor);
+	if (colors)
+	{
+		const FLinearColor badgeColor = bDisabled
+			? colors->GetStateColor(EBaseWidgetState::Disabled)
+			: colors->GetStateColor(State);
+		if (LabelTextBlock)
+		{
+			LabelTextBlock->SetColorAndOpacity(FSlateColor(bDisabled
+				? colors->TextFaintColor
+				: badgeColor));
+		}
+		ApplyBorderColor(StatusDot.Get(), badgeColor);
+	}
 }
 
 void UBaseStatusBadgeWidget::SetLabel(const FText inLabel)

@@ -231,6 +231,7 @@ bool AScenarioStaticObstacle::ApplyPropEntry(const FScenarioStaticObstaclePropEn
 	BoundsSizeMeters = propEntry.BoundsSizeMeters;
 	BoundsCenterOffsetMeters = propEntry.BoundsCenterOffsetMeters;
 	FallbackBoxExtent = propEntry.FallbackBoxExtent;
+	CollisionSourceMode = propEntry.CollisionSourceMode;
 	bUseMeshSimpleCollision = propEntry.bUseMeshSimpleCollision;
 	bUseFallbackBoxCollision = propEntry.bUseFallbackBoxCollision;
 
@@ -271,14 +272,34 @@ void AScenarioStaticObstacle::ApplyCollisionSettings()
 		: (bUseSafetyQuery ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
 
 	const bool bUseAuthoredBoundsCollision = HasAuthoredBoundsSize();
-	const bool bUseMeshCollision = !bUseAuthoredBoundsCollision
-		&& bUseMeshSimpleCollision
-		&& MeshRoot
-		&& StaticMeshHasSimpleCollision(MeshRoot->GetStaticMesh());
-	const bool bUseBoundsCollision = bUseFallbackBoxCollision
-		&& (bUseAuthoredBoundsCollision || !bUseMeshCollision);
+	bool bUseVisualCollision = false;
+	bool bUseAllStaticMeshSimpleCollision = false;
+	bool bUseBoundsCollision = false;
 
-	ApplyVisualPrimitiveCollisionSettings(bUseMeshCollision ? collisionEnabled : ECollisionEnabled::NoCollision);
+	switch (CollisionSourceMode)
+	{
+	case EScenarioStaticObstacleCollisionSourceMode::AuthoredBoundsBox:
+		bUseBoundsCollision = bUseFallbackBoxCollision;
+		break;
+	case EScenarioStaticObstacleCollisionSourceMode::MeshSimpleCollision:
+		bUseAllStaticMeshSimpleCollision = HasAnyStaticMeshSimpleCollision();
+		bUseVisualCollision = bUseAllStaticMeshSimpleCollision;
+		bUseBoundsCollision = bUseFallbackBoxCollision && !bUseVisualCollision;
+		break;
+	case EScenarioStaticObstacleCollisionSourceMode::Auto:
+	default:
+		bUseVisualCollision = !bUseAuthoredBoundsCollision
+			&& bUseMeshSimpleCollision
+			&& MeshRoot
+			&& StaticMeshHasSimpleCollision(MeshRoot->GetStaticMesh());
+		bUseBoundsCollision = bUseFallbackBoxCollision
+			&& (bUseAuthoredBoundsCollision || !bUseVisualCollision);
+		break;
+	}
+
+	ApplyVisualPrimitiveCollisionSettings(
+		bUseVisualCollision ? collisionEnabled : ECollisionEnabled::NoCollision,
+		bUseAllStaticMeshSimpleCollision);
 
 	if (!CollisionBoundsComponent)
 	{
@@ -299,7 +320,8 @@ void AScenarioStaticObstacle::ApplyCollisionSettings()
 }
 
 void AScenarioStaticObstacle::ApplyVisualPrimitiveCollisionSettings(
-	ECollisionEnabled::Type meshRootCollisionEnabled)
+	ECollisionEnabled::Type visualCollisionEnabled,
+	bool bUseAllStaticMeshSimpleCollision)
 {
 	TArray<UPrimitiveComponent*> primitiveComponents;
 	GetComponents<UPrimitiveComponent>(primitiveComponents);
@@ -310,11 +332,17 @@ void AScenarioStaticObstacle::ApplyVisualPrimitiveCollisionSettings(
 			continue;
 		}
 
-		const bool bAllowMeshRootCollision =
-			primitiveComponent == MeshRoot && meshRootCollisionEnabled != ECollisionEnabled::NoCollision;
+		const UStaticMeshComponent* staticMeshComponent = Cast<UStaticMeshComponent>(primitiveComponent);
+		const bool bHasSimpleStaticMeshCollision =
+			staticMeshComponent
+			&& StaticMeshHasSimpleCollision(staticMeshComponent->GetStaticMesh());
+		const bool bAllowVisualCollision =
+			bUseAllStaticMeshSimpleCollision
+				? bHasSimpleStaticMeshCollision
+				: primitiveComponent == MeshRoot && visualCollisionEnabled != ECollisionEnabled::NoCollision;
 		ConfigureObstacleCollisionPrimitive(
 			primitiveComponent,
-			bAllowMeshRootCollision ? meshRootCollisionEnabled : ECollisionEnabled::NoCollision);
+			bAllowVisualCollision ? visualCollisionEnabled : ECollisionEnabled::NoCollision);
 	}
 }
 
@@ -432,6 +460,21 @@ bool AScenarioStaticObstacle::HasConfiguredVisualMesh() const
 	for (const USkeletalMeshComponent* skeletalMeshComponent : skeletalMeshComponents)
 	{
 		if (skeletalMeshComponent && skeletalMeshComponent->GetSkeletalMeshAsset())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool AScenarioStaticObstacle::HasAnyStaticMeshSimpleCollision() const
+{
+	TArray<UStaticMeshComponent*> staticMeshComponents;
+	GetComponents<UStaticMeshComponent>(staticMeshComponents);
+	for (const UStaticMeshComponent* staticMeshComponent : staticMeshComponents)
+	{
+		if (staticMeshComponent && StaticMeshHasSimpleCollision(staticMeshComponent->GetStaticMesh()))
 		{
 			return true;
 		}

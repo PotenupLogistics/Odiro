@@ -30,7 +30,7 @@ namespace LfsLockPoller
 	/** Summary of permission changes applied during one poll cycle. */
 	struct FPermissionSummary
 	{
-		/** Files made writable because the current user owns the active lock. */
+		/** Files made writable because the current user owns the active lock or the asset is local-only. */
 		int32 WritableCount = 0;
 
 		/** Files made read-only because the current user does not own the active lock. */
@@ -147,7 +147,7 @@ namespace LfsLockPoller
 		return lockableExtensions.Contains(extension);
 	}
 
-	/** Reads tracked project Content files that match the configured lockable extensions. */
+	/** Reads local tracked project Content files that match the configured lockable extensions. */
 	bool ReadTrackedLockableFiles(const FPollConfig& config, const FString& repositoryRoot, TArray<FString>& outRepositoryPaths, FString& outError)
 	{
 		FString contentRoot;
@@ -160,6 +160,78 @@ namespace LfsLockPoller
 		FString stdoutText;
 		FString stderrText;
 		const FString arguments = FString::Printf(TEXT("-c core.quotePath=false ls-files -- %s"), *QuoteArgument(contentRoot));
+		if (!RunGitCommand(config.GitBinaryPath, repositoryRoot, arguments, stdoutText, stderrText))
+		{
+			outError = stderrText.IsEmpty() ? stdoutText : stderrText;
+			return false;
+		}
+
+		for (const FString& path : SplitGitPathLines(stdoutText))
+		{
+			const FString normalizedPath = NormalizeGitPath(path);
+			if (IsLockablePath(normalizedPath, config.LockableExtensions))
+			{
+				outRepositoryPaths.Add(normalizedPath);
+			}
+		}
+		return true;
+	}
+
+	/** Resolves the remote tree used to decide which lockable assets already exist outside this workspace. */
+	bool ResolveRemoteReference(const FPollConfig& config, const FString& repositoryRoot, FString& outRemoteReference, FString& outError)
+	{
+		FString stdoutText;
+		FString stderrText;
+		if (RunGitCommand(config.GitBinaryPath, repositoryRoot, TEXT("rev-parse --abbrev-ref --symbolic-full-name @{u}"), stdoutText, stderrText))
+		{
+			outRemoteReference = stdoutText.TrimStartAndEnd();
+			return !outRemoteReference.IsEmpty();
+		}
+
+		FString currentBranch;
+		if (RunGitCommand(config.GitBinaryPath, repositoryRoot, TEXT("branch --show-current"), stdoutText, stderrText))
+		{
+			currentBranch = stdoutText.TrimStartAndEnd();
+			if (!currentBranch.IsEmpty())
+			{
+				const FString originBranchReference = FString::Printf(TEXT("refs/remotes/origin/%s"), *currentBranch);
+				if (RunGitCommand(config.GitBinaryPath, repositoryRoot, FString::Printf(TEXT("rev-parse --verify --quiet %s"), *QuoteArgument(originBranchReference)), stdoutText, stderrText))
+				{
+					outRemoteReference = originBranchReference;
+					return true;
+				}
+			}
+		}
+
+		if (RunGitCommand(config.GitBinaryPath, repositoryRoot, TEXT("symbolic-ref --short refs/remotes/origin/HEAD"), stdoutText, stderrText))
+		{
+			outRemoteReference = stdoutText.TrimStartAndEnd();
+			return !outRemoteReference.IsEmpty();
+		}
+
+		outError = TEXT("No upstream branch, matching origin branch, or origin/HEAD was available for remote asset filtering.");
+		return false;
+	}
+
+	/** Reads remote project Content files that match the configured lockable extensions. */
+	bool ReadRemoteLockableFiles(const FPollConfig& config, const FString& repositoryRoot, TArray<FString>& outRepositoryPaths, FString& outError)
+	{
+		FString contentRoot;
+		if (!TryMakeRepositoryRelativePath(repositoryRoot, FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir()), contentRoot))
+		{
+			outError = TEXT("Project Content directory is not inside the Git repository.");
+			return false;
+		}
+
+		FString remoteReference;
+		if (!ResolveRemoteReference(config, repositoryRoot, remoteReference, outError))
+		{
+			return false;
+		}
+
+		FString stdoutText;
+		FString stderrText;
+		const FString arguments = FString::Printf(TEXT("-c core.quotePath=false ls-tree -r --name-only %s -- %s"), *QuoteArgument(remoteReference), *QuoteArgument(contentRoot));
 		if (!RunGitCommand(config.GitBinaryPath, repositoryRoot, arguments, stdoutText, stderrText))
 		{
 			outError = stderrText.IsEmpty() ? stdoutText : stderrText;
@@ -232,12 +304,16 @@ namespace LfsLockPoller
 		return true;
 	}
 
-	/** Applies read-only state so only paths in ownedLockPaths remain writable. */
-	FPermissionSummary ApplyPermissions(const FString& repositoryRoot, const TArray<FString>& lockablePaths, const TSet<FString>& ownedLockPaths)
+	/** Applies read-only state so only remote lockable paths require an owned LFS lock. */
+	FPermissionSummary ApplyPermissions(
+		const FString& repositoryRoot,
+		const TArray<FString>& localLockablePaths,
+		const TSet<FString>& remoteLockablePaths,
+		const TSet<FString>& ownedLockPaths)
 	{
 		FPermissionSummary summary;
 		IPlatformFile& platformFile = FPlatformFileManager::Get().GetPlatformFile();
-		for (const FString& repositoryPath : lockablePaths)
+		for (const FString& repositoryPath : localLockablePaths)
 		{
 			const FString absolutePath = FPaths::ConvertRelativePathToFull(repositoryRoot, repositoryPath);
 			if (!platformFile.FileExists(*absolutePath))
@@ -245,7 +321,8 @@ namespace LfsLockPoller
 				continue;
 			}
 
-			const bool bShouldBeWritable = ownedLockPaths.Contains(repositoryPath);
+			const bool bExistsOnRemote = remoteLockablePaths.Contains(repositoryPath);
+			const bool bShouldBeWritable = !bExistsOnRemote || ownedLockPaths.Contains(repositoryPath);
 			const bool bIsReadOnly = platformFile.IsReadOnly(*absolutePath);
 			if (bIsReadOnly == !bShouldBeWritable)
 			{
@@ -370,14 +447,32 @@ private:
 			return;
 		}
 
-		TArray<FString> lockablePaths;
-		if (!LfsLockPoller::ReadTrackedLockableFiles(config, repositoryRoot, lockablePaths, error))
+		TArray<FString> localLockablePaths;
+		if (!LfsLockPoller::ReadTrackedLockableFiles(config, repositoryRoot, localLockablePaths, error))
 		{
-			UE_LOG(LogLfsLockPoller, Warning, TEXT("Skipping permission sync because tracked asset query failed: %s"), *error.TrimStartAndEnd());
+			UE_LOG(LogLfsLockPoller, Warning, TEXT("Skipping permission sync because local asset query failed: %s"), *error.TrimStartAndEnd());
 			return;
 		}
 
-		const LfsLockPoller::FPermissionSummary summary = LfsLockPoller::ApplyPermissions(repositoryRoot, lockablePaths, ownedLockPaths);
+		TArray<FString> remoteLockablePaths;
+		if (!LfsLockPoller::ReadRemoteLockableFiles(config, repositoryRoot, remoteLockablePaths, error))
+		{
+			UE_LOG(LogLfsLockPoller, Warning, TEXT("Skipping permission sync because remote asset query failed: %s"), *error.TrimStartAndEnd());
+			return;
+		}
+
+		TSet<FString> remoteLockablePathSet;
+		remoteLockablePathSet.Reserve(remoteLockablePaths.Num());
+		for (const FString& remotePath : remoteLockablePaths)
+		{
+			remoteLockablePathSet.Add(remotePath);
+		}
+
+		const LfsLockPoller::FPermissionSummary summary = LfsLockPoller::ApplyPermissions(
+			repositoryRoot,
+			localLockablePaths,
+			remoteLockablePathSet,
+			ownedLockPaths);
 		if (summary.WritableCount > 0 || summary.ReadOnlyCount > 0 || summary.FailureCount > 0)
 		{
 			UE_LOG(LogLfsLockPoller, Display, TEXT("Synchronized LFS lock permissions: writable=%d read_only=%d failed=%d"),

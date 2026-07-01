@@ -1289,6 +1289,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveDirty(const TSharedPtr<FJsonObject>&
 			Failed.Add(MakeShared<FJsonValueObject>(Entry));
 			continue;
 		}
+		if (IFileManager::Get().FileExists(*FileName) && IFileManager::Get().IsReadOnly(*FileName))
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("package"), PackageName);
+			Entry->SetStringField(TEXT("file"), FileName);
+			Entry->SetBoolField(TEXT("isMap"), Pkg->ContainsMap());
+			Entry->SetStringField(TEXT("error"), TEXT("target file is read-only"));
+			Failed.Add(MakeShared<FJsonValueObject>(Entry));
+			continue;
+		}
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
 		SaveArgs.Error = GError;

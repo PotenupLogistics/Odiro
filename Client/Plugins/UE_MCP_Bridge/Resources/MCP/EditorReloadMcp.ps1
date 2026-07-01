@@ -289,6 +289,53 @@ function Get-ColdStartEligibility {
     }
 }
 
+# Builds a compact action-advice object for recoverable lifecycle responses.
+function New-ReloadActionAdvice {
+    param(
+        [bool] $CanAutoRecover = $false,
+        [bool] $BlockedByCrashReporter = $false,
+        [string] $RecommendedNextTool = "",
+        [hashtable] $RecommendedArgs = @{},
+        [string] $RecommendedAction = ""
+    )
+    return [pscustomobject]@{
+        canAutoRecover = $CanAutoRecover
+        blockedByCrashReporter = $BlockedByCrashReporter
+        recommendedNextTool = $RecommendedNextTool
+        recommendedArgs = [pscustomobject] $RecommendedArgs
+        recommendedAction = $RecommendedAction
+    }
+}
+
+# Adds action-advice fields to an existing response object.
+function Add-ReloadActionAdvice {
+    param(
+        [object] $Result,
+        [object] $Advice
+    )
+    if ($null -eq $Result -or $null -eq $Advice) {
+        return $Result
+    }
+    foreach ($property in $Advice.PSObject.Properties) {
+        $Result | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value -Force
+    }
+    return $Result
+}
+
+# Returns a small summary of a recovery result suitable for embedding in job state.
+function New-ReloadRecoverySummary {
+    param([object] $Recovery)
+    if ($null -eq $Recovery) {
+        return $null
+    }
+    return [pscustomobject]@{
+        code = [string] (Get-ObjectProperty -Object $Recovery -Name "code" -DefaultValue "")
+        reason = [string] (Get-ObjectProperty -Object $Recovery -Name "reason" -DefaultValue "")
+        actions = @((Get-ObjectProperty -Object $Recovery -Name "actions" -DefaultValue @()))
+        success = [bool] (Get-ObjectProperty -Object $Recovery -Name "success" -DefaultValue $false)
+    }
+}
+
 # Sends one JSON-RPC request to the editor's WebSocket bridge.
 function Invoke-BridgeMethod {
     param(
@@ -397,7 +444,7 @@ function Get-ReloadStatus {
     $crashReportClients = @(Get-UnrealCrashReportClientStates)
     $pendingCrashReports = @($crashReportClients | Where-Object { $_.blocksEditorLaunch })
 
-    return [pscustomobject]@{
+    $result = [pscustomobject]@{
         success = $true
         stateDirectory = $stateDir
         maintenancePath = $maintenancePath
@@ -413,6 +460,33 @@ function Get-ReloadStatus {
         latestEditorLog = $latestEditorLog
         editorStartupDiagnosis = (Get-EditorStartupDiagnosis -EditorPid $portPid -LatestLog $latestEditorLog)
     }
+
+    $portClassification = [string] (Get-ObjectProperty -Object $port -Name "classification" -DefaultValue "")
+    if ($pendingCrashReports.Count -gt 0) {
+        return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+            -CanAutoRecover $false `
+            -BlockedByCrashReporter $true `
+            -RecommendedNextTool "editor_reload_recover" `
+            -RecommendedArgs @{ reason = "retry after closing Unreal Crash Reporter" } `
+            -RecommendedAction "Close or submit the Unreal Crash Reporter dialog before relaunching the editor.")
+    }
+    if ($maintenanceTerminal -or $portClassification -eq "stale_pid") {
+        return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+            -CanAutoRecover $true `
+            -BlockedByCrashReporter $false `
+            -RecommendedNextTool "editor_reload_recover_and_restart" `
+            -RecommendedArgs @{ wait = $true; reason = "recover stale editor reload state" } `
+            -RecommendedAction "Recover stale reload state and cold-start the editor if no live editor remains.")
+    }
+    if ($bridgeError -and $portClassification -eq "process_alive_but_bridge_down") {
+        return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+            -CanAutoRecover $false `
+            -BlockedByCrashReporter $false `
+            -RecommendedNextTool "editor_reload_get_status" `
+            -RecommendedArgs @{} `
+            -RecommendedAction "The editor process is alive but the bridge is unreachable; inspect the editor or close it before restart.")
+    }
+    return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice)
 }
 
 # Updates a reload job file with status, phase, and optional details.
@@ -888,7 +962,7 @@ function Start-RebuildAndRestart {
     $lockTimeoutMs = [Math]::Max($TimeoutMs, 10000)
     $pendingCrashReports = @(Get-PendingUnrealCrashReportClients)
     if ($pendingCrashReports.Count -gt 0) {
-        return [pscustomobject]@{
+        $result = [pscustomobject]@{
             success = $false
             accepted = $false
             code = "crash_report_pending"
@@ -896,7 +970,39 @@ function Start-RebuildAndRestart {
             pendingCrashReports = $pendingCrashReports
             recoveryTool = "editor_reload_recover"
         }
+        return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+            -CanAutoRecover $false `
+            -BlockedByCrashReporter $true `
+            -RecommendedNextTool "editor_reload_recover" `
+            -RecommendedArgs @{ reason = "retry after closing Unreal Crash Reporter" } `
+            -RecommendedAction "Close or submit the Unreal Crash Reporter dialog, then retry recovery.")
     }
+
+    $preStartRecovery = Invoke-ReloadRecover -Reason "automatic recovery before rebuild/restart"
+    if (-not [bool] (Get-ObjectProperty -Object $preStartRecovery -Name "success" -DefaultValue $false)) {
+        $result = [pscustomobject]@{
+            success = $false
+            accepted = $false
+            code = [string] (Get-ObjectProperty -Object $preStartRecovery -Name "code" -DefaultValue "recovery_failed")
+            error = [string] (Get-ObjectProperty -Object $preStartRecovery -Name "error" -DefaultValue "Reload recovery failed before rebuild/restart.")
+            preStartRecovery = $preStartRecovery
+        }
+        $blockedByCrashReporter = ([string] (Get-ObjectProperty -Object $result -Name "code" -DefaultValue "")) -eq "crash_report_pending"
+        return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+            -CanAutoRecover $false `
+            -BlockedByCrashReporter $blockedByCrashReporter `
+            -RecommendedNextTool "editor_reload_get_status" `
+            -RecommendedArgs @{} `
+            -RecommendedAction "Inspect editor/reload status before retrying restart.")
+    }
+
+    $preStartRecoverySummary = New-ReloadRecoverySummary -Recovery $preStartRecovery
+    $preStartRecoveryActions = New-Object System.Collections.Generic.List[string]
+    foreach ($action in @((Get-ObjectProperty -Object $preStartRecovery -Name "actions" -DefaultValue @()))) {
+        $preStartRecoveryActions.Add([string] $action)
+    }
+    $initialColdStartEligibility = Get-ColdStartEligibility
+    $preferColdStart = [bool] (Get-ObjectProperty -Object $initialColdStartEligibility -Name "allowed" -DefaultValue $false)
 
     while ($true) {
         $lock = Enter-ReloadFileLock -Name "state.lock" -TimeoutMs $lockTimeoutMs
@@ -907,14 +1013,9 @@ function Start-RebuildAndRestart {
         try {
             $existing = Read-JsonFile -Path $maintenancePath
             if (Test-TerminalMaintenanceState -Maintenance $existing) {
-                return [pscustomobject]@{
-                    success = $false
-                    accepted = $false
-                    code = "terminal_maintenance_requires_recover"
-                    maintenancePath = $maintenancePath
-                    maintenanceState = $existing
-                    recoveryTool = "editor_reload_recover"
-                }
+                Remove-Item -LiteralPath $maintenancePath -Force
+                $preStartRecoveryActions.Add("cleared_terminal_maintenance")
+                $existing = $null
             }
             $existingJobId = [string] (Get-ObjectProperty -Object $existing -Name "jobId" -DefaultValue "")
             if ($null -ne $existing -and $existingJobId) {
@@ -950,12 +1051,12 @@ function Start-RebuildAndRestart {
                 $lastSuccess = Get-LastSuccessfulReload
                 $lastSuccessOperation = [string] (Get-ObjectProperty -Object $lastSuccess -Name "operation" -DefaultValue "")
                 $lastSuccessFingerprint = Get-ObjectProperty -Object $lastSuccess -Name "sourceFingerprint"
-                if (-not $Force -and $lastSuccessOperation -eq "rebuild_restart" -and (Test-SourceFingerprintEqual -Left $lastSuccessFingerprint -Right $sourceFingerprintBeforeCheck)) {
+                if (-not $Force -and -not $preferColdStart -and $lastSuccessOperation -eq "rebuild_restart" -and (Test-SourceFingerprintEqual -Left $lastSuccessFingerprint -Right $sourceFingerprintBeforeCheck)) {
                     return New-SkippedReloadResult -Operation "rebuild_restart" -Code "already_built" -Reason "Current source fingerprint matches the last successful rebuild/restart." -SourceFingerprint $sourceFingerprintBeforeCheck -LastSuccess $lastSuccess
                 }
 
                 $upToDateCheck = $null
-                if (-not $Force) {
+                if (-not $Force -and -not $preferColdStart) {
                     $upToDateCheck = Test-SourceBuildUpToDate -Operation "rebuild_restart" -RequestId ([guid]::NewGuid().ToString("N")) -TimeoutMs $TimeoutMs
                     $sourceFingerprintAfterCheck = Get-SourceStateFingerprint
                     if ((Get-ObjectProperty -Object $upToDateCheck -Name "success" -DefaultValue $false) -and
@@ -970,26 +1071,46 @@ function Start-RebuildAndRestart {
                 }
 
                 $coldStart = $false
-                $coldStartEligibility = $null
-                try {
-                    $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_get_status" -TimeoutMs 5000)
-                }
-                catch {
+                $coldStartEligibility = $initialColdStartEligibility
+                if ($preferColdStart) {
                     $coldStartEligibility = Get-ColdStartEligibility
-                    if ($Force -and (Get-ObjectProperty -Object $coldStartEligibility -Name "allowed" -DefaultValue $false)) {
+                    if (Get-ObjectProperty -Object $coldStartEligibility -Name "allowed" -DefaultValue $false) {
                         $coldStart = $true
-                        Write-ReloadLog "coordination_get_status unavailable; force rebuild/restart will use verified cold start: $($_.Exception.Message)"
+                        $preStartRecoveryActions.Add("selected_cold_start")
                     }
                     else {
-                        return [pscustomobject]@{
-                            success = $false
-                            accepted = $false
-                            code = "coordination_unavailable"
-                            error = $_.Exception.Message
-                            maintenancePath = $maintenancePath
-                            sourceFingerprint = $sourceFingerprint
-                            upToDateCheck = $upToDateCheck
-                            coldStartEligibility = $coldStartEligibility
+                        $preferColdStart = $false
+                    }
+                }
+                if (-not $coldStart) {
+                    try {
+                        $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_get_status" -TimeoutMs 5000)
+                    }
+                    catch {
+                        $coldStartEligibility = Get-ColdStartEligibility
+                        if (Get-ObjectProperty -Object $coldStartEligibility -Name "allowed" -DefaultValue $false) {
+                            $coldStart = $true
+                            $preStartRecoveryActions.Add("selected_cold_start_after_coordination_unavailable")
+                            Write-ReloadLog "coordination_get_status unavailable; rebuild/restart will use verified cold start: $($_.Exception.Message)"
+                        }
+                        else {
+                            $result = [pscustomobject]@{
+                                success = $false
+                                accepted = $false
+                                code = "coordination_unavailable"
+                                error = $_.Exception.Message
+                                maintenancePath = $maintenancePath
+                                sourceFingerprint = $sourceFingerprint
+                                upToDateCheck = $upToDateCheck
+                                coldStartEligibility = $coldStartEligibility
+                                preStartRecovery = $preStartRecoverySummary
+                            }
+                            return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+                                -CanAutoRecover $false `
+                                -BlockedByCrashReporter $false `
+                                -RecommendedNextTool "editor_reload_get_status" `
+                                -RecommendedArgs @{} `
+                                -RecommendedAction "The editor process appears alive but coordination is unavailable; inspect status before retrying.")
                         }
                     }
                 }
@@ -999,16 +1120,23 @@ function Start-RebuildAndRestart {
                 }
 
                 if ($coldStart -and -not (Get-ObjectProperty -Object $coldStartEligibility -Name "allowed" -DefaultValue $false)) {
-                    return [pscustomobject]@{
-                        success = $false
-                        accepted = $false
-                        code = "coordination_unavailable"
-                        error = "Cold start was requested but a live editor process was detected."
-                        maintenancePath = $maintenancePath
-                        sourceFingerprint = $sourceFingerprint
-                        upToDateCheck = $upToDateCheck
-                        coldStartEligibility = $coldStartEligibility
-                    }
+                    $result = [pscustomobject]@{
+                            success = $false
+                            accepted = $false
+                            code = "coordination_unavailable"
+                            error = "Cold start was selected but a live editor process was detected."
+                            maintenancePath = $maintenancePath
+                            sourceFingerprint = $sourceFingerprint
+                            upToDateCheck = $upToDateCheck
+                            coldStartEligibility = $coldStartEligibility
+                            preStartRecovery = $preStartRecoverySummary
+                        }
+                    return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+                        -CanAutoRecover $false `
+                        -BlockedByCrashReporter $false `
+                        -RecommendedNextTool "editor_reload_get_status" `
+                        -RecommendedArgs @{} `
+                        -RecommendedAction "A live editor appeared during cold-start selection; inspect status before retrying.")
                 }
 
                 $jobId = [guid]::NewGuid().ToString("N")
@@ -1035,6 +1163,8 @@ function Start-RebuildAndRestart {
                     force = $Force
                     coldStart = $coldStart
                     coldStartEligibility = $coldStartEligibility
+                    preStartRecovery = $preStartRecoverySummary
+                    preStartRecoveryActions = @($preStartRecoveryActions.ToArray())
                     editorArgs = $EditorArgs
                     mcpSafeLaunch = $McpSafeLaunch
                     maxParallelActions = $MaxParallelActions
@@ -1044,11 +1174,13 @@ function Start-RebuildAndRestart {
                 Write-JsonFile -Path $maintenancePath -Value $maintenance
                 Write-JsonFile -Path $jobPath -Value $job
 
-                try {
-                    $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_prepare_maintenance" -Params @{ jobId = $jobId; reason = $Reason; operation = "rebuild_restart"; phase = "preparing" } -TimeoutMs 5000)
-                }
-                catch {
-                    Write-ReloadLog "coordination_prepare_maintenance failed: $($_.Exception.Message)"
+                if (-not $coldStart) {
+                    try {
+                        $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_prepare_maintenance" -Params @{ jobId = $jobId; reason = $Reason; operation = "rebuild_restart"; phase = "preparing" } -TimeoutMs 5000)
+                    }
+                    catch {
+                        Write-ReloadLog "coordination_prepare_maintenance failed: $($_.Exception.Message)"
+                    }
                 }
 
                 $helper = Join-Path (Get-PluginRoot) "Resources\Automation\RebuildAndRestart.ps1"
@@ -1420,7 +1552,7 @@ function Invoke-ReloadRecover {
     $actions = New-Object System.Collections.Generic.List[string]
     $pendingCrashReports = @(Get-ObjectProperty -Object $status -Name "pendingCrashReports" -DefaultValue @())
     if ($pendingCrashReports.Count -gt 0) {
-        return [pscustomobject]@{
+        $result = [pscustomobject]@{
             success = $false
             code = "crash_report_pending"
             reason = $Reason
@@ -1429,6 +1561,12 @@ function Invoke-ReloadRecover {
             manualAction = "Close CrashReportClientEditor or submit/dismiss the Crash Reporter dialog, then retry editor_reload_recover."
             status = $status
         }
+        return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+            -CanAutoRecover $false `
+            -BlockedByCrashReporter $true `
+            -RecommendedNextTool "editor_reload_recover" `
+            -RecommendedArgs @{ reason = "retry after closing Unreal Crash Reporter" } `
+            -RecommendedAction "Close or submit the Unreal Crash Reporter dialog, then retry recovery.")
     }
 
     $maintenancePath = Get-ObjectProperty -Object $status -Name "maintenancePath"
@@ -1439,12 +1577,18 @@ function Invoke-ReloadRecover {
             $actions.Add("cleared_terminal_maintenance")
         }
         else {
-            return [pscustomobject]@{
+            $result = [pscustomobject]@{
                 success = $false
                 code = "maintenance_in_progress"
                 reason = $Reason
                 status = $status
             }
+            return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+                -CanAutoRecover $false `
+                -BlockedByCrashReporter $false `
+                -RecommendedNextTool "editor_reload_wait_for_job" `
+                -RecommendedArgs @{ jobId = [string] (Get-ObjectProperty -Object $maintenanceState -Name "jobId" -DefaultValue "") } `
+                -RecommendedAction "Wait for the active reload job instead of starting another recovery.")
         }
     }
     $portState = Get-ObjectProperty -Object $status -Name "portState"
@@ -1456,7 +1600,7 @@ function Invoke-ReloadRecover {
     }
 
     if ($actions.Count -gt 0) {
-        return [pscustomobject]@{
+        $result = [pscustomobject]@{
             success = $true
             code = "recovered"
             reason = $Reason
@@ -1464,26 +1608,70 @@ function Invoke-ReloadRecover {
             before = $status
             after = (Get-ReloadStatus)
         }
+        return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+            -CanAutoRecover $true `
+            -BlockedByCrashReporter $false `
+            -RecommendedNextTool "editor_reload_recover_and_restart" `
+            -RecommendedArgs @{ wait = $true; reason = "restart after reload recovery" } `
+            -RecommendedAction "Run recover-and-restart to rebuild and relaunch the editor.")
     }
 
     $bridgeError = Get-ObjectProperty -Object $status -Name "bridgeError"
     if ((Get-ObjectProperty -Object $portState -Name "exists" -DefaultValue $false) -and
         (Get-ObjectProperty -Object $portState -Name "processAlive" -DefaultValue $false) -and
         $bridgeError) {
-        return [pscustomobject]@{
+        $result = [pscustomobject]@{
             success = $false
             code = "bridge_unreachable_editor_alive"
             error = "Editor process is alive but bridge is unreachable; unsafe restart is disabled."
             allowUnsafeRestart = $AllowUnsafeRestart
             status = $status
         }
+        return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+            -CanAutoRecover $false `
+            -BlockedByCrashReporter $false `
+            -RecommendedNextTool "editor_reload_get_status" `
+            -RecommendedArgs @{} `
+            -RecommendedAction "The editor process is alive; inspect status or close the editor before retrying recovery.")
     }
-    return [pscustomobject]@{
+    $result = [pscustomobject]@{
         success = $true
         code = "no_recovery_needed"
         reason = $Reason
         status = $status
     }
+    return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice)
+}
+
+# Runs recovery first, then starts the normal rebuild/restart flow.
+function Invoke-ReloadRecoverAndRestart {
+    param(
+        [string] $Reason = "recover and restart requested",
+        [bool] $Wait = $false,
+        [int] $TimeoutMs = 60000,
+        [bool] $Force = $false,
+        [string[]] $EditorArgs = @(),
+        [int] $MaxParallelActions = 0,
+        [bool] $McpSafeLaunch = $false
+    )
+    $recovery = Invoke-ReloadRecover -Reason "explicit recovery before restart"
+    if (-not [bool] (Get-ObjectProperty -Object $recovery -Name "success" -DefaultValue $false)) {
+        return $recovery
+    }
+
+    $result = Start-RebuildAndRestart `
+        -Reason $Reason `
+        -Wait $Wait `
+        -TimeoutMs $TimeoutMs `
+        -Force $Force `
+        -EditorArgs $EditorArgs `
+        -MaxParallelActions $MaxParallelActions `
+        -McpSafeLaunch $McpSafeLaunch
+
+    if ($null -ne $result) {
+        $result | Add-Member -NotePropertyName explicitRecovery -NotePropertyValue (New-ReloadRecoverySummary -Recovery $recovery) -Force
+    }
+    return $result
 }
 
 # Converts internal data into an MCP tool result.
@@ -1524,7 +1712,23 @@ function Get-ToolList {
         },
         @{
             name = "editor_reload_rebuild_and_restart"
-            description = "Safely drain MCP work, close the editor, rebuild, and restart it."
+            description = "Safely recover stale crash state when possible, drain MCP work, close the editor, rebuild, and restart it."
+            inputSchema = @{
+                type = "object"
+                properties = @{
+                    reason = @{ type = "string" }
+                    wait = @{ type = "boolean" }
+                    timeoutMs = @{ type = "number" }
+                    force = @{ type = "boolean" }
+                    editorArgs = @{ type = "array"; items = @{ type = "string" } }
+                    maxParallelActions = @{ type = "number" }
+                    mcpSafeLaunch = @{ type = "boolean" }
+                }
+            }
+        },
+        @{
+            name = "editor_reload_recover_and_restart"
+            description = "Run reload recovery first, then rebuild and restart the editor using cold start when the editor crashed or is closed."
             inputSchema = @{
                 type = "object"
                 properties = @{
@@ -1598,6 +1802,16 @@ function Invoke-ToolCall {
         "editor_reload_rebuild_and_restart" {
             return New-ToolResult -Data (Start-RebuildAndRestart `
                 -Reason ([string] (Get-ObjectProperty -Object $Arguments -Name "reason" -DefaultValue "rebuild requested")) `
+                -Wait ([bool] (Get-ObjectProperty -Object $Arguments -Name "wait" -DefaultValue $false)) `
+                -TimeoutMs ([int] (Get-ObjectProperty -Object $Arguments -Name "timeoutMs" -DefaultValue 60000)) `
+                -Force ([bool] (Get-ObjectProperty -Object $Arguments -Name "force" -DefaultValue $false)) `
+                -EditorArgs @((Get-ObjectProperty -Object $Arguments -Name "editorArgs" -DefaultValue @())) `
+                -MaxParallelActions ([int] (Get-ObjectProperty -Object $Arguments -Name "maxParallelActions" -DefaultValue 0)) `
+                -McpSafeLaunch ([bool] (Get-ObjectProperty -Object $Arguments -Name "mcpSafeLaunch" -DefaultValue $false)))
+        }
+        "editor_reload_recover_and_restart" {
+            return New-ToolResult -Data (Invoke-ReloadRecoverAndRestart `
+                -Reason ([string] (Get-ObjectProperty -Object $Arguments -Name "reason" -DefaultValue "recover and restart requested")) `
                 -Wait ([bool] (Get-ObjectProperty -Object $Arguments -Name "wait" -DefaultValue $false)) `
                 -TimeoutMs ([int] (Get-ObjectProperty -Object $Arguments -Name "timeoutMs" -DefaultValue 60000)) `
                 -Force ([bool] (Get-ObjectProperty -Object $Arguments -Name "force" -DefaultValue $false)) `

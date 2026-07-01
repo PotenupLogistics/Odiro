@@ -81,10 +81,8 @@
 
 namespace
 {
-	const TCHAR* McpRegularFontPath =
-		TEXT("/Game/Fonts/Freesentation/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
-	const TCHAR* McpBoldFontPath =
-		TEXT("/Game/Fonts/Freesentation/Freesentation-7Bold_Font.Freesentation-7Bold_Font");
+	const TCHAR* McpFontPath =
+		TEXT("/Game/Fonts/Freesentation/Freesentation.Freesentation");
 
 	void RefreshBorderMaterialElementSizes(UUserWidget* UserWidget)
 	{
@@ -414,9 +412,9 @@ namespace
 	FSlateFontInfo McpMakeFont(const int32 Size, const bool bBold)
 	{
 		FSlateFontInfo FontInfo;
-		FontInfo.FontObject = LoadObject<UObject>(nullptr, bBold ? McpBoldFontPath : McpRegularFontPath);
+		FontInfo.FontObject = LoadObject<UObject>(nullptr, McpFontPath);
 		FontInfo.Size = Size;
-		FontInfo.TypefaceFontName = bBold ? FName(TEXT("Bold")) : FName(TEXT("Regular"));
+		FontInfo.TypefaceFontName = bBold ? FName(TEXT("700 Bold")) : FName(TEXT("400 Regular"));
 		return FontInfo;
 	}
 

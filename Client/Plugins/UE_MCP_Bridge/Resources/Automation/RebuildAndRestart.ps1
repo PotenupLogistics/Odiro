@@ -358,7 +358,69 @@ function Wait-EditorExit {
     }
 }
 
-# Runs Build.bat and writes stdout/stderr to job log files.
+# Writes a short progress line for visible rebuild helper windows.
+function Write-ReloadConsoleStatus {
+    param([string] $Message)
+    Write-Host ("[{0}] {1}" -f (Get-Date).ToString("HH:mm:ss"), $Message)
+}
+
+# Mirrors newly appended process log lines without taking exclusive file access.
+function Write-NewProcessLogLines {
+    param(
+        [string] $Path,
+        [long] $Position = 0,
+        [string] $ForegroundColor = ""
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return [pscustomobject]@{ position = $Position; lines = 0 }
+    }
+
+    $stream = $null
+    $reader = $null
+    $newPosition = $Position
+    $lineCount = 0
+    try {
+        $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        if ($Position -lt 0 -or $Position -gt $stream.Length) {
+            $Position = 0
+        }
+        [void] $stream.Seek($Position, [System.IO.SeekOrigin]::Begin)
+        $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8, $true)
+        while (-not $reader.EndOfStream) {
+            $line = $reader.ReadLine()
+            if ($null -eq $line) {
+                break
+            }
+            if ($ForegroundColor) {
+                Write-Host $line -ForegroundColor $ForegroundColor
+            }
+            else {
+                Write-Host $line
+            }
+            $lineCount++
+        }
+        $newPosition = $stream.Position
+    }
+    catch [System.IO.IOException] {
+        return [pscustomobject]@{ position = $Position; lines = 0 }
+    }
+    catch [System.UnauthorizedAccessException] {
+        return [pscustomobject]@{ position = $Position; lines = 0 }
+    }
+    finally {
+        if ($null -ne $reader) {
+            $reader.Dispose()
+        }
+        elseif ($null -ne $stream) {
+            $stream.Dispose()
+        }
+    }
+
+    return [pscustomobject]@{ position = $newPosition; lines = $lineCount }
+}
+
+# Runs Build.bat, persists stdout/stderr logs, and mirrors UBT output when visible.
 function Invoke-ClientEditorBuild {
     $projectFile = Get-ReloadProjectFile -ProjectRoot $projectRootPath
     $buildBat = Resolve-ReloadUnrealBuildBatch -ProjectFile $projectFile
@@ -381,19 +443,50 @@ function Invoke-ClientEditorBuild {
         $arguments += "-MaxParallelActions=$requestedMaxParallelActions"
     }
 
+    Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    Write-ReloadConsoleStatus "Starting UBT build for $(Get-EditorTargetName)."
+    if ($requestedMaxParallelActions -gt 0) {
+        Write-ReloadConsoleStatus "MaxParallelActions=$requestedMaxParallelActions"
+    }
+    Write-ReloadConsoleStatus "Stdout log: $stdoutPath"
+    Write-ReloadConsoleStatus "Stderr log: $stderrPath"
+
     $process = Start-Process `
         -FilePath $buildBat `
         -ArgumentList (Join-ReloadProcessArguments -Arguments $arguments) `
         -WorkingDirectory $projectRootPath `
         -RedirectStandardOutput $stdoutPath `
         -RedirectStandardError $stderrPath `
-        -Wait `
         -PassThru
+
+    $stdoutPosition = 0L
+    $stderrPosition = 0L
+    $lastActivityUtc = [DateTime]::UtcNow
+    while (-not $process.HasExited) {
+        $stdoutResult = Write-NewProcessLogLines -Path $stdoutPath -Position $stdoutPosition
+        $stderrResult = Write-NewProcessLogLines -Path $stderrPath -Position $stderrPosition -ForegroundColor "Yellow"
+        $stdoutPosition = [long] $stdoutResult.position
+        $stderrPosition = [long] $stderrResult.position
+        $linesWritten = [int] $stdoutResult.lines + [int] $stderrResult.lines
+        if ($linesWritten -gt 0) {
+            $lastActivityUtc = [DateTime]::UtcNow
+        }
+        elseif (([DateTime]::UtcNow - $lastActivityUtc).TotalSeconds -ge 20) {
+            Write-ReloadConsoleStatus "UBT build still running (pid $($process.Id))."
+            $lastActivityUtc = [DateTime]::UtcNow
+        }
+        Start-Sleep -Milliseconds 300
+    }
+    $process.WaitForExit()
+    Write-NewProcessLogLines -Path $stdoutPath -Position $stdoutPosition | Out-Null
+    Write-NewProcessLogLines -Path $stderrPath -Position $stderrPosition -ForegroundColor "Yellow" | Out-Null
 
     $exitCode = [int] (Get-ObjectProperty -Object $process -Name "ExitCode" -DefaultValue 0)
     if ($exitCode -ne 0) {
+        Write-ReloadConsoleStatus "UBT build failed with exit code $exitCode."
         throw "Build failed with exit code $exitCode. Logs: $stdoutPath, $stderrPath"
     }
+    Write-ReloadConsoleStatus "UBT build completed successfully."
     return [pscustomobject]@{
         stdout = $stdoutPath
         stderr = $stderrPath

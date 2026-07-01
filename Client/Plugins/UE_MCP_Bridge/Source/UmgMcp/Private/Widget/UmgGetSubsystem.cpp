@@ -325,10 +325,29 @@ FString UUmgGetSubsystem::QueryWidgetProperties(UWidgetBlueprint* WidgetBlueprin
                 if (PartIndex == Parts.Num() - 1)
                 {
                     // Found the target property
-                    TSharedPtr<FJsonValue> PropertyJsonValue = FJsonObjectConverter::UPropertyToJsonValue(Property, CurrentValuePtr);
-                    if (PropertyJsonValue.IsValid())
+                    if (FObjectProperty* ObjectProperty = CastField<FObjectProperty>(Property))
                     {
-                        PropertiesJson->SetField(PropPath, PropertyJsonValue);
+                        UObject* ObjectValue = ObjectProperty->GetObjectPropertyValue(CurrentValuePtr);
+                        if (ObjectValue)
+                        {
+                            TSharedPtr<FJsonObject> ObjectJson = MakeShared<FJsonObject>();
+                            ObjectJson->SetStringField(TEXT("name"), ObjectValue->GetName());
+                            ObjectJson->SetStringField(TEXT("class"), ObjectValue->GetClass()->GetPathName());
+                            ObjectJson->SetStringField(TEXT("path"), ObjectValue->GetPathName());
+                            PropertiesJson->SetObjectField(PropPath, ObjectJson);
+                        }
+                        else
+                        {
+                            PropertiesJson->SetField(PropPath, MakeShared<FJsonValueNull>());
+                        }
+                    }
+                    else
+                    {
+                        TSharedPtr<FJsonValue> PropertyJsonValue = FJsonObjectConverter::UPropertyToJsonValue(Property, CurrentValuePtr);
+                        if (PropertyJsonValue.IsValid())
+                        {
+                            PropertiesJson->SetField(PropPath, PropertyJsonValue);
+                        }
                     }
                 }
                 else

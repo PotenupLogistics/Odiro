@@ -36,7 +36,7 @@ Shared state lives in `Client/Saved/UE_MCP_Bridge`.
 - `checks/*-outdated-actions.json`: UBT check-only action exports used to decide whether C++ work is already up to date.
 - `editor.lock` and `state.lock`: file locks used by per-session reload MCP processes.
 
-Terminal maintenance phases (`completed`, `failed`, `restart_failed`, `port_timeout`, `editor_crashed`, `modal_blocked`, `crash_report_pending`) are recoverable state, not an active editor gate. Use `editor_reload_recover` to clear stale terminal maintenance or stale `port.json`; do not remove state files manually during an active job.
+Terminal maintenance phases (`completed`, `failed`, `restart_failed`, `port_timeout`, `editor_crashed`, `modal_blocked`, `crash_report_pending`) are recoverable state, not an active editor gate. `editor_reload_rebuild_and_restart` now runs safe pre-start recovery automatically and cold-starts when no live editor remains. Use `editor_reload_recover_and_restart` as the one-step crash recovery entry point; use `editor_reload_recover` only when you want to inspect or clear stale state without starting a build/relaunch. Do not remove state files manually during an active job.
 
 Bridge status classifies `port.json` as `missing`, `stale_pid`, `process_alive_but_bridge_down`, or `ready` so agents can report the actual failure instead of guessing that the plugin is missing.
 
@@ -65,9 +65,12 @@ Exposed tools:
 - `editor_reload_get_status`: reports sentinel, bridge, editor pid, and job state.
 - `editor_reload_check_up_to_date`: runs UBT `-WriteOutdatedActions` and reports whether the editor target has stale actions without compiling.
 - `editor_reload_hot_reload`: waits for an existing reload job or active Live Coding compile, rechecks source state, skips if already covered or up to date, otherwise writes the sentinel, runs Live Coding through a coordination handler, then removes the sentinel.
-- `editor_reload_rebuild_and_restart`: with `wait=true`, waits for an existing reload job, rechecks source state, skips if already covered or up to date, otherwise writes the sentinel, waits for active bridge work to drain, saves dirty packages, asks the editor to exit, rebuilds, restarts, then removes the sentinel.
+- `editor_reload_rebuild_and_restart`: with `wait=true`, waits for an existing reload job, runs safe recovery for terminal maintenance or stale `port.json`, skips only when a live editor does not need a lifecycle restart, otherwise writes the sentinel, drains active bridge work or uses cold start when the editor is already gone, saves dirty packages when possible, asks the editor to exit when alive, rebuilds, restarts, then removes the sentinel.
+- `editor_reload_recover_and_restart`: one-step crash recovery flow. It runs `editor_reload_recover`, then uses the normal rebuild/restart path. Use this after an editor crash, stale pid, terminal maintenance state, or closed-editor recovery request.
 - `editor_reload_wait_for_job`: waits for an accepted job to complete or fail.
 - `editor_reload_recover`: inspects recovery state without killing a live editor.
+
+Status and recoverable failure responses include additive action fields: `canAutoRecover`, `blockedByCrashReporter`, `recommendedNextTool`, `recommendedArgs`, and `recommendedAction`. Existing clients can ignore them; agents should prefer them over guessing a next command.
 
 `editor_reload_hot_reload` and `editor_reload_rebuild_and_restart` accept `force=true` to bypass duplicate/up-to-date skipping when a lifecycle restart is required even without source changes. Skipped requests return `success=true`, `accepted=false`, `skipped=true`, and a stable `code` such as `already_included_by_existing_job`, `already_included_by_existing_compile`, `already_loaded`, `already_built`, or `source_up_to_date`.
 
@@ -75,7 +78,7 @@ Exposed tools:
 
 If UBT check-only is blocked because Live Coding is active, the check result uses `upToDateCheck.code = live_coding_active`. `editor_reload_hot_reload` checks `liveCoding.compiling`: when a compile is active it waits, reruns the freshness check, and can skip with `already_included_by_existing_compile`; when Live Coding is merely enabled but idle, it proceeds with the coordinated compile. It does not start another Live Coding compile while `liveCoding.compiling=true`.
 
-If a previous editor crash left Crash Report Client open, reload status and recover return `code = crash_report_pending`. Rebuild/restart and direct `Client/Tools/Dev.ps1` launch refuse to start another editor until the pending Crash Report window is closed. The tools do not kill Crash Report Client automatically.
+If a previous editor crash left Crash Report Client open, reload status, recover, and restart return `code = crash_report_pending` with `blockedByCrashReporter=true`. Rebuild/restart and direct `Client/Tools/Dev.ps1` launch refuse to start another editor until the pending Crash Report window is closed. The tools do not kill Crash Report Client automatically.
 
 The helper script is `Resources/Automation/RebuildAndRestart.ps1`. It is launched detached so the reload job can continue after the editor process and its bridge disappear. Reload scripts resolve `.uproject`, `Build.bat`, and `UnrealEditor.exe` through the plugin-local `Resources/Automation/UnrealProjectTools.ps1`; do not source project tool scripts such as `Client/Tools/Common.ps1` from this plugin surface.
 

@@ -70,6 +70,7 @@ def scenario_generate_endpoint(
 @router.post(
     "/api/v2/scenarios/generate",
     response_model=ProjectScenarioV1Response,
+    response_model_exclude_none=True,
 )
 def scenario_generate_v2_endpoint(
     request: ScenarioGenerateV2Request,

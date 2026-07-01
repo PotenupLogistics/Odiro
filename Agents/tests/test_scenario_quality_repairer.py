@@ -21,12 +21,11 @@ def _base_quality_scenario() -> dict:
         "corridor": {
             "axis": {"type": "polyline", "points_m": [[0.0, 0.0], [10.0, 0.0]]},
             "walkway_width_m": 1.4,
-            "building_side": [{"surface": "wall", "width_m": 0.3}],
+            "building_side": [{"surface": "building", "width_m": 0.3}],
             "curb_side": [{"surface": "road", "width_m": 4.0}],
             "segments": [{"id": "main", "type": "straight", "along_range_m": [0.0, 10.0]}],
         },
         "obstacles": {"min_clear_width_m": 0.9, "placements": []},
-        "pedestrians": {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []},
         "robot": {
             "start": {
                 "type": "corridor_pose",
@@ -81,6 +80,15 @@ def _max_clear_width(walkway_width_m: float, offset_m: object) -> float:
     return max(left_clear, right_clear)
 
 
+def _placements(scenario: dict) -> list[dict]:
+    """Return optional obstacle placements from a repaired scenario."""
+    obstacles = scenario.get("obstacles")
+    if not isinstance(obstacles, dict):
+        return []
+    placements = obstacles.get("placements")
+    return placements if isinstance(placements, list) else []
+
+
 def _assert_no_anchor_conflicts(
     scenario: dict,
     *,
@@ -92,7 +100,7 @@ def _assert_no_anchor_conflicts(
         (scenario["robot"]["start"], start_radius_m),
         (scenario["robot"]["goal"], goal_radius_m),
     ]
-    for placement in scenario["obstacles"]["placements"]:
+    for placement in _placements(scenario):
         at = placement["at"]
         along_bounds = _bounds(at["along_m"])
         for anchor, radius_m in anchors:
@@ -105,7 +113,7 @@ def _assert_no_anchor_conflicts(
 
 def _assert_no_placement_overlaps(scenario: dict) -> None:
     """Assert no two fixed obstacles overlap in both along and offset ranges."""
-    placements = scenario["obstacles"]["placements"]
+    placements = _placements(scenario)
     for left_index, left in enumerate(placements):
         for right in placements[left_index + 1 :]:
             if left["at"]["segment"] != right["at"]["segment"]:
@@ -227,7 +235,7 @@ def test_repair_records_anchor_clearance_relocation_and_removal() -> None:
 
     removed, removal_events = _repair_with_events(blocked)
 
-    assert removed["obstacles"]["placements"] == []
+    assert _placements(removed) == []
     assert RepairDiagnosticCode.OBSTACLE_REMOVED_ANCHOR_CLEARANCE.value in _event_codes(removal_events)
 
 
@@ -284,7 +292,7 @@ def test_repair_removes_obstacles_when_start_goal_bands_fill_short_corridor() ->
 
     removed, removal_events = _repair_with_events(scenario)
 
-    assert removed["obstacles"]["placements"] == []
+    assert _placements(removed) == []
     assert TemplateValidator().validate(removed).valid is True
     assert RepairDiagnosticCode.OBSTACLE_REMOVED_ANCHOR_CLEARANCE.value in _event_codes(removal_events)
 
@@ -324,7 +332,7 @@ def test_repair_records_min_clear_width_adjustment_and_removal() -> None:
 
     removed, removal_events = _repair_with_events(impossible)
 
-    assert removed["obstacles"]["placements"] == []
+    assert _placements(removed) == []
     assert RepairDiagnosticCode.OBSTACLE_REMOVED_MIN_CLEAR_WIDTH.value in _event_codes(removal_events)
 
 
@@ -343,7 +351,7 @@ def test_repair_records_invalid_anchor_removals() -> None:
 
     repaired, events = _repair_with_events(scenario)
 
-    assert repaired["obstacles"]["placements"] == []
+    assert _placements(repaired) == []
     invalid_events = [
         event for event in events if event["code"] == RepairDiagnosticCode.OBSTACLE_REMOVED_INVALID_ANCHOR.value
     ]
@@ -373,7 +381,7 @@ def test_repair_records_no_valid_interval_removal_separately_from_invalid_anchor
 
     repaired, events = _repair_with_events(scenario)
 
-    assert repaired["obstacles"]["placements"] == []
+    assert _placements(repaired) == []
     assert RepairDiagnosticCode.OBSTACLE_REMOVED_NO_VALID_INTERVAL.value in _event_codes(events)
     assert RepairDiagnosticCode.OBSTACLE_REMOVED_INVALID_ANCHOR.value not in _event_codes(events)
 

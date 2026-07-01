@@ -44,6 +44,7 @@ class RepairHandler:
         repaired["scenario_id"] = re.sub(r"[^a-zA-Z0-9]+", "_", scenario_id).strip("_").lower() or "project_scenario"
         for legacy_field in ("template_id", "scenario_template"):
             repaired.pop(legacy_field, None)
+        repaired.pop("pedestrians", None)
         self._remove_null_fields(repaired)
         self._remove_catalog_metadata_fields(repaired)
         self._repair_obstacle_placements(repaired, diagnostics, stage)
@@ -52,6 +53,7 @@ class RepairHandler:
         self._repair_lane_hints(repaired, diagnostics, stage)
         if repair_quality:
             self._repair_obstacle_quality(repaired, diagnostics, stage)
+        self._remove_empty_optional_obstacles(repaired)
         return repaired
 
     def _remove_catalog_metadata_fields(self, value: Any) -> None:
@@ -833,6 +835,16 @@ class RepairHandler:
         elif isinstance(value, list):
             for child in value:
                 self._remove_null_fields(child)
+
+    def _remove_empty_optional_obstacles(self, template: dict[str, Any]) -> None:
+        """Remove optional obstacles when no placements remain after repair."""
+        obstacles = template.get("obstacles")
+        if not isinstance(obstacles, dict):
+            template.pop("obstacles", None)
+            return
+        placements = obstacles.get("placements")
+        if not isinstance(placements, list) or not placements:
+            template.pop("obstacles", None)
 
     def _swap_inverted_ranges(
         self,

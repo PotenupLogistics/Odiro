@@ -83,7 +83,6 @@ def project_scenario_v1_json_schema() -> dict[str, Any]:
             "intent",
             "corridor",
             "obstacles",
-            "pedestrians",
             "robot",
         ],
         "properties": {
@@ -132,7 +131,7 @@ def project_scenario_v1_json_schema() -> dict[str, Any]:
                             "required": ["id", "type", "along_range_m", "replaced_by"],
                             "properties": {
                                 "id": {"type": "string"},
-                                "type": {"type": "string", "enum": ["straight", "narrowing", "crosswalk", "entrance"]},
+                                "type": {"type": "string", "enum": ["straight"]},
                                 "along_range_m": {
                                     "type": "array",
                                     "minItems": 2,
@@ -145,7 +144,7 @@ def project_scenario_v1_json_schema() -> dict[str, Any]:
                     },
                 },
             },
-            "obstacles": {
+            "obstacles": _nullable({
                 "type": "object",
                 "additionalProperties": False,
                 "required": ["min_clear_width_m", "placements"],
@@ -160,26 +159,18 @@ def project_scenario_v1_json_schema() -> dict[str, Any]:
                                 "kind",
                                 "id",
                                 "prop",
-                                "pattern",
                                 "at",
-                                "count",
-                                "spacing_m",
-                                "gap_width_m",
                                 "yaw_deg",
-                                "zone",
-                                "density_per_10m",
-                                "palette",
                                 "allow_blocking",
                             ],
                             "properties": {
-                                "kind": {"type": "string", "enum": ["fixed", "pattern", "scatter"]},
+                                "kind": {"type": "string", "enum": ["fixed"]},
                                 "id": {"type": "string"},
                                 "prop": {
                                     "type": ["string", "null"],
                                     "enum": [*sorted(get_allowed_static_obstacle_prop_ids()), None],
                                 },
-                                "pattern": {"type": ["string", "null"], "enum": ["gate", "line", "cluster", None]},
-                                "at": _nullable({
+                                "at": {
                                     "type": "object",
                                     "additionalProperties": False,
                                     "required": ["segment", "along_m", "offset_m", "lane"],
@@ -189,75 +180,14 @@ def project_scenario_v1_json_schema() -> dict[str, Any]:
                                         "offset_m": _number_or_range_schema(),
                                         "lane": {"type": "string"},
                                     },
-                                }),
-                                "count": _nullable(_integer_or_range_schema()),
-                                "spacing_m": _nullable(_number_or_range_schema()),
-                                "gap_width_m": _nullable(_number_or_range_schema()),
+                                },
                                 "yaw_deg": _nullable(_number_or_range_schema()),
-                                "zone": _nullable(_scatter_zone_schema()),
-                                "density_per_10m": _nullable(_number_or_range_schema()),
-                                "palette": _nullable(_palette_schema()),
                                 "allow_blocking": {"type": ["boolean", "null"]},
                             },
                         },
                     },
                 },
-            },
-            "pedestrians": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["background", "encounters"],
-                "properties": {
-                    "background": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "required": ["count", "speed_mps", "spawn_zone"],
-                        "properties": {
-                            "count": _integer_or_range_schema(),
-                            "speed_mps": _number_or_range_schema(),
-                            "spawn_zone": _nullable(_spawn_zone_schema()),
-                        },
-                    },
-                    "encounters": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": ["id", "type", "at", "meet_offset_m", "persona", "overrides"],
-                            "properties": {
-                                "id": {"type": "string"},
-                                "type": {
-                                    "type": "string",
-                                    "enum": ["oncoming_pass", "overtake", "cross_path", "standing_group"],
-                                },
-                                "at": {"type": "string"},
-                                "meet_offset_m": _number_or_range_schema(),
-                                "persona": {"type": "string", "enum": ["passive", "normal", "assertive", "vulnerable"]},
-                                "overrides": {
-                                    "type": "object",
-                                    "additionalProperties": False,
-                                    "required": [
-                                        "cooperation",
-                                        "evasiveness",
-                                        "personal_space_m",
-                                        "awareness_horizon_s",
-                                        "max_yield_wait_s",
-                                        "sidestep_distance_m",
-                                    ],
-                                    "properties": {
-                                        "cooperation": _nullable(_number_or_range_schema()),
-                                        "evasiveness": _nullable(_number_or_range_schema()),
-                                        "personal_space_m": _nullable(_number_or_range_schema()),
-                                        "awareness_horizon_s": _nullable(_number_or_range_schema()),
-                                        "max_yield_wait_s": _nullable(_number_or_range_schema()),
-                                        "sidestep_distance_m": _nullable(_number_or_range_schema()),
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
+            }),
             "robot": {
                 "type": "object",
                 "additionalProperties": False,

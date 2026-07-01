@@ -45,9 +45,12 @@ class ScenarioPresetLoader:
         """Find a bundled scenario preset under repo static templates."""
         filename = f"{preset_id}.json"
         for root in self._candidate_roots():
-            candidate = root / "static" / "templates" / "scenario" / filename
-            if candidate.is_file():
-                return candidate
+            for candidate in (
+                root / "static" / "templates" / "scenario" / filename,
+                root / "static" / "presets" / "scenario" / preset_id / "scenario.json",
+            ):
+                if candidate.is_file():
+                    return candidate
         raise FileNotFoundError(f"scenario preset not found: {preset_id}")
 
     def _candidate_roots(self) -> list[Path]:

@@ -16,6 +16,7 @@ paths:
   - Agents/docs/api/**
   - Agents/docs/providers/**
   - Agents/docs/environment/**
+  - Client/Json/Schema/scenario.json.md
   - Client/Json/environment-catalog.md
   - contracts/specs/user-project-data.md
 entry:
@@ -43,7 +44,10 @@ entry:
       - Agents/app/services/world_config_to_delivery_bot_setup_adapter.py
 guardrails:
   - Active public scenario generation is v2 project scenario output, not legacy RunQueue export.
-  - Scenario generation v2 may read bundled scenario presets as skeletons, but must deepcopy, patch user intent, validate, repair/revalidate, and fallback without changing the external scenario JSON response schema.
+  - Scenario generation v2 uses `Client/Json/Schema/scenario.json.md` as the scenario authoring contract and `Client/Json/environment-catalog.md` as the vocabulary/catalog source.
+  - Scenario generation v2 may read bundled scenario presets as skeletons, but must deepcopy, patch user intent, normalize to the current `scenario` contract, validate, repair/revalidate, and fallback without changing the external scenario JSON response schema.
+  - Scenario generation v2 external responses must omit unimplemented `pedestrians`; `obstacles` is optional and omitted when no fixed placements remain.
+  - Scenario generation v2 authoring output is limited to `corridor.segments[].type=straight`, `corridor.building_side[].surface=building`, `corridor.curb_side[].surface=road`, and fixed obstacle placements.
   - Scenario generation v2 preset patching and fallback generation must both use the same `ScenarioIntent` fields for corridor profile, length, obstacle count, requested prop, and no-obstacle/no-pedestrian policy.
   - Scenario generation v2 fallback output must be generated from `ScenarioIntent` values such as corridor profile, requested length, obstacle count, prop id, and no-obstacle/no-pedestrian flags without requiring static scenario preset files.
   - Scenario generation v2 normalizes known legacy static obstacle prop ids through the shared prop normalizer before validator-gated preset, repair, or LLM output can become an API response.
@@ -51,7 +55,9 @@ guardrails:
   - Legacy WorldConfig tooling must call only the provider explicitly selected by the caller; Ollama remains a direct local/manual provider, not an automatic retry target.
   - Final user project contracts write project/run/episode artifacts under `contracts/specs/user-project-data.md`.
   - V2 LLM prompt context is loaded only through the SpecContextLoader allowlist.
-  - V2 LLM prompt context reads the Client environment catalog at Client/Json/environment-catalog.md for scenario vocabulary and static obstacle bounding boxes.
+  - V2 scenario generation LLM prompt context includes the project scenario contract before the Client environment catalog and excludes project/run/episode storage specs that mention legacy scenario_sample or pedestrians authoring.
+  - Result analysis keeps the common context and must not include the scenario authoring document.
+  - V2 LLM prompt context reads the Client environment catalog at Client/Json/environment-catalog.md for scenario vocabulary and fixed obstacle prop ids.
   - `/api/v2/analysis/run` always executes `ResultAnalysisGraphRunnerV2`; do not add runtime settings that switch it to another analysis path.
   - Result analysis reads `prompts/system_prompt.md` only on the LLM-enabled path; `V2_AGENT_LLM_ENABLED=true` from `Agents/.env` or process env can enable that path during local runs.
   - `Settings(_env_file=None)` is for checking code fallback defaults without reading `.env`; do not treat it as the local runtime value when `Agents/.env` is present.
@@ -68,6 +74,7 @@ verify:
   - when: v2 scenario preset selection, patching, validation, or fallback changes
     run:
       - cd Agents; uv run pytest tests/test_v2_scenario_generation_api.py -q
+      - cd Agents; uv run pytest tests/test_v2_spec_context_prompts.py tests/test_spec_context_loader.py -q
   - when: v2 scenario repair behavior or repair diagnostics change
     run:
       - cd Agents; uv run pytest tests/test_scenario_quality_repairer.py -q

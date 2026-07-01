@@ -150,6 +150,18 @@
 | `recommendations[].id` | `recommendations.json.recommendations[].id` |
 | `recommendations[].proposed_change` | `recommendations.json.recommendations[].proposed_change` |
 
+아래 review artifact path 필드는 public API 응답에 다시 추가하지 않는다.
+
+```text
+review_dir
+status_path
+request_path
+report_path
+manifest_path
+recommendations_path
+rag_evidence_path
+```
+
 ## 6. run_overview와 metrics 계산 기준
 
 `run_overview`, `episodes`, public `metrics.success_count/failure_count/collision_count`는 `runs/<run_id>/summary.json`의 `rows[]`를 기준으로 계산한다. UE의 `ProjectRunResultDashboard.cpp::IsSuccessRow` 기준과 맞춘다.
@@ -270,6 +282,8 @@ run directory가 존재하면 API는 아래 경로를 생성한다.
   scenario.json       # environment_review일 때만 생성
 ```
 
+Result analysis v2 내부 file-based RAG context는 public API 응답과 review artifact 구조에 저장하지 않는다. `rag_evidence.json`, `review/internal/`, 기타 RAG debug artifact 파일은 생성하지 않는다.
+
 ## 10. report.json
 
 `report.json`은 상세 분석 근거를 저장한다.
@@ -364,6 +378,8 @@ run directory가 존재하면 API는 아래 경로를 생성한다.
 | `snapshot_hashes` | 현재 run snapshot hash |
 | `comparison` | 이전 run 비교 결과 |
 | `artifacts` | `recommendations.json.artifacts`와 같은 후보 artifact 상태 |
+
+`manifest.json` 구조는 RAG 작업으로 확장하지 않는다. `rag_diagnostic`, raw chunk, source, retrieval score/chunk score, matched_fields, chunk_id, card_id, `rag_evidence.json` 경로는 저장하지 않는다. RAG route와 diagnostic은 `ResultAnalysisGraphRunnerV2` 내부 state 또는 테스트용 `last_state`에서만 확인한다.
 
 ## 13. Candidate Artifacts
 

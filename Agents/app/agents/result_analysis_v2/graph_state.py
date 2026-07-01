@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
+from app.agents.result_analysis_v2.routes import AnalysisRouteV2, RagRouteV2, RecommendationRouteV2
+
 
 class ResultAnalysisGraphStateV2(TypedDict, total=False):
+    """Internal LangGraph state for result-analysis v2 execution."""
+
     request: Any
     experiments_root: Any
     scan: Any
@@ -29,3 +33,8 @@ class ResultAnalysisGraphStateV2(TypedDict, total=False):
     warnings: list[str]
     analysis_mode: str
     overall_judgement: str
+    analysis_route: AnalysisRouteV2
+    rag_route: RagRouteV2
+    recommendation_route: RecommendationRouteV2
+    recommendation_validation_route: str
+    rag_diagnostic: dict[str, Any]

@@ -6,10 +6,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.agents.common.llm_json_client import AgentLlmJsonClient
+from app.agents.result_analysis_v2 import rag_context_builder as rag_module
 from app.agents.result_analysis_v2.agent import ResultAnalysisV2Agent
-from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2
+from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2, StateGraph
 from app.core.settings import Settings
 from app.main import app
+from app.models.analysis_v2 import AnalysisRunV2Request
 
 
 # Internal source markers that unsafe LLM output must not expose publicly.
@@ -20,6 +22,24 @@ FORBIDDEN_LLM_PUBLIC_TEXT = (
     "p.33",
     "근거 문서",
     "RAG",
+)
+
+FORBIDDEN_PUBLIC_PATH_FIELDS = (
+    "review_dir",
+    "status_path",
+    "request_path",
+    "report_path",
+    "manifest_path",
+    "recommendations_path",
+    "rag_evidence_path",
+)
+
+FORBIDDEN_RAG_PUBLIC_METADATA = (
+    "chunk_id",
+    "card_id",
+    "matched_fields",
+    "retrieval_score",
+    "chunk retrieval score",
 )
 
 
@@ -76,6 +96,16 @@ def _write_project_blocked_episode(project, episode_id: str) -> None:
         encoding="utf-8",
     )
     _upsert_summary_row(project / "runs" / "000001", episode_id, blocked=True)
+
+
+def _write_project_success_episode(project, episode_id: str) -> None:
+    episode_dir = project / "runs" / "000001" / "episodes" / episode_id
+    episode_dir.mkdir(parents=True)
+    (episode_dir / "result.json").write_text(
+        json.dumps({"success": True, "goal_reached": True}),
+        encoding="utf-8",
+    )
+    _upsert_summary_row(project / "runs" / "000001", episode_id, blocked=False)
 
 
 def _write_project_summary(project, summary: dict) -> None:
@@ -178,6 +208,15 @@ def test_result_analysis_graph_runner_imports_without_langgraph_dependency() -> 
     assert ResultAnalysisGraphRunnerV2
 
 
+def test_result_analysis_graph_runner_uses_compiled_langgraph_when_available(tmp_path) -> None:
+    runner = ResultAnalysisGraphRunnerV2(experiments_root=tmp_path / "missing", settings=Settings(_env_file=None))
+
+    if StateGraph is None:
+        assert runner.compiled_graph is None
+    else:
+        assert runner.compiled_graph is not None
+
+
 def test_graph_runner_builds_insufficient_data_response_without_langgraph(tmp_path) -> None:
     runner = ResultAnalysisGraphRunnerV2(experiments_root=tmp_path / "missing", settings=Settings(_env_file=None))
 
@@ -185,6 +224,22 @@ def test_graph_runner_builds_insufficient_data_response_without_langgraph(tmp_pa
 
     assert response.schema_ == "analysis_run_response_v2"
     assert response.summary.overall_judgement == "insufficient_data"
+    assert runner.last_state["analysis_route"] == "insufficient_data"
+    assert runner.last_state["rag_route"] == "skipped"
+    assert runner.last_state["recommendation_route"] == "none"
+
+
+def test_graph_runner_records_no_change_route_defaults(tmp_path) -> None:
+    project = tmp_path / "Project1"
+    _write_project_success_episode(project, "000001")
+    runner = ResultAnalysisGraphRunnerV2(settings=Settings(_env_file=None))
+
+    response = runner.run(AnalysisRunV2Request(project_path=str(project), run_id="000001"))
+
+    assert response.summary.overall_judgement == "no_change_needed"
+    assert runner.last_state["analysis_route"] == "no_change_needed"
+    assert runner.last_state["rag_route"] == "skipped"
+    assert runner.last_state["recommendation_route"] == "none"
 
 
 def test_graph_runner_generates_recommendations_for_repeated_blocked_region(tmp_path) -> None:
@@ -199,6 +254,82 @@ def test_graph_runner_generates_recommendations_for_repeated_blocked_region(tmp_
     assert response.patterns[0]["type"] == "blocked_region_violation_repeated"
     assert response.recommendations[0]["target"] == "policy"
     assert "analysis_mode" not in response.model_dump(by_alias=True)
+    assert runner.last_state["analysis_route"] == "patterns_found"
+    assert runner.last_state["recommendation_route"] == "rule_based_fallback"
+
+
+def test_graph_runner_retrieves_file_based_rag_context_for_patterns(tmp_path) -> None:
+    experiments = tmp_path / "experiments"
+    _write_blocked_episode(experiments, "000001")
+    _write_blocked_episode(experiments, "000002")
+    runner = ResultAnalysisGraphRunnerV2(experiments_root=experiments, settings=Settings(_env_file=None))
+
+    response = runner.run()
+    state = runner.last_state
+
+    assert response.summary.overall_judgement == "change_recommended"
+    assert state["rag_route"] == "retrieved"
+    assert state["rag_diagnostic"]["backend"] == "file_based_jsonl"
+    assert state["rag_diagnostic"]["used"] is True
+    assert state["rag_diagnostic"]["retrieved_chunk_count"] > 0
+    assert state["rag_context"]["retrieval_mode"] == "file_based_jsonl"
+    assert state["retrieved_context"]
+    assert all("chunk_id" not in item for item in state["retrieved_context"])
+    assert all("card_id" not in item for item in state["retrieved_context"])
+    assert all("matched_fields" not in item for item in state["retrieved_context"])
+    assert all("retrieval_score" not in item for item in state["retrieved_context"])
+
+
+def test_graph_runner_rag_store_missing_falls_back_without_public_leak(monkeypatch, tmp_path) -> None:
+    def missing_store(_query):
+        raise FileNotFoundError("C:/internal/path/policy_rag_chunks.jsonl")
+
+    monkeypatch.setattr(rag_module, "search_policy_chunks", missing_store, raising=False)
+    experiments = tmp_path / "experiments"
+    _write_blocked_episode(experiments, "000001")
+    _write_blocked_episode(experiments, "000002")
+    runner = ResultAnalysisGraphRunnerV2(experiments_root=experiments, settings=Settings(_env_file=None))
+
+    response = runner.run()
+    state = runner.last_state
+
+    assert response.summary.overall_judgement == "change_recommended"
+    assert state["rag_route"] == "store_missing"
+    assert state["rag_diagnostic"]["fallback_reason"] == "store_missing"
+    assert "C:/internal/path" not in json.dumps(state["rag_diagnostic"])
+    assert "policy_rag_chunks.jsonl" not in json.dumps(state["rag_diagnostic"])
+
+
+def test_graph_runner_rag_query_empty_falls_back(tmp_path) -> None:
+    experiments = tmp_path / "experiments"
+    _write_blocked_episode(experiments, "000001")
+    _write_blocked_episode(experiments, "000002")
+    runner = ResultAnalysisGraphRunnerV2(experiments_root=experiments, settings=Settings(_env_file=None))
+    runner.agent.rag_query_builder.build_queries = lambda **_kwargs: []
+
+    response = runner.run()
+    state = runner.last_state
+
+    assert response.summary.overall_judgement == "change_recommended"
+    assert state["rag_route"] == "no_query"
+    assert state["rag_diagnostic"]["fallback_reason"] == "query_empty"
+    assert state["recommendation_route"] == "rule_based_fallback"
+
+
+def test_graph_runner_sequential_fallback_shares_route_decisions(tmp_path) -> None:
+    experiments = tmp_path / "experiments"
+    _write_blocked_episode(experiments, "000001")
+    _write_blocked_episode(experiments, "000002")
+    graph_runner = ResultAnalysisGraphRunnerV2(experiments_root=experiments, settings=Settings(_env_file=None))
+    fallback_runner = ResultAnalysisGraphRunnerV2(experiments_root=experiments, settings=Settings(_env_file=None))
+    fallback_runner.compiled_graph = None
+
+    graph_runner.run()
+    fallback_runner.run()
+
+    assert graph_runner.last_state["analysis_route"] == fallback_runner.last_state["analysis_route"]
+    assert graph_runner.last_state["rag_route"] == fallback_runner.last_state["rag_route"]
+    assert graph_runner.last_state["recommendation_route"] == fallback_runner.last_state["recommendation_route"]
 
 
 def test_graph_runner_exposes_node_state_without_response_schema_changes(tmp_path) -> None:
@@ -281,6 +412,7 @@ def test_graph_runner_falls_back_when_llm_public_text_contains_internal_source_t
     assert all(forbidden not in public_text for forbidden in FORBIDDEN_LLM_PUBLIC_TEXT)
     assert any("rule-based recommendation fallback" in warning for warning in response.warnings)
     assert response.recommendations[0]["recommendation"] != "policy card 기준을 반영했습니다."
+    assert runner.last_state["recommendation_route"] == "rule_based_fallback"
 
 
 def test_graph_runner_falls_back_when_llm_policy_parameter_change_is_invalid(tmp_path) -> None:
@@ -299,6 +431,7 @@ def test_graph_runner_falls_back_when_llm_policy_parameter_change_is_invalid(tmp
 
     assert any("rule-based recommendation fallback" in warning for warning in response.warnings)
     assert response.recommendations[0]["recommendation"] != "LLM invalid change should not be public."
+    assert runner.last_state["recommendation_route"] == "rule_based_fallback"
 
 
 def test_analysis_api_preserves_response_schema(tmp_path) -> None:
@@ -313,6 +446,7 @@ def test_analysis_api_preserves_response_schema(tmp_path) -> None:
     assert payload["schema"] == "analysis_run_response_v2"
     assert payload["summary"]["overall_judgement"] == "change_recommended"
     assert "episode_timelines" not in payload
+    assert all(field not in payload for field in FORBIDDEN_PUBLIC_PATH_FIELDS)
 
 
 def test_analysis_api_uses_graph_runner_path(tmp_path) -> None:
@@ -327,6 +461,24 @@ def test_analysis_api_uses_graph_runner_path(tmp_path) -> None:
     assert payload["schema"] == "analysis_run_response_v2"
     assert payload["summary"]["overall_judgement"] == "change_recommended"
     assert "analysis_mode" not in payload
+
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    report = json.loads((review_dir / "report.json").read_text(encoding="utf-8"))
+    recommendations = json.loads((review_dir / "recommendations.json").read_text(encoding="utf-8"))
+    manifest = json.loads((review_dir / "manifest.json").read_text(encoding="utf-8"))
+    public_surfaces = "\n".join(
+        [
+            json.dumps(payload, ensure_ascii=False),
+            json.dumps(report, ensure_ascii=False),
+            json.dumps(recommendations, ensure_ascii=False),
+        ]
+    )
+    assert not (review_dir / "rag_evidence.json").exists()
+    assert not (review_dir / "internal").exists()
+    assert "rag_diagnostic" not in manifest
+    assert all("rag_evidence" not in item for item in manifest.get("generated_files", []))
+    assert all(term not in public_surfaces for term in FORBIDDEN_LLM_PUBLIC_TEXT)
+    assert all(term not in public_surfaces for term in FORBIDDEN_RAG_PUBLIC_METADATA)
 
 
 def test_analysis_api_falls_back_when_openai_fails_without_ollama_attempt(monkeypatch, tmp_path) -> None:

@@ -46,24 +46,24 @@ START
 → aggregate_experiments_node
 → detect_failure_patterns_node
 → route_analysis_need_node
-    ├─ insufficient_data → build_insufficient_data_response_node → END
-    ├─ no_change_needed → build_no_change_response_node → END
-    └─ patterns_found → build_rag_query_node
+    ├─ insufficient_data → build_response_node → END
+    ├─ no_change_needed → build_response_node → END
+    └─ patterns_found → build_rag_queries_node
 → retrieve_rag_context_node
 → build_analysis_context_node
-→ llm_failure_analysis_node
+→ analyze_failure_node
 → generate_recommendations_node
 → validate_recommendations_node
 → route_recommendation_validation_node
     ├─ valid → build_response_node → END
-    └─ invalid → rule_based_fallback_node → build_response_node → END
+    └─ fallback → rule_based_fallback_node → build_response_node → END
 ```
 
 ## 5. State 정의
 
 `ScenarioGenerationGraphStateV2`는 request, prompt, parsed intent, selected pattern, optional LLM scenario candidate, generated scenario, validation result, response, warnings를 가진 state입니다.
 
-`ResultAnalysisGraphStateV2`는 request, user project run root, artifacts, classified/parsed artifacts, parse warnings, episode metrics, timelines, representative failed episodes, run aggregates, failure patterns, RAG queries/context, analysis context, LLM analysis, recommendations, validation errors, response, warnings를 가집니다.
+`ResultAnalysisGraphStateV2`는 request, user project run root, artifacts, classified/parsed artifacts, parse warnings, episode metrics, timelines, representative failed episodes, run aggregates, failure patterns, RAG queries/context, `rag_diagnostic`, `analysis_route`, `rag_route`, `recommendation_route`, analysis context, LLM analysis, recommendations, validation errors, response, warnings를 가집니다. route와 diagnostic은 내부 state에만 남기며 public response나 review artifact 구조에 추가하지 않습니다.
 
 ## 6. Node 목록
 
@@ -89,24 +89,28 @@ Analysis nodes:
 * `aggregate_runs_node`
 * `aggregate_experiments_node`
 * `detect_failure_patterns_node`
-* `build_rag_query_node`
+* `route_analysis_need_node`
+* `build_rag_queries_node`
 * `retrieve_rag_context_node`
 * `build_analysis_context_node`
-* `llm_failure_analysis_node`
+* `analyze_failure_node`
 * `generate_recommendations_node`
 * `validate_recommendations_node`
+* `route_recommendation_validation_node`
 * `rule_based_fallback_node`
 * `build_response_node`
 
-Scenario generation v2 runner는 실제 LangGraph `StateGraph`를 compile/invoke합니다. ResultAnalysisGraphRunnerV2도 graph-compatible node boundary를 유지합니다.
+Scenario generation v2 runner와 ResultAnalysisGraphRunnerV2는 실제 LangGraph `StateGraph`를 compile/invoke합니다. `langgraph`가 없는 환경에서는 ResultAnalysisGraphRunnerV2가 동일 route decision 함수를 공유하는 sequential fallback으로 동작할 수 있습니다.
 
 ## 7. Edge와 조건 분기
 
 Scenario validation 결과는 `valid`, `repair`, `fallback`으로 route합니다. repair는 제한 횟수 안에서만 validate node로 되돌아가며, 실패 시 deterministic fallback으로 이동합니다.
 
-Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터가 없으면 insufficient data response, 반복 패턴이 없으면 no-change response를 만듭니다. 반복 패턴이 있으면 RAG query/context를 구성하고 optional LLM 또는 rule-based recommendation 경로를 탑니다.
+Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터가 없으면 `analysis_route="insufficient_data"`, 반복 패턴이 없으면 `analysis_route="no_change_needed"`로 두고 두 경로 모두 `rag_route="skipped"`, `recommendation_route="none"` 기본값을 남긴 뒤 response를 만듭니다. 반복 패턴이 있으면 `analysis_route="patterns_found"`로 두고 file-based RAG query/context를 구성한 뒤 optional LLM 또는 rule-based recommendation 경로를 탑니다.
 
-`V2_AGENT_LLM_ENABLED=true`이면 `analyze_failure_node`가 result analysis `prompts/system_prompt.md`와 요약 context를 LLM JSON client에 전달합니다. system prompt는 run summary, metrics, patterns, warnings, refs만 근거로 쓰도록 제한하고 JSON-only 출력과 public 응답 안전 규칙을 정의합니다. `V2_AGENT_LLM_ENABLED=false`이거나 LLM 출력 검증이 실패하면 `LlmFailureAnalyzer`와 rule-based recommendation 경로로 fallback합니다. 현재 `LlmFailureAnalyzer` 자체는 실제 LLM 호출자가 아니라 deterministic 전처리 단계입니다.
+`V2_AGENT_LLM_ENABLED=true`이면 `analyze_failure_node`가 result analysis `prompts/system_prompt.md`와 요약 context를 LLM JSON client에 전달합니다. system prompt는 run summary, metrics, patterns, warnings, refs만 근거로 쓰도록 제한하고 JSON-only 출력과 public 응답 안전 규칙을 정의합니다. `V2_AGENT_LLM_ENABLED=false`, LLM 호출 실패, LLM 출력 검증 실패, LLM recommendation 사용 불가 경로는 기존 rule-based recommendation으로 fallback하고 `recommendation_route="rule_based_fallback"`으로 기록합니다. 유효한 LLM recommendation만 `recommendation_route="llm_valid"`로 기록합니다.
+
+RAG route는 `skipped`, `retrieved`, `no_query`, `no_result`, `store_missing`, `jsonl_error`, `search_error` 중 하나입니다. RAG 실패는 API 실패로 전파하지 않고 내부 `rag_diagnostic`에 통제된 `fallback_reason`만 남깁니다. raw exception, traceback, 내부 파일 경로, raw chunk, chunk/card id, matched fields, retrieval score는 저장하지 않습니다.
 
 ## 8. Tool 목록
 
@@ -147,6 +151,9 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 * graph 내부 diagnostics, validation, generation mode는 외부 scenario generation response wrapper로 노출하지 않습니다.
 * LLM 출력은 validator와 evidence validation을 통과해야 합니다.
 * Result analysis public 응답에는 내부 RAG/source 문구를 노출하지 않습니다.
+* Result analysis file-based RAG는 internal state context로만 사용하며 raw RAG evidence 파일을 생성하지 않습니다.
+* `rag_diagnostic`은 `manifest.json`에 저장하지 않고 runner state에만 둡니다.
+* `report.json`, `recommendations.json`, `manifest.json`, review directory 구조와 public API schema는 변경하지 않습니다.
 * 실패 시 기존 deterministic/rule-based fallback을 사용합니다.
 
 ## 10. HITL 후보
@@ -157,11 +164,11 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 * recommendation의 policy/environment target 확정
 * Unreal schema 확정 전 신규 response field 추가 여부 판단
 
-## 11. 실제 LangGraph 전환 계획
+## 11. 검증 기준
 
 1. ScenarioGenerationV2 runner는 실제 `StateGraph` 경로를 기본으로 유지합니다.
-2. `V2_AGENT_LLM_ENABLED`로 scenario generation graph 내부 LLM-assisted node 사용 여부를 제어합니다.
-3. LLM generation은 `project_scenario_v1` structured output schema를 우선 사용하고, 모든 결과는 `TemplateValidator`를 통과해야 합니다.
-4. ResultAnalysisV2 graph-compatible node pipeline을 기존 v2 response schema와 동등하게 검증합니다.
-5. v2 response schema와 Unreal scenario schema가 확정되면 graph state 타입을 더 엄격하게 좁힙니다.
+2. ResultAnalysisGraphRunnerV2는 LangGraph 설치 환경에서 `StateGraph.compile().invoke()`를 사용합니다.
+3. ResultAnalysisGraphRunnerV2 sequential fallback은 LangGraph 실행과 같은 `analysis_route`, `rag_route`, `recommendation_route`를 남깁니다.
+4. `/api/v2/analysis/run` response schema와 `report.json`/`recommendations.json`/`manifest.json` 구조는 변경하지 않습니다.
+5. RAG raw evidence 파일, `review_dir/internal`, path field 재추가는 금지합니다.
 6. 운영 환경에서 LLM validator failure와 fallback warning 비율을 확인합니다.

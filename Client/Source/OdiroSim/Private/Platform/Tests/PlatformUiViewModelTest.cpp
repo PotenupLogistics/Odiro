@@ -6,6 +6,7 @@
 #include "Platform/ViewModel/RobotProfileViewModel.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/PlatformUiDeveloperSettings.h"
+#include "Platform/PlatformUiSubsystem.h"
 #include "Platform/Widget/PlatformRootWidget.h"
 
 #include "Engine/GameInstance.h"

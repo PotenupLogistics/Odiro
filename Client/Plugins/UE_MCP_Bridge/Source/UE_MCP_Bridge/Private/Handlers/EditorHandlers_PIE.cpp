@@ -22,6 +22,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Modules/ModuleManager.h"
+#include "HAL/PlatformProcess.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UObjectIterator.h"
 #include "UObject/UnrealType.h"
@@ -127,6 +128,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieControl(const TSharedPtr<FJsonObject>
 		bool bIsPlaying = (GEditor->PlayWorld != nullptr);
 		Result->SetBoolField(TEXT("isPlaying"), bIsPlaying);
 		Result->SetStringField(TEXT("action"), Action);
+		if (bIsPlaying)
+		{
+			Result->SetStringField(TEXT("playWorld"), GEditor->PlayWorld->GetPathName());
+		}
 	}
 	else if (Action == TEXT("start"))
 	{
@@ -179,8 +184,17 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieControl(const TSharedPtr<FJsonObject>
 			return MCPError(TEXT("No PIE session active"));
 		}
 
+		const bool bWaitRequested = OptionalBool(Params, TEXT("wait"), true);
+		const FString PlayWorldName = GEditor->PlayWorld->GetPathName();
 		GEditor->RequestEndPlayMap();
 		Result->SetStringField(TEXT("action"), Action);
+		Result->SetBoolField(TEXT("stopRequested"), true);
+		Result->SetBoolField(TEXT("waitRequested"), bWaitRequested);
+		Result->SetBoolField(TEXT("completed"), false);
+		Result->SetBoolField(TEXT("isPlaying"), true);
+		Result->SetStringField(TEXT("playWorld"), PlayWorldName);
+		Result->SetNumberField(TEXT("retryAfterMs"), 250.0);
+		Result->SetStringField(TEXT("message"), TEXT("PIE stop requested. Poll pie_control status until isPlaying=false."));
 	}
 	else
 	{

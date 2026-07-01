@@ -142,6 +142,9 @@ private:
 	static TSharedPtr<FJsonValue> CoordinationSaveDirty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CoordinationLiveCodingCompile(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CoordinationRequestExit(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CoordinationOperationStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CoordinationOperationWait(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CoordinationOperationCancel(const TSharedPtr<FJsonObject>& Params);
 	// #340: enumerate currently-dirty content/map packages
 	static TSharedPtr<FJsonValue> ListDirtyPackages(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieGetRuntimeValue(const TSharedPtr<FJsonObject>& Params);

@@ -56,7 +56,28 @@ function Write-JsonFile {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
     $json = $Value | ConvertTo-Json -Depth 50
-    [System.IO.File]::WriteAllText($Path, $json, $script:Utf8NoBom)
+    $tmp = "$Path.tmp.$([guid]::NewGuid().ToString('N'))"
+    $backup = "$Path.bak.$([guid]::NewGuid().ToString('N'))"
+    [System.IO.File]::WriteAllText($tmp, $json, $script:Utf8NoBom)
+    try {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            [System.IO.File]::Replace($tmp, $Path, $backup, $true)
+        }
+        else {
+            [System.IO.File]::Move($tmp, $Path)
+        }
+    }
+    catch {
+        if (Test-Path -LiteralPath $tmp -PathType Leaf) {
+            Remove-Item -LiteralPath $tmp -Force
+        }
+        throw
+    }
+    finally {
+        if (Test-Path -LiteralPath $backup -PathType Leaf) {
+            Remove-Item -LiteralPath $backup -Force
+        }
+    }
 }
 
 # Returns a property value without tripping StrictMode on missing JSON fields.

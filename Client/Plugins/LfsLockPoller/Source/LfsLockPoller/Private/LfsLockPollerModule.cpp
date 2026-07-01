@@ -6,10 +6,15 @@
 #include "Dom/JsonValue.h"
 #include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformProcess.h"
+#include "Misc/FileHelper.h"
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Misc/SecureHash.h"
 #include "Modules/ModuleManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "UObject/Package.h"
+#include "UObject/UObjectIterator.h"
 
 #include <atomic>
 
@@ -39,6 +44,80 @@ namespace LfsLockPoller
 		/** Files whose filesystem attributes could not be updated. */
 		int32 FailureCount = 0;
 	};
+
+	/** Cross-process lane guard shared by LFS poller and source-control LFS commands. */
+	class FScopedGitLfsOperationLock
+	{
+	public:
+		/** Try to acquire the source-control lane for one repository. */
+		FScopedGitLfsOperationLock(const FString& repositoryRoot, uint64 timeoutMs)
+		{
+			FString normalizedRoot = repositoryRoot;
+			FPaths::NormalizeDirectoryName(normalizedRoot);
+			const FString lockName = FString::Printf(TEXT("OdiroGitLfsOps_%s"), *FMD5::HashAnsiString(*normalizedRoot));
+			Semaphore = FPlatformProcess::NewInterprocessSynchObject(lockName, true, 1);
+			if (Semaphore)
+			{
+				bLocked = Semaphore->TryLock(timeoutMs * 1000ull * 1000ull);
+			}
+		}
+
+		~FScopedGitLfsOperationLock()
+		{
+			if (Semaphore)
+			{
+				if (bLocked)
+				{
+					Semaphore->Unlock();
+				}
+				FPlatformProcess::DeleteInterprocessSynchObject(Semaphore);
+			}
+		}
+
+		/** Return whether the shared source-control lane was acquired. */
+		bool IsLocked() const { return bLocked; }
+
+	private:
+		FPlatformProcess::FSemaphore* Semaphore = nullptr;
+		bool bLocked = false;
+	};
+
+	/** Returns true when Editor Reload MCP has gated the editor for maintenance. */
+	bool IsBridgeMaintenanceActive()
+	{
+		const FString maintenancePath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("UE_MCP_Bridge"), TEXT("maintenance.json"));
+		if (!FPaths::FileExists(maintenancePath))
+		{
+			return false;
+		}
+
+		FString text;
+		if (!FFileHelper::LoadFileToString(text, *maintenancePath))
+		{
+			return true;
+		}
+
+		TSharedPtr<FJsonObject> state;
+		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(text);
+		if (!FJsonSerializer::Deserialize(reader, state) || !state.IsValid())
+		{
+			return true;
+		}
+
+		FString phase;
+		if (!state->TryGetStringField(TEXT("phase"), phase))
+		{
+			return true;
+		}
+
+		return !(phase.Equals(TEXT("completed"), ESearchCase::IgnoreCase)
+			|| phase.Equals(TEXT("failed"), ESearchCase::IgnoreCase)
+			|| phase.Equals(TEXT("restart_failed"), ESearchCase::IgnoreCase)
+			|| phase.Equals(TEXT("port_timeout"), ESearchCase::IgnoreCase)
+			|| phase.Equals(TEXT("editor_crashed"), ESearchCase::IgnoreCase)
+			|| phase.Equals(TEXT("modal_blocked"), ESearchCase::IgnoreCase)
+			|| phase.Equals(TEXT("crash_report_pending"), ESearchCase::IgnoreCase));
+	}
 
 	/** Quotes one native process argument for Git command-line execution. */
 	FString QuoteArgument(const FString& value)
@@ -309,12 +388,18 @@ namespace LfsLockPoller
 		const FString& repositoryRoot,
 		const TArray<FString>& localLockablePaths,
 		const TSet<FString>& remoteLockablePaths,
-		const TSet<FString>& ownedLockPaths)
+		const TSet<FString>& ownedLockPaths,
+		const TSet<FString>& blockedRepositoryPaths)
 	{
 		FPermissionSummary summary;
 		IPlatformFile& platformFile = FPlatformFileManager::Get().GetPlatformFile();
 		for (const FString& repositoryPath : localLockablePaths)
 		{
+			if (blockedRepositoryPaths.Contains(repositoryPath))
+			{
+				continue;
+			}
+
 			const FString absolutePath = FPaths::ConvertRelativePathToFull(repositoryRoot, repositoryPath);
 			if (!platformFile.FileExists(*absolutePath))
 			{
@@ -345,6 +430,55 @@ namespace LfsLockPoller
 			}
 		}
 		return summary;
+	}
+
+	/** Collect dirty content packages so the poller does not flip attributes during save-sensitive edits. */
+	TSet<FString> CollectDirtyRepositoryPaths(const FString& repositoryRoot, const TSet<FString>& lockableExtensions)
+	{
+		TSet<FString> blockedPaths;
+		if (!IsInGameThread())
+		{
+			return blockedPaths;
+		}
+
+		for (TObjectIterator<UPackage> It; It; ++It)
+		{
+			UPackage* package = *It;
+			if (!package || !package->IsDirty())
+			{
+				continue;
+			}
+
+			const FString packageName = package->GetName();
+			if (!FPackageName::IsValidLongPackageName(packageName)
+				|| packageName.StartsWith(TEXT("/Script/"))
+				|| packageName.StartsWith(TEXT("/Temp/"))
+				|| packageName.Contains(TEXT("UEDPIE_"), ESearchCase::IgnoreCase))
+			{
+				continue;
+			}
+
+			const FString extension = package->ContainsMap()
+				? FPackageName::GetMapPackageExtension()
+				: FPackageName::GetAssetPackageExtension();
+			if (!lockableExtensions.Contains(extension.ToLower()))
+			{
+				continue;
+			}
+
+			FString filename;
+			if (!FPackageName::TryConvertLongPackageNameToFilename(packageName, filename, extension))
+			{
+				continue;
+			}
+
+			FString repositoryPath;
+			if (TryMakeRepositoryRelativePath(repositoryRoot, filename, repositoryPath))
+			{
+				blockedPaths.Add(repositoryPath);
+			}
+		}
+		return blockedPaths;
 	}
 }
 
@@ -432,11 +566,24 @@ private:
 	/** Performs Git queries and filesystem permission updates for one cycle. */
 	void RunPollCycle(const LfsLockPoller::FPollConfig& config)
 	{
+		if (LfsLockPoller::IsBridgeMaintenanceActive())
+		{
+			UE_LOG(LogLfsLockPoller, Warning, TEXT("Skipping permission sync because editor maintenance is active."));
+			return;
+		}
+
 		FString repositoryRoot;
 		FString error;
 		if (!LfsLockPoller::ResolveRepositoryRoot(config.GitBinaryPath, repositoryRoot, error))
 		{
 			UE_LOG(LogLfsLockPoller, Warning, TEXT("Unable to resolve Git repository root: %s"), *error.TrimStartAndEnd());
+			return;
+		}
+
+		LfsLockPoller::FScopedGitLfsOperationLock sourceControlLock(repositoryRoot, 0);
+		if (!sourceControlLock.IsLocked())
+		{
+			UE_LOG(LogLfsLockPoller, Warning, TEXT("Skipping permission sync because the shared Git LFS operation lane is busy."));
 			return;
 		}
 
@@ -468,11 +615,36 @@ private:
 			remoteLockablePathSet.Add(remotePath);
 		}
 
+		TSet<FString> blockedRepositoryPaths;
+		if (IsInGameThread())
+		{
+			blockedRepositoryPaths = LfsLockPoller::CollectDirtyRepositoryPaths(repositoryRoot, config.LockableExtensions);
+		}
+		else
+		{
+			TPromise<TSet<FString>> promise;
+			TFuture<TSet<FString>> future = promise.GetFuture();
+			AsyncTask(ENamedThreads::GameThread, [repositoryRoot, lockableExtensions = config.LockableExtensions, promise = MoveTemp(promise)]() mutable
+			{
+				promise.SetValue(LfsLockPoller::CollectDirtyRepositoryPaths(repositoryRoot, lockableExtensions));
+			});
+			if (future.WaitFor(FTimespan::FromSeconds(2.0)))
+			{
+				blockedRepositoryPaths = future.Get();
+			}
+			else
+			{
+				UE_LOG(LogLfsLockPoller, Warning, TEXT("Skipping permission sync because dirty package state could not be read from the game thread."));
+				return;
+			}
+		}
+
 		const LfsLockPoller::FPermissionSummary summary = LfsLockPoller::ApplyPermissions(
 			repositoryRoot,
 			localLockablePaths,
 			remoteLockablePathSet,
-			ownedLockPaths);
+			ownedLockPaths,
+			blockedRepositoryPaths);
 		if (summary.WritableCount > 0 || summary.ReadOnlyCount > 0 || summary.FailureCount > 0)
 		{
 			UE_LOG(LogLfsLockPoller, Display, TEXT("Synchronized LFS lock permissions: writable=%d read_only=%d failed=%d"),

@@ -64,6 +64,54 @@ function Read-JsonConfig {
 }
 
 # Writes a UTF-8 JSON file after ensuring the parent directory exists.
+function Invoke-ConfigFileLock {
+    param(
+        [string] $Path,
+        [scriptblock] $Body
+    )
+    $parent = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    $lockPath = "$Path.lock"
+    $lockStream = [System.IO.File]::Open($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    try {
+        & $Body
+    }
+    finally {
+        $lockStream.Dispose()
+    }
+}
+
+function Write-TextFileAtomic {
+    param(
+        [string] $Path,
+        [string] $Content
+    )
+    $tmp = "$Path.tmp.$([guid]::NewGuid().ToString('N'))"
+    $backup = "$Path.bak.$([guid]::NewGuid().ToString('N'))"
+    [System.IO.File]::WriteAllText($tmp, $Content, [System.Text.UTF8Encoding]::new($false))
+    try {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            [System.IO.File]::Replace($tmp, $Path, $backup, $true)
+        }
+        else {
+            [System.IO.File]::Move($tmp, $Path)
+        }
+    }
+    catch {
+        if (Test-Path -LiteralPath $tmp -PathType Leaf) {
+            Remove-Item -LiteralPath $tmp -Force
+        }
+        throw
+    }
+    finally {
+        if (Test-Path -LiteralPath $backup -PathType Leaf) {
+            Remove-Item -LiteralPath $backup -Force
+        }
+    }
+}
+
 function Write-JsonConfig {
     param(
         [string] $Path,
@@ -78,7 +126,7 @@ function Write-JsonConfig {
         Write-Step "Would write $Path"
         return
     }
-    [System.IO.File]::WriteAllText($Path, ($json + "`n"), [System.Text.UTF8Encoding]::new($false))
+    Write-TextFileAtomic -Path $Path -Content ($json + "`n")
 }
 
 # Adds or replaces a note property on a PowerShell JSON object.
@@ -147,11 +195,13 @@ function New-VsCodeServerEntry {
 # Installs .mcp.json for Claude Code project scope.
 function Install-ClaudeCodeMcp {
     $path = Join-Path $repoRoot ".mcp.json"
-    $config = Read-JsonConfig -Path $path
-    $servers = Get-OrCreateJsonObjectProperty -Object $config -Name "mcpServers"
-    Set-JsonProperty -Object $servers -Name "odiro_ue_bridge" -Value (New-McpServersEntry -ScriptPath $bridgeMcp)
-    Set-JsonProperty -Object $servers -Name "odiro_editor_reload" -Value (New-McpServersEntry -ScriptPath $reloadMcp)
-    Write-JsonConfig -Path $path -Value $config
+    Invoke-ConfigFileLock -Path $path -Body {
+        $config = Read-JsonConfig -Path $path
+        $servers = Get-OrCreateJsonObjectProperty -Object $config -Name "mcpServers"
+        Set-JsonProperty -Object $servers -Name "odiro_ue_bridge" -Value (New-McpServersEntry -ScriptPath $bridgeMcp)
+        Set-JsonProperty -Object $servers -Name "odiro_editor_reload" -Value (New-McpServersEntry -ScriptPath $reloadMcp)
+        Write-JsonConfig -Path $path -Value $config
+    }
     if (-not $DryRun) {
         Write-Success "Claude Code MCP config installed."
     }
@@ -160,11 +210,13 @@ function Install-ClaudeCodeMcp {
 # Installs .cursor/mcp.json for Cursor project scope.
 function Install-CursorMcp {
     $path = Join-Path $repoRoot ".cursor\mcp.json"
-    $config = Read-JsonConfig -Path $path
-    $servers = Get-OrCreateJsonObjectProperty -Object $config -Name "mcpServers"
-    Set-JsonProperty -Object $servers -Name "odiro_ue_bridge" -Value (New-McpServersEntry -ScriptPath $bridgeMcp)
-    Set-JsonProperty -Object $servers -Name "odiro_editor_reload" -Value (New-McpServersEntry -ScriptPath $reloadMcp)
-    Write-JsonConfig -Path $path -Value $config
+    Invoke-ConfigFileLock -Path $path -Body {
+        $config = Read-JsonConfig -Path $path
+        $servers = Get-OrCreateJsonObjectProperty -Object $config -Name "mcpServers"
+        Set-JsonProperty -Object $servers -Name "odiro_ue_bridge" -Value (New-McpServersEntry -ScriptPath $bridgeMcp)
+        Set-JsonProperty -Object $servers -Name "odiro_editor_reload" -Value (New-McpServersEntry -ScriptPath $reloadMcp)
+        Write-JsonConfig -Path $path -Value $config
+    }
     if (-not $DryRun) {
         Write-Success "Cursor MCP config installed."
     }
@@ -173,11 +225,13 @@ function Install-CursorMcp {
 # Installs .vscode/mcp.json for VS Code Copilot workspace scope.
 function Install-VsCodeCopilotMcp {
     $path = Join-Path $repoRoot ".vscode\mcp.json"
-    $config = Read-JsonConfig -Path $path
-    $servers = Get-OrCreateJsonObjectProperty -Object $config -Name "servers"
-    Set-JsonProperty -Object $servers -Name "odiro_ue_bridge" -Value (New-VsCodeServerEntry -ScriptPath $bridgeMcp)
-    Set-JsonProperty -Object $servers -Name "odiro_editor_reload" -Value (New-VsCodeServerEntry -ScriptPath $reloadMcp)
-    Write-JsonConfig -Path $path -Value $config
+    Invoke-ConfigFileLock -Path $path -Body {
+        $config = Read-JsonConfig -Path $path
+        $servers = Get-OrCreateJsonObjectProperty -Object $config -Name "servers"
+        Set-JsonProperty -Object $servers -Name "odiro_ue_bridge" -Value (New-VsCodeServerEntry -ScriptPath $bridgeMcp)
+        Set-JsonProperty -Object $servers -Name "odiro_editor_reload" -Value (New-VsCodeServerEntry -ScriptPath $reloadMcp)
+        Write-JsonConfig -Path $path -Value $config
+    }
     if (-not $DryRun) {
         Write-Success "VS Code Copilot MCP config installed."
     }
@@ -213,11 +267,6 @@ function Remove-CodexMcpBlocks {
 # Installs the user-scope Codex config because Codex loads MCP servers from CODEX_HOME.
 function Install-CodexMcp {
     $path = Join-Path $codexHome "config.toml"
-    $content = ""
-    if (Test-Path -LiteralPath $path -PathType Leaf) {
-        $content = Get-Content -LiteralPath $path -Raw
-    }
-    $content = Remove-CodexMcpBlocks -Content $content
     $append = @"
 [mcp_servers.odiro_ue_bridge]
 command = "powershell.exe"
@@ -237,9 +286,16 @@ startup_timeout_sec = 120
         Write-Step "Would write $path"
         return
     }
-    $baseContent = $content.TrimEnd()
-    $newContent = if ($baseContent) { $baseContent + "`n`n" + $append + "`n" } else { $append + "`n" }
-    [System.IO.File]::WriteAllText($path, $newContent, [System.Text.UTF8Encoding]::new($false))
+    Invoke-ConfigFileLock -Path $path -Body {
+        $content = ""
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            $content = Get-Content -LiteralPath $path -Raw
+        }
+        $content = Remove-CodexMcpBlocks -Content $content
+        $baseContent = $content.TrimEnd()
+        $newContent = if ($baseContent) { $baseContent + "`n`n" + $append + "`n" } else { $append + "`n" }
+        Write-TextFileAtomic -Path $path -Content $newContent
+    }
     Write-Success "Codex MCP config installed."
 }
 

@@ -1,6 +1,7 @@
 // Copyright (c) 2025-2026 Winyunq. All rights reserved.
 #include "Bridge/UmgMcpBridge.h"
 #include "Bridge/UmgMcpConfig.h"
+#include "MCPBridgeOperationCoordinator.h"
 #include "UmgMcp.h"
 #include "Bridge/MCPServerRunnable.h"
 #include "Sockets.h"
@@ -63,9 +64,63 @@
 
 namespace
 {
-bool bUmgDesignVerificationPending = false;
-FString PendingUmgDesignMutationCommand;
-TSet<FString> CompletedUmgDesignVerificationSteps;
+struct FUmgDesignVerificationState
+{
+    bool bPending = false;
+    FString PendingMutationCommand;
+    TSet<FString> CompletedSteps;
+};
+
+TMap<FString, FUmgDesignVerificationState> GUmgDesignVerificationByAsset;
+
+struct FUmgCommandExecutionState
+{
+    FThreadSafeBool bAbandoned{false};
+};
+
+// Serializes one coordinator result for legacy UmgMcp socket responses.
+FString SerializeJsonValue(const TSharedPtr<FJsonValue>& Value)
+{
+    FString ResultString;
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
+    const TSharedPtr<FJsonObject>* Object = nullptr;
+    if (Value.IsValid() && Value->TryGetObject(Object) && Object && Object->IsValid())
+    {
+        FJsonSerializer::Serialize((*Object).ToSharedRef(), Writer);
+    }
+    return ResultString;
+}
+
+// Returns the asset key that owns the verification checklist for this command.
+FString GetUmgDesignVerificationKey(const TSharedPtr<FJsonObject>& Params)
+{
+    if (!Params.IsValid())
+    {
+        return TEXT("__global_umg__");
+    }
+
+    FString Value;
+    static const TCHAR* CandidateFields[] =
+    {
+        TEXT("assetPath"),
+        TEXT("asset_path"),
+        TEXT("path"),
+        TEXT("widgetBlueprintPath"),
+        TEXT("widget_blueprint_path"),
+        TEXT("blueprintPath"),
+        TEXT("blueprint_path")
+    };
+
+    for (const TCHAR* FieldName : CandidateFields)
+    {
+        if (Params->TryGetStringField(FieldName, Value) && !Value.IsEmpty())
+        {
+            return Value;
+        }
+    }
+
+    return TEXT("__global_umg__");
+}
 
 // Identifies UMG commands whose successful result must be followed by visual layout verification.
 bool IsUmgDesignMutationCommand(const FString& CommandType)
@@ -123,12 +178,12 @@ TArray<FString> GetUmgDesignRequiredSequence()
 }
 
 // Reports completed checklist items in required-sequence order for stable responses.
-TArray<FString> GetCompletedUmgDesignVerificationSteps()
+TArray<FString> GetCompletedUmgDesignVerificationSteps(const FUmgDesignVerificationState& State)
 {
     TArray<FString> CompletedSteps;
     for (const FString& Step : GetUmgDesignRequiredSequence())
     {
-        if (CompletedUmgDesignVerificationSteps.Contains(Step))
+        if (State.CompletedSteps.Contains(Step))
         {
             CompletedSteps.Add(Step);
         }
@@ -148,12 +203,12 @@ TArray<TSharedPtr<FJsonValue>> MakeStringArray(const TArray<FString>& Values)
 }
 
 // Reports checklist items that have not completed since the last UMG design mutation.
-TArray<FString> GetMissingUmgDesignVerificationSteps()
+TArray<FString> GetMissingUmgDesignVerificationSteps(const FUmgDesignVerificationState& State)
 {
     TArray<FString> MissingSteps;
     for (const FString& Step : GetUmgDesignRequiredSequence())
     {
-        if (!CompletedUmgDesignVerificationSteps.Contains(Step))
+        if (!State.CompletedSteps.Contains(Step))
         {
             MissingSteps.Add(Step);
         }
@@ -162,13 +217,13 @@ TArray<FString> GetMissingUmgDesignVerificationSteps()
 }
 
 // Returns true only when all required verification steps have passed.
-bool IsUmgDesignVerificationComplete()
+bool IsUmgDesignVerificationComplete(const FUmgDesignVerificationState& State)
 {
-    return GetMissingUmgDesignVerificationSteps().Num() == 0;
+    return GetMissingUmgDesignVerificationSteps(State).Num() == 0;
 }
 
 // Adds a machine-readable verification checklist to mutation responses for MCP clients.
-void AddUmgDesignVerificationRequirement(const TSharedPtr<FJsonObject>& ResponseJson, const FString& CommandType)
+void AddUmgDesignVerificationRequirement(const TSharedPtr<FJsonObject>& ResponseJson, const FUmgDesignVerificationState& State, const FString& CommandType)
 {
     if (!ResponseJson.IsValid())
     {
@@ -184,8 +239,8 @@ void AddUmgDesignVerificationRequirement(const TSharedPtr<FJsonObject>& Response
     Verification->SetStringField(TEXT("trigger_command"), CommandType);
     Verification->SetStringField(TEXT("reason"), TEXT("UMG visual or layout state changed; verify tree, compile result, layout geometry, overlap, and visual/runtime capture before reporting completion."));
     Verification->SetArrayField(TEXT("required_sequence"), MakeStringArray(GetUmgDesignRequiredSequence()));
-    Verification->SetArrayField(TEXT("completed_sequence"), MakeStringArray(GetCompletedUmgDesignVerificationSteps()));
-    Verification->SetArrayField(TEXT("missing_sequence"), MakeStringArray(GetMissingUmgDesignVerificationSteps()));
+    Verification->SetArrayField(TEXT("completed_sequence"), MakeStringArray(GetCompletedUmgDesignVerificationSteps(State)));
+    Verification->SetArrayField(TEXT("missing_sequence"), MakeStringArray(GetMissingUmgDesignVerificationSteps(State)));
     Verification->SetArrayField(TEXT("visual_verification_options"), VisualVerificationOptions);
 
     ResponseJson->SetObjectField(TEXT("design_verification_required"), Verification);
@@ -372,11 +427,33 @@ FString UUmgMcpBridge::ExecuteCommand(const FString& CommandType, const TSharedP
 {
     UE_LOG(LogUmgMcp, Display, TEXT("UmgMcpBridge: Received command: %s"), *CommandType);
 
+    TSharedPtr<FJsonObject> SafeParams = Params.IsValid() ? Params : MakeShareable(new FJsonObject);
+    const bool bAlreadyAdmitted = FMCPBridgeOperationCoordinator::IsCurrentThreadOperationAdmitted();
+    TSharedPtr<FMCPBridgeOperationLease> OperationLease;
+    if (!bAlreadyAdmitted)
+    {
+        FMCPBridgeOperationAdmission Admission = FMCPBridgeOperationCoordinator::TryBeginOrReserve(CommandType, SafeParams);
+        if (!Admission.bCanExecute)
+        {
+            return SerializeJsonValue(Admission.Response);
+        }
+        OperationLease = Admission.Lease;
+    }
+
     // If we are already on the GameThread (e.g. called from FabServer or test), execute directly
     if (IsInGameThread())
     {
         UE_LOG(LogUmgMcp, Verbose, TEXT("UmgMcpBridge: Already on GameThread, executing directly."));
-        return InternalExecuteCommand(CommandType, Params);
+        if (OperationLease.IsValid())
+        {
+            OperationLease->MarkStarted();
+        }
+        FString Result = InternalExecuteCommand(CommandType, SafeParams);
+        if (OperationLease.IsValid())
+        {
+            OperationLease->Release();
+        }
+        return Result;
     }
 
     // Otherwise, queue execution on Game Thread and wait
@@ -385,10 +462,35 @@ FString UUmgMcpBridge::ExecuteCommand(const FString& CommandType, const TSharedP
 
     TPromise<FString> Promise;
     TFuture<FString> Future = Promise.GetFuture();
+    TSharedRef<FUmgCommandExecutionState> ExecutionState = MakeShared<FUmgCommandExecutionState>();
 
-    AsyncTask(ENamedThreads::GameThread, [this, CommandType, Params, Promise = MoveTemp(Promise)]() mutable
+    AsyncTask(ENamedThreads::GameThread, [this, CommandType, SafeParams, OperationLease, ExecutionState, Promise = MoveTemp(Promise)]() mutable
     {
-        FString Result = InternalExecuteCommand(CommandType, Params);
+        if (ExecutionState->bAbandoned)
+        {
+            if (OperationLease.IsValid())
+            {
+                OperationLease->ReleaseIfNeverStarted();
+            }
+            TSharedPtr<FJsonObject> ErrorResponse = MakeShareable(new FJsonObject);
+            ErrorResponse->SetStringField(TEXT("status"), TEXT("error"));
+            ErrorResponse->SetStringField(TEXT("error"), TEXT("Game Thread Timeout - command was abandoned before execution."));
+            FString AbandonedResult;
+            TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&AbandonedResult);
+            FJsonSerializer::Serialize(ErrorResponse.ToSharedRef(), Writer);
+            Promise.SetValue(AbandonedResult);
+            return;
+        }
+
+        if (OperationLease.IsValid())
+        {
+            OperationLease->MarkStarted();
+        }
+        FString Result = InternalExecuteCommand(CommandType, SafeParams);
+        if (OperationLease.IsValid())
+        {
+            OperationLease->Release();
+        }
         Promise.SetValue(Result);
     });
 
@@ -400,6 +502,11 @@ FString UUmgMcpBridge::ExecuteCommand(const FString& CommandType, const TSharedP
     }
     else
     {
+        ExecutionState->bAbandoned = true;
+        if (OperationLease.IsValid())
+        {
+            OperationLease->ReleaseIfNeverStarted();
+        }
         UE_LOG(LogUmgMcp, Error, TEXT("UmgMcpBridge: GameThread execution timed out (%.1fs) for command: %s"), MCP_GAME_THREAD_TIMEOUT_DEFAULT, *CommandType);
 
         TSharedPtr<FJsonObject> ErrorResponse = MakeShareable(new FJsonObject);
@@ -416,12 +523,14 @@ FString UUmgMcpBridge::ExecuteCommand(const FString& CommandType, const TSharedP
 FString UUmgMcpBridge::InternalExecuteCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
     TSharedPtr<FJsonObject> ResponseJson = MakeShareable(new FJsonObject);
+    const FString VerificationKey = GetUmgDesignVerificationKey(Params);
+    FUmgDesignVerificationState& VerificationState = GUmgDesignVerificationByAsset.FindOrAdd(VerificationKey);
 
-    if (CommandType == TEXT("save_asset") && bUmgDesignVerificationPending && !IsUmgDesignVerificationComplete())
+    if (CommandType == TEXT("save_asset") && VerificationState.bPending && !IsUmgDesignVerificationComplete(VerificationState))
     {
         ResponseJson->SetStringField(TEXT("status"), TEXT("error"));
         ResponseJson->SetStringField(TEXT("error"), TEXT("UMG design verification is pending. Run the missing design verification steps before save_asset."));
-        AddUmgDesignVerificationRequirement(ResponseJson, PendingUmgDesignMutationCommand);
+        AddUmgDesignVerificationRequirement(ResponseJson, VerificationState, VerificationState.PendingMutationCommand);
 
         FString ResultString;
         TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
@@ -833,21 +942,21 @@ FString UUmgMcpBridge::InternalExecuteCommand(const FString& CommandType, const 
 
             if (IsUmgDesignVerificationCommand(CommandType) && DidUmgDesignVerificationCommandPass(CommandType, ResultJson))
             {
-                CompletedUmgDesignVerificationSteps.Add(CommandType);
+                VerificationState.CompletedSteps.Add(CommandType);
             }
 
             if (IsUmgDesignMutationCommand(CommandType))
             {
-                bUmgDesignVerificationPending = true;
-                PendingUmgDesignMutationCommand = CommandType;
-                CompletedUmgDesignVerificationSteps.Empty();
-                AddUmgDesignVerificationRequirement(ResponseJson, CommandType);
+                VerificationState.bPending = true;
+                VerificationState.PendingMutationCommand = CommandType;
+                VerificationState.CompletedSteps.Empty();
+                AddUmgDesignVerificationRequirement(ResponseJson, VerificationState, CommandType);
             }
-            else if (CommandType == TEXT("save_asset") && bUmgDesignVerificationPending && IsUmgDesignVerificationComplete())
+            else if (CommandType == TEXT("save_asset") && VerificationState.bPending && IsUmgDesignVerificationComplete(VerificationState))
             {
-                bUmgDesignVerificationPending = false;
-                PendingUmgDesignMutationCommand.Empty();
-                CompletedUmgDesignVerificationSteps.Empty();
+                VerificationState.bPending = false;
+                VerificationState.PendingMutationCommand.Empty();
+                VerificationState.CompletedSteps.Empty();
             }
         }
         else

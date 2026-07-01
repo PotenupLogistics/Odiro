@@ -933,40 +933,46 @@ bool UScenarioAuthoringSubsystem::TryResolveScenarioPreviewMapBounds(
 		outBounds);
 }
 
-// Resolves editor viewport fit bounds from preview surfaces, authored objects, and route marker anchors.
+// Resolves editor viewport fit bounds from corridor, authored objects, and scenario marker anchors.
 bool UScenarioAuthoringSubsystem::TryResolveScenarioEditorViewportMapBounds(
 	FScenarioMapBounds& outBounds) const
 {
 	outBounds = FScenarioMapBounds{};
 
 	FBox2D viewportXYBounds(ForceInit);
-	FScenarioMapBounds surfaceBounds;
-	const bool bHasSurfaceBounds = TryResolveScenarioPreviewMapBounds(surfaceBounds);
-	if (bHasSurfaceBounds)
-	{
-		viewportXYBounds += surfaceBounds.XYBounds.Min;
-		viewportXYBounds += surfaceBounds.XYBounds.Max;
-	}
-
 	double actorCenterZSum = 0.0;
 	int32 validActorCount = 0;
+	bool bHasEditorFitActor = false;
 	const auto accumulateActor =
-		[&viewportXYBounds, &actorCenterZSum, &validActorCount](const AActor* actor)
+		[&viewportXYBounds, &actorCenterZSum, &validActorCount, &bHasEditorFitActor](
+			const AActor* actor)
 	{
-		TryAccumulateViewportActorBounds(
+		const bool bAccumulated = TryAccumulateViewportActorBounds(
 			actor,
 			viewportXYBounds,
 			actorCenterZSum,
 			validActorCount);
+		bHasEditorFitActor = bHasEditorFitActor || bAccumulated;
+		return bAccumulated;
+	};
+	const auto accumulateGroundRegion =
+		[&accumulateActor](const AScenarioGroundRegion* regionActor, const bool bAllowGeneratedCity)
+	{
+		if (!bAllowGeneratedCity
+			&& IsValid(regionActor)
+			&& regionActor->RegionSpec.RegionId.StartsWith(AuthoringGeneratedCityRegionIdPrefix))
+		{
+			return false;
+		}
+
+		return accumulateActor(regionActor);
 	};
 
-	if (!bHasSurfaceBounds)
+	accumulateActor(CorridorPreviewActor.Get());
+
+	for (const TPair<FString, TObjectPtr<AScenarioGroundRegion>>& pair : GroundRegionActors)
 	{
-		accumulateActor(CorridorPreviewActor.Get());
-		for (const TPair<FString, TObjectPtr<AScenarioGroundRegion>>& pair : GroundRegionActors)
-		{
-			accumulateActor(pair.Value.Get());
-		}
+		accumulateGroundRegion(pair.Value.Get(), false);
 	}
 
 	for (const TPair<FString, TObjectPtr<AScenarioStaticObstacle>>& pair : StaticObstacleActors)
@@ -987,6 +993,15 @@ bool UScenarioAuthoringSubsystem::TryResolveScenarioEditorViewportMapBounds(
 	accumulateActor(RobotStartMarkerActor.Get());
 	accumulateActor(RobotGoalMarkerActor.Get());
 
+	// Generated city regions are background context, but remain the last fallback for surface-only previews.
+	if (!bHasEditorFitActor)
+	{
+		for (const TPair<FString, TObjectPtr<AScenarioGroundRegion>>& pair : GroundRegionActors)
+		{
+			accumulateGroundRegion(pair.Value.Get(), true);
+		}
+	}
+
 	if (!viewportXYBounds.bIsValid)
 	{
 		return false;
@@ -995,10 +1010,7 @@ bool UScenarioAuthoringSubsystem::TryResolveScenarioEditorViewportMapBounds(
 	EnsureMinimumViewportBoundsExtent(viewportXYBounds);
 
 	outBounds.XYBounds = viewportXYBounds;
-	outBounds.CenterZ =
-		bHasSurfaceBounds
-			? surfaceBounds.CenterZ
-			: (validActorCount > 0 ? actorCenterZSum / validActorCount : 0.0);
+	outBounds.CenterZ = validActorCount > 0 ? actorCenterZSum / validActorCount : 0.0;
 	return outBounds.IsValid();
 }
 

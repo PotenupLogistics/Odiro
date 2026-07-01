@@ -1127,6 +1127,7 @@ UPlatformRootWidget* AScenarioEditorController::ShowPlatformRootWidget()
 void AScenarioEditorController::RemovePlatformRootWidget()
 {
 	RemoveEditorRootWidget();
+	bPlatformRootScenarioEditorActive = false;
 
 	if (IsValid(PlatformRootWidget))
 	{
@@ -1173,7 +1174,12 @@ void AScenarioEditorController::ClearRegisteredEditorRootWidget(UScenarioEditorR
 
 void AScenarioEditorController::HandlePlatformRootScreenChanged(const EPlatformRootScreen screen)
 {
-	if (screen == EPlatformRootScreen::ScenarioEditor)
+	const bool bIsScenarioEditorScreen = screen == EPlatformRootScreen::ScenarioEditor;
+	const bool bEnteredScenarioEditorScreen =
+		bIsScenarioEditorScreen && !bPlatformRootScenarioEditorActive;
+	bPlatformRootScenarioEditorActive = bIsScenarioEditorScreen;
+
+	if (bIsScenarioEditorScreen)
 	{
 		if (!IsValid(EditorRootWidget))
 		{
@@ -1183,7 +1189,10 @@ void AScenarioEditorController::HandlePlatformRootScreenChanged(const EPlatformR
 		{
 			ShowRouteMarkerOverlayWidget(EditorRootWidget.Get());
 		}
-		RequestFitEditorViewToScenario();
+		if (bEnteredScenarioEditorScreen)
+		{
+			RequestFitEditorViewToScenario();
+		}
 		return;
 	}
 

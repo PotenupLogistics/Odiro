@@ -515,6 +515,8 @@ private:
 	bool bIsRegionDragging = false;
 	// Guards next-tick editor viewport fit requests from piling up during entry and load transitions.
 	bool bEditorViewFitQueued = false;
+	// Tracks active PlatformRoot screen state so selection UI refreshes do not re-fit the viewport.
+	bool bPlatformRootScenarioEditorActive = false;
 	FVector RegionDragStartWorld = FVector::ZeroVector;
 	bool bIsTransformGizmoDragging = false;
 	EScenarioTransformGizmoHandle ActiveTransformGizmoHandle = EScenarioTransformGizmoHandle::None;

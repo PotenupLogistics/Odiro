@@ -94,6 +94,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
 	void EnterPerspectiveView();
 
+	// Fits the top-down editor camera to the resolved scenario viewport frame.
+	void ApplyTopDownFrame(const FVector2D& centerXY, double orthoWidthCm);
+
+	// Places the perspective editor camera at a fixed oblique pose aimed at the resolved scenario viewport frame.
+	void ApplyPerspectiveFrame(
+		const FVector2D& targetXY,
+		double targetZ,
+		double distanceCm,
+		double yawDegrees,
+		double pitchDegrees);
+
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor")
 	bool IsTopDownViewActive() const { return bTopDownViewActive; }
 

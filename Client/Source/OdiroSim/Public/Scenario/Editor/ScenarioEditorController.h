@@ -23,6 +23,8 @@ class UInputMappingContext;
 class UMaterialInterface;
 class UWidget;
 struct FInputActionValue;
+struct FScenarioMapBounds;
+struct FScenarioPreviewFrame;
 enum class EPlatformRootScreen : uint8;
 
 // Native notification used by editor UI widgets to mirror viewport selection.
@@ -121,6 +123,26 @@ public:
 	// Viewport z-order offset that keeps route markers below WBP_Root and its editor panels.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
 	int32 RouteMarkerOverlayViewportZOrderOffset = -1;
+
+	// Extra viewport fit margin applied when the editor frames the authored scenario.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Viewport", meta = (ClampMin = "1.0"))
+	double EditorViewportFitScale = 1.15;
+
+	// Fixed yaw used by the perspective editor fit pose.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Viewport")
+	double EditorPerspectiveFitYawDegrees = 45.0;
+
+	// Fixed downward pitch used by the perspective editor fit pose.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Viewport", meta = (ClampMin = "-89.0", ClampMax = "-1.0"))
+	double EditorPerspectiveFitPitchDegrees = -55.0;
+
+	// Minimum camera distance used by the perspective editor fit pose.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Viewport", meta = (ClampMin = "1.0"))
+	double EditorPerspectiveFitMinDistanceCm = 1800.0;
+
+	// Height offset above map center used as the perspective fit look target.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Viewport")
+	double EditorPerspectiveFitTargetHeightCm = 150.0;
 
 	// Screen-space route marker hit size matched to the root overlay's default 78:120 aspect.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
@@ -380,6 +402,12 @@ private:
 	void EnsureAuthoringOutlineCustomDepthEnabled() const;
 	void AddEditorInputMappingContext();
 	void BindEditorInputActions();
+	// Queues a scenario viewport fit after entry, loading, or an explicit view-mode switch.
+	void RequestFitEditorViewToScenario();
+	// Applies the queued scenario viewport fit to the currently active editor view mode.
+	void FitEditorViewToScenario();
+	// Resolves a viewport-aspect-aware frame for the current authored scenario.
+	bool TryResolveEditorViewportFrame(FScenarioPreviewFrame& outFrame, FScenarioMapBounds& outBounds) const;
 	// Mirrors Platform root active-screen changes into editor overlay visibility.
 	void HandlePlatformRootScreenChanged(EPlatformRootScreen screen);
 	// Ensures the route marker visual overlay is present below the main editor UI.
@@ -485,6 +513,8 @@ private:
 
 	bool bIsLookInputHeld = false;
 	bool bIsRegionDragging = false;
+	// Guards next-tick editor viewport fit requests from piling up during entry and load transitions.
+	bool bEditorViewFitQueued = false;
 	FVector RegionDragStartWorld = FVector::ZeroVector;
 	bool bIsTransformGizmoDragging = false;
 	EScenarioTransformGizmoHandle ActiveTransformGizmoHandle = EScenarioTransformGizmoHandle::None;

@@ -2,7 +2,10 @@
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "CollisionQueryParams.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/SphereComponent.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "Scenario/Actors/ScenarioGroundRegion.h"
 #include "Scenario/Actors/ScenarioPedestrian.h"
@@ -993,7 +996,6 @@ bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacleInternal(
 	}
 
 	const FTransform candidateTransform = ResolveStaticObstaclePlacementTransform(transform);
-	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp, candidateTransform);
 	const FVector candidateLocation = ComputePlacementBoundsCenter(candidateProp, candidateTransform);
 	double surfaceTopZCm = 0.0;
 	if (!TryResolveCorridorSurfaceTopZCm(transform.GetLocation(), surfaceTopZCm)
@@ -1006,6 +1008,26 @@ bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacleInternal(
 		return false;
 	}
 
+	bool bUsedCollisionPlacementQuery = false;
+	FString overlappedInstanceId;
+	if (TryFindStaticObstaclePlacementCollisionOverlap(
+		candidateProp,
+		candidateTransform,
+		ignoredInstanceId,
+		bUsedCollisionPlacementQuery,
+		overlappedInstanceId))
+	{
+		outFailureReason = overlappedInstanceId.IsEmpty()
+			? TEXT("Overlaps static obstacle.")
+			: FString::Printf(TEXT("Overlaps static obstacle '%s'."), *overlappedInstanceId);
+		return false;
+	}
+	if (bUsedCollisionPlacementQuery)
+	{
+		return true;
+	}
+
+	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp, candidateTransform);
 	for (const FScenarioAuthoringStaticObstacleRecord& record : StaticObstacleRecords)
 	{
 		if (!ignoredInstanceId.IsEmpty() && record.InstanceId == ignoredInstanceId)
@@ -3318,6 +3340,187 @@ bool UScenarioAuthoringSubsystem::StaticObstacleFootprintsOverlap(
 	const double deltaY = FMath::Abs(candidateLocation.Y - recordLocation.Y);
 
 	return deltaX < allowedDeltaX && deltaY < allowedDeltaY;
+}
+
+bool UScenarioAuthoringSubsystem::ShouldUseStaticObstaclePlacementCollisionQuery(
+	const FScenarioStaticObstaclePropEntry& candidatePropEntry) const
+{
+	if (candidatePropEntry.CollisionSourceMode == EScenarioStaticObstacleCollisionSourceMode::MeshSimpleCollision)
+	{
+		return true;
+	}
+
+	for (const FScenarioAuthoringStaticObstacleRecord& record : StaticObstacleRecords)
+	{
+		FScenarioStaticObstaclePropEntry recordPropEntry;
+		if (TryFindStaticObstacleProp(record.PropId, recordPropEntry)
+			&& recordPropEntry.CollisionSourceMode == EScenarioStaticObstacleCollisionSourceMode::MeshSimpleCollision)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool UScenarioAuthoringSubsystem::TryFindStaticObstaclePlacementCollisionOverlap(
+	const FScenarioStaticObstaclePropEntry& candidatePropEntry,
+	const FTransform& candidateTransform,
+	const FString& ignoredInstanceId,
+	bool& bOutQueryExecuted,
+	FString& outOverlappedInstanceId) const
+{
+	bOutQueryExecuted = false;
+	outOverlappedInstanceId.Reset();
+
+	if (!ShouldUseStaticObstaclePlacementCollisionQuery(candidatePropEntry))
+	{
+		return false;
+	}
+
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		return false;
+	}
+	if (StaticObstacleActors.IsEmpty())
+	{
+		bOutQueryExecuted = StaticObstacleRecords.IsEmpty();
+		return false;
+	}
+
+	AScenarioStaticObstacle* queryActor =
+		SpawnStaticObstaclePlacementQueryActor(candidatePropEntry, candidateTransform);
+	if (!queryActor)
+	{
+		return false;
+	}
+
+	bOutQueryExecuted = true;
+	queryActor->SetActorHiddenInGame(true);
+
+	AScenarioStaticObstacle* ignoredActor = nullptr;
+	if (!ignoredInstanceId.IsEmpty())
+	{
+		if (const TObjectPtr<AScenarioStaticObstacle>* ignoredActorPtr = StaticObstacleActors.Find(ignoredInstanceId))
+		{
+			ignoredActor = ignoredActorPtr->Get();
+		}
+	}
+
+	FComponentQueryParams queryParams(SCENE_QUERY_STAT(ScenarioStaticObstaclePlacementOverlap));
+	queryParams.AddIgnoredActor(queryActor);
+	if (ignoredActor)
+	{
+		queryParams.AddIgnoredActor(ignoredActor);
+	}
+	const FCollisionObjectQueryParams objectQueryParams(ECC_WorldStatic);
+
+	TArray<UPrimitiveComponent*> primitiveComponents;
+	queryActor->GetComponents<UPrimitiveComponent>(primitiveComponents);
+	for (UPrimitiveComponent* primitiveComponent : primitiveComponents)
+	{
+		if (!primitiveComponent || primitiveComponent->GetCollisionEnabled() == ECollisionEnabled::NoCollision)
+		{
+			continue;
+		}
+
+		TArray<FOverlapResult> overlapResults;
+		world->ComponentOverlapMulti(
+			overlapResults,
+			primitiveComponent,
+			primitiveComponent->GetComponentLocation(),
+			primitiveComponent->GetComponentQuat(),
+			queryParams,
+			objectQueryParams);
+
+		for (const FOverlapResult& overlapResult : overlapResults)
+		{
+			const AActor* overlapActor = overlapResult.GetActor();
+			if (!overlapActor || overlapActor == queryActor || overlapActor == ignoredActor)
+			{
+				continue;
+			}
+
+			if (TryFindStaticObstacleActorInstanceId(overlapActor, outOverlappedInstanceId))
+			{
+				queryActor->Destroy();
+				return true;
+			}
+		}
+	}
+
+	queryActor->Destroy();
+	return false;
+}
+
+AScenarioStaticObstacle* UScenarioAuthoringSubsystem::SpawnStaticObstaclePlacementQueryActor(
+	const FScenarioStaticObstaclePropEntry& propEntry,
+	const FTransform& transform) const
+{
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		return nullptr;
+	}
+
+	UClass* spawnClass = nullptr;
+	if (!propEntry.ObstacleActorClass.IsNull())
+	{
+		spawnClass = propEntry.ObstacleActorClass.LoadSynchronous();
+	}
+	else
+	{
+		spawnClass = StaticObstacleClass ? StaticObstacleClass.Get() : AScenarioStaticObstacle::StaticClass();
+	}
+
+	if (!spawnClass || !spawnClass->IsChildOf(AScenarioStaticObstacle::StaticClass()))
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	spawnParams.ObjectFlags |= RF_Transient;
+
+	AScenarioStaticObstacle* queryActor = world->SpawnActor<AScenarioStaticObstacle>(
+		spawnClass,
+		transform,
+		spawnParams);
+	if (!queryActor)
+	{
+		return nullptr;
+	}
+
+	if (!queryActor->ApplyPropEntry(propEntry))
+	{
+		queryActor->Destroy();
+		return nullptr;
+	}
+
+	return queryActor;
+}
+
+bool UScenarioAuthoringSubsystem::TryFindStaticObstacleActorInstanceId(
+	const AActor* actor,
+	FString& outInstanceId) const
+{
+	outInstanceId.Reset();
+	if (!actor)
+	{
+		return false;
+	}
+
+	for (const TPair<FString, TObjectPtr<AScenarioStaticObstacle>>& pair : StaticObstacleActors)
+	{
+		if (pair.Value.Get() == actor)
+		{
+			outInstanceId = pair.Key;
+			return true;
+		}
+	}
+
+	return false;
 }
 
 FString UScenarioAuthoringSubsystem::GenerateStaticObstacleInstanceId()

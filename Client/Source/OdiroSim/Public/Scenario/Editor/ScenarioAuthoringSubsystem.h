@@ -460,6 +460,22 @@ private:
 		const FVector& candidateLocation,
 		const FVector2D& candidateHalfExtent,
 		const FScenarioAuthoringStaticObstacleRecord& record) const;
+	// Returns true when precise collision overlap should replace catalog-bounds footprint checks.
+	bool ShouldUseStaticObstaclePlacementCollisionQuery(
+		const FScenarioStaticObstaclePropEntry& candidatePropEntry) const;
+	// Tests a candidate obstacle against authored obstacle collision primitives when collision geometry is authoritative.
+	bool TryFindStaticObstaclePlacementCollisionOverlap(
+		const FScenarioStaticObstaclePropEntry& candidatePropEntry,
+		const FTransform& candidateTransform,
+		const FString& ignoredInstanceId,
+		bool& bOutQueryExecuted,
+		FString& outOverlappedInstanceId) const;
+	// Spawns a transient configured obstacle actor used only for placement collision queries.
+	AScenarioStaticObstacle* SpawnStaticObstaclePlacementQueryActor(
+		const FScenarioStaticObstaclePropEntry& propEntry,
+		const FTransform& transform) const;
+	// Resolves an authored static obstacle actor back to its editor instance id.
+	bool TryFindStaticObstacleActorInstanceId(const AActor* actor, FString& outInstanceId) const;
 	FString GenerateStaticObstacleInstanceId();
 	FString GeneratePedestrianInstanceId();
 	FString GenerateGroundRegionId();

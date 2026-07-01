@@ -40,6 +40,19 @@ enum class EScenarioStaticObstaclePropCategory : uint8
 	SurfaceObject
 };
 
+UENUM(BlueprintType)
+enum class EScenarioStaticObstacleCollisionSourceMode : uint8
+{
+	// Preserves the legacy decision order: authored bounds, then MeshRoot simple collision, then fallback box.
+	Auto,
+
+	// Uses the catalog-authored bounds box, falling back to FallbackBoxExtent when full bounds are missing.
+	AuthoredBoundsBox,
+
+	// Uses every static mesh component that has simple convex collision as the obstacle collision source.
+	MeshSimpleCollision
+};
+
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioStaticObstaclePropEntry
 {
@@ -92,6 +105,11 @@ struct ODIROSIM_API FScenarioStaticObstaclePropEntry
 	// Enables query-only safety checks when physical collision is disabled.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Collision")
 	bool bUseSafetyQuery = true;
+
+	// Selects which actor primitives represent this obstacle for physics and sensor queries.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Collision")
+	EScenarioStaticObstacleCollisionSourceMode CollisionSourceMode =
+		EScenarioStaticObstacleCollisionSourceMode::Auto;
 
 	// Enables legacy mesh simple collision when no authored bounds size is set.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Collision")

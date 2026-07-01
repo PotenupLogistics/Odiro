@@ -4,11 +4,14 @@
 
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
 #include "PhysicsEngine/AggregateGeom.h"
 #include "PhysicsEngine/BodySetup.h"
+#include "Scenario/Data/ScenarioStaticObstaclePropCatalog.h"
+#include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 
 namespace
 {
@@ -18,7 +21,7 @@ namespace
 		// Transient world that receives one obstacle actor during a test.
 		UWorld* World = nullptr;
 
-		// Creates a minimal world so component collision state can be exercised without loading a map.
+		// Creates a minimal world so component collision state and placement queries can be exercised without loading a map.
 		FScenarioStaticObstacleCollisionTestWorld()
 		{
 			static int32 NextWorldIndex = 0;
@@ -28,7 +31,7 @@ namespace
 
 			UWorld::InitializationValues InitValues;
 			InitValues.AllowAudioPlayback(false)
-				.CreatePhysicsScene(false)
+				.CreatePhysicsScene(true)
 				.RequiresHitProxies(false)
 				.CreateNavigation(false)
 				.CreateAISystem(false)
@@ -44,6 +47,11 @@ namespace
 				false,
 				ERHIFeatureLevel::Num,
 				&InitValues);
+			if (GEngine && World)
+			{
+				FWorldContext& WorldContext = GEngine->CreateNewWorldContext(EWorldType::Game);
+				WorldContext.SetCurrentWorld(World);
+			}
 		}
 
 		// Destroys the isolated world after spawned component ownership has been released.
@@ -52,6 +60,10 @@ namespace
 			if (World)
 			{
 				World->DestroyWorld(false);
+				if (GEngine)
+				{
+					GEngine->DestroyWorldContext(World);
+				}
 			}
 		}
 	};
@@ -130,6 +142,29 @@ namespace
 		Entry.bUseMeshSimpleCollision = false;
 		Entry.bUseFallbackBoxCollision = true;
 		return Entry;
+	}
+
+	// Creates a transient catalog with intentionally oversized authored bounds for placement-query tests.
+	UScenarioStaticObstaclePropCatalog* MakePlacementQueryTestCatalog(
+		UObject* Outer,
+		UStaticMesh* Mesh)
+	{
+		UScenarioStaticObstaclePropCatalog* Catalog =
+			NewObject<UScenarioStaticObstaclePropCatalog>(Outer, TEXT("ScenarioStaticObstaclePlacementQueryCatalog"));
+		if (!Catalog)
+		{
+			return nullptr;
+		}
+
+		FScenarioStaticObstaclePropEntry Entry = MakeCollisionSourceTestEntry(
+			Mesh,
+			EScenarioStaticObstacleCollisionSourceMode::MeshSimpleCollision);
+		Entry.PropId = TEXT("test.mesh_source_large_bounds");
+		Entry.BoundsSizeMeters = FVector(10.0, 10.0, 2.0);
+		Entry.BoundsCenterOffsetMeters = FVector(0.0, 0.0, 1.0);
+		Entry.SafetyRadius = 0.0;
+		Catalog->Entries.Add(Entry);
+		return Catalog;
 	}
 }
 
@@ -251,6 +286,84 @@ bool FScenarioStaticObstacleAutoCollisionSourceTest::RunTest(const FString& Para
 		TEXT("Auto disables MeshRoot when authored bounds exist"),
 		static_cast<int32>(Obstacle->MeshRoot->GetCollisionEnabled()),
 		static_cast<int32>(ECollisionEnabled::NoCollision));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioStaticObstaclePlacementCollisionQueryTest,
+	"OdiroSim.Scenario.StaticObstacle.PlacementCollisionQuery",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioStaticObstaclePlacementCollisionQueryTest::RunTest(const FString& Parameters)
+{
+	FScenarioStaticObstacleCollisionTestWorld TestWorld;
+	TestNotNull(TEXT("test world"), TestWorld.World);
+	if (!TestWorld.World)
+	{
+		return false;
+	}
+
+	UStaticMesh* CubeMesh = LoadBasicCubeMesh();
+	TestNotNull(TEXT("basic cube mesh"), CubeMesh);
+	if (!CubeMesh)
+	{
+		return false;
+	}
+
+	if (!MeshHasSimpleCollision(CubeMesh))
+	{
+		AddWarning(TEXT("Skipping static obstacle placement query test because the engine cube has no simple collision."));
+		return true;
+	}
+
+	UScenarioAuthoringSubsystem* AuthoringSubsystem =
+		TestWorld.World->GetSubsystem<UScenarioAuthoringSubsystem>();
+	TestNotNull(TEXT("authoring subsystem"), AuthoringSubsystem);
+	if (!AuthoringSubsystem)
+	{
+		return false;
+	}
+
+	UScenarioStaticObstaclePropCatalog* TestCatalog =
+		MakePlacementQueryTestCatalog(GetTransientPackage(), CubeMesh);
+	TestNotNull(TEXT("test static obstacle catalog"), TestCatalog);
+	if (!TestCatalog)
+	{
+		return false;
+	}
+
+	AuthoringSubsystem->StaticObstaclePropCatalog = TestCatalog;
+	AuthoringSubsystem->StaticObstacleFootprintClearanceCm = 0.0;
+	AuthoringSubsystem->StaticObstacleGroundZToleranceCm = 200.0;
+
+	const FName PropId(TEXT("test.mesh_source_large_bounds"));
+	FScenarioPlaceableInstanceSpec FirstSpec;
+	TestTrue(
+		TEXT("first mesh-source obstacle is placed"),
+		AuthoringSubsystem->AddStaticObstacle(
+			PropId,
+			FTransform(FRotator::ZeroRotator, FVector::ZeroVector),
+			FirstSpec));
+
+	FString FailureReason;
+	TestTrue(
+		TEXT("placement uses simple collision instead of oversized authored bounds"),
+		AuthoringSubsystem->CanPlaceStaticObstacle(
+			PropId,
+			FTransform(FRotator::ZeroRotator, FVector(400.0, 0.0, 0.0)),
+			FailureReason));
+	TestEqual(TEXT("non-overlap failure reason"), FailureReason, FString());
+
+	TestFalse(
+		TEXT("placement still rejects actual simple-collision overlap"),
+		AuthoringSubsystem->CanPlaceStaticObstacle(
+			PropId,
+			FTransform(FRotator::ZeroRotator, FVector(75.0, 0.0, 0.0)),
+			FailureReason));
+	TestTrue(
+		TEXT("overlap failure identifies the existing obstacle"),
+		FailureReason.Contains(FirstSpec.InstanceId));
 
 	return true;
 }

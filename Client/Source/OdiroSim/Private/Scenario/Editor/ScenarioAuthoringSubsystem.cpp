@@ -61,6 +61,8 @@ namespace
 	const double CorridorVertexHandleScale = 0.28;
 	// Minimum interactive viewport fit extent for point-like marker or object-only scenarios.
 	const double EditorViewportMinBoundsHalfExtentCm = 250.0;
+	// Saved preview route padding mirrors the runtime episode preview map-bounds padding.
+	const double ScenarioPreviewRouteBoundsPaddingCm = 100.0;
 
 	FScenarioParamValue MakeStringParamValue(const FString& value)
 	{
@@ -891,7 +893,7 @@ void UScenarioAuthoringSubsystem::GetEditorPlacementIgnoredActors(TArray<AActor*
 	}
 }
 
-// 현재 Editor Preview Surface만 기준으로 촬영용 Map Bounds를 계산한다.
+// Resolves saved preview bounds with the same surface and DeliveryBot route expansion used by episode previews.
 bool UScenarioAuthoringSubsystem::TryResolveScenarioPreviewMapBounds(
 	FScenarioMapBounds& outBounds) const
 {
@@ -922,14 +924,13 @@ bool UScenarioAuthoringSubsystem::TryResolveScenarioPreviewMapBounds(
 		return false;
 	}
 
-	// 시나리오 대표 Preview는 DeliveryBot Start/Goal로 영역을 확장하지 않는다.
-	const TArray<FScenarioPlaceableInstanceSpec> emptyPlaceables;
+	const FScenarioWorldSpec previewWorldSpec = BuildDraftWorldSpecForPreview();
 
-	// Surface Bounds 그대로 촬영 Bounds를 계산한다.
+	// Episode preview expands surface bounds by the DeliveryBot route using the same shared resolver.
 	return FScenarioMapBoundsResolver::TryResolve(
 		surfaceActors,
-		emptyPlaceables,
-		0.0,
+		previewWorldSpec.Placeables,
+		ScenarioPreviewRouteBoundsPaddingCm,
 		outBounds);
 }
 

@@ -364,7 +364,7 @@ public:
 	bool TryResolveScenarioEditorViewportMapBounds(
 		FScenarioMapBounds& outBounds) const;
 
-	// 현재 Editor Preview Surface만 기준으로 촬영용 Map Bounds를 계산한다.
+	// Resolves saved preview bounds from editor surfaces and the compiled DeliveryBot route.
 	bool TryResolveScenarioPreviewMapBounds(
 		FScenarioMapBounds& outBounds) const;
 

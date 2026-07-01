@@ -150,6 +150,18 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
 	float DeliveryBotGridBoundsPaddingCm{ 100.f };
 
+	// 시뮬레이션 초기 카메라를 Robot 시작 pose 뒤쪽에 배치하는 거리.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Viewport", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+	double RuntimeInitialCameraBackDistanceCm{ 1000.0 };
+
+	// 시뮬레이션 초기 카메라를 Robot 시작 pose 위쪽에 배치하는 높이.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Viewport", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+	double RuntimeInitialCameraHeightCm{ 700.0 };
+
+	// 시뮬레이션 초기 카메라가 바라보는 Robot 기준 목표 높이.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Viewport", meta = (AllowPrivateAccess = "true"))
+	double RuntimeInitialCameraTargetHeightCm{ 120.0 };
+
 	AActor* SpawnPlaceable(const FScenarioPlaceableInstanceSpec& placeableSpec);
 	AScenarioStaticObstacle* SpawnStaticObstacle(const FScenarioPlaceableInstanceSpec& placeableSpec);
 	bool TryFindStaticObstacleProp(FName propId, FScenarioStaticObstaclePropEntry& outPropEntry) const;
@@ -201,6 +213,9 @@ private:
 
 	// Removes the runtime route marker overlay before replacing or clearing the scenario.
 	void RemoveRuntimeRouteMarkerOverlayWidget();
+
+	// Robot spawn 직후 local player에 고정 초기 시야를 적용한다.
+	void ApplyRuntimeInitialView(AActor* robotActor);
 
 	void RegisterRuntimeActor(
 		const FString& instanceId,

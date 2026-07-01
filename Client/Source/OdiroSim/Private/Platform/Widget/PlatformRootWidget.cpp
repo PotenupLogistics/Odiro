@@ -11,6 +11,7 @@
 #include "Platform/Widget/ProjectOverviewScreenWidget.h"
 #include "Platform/Widget/RunDetailScreenWidget.h"
 #include "Platform/Widget/RunListScreenWidget.h"
+#include "Platform/Widget/ScenarioEditorScreenWidget.h"
 #include "Platform/Widget/StartupScreenWidget.h"
 #include "Platform/Widget/WindowStatusBarWidget.h"
 #include "Platform/Widget/WindowTabBarWidget.h"
@@ -243,6 +244,12 @@ UScenarioEditorRootWidget* UPlatformRootWidget::GetScenarioEditorRootWidget() co
 	if (ScenarioEditorRootWidget)
 	{
 		return ScenarioEditorRootWidget.Get();
+	}
+
+	if (const UScenarioEditorScreenWidget* scenarioEditorScreen =
+		Cast<UScenarioEditorScreenWidget>(ScenarioEditorScreen.Get()))
+	{
+		return scenarioEditorScreen->GetScenarioEditorRootWidget();
 	}
 
 	return Cast<UScenarioEditorRootWidget>(ScenarioEditorScreen.Get());

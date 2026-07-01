@@ -130,12 +130,14 @@ guardrails:
   - Scenario editor selection, subsystem lookup, and world mutation stay controller/subsystem/component-owned; ViewModels expose FieldNotify state and command facades through ScenarioEditorUiSubsystem.
   - ScenarioEditorToolbarWidget is the left command rail for template panel switching and transform gizmo mode/orientation commands; save, return, and status remain outside the toolbar surface.
   - Scenario editor viewport navigation input is owned by ScenarioEditorController with Enhanced Input assets under Client/Content/Input; keep mouse capture, selection, and cancel bindings explicit.
+  - Scenario editor viewport auto-fit is entry/load/view-mode-switch driven; bounds are resolved by ScenarioAuthoringSubsystem while camera application stays in ScenarioEditorController and ScenarioEditorPawn.
   - ScenarioEditorLaunchSubsystem owns ScenarioEditorMap travel gating for shared visual asset preload before the viewport becomes visible.
   - SimulatorProcessSubsystem gates project-run ScenarioSimulationMap travel behind the same shared visual asset preload when launching from the Platform root shell.
   - ScenarioViewportPresentation owns shared scenario map preload assets, the global grey-background enable switch, and grey background post-process application for editor cameras, runtime unbound post-process volumes, and preview SceneCapture components.
   - Scenario editor robot Start/Goal markers use authoring-subsystem proxy actors for selection and a ScenarioEditorController-owned viewport overlay below the active Platform root shell for visible markers.
   - Scenario editor Corridor vertex/segment handles use invisible proxy actors for selection and transform gizmo ownership, with ScenarioEditorRouteMarkerOverlayWidget painting and hit-testing the visible screen-space grips.
   - Scenario simulation robot Start/Goal markers are runtime overlay items owned by ScenarioSimulationSubsystem; simulation no longer spawns visible BP_StartPoint/BP_GoalPoint marker actors.
+  - ScenarioSimulationSubsystem owns the fixed initial runtime view by moving the local default pawn from the spawned DeliveryBot start pose; it is an initial placement, not a follow camera.
   - Scenario Object Palette commands must be backed by scenario.json authoring contracts; currently it creates only fixed static-obstacle rows in obstacles.placements.
   - ScenarioEditorShellViewModel owns editor UI selection commands for template panel/block and placeable selection; viewport and outliner placeable selection focus and scroll to the matching sidebar block, and sidebar placeable-backed blocks route reverse selection through Shell commands instead of composing selection state locally.
   - Scenario editor reusable WBP class references come from ScenarioEditorWidgetClassCatalog assets or exposed widget properties; do not add C++ WBP class-path fallbacks.

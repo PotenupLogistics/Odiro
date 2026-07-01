@@ -24,7 +24,9 @@
 #include "Misc/Paths.h"
 #include "Platform/PlatformUiDeveloperSettings.h"
 #include "Platform/Widget/PlatformRootWidget.h"
+#include "Shared/Actors/ScenarioPreviewFraming.h"
 #include "Shared/ScenarioViewportPresentation.h"
+#include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorController, Log, All);
 
@@ -388,6 +390,8 @@ void AScenarioEditorController::SetEditorViewMode(EScenarioEditorViewMode viewMo
 	{
 		editorPawn->EnterPerspectiveView();
 	}
+
+	RequestFitEditorViewToScenario();
 }
 
 void AScenarioEditorController::ToggleEditorViewMode()
@@ -396,6 +400,117 @@ void AScenarioEditorController::ToggleEditorViewMode()
 		EditorViewMode == EScenarioEditorViewMode::Perspective
 			? EScenarioEditorViewMode::TopDownOrtho
 			: EScenarioEditorViewMode::Perspective);
+}
+
+// Queues a scenario viewport fit after entry, loading, or an explicit view-mode switch.
+void AScenarioEditorController::RequestFitEditorViewToScenario()
+{
+	if (bEditorViewFitQueued)
+	{
+		return;
+	}
+
+	UWorld* world = GetWorld();
+	if (!IsValid(world))
+	{
+		FitEditorViewToScenario();
+		return;
+	}
+
+	bEditorViewFitQueued = true;
+	FTimerDelegate fitDelegate;
+	fitDelegate.BindUObject(this, &AScenarioEditorController::FitEditorViewToScenario);
+	world->GetTimerManager().SetTimerForNextTick(fitDelegate);
+}
+
+// Applies the queued scenario viewport fit to the currently active editor view mode.
+void AScenarioEditorController::FitEditorViewToScenario()
+{
+	bEditorViewFitQueued = false;
+
+	AScenarioEditorPawn* editorPawn = GetEditorPawn();
+	if (!IsValid(editorPawn))
+	{
+		return;
+	}
+
+	FScenarioPreviewFrame frame;
+	FScenarioMapBounds mapBounds;
+	if (!TryResolveEditorViewportFrame(frame, mapBounds))
+	{
+		return;
+	}
+
+	if (EditorViewMode == EScenarioEditorViewMode::TopDownOrtho)
+	{
+		editorPawn->ApplyTopDownFrame(frame.CenterXY, frame.OrthoWidth);
+		return;
+	}
+
+	int32 viewportWidth = 0;
+	int32 viewportHeight = 0;
+	GetViewportSize(viewportWidth, viewportHeight);
+	const double aspectRatio =
+		viewportWidth > 0 && viewportHeight > 0
+			? static_cast<double>(viewportWidth) / static_cast<double>(viewportHeight)
+			: (16.0 / 9.0);
+	const double visibleHeightCm = frame.OrthoWidth / FMath::Max(aspectRatio, KINDA_SMALL_NUMBER);
+	const double fitRadiusCm = FVector2D(frame.OrthoWidth, visibleHeightCm).Size() * 0.5;
+
+	const double horizontalFovDegrees =
+		editorPawn->CameraComponent
+			? static_cast<double>(editorPawn->CameraComponent->FieldOfView)
+			: 90.0;
+	const double horizontalHalfFovRadians = FMath::DegreesToRadians(
+		FMath::Clamp(horizontalFovDegrees, 5.0, 170.0) * 0.5);
+	const double verticalHalfFovRadians = FMath::Atan(
+		FMath::Tan(horizontalHalfFovRadians) / FMath::Max(aspectRatio, KINDA_SMALL_NUMBER));
+	const double fitHalfFovRadians = FMath::Max(
+		FMath::Min(horizontalHalfFovRadians, verticalHalfFovRadians),
+		FMath::DegreesToRadians(1.0));
+	const double fitDistanceCm = fitRadiusCm / FMath::Sin(fitHalfFovRadians);
+
+	editorPawn->ApplyPerspectiveFrame(
+		frame.CenterXY,
+		mapBounds.CenterZ + EditorPerspectiveFitTargetHeightCm,
+		FMath::Max(fitDistanceCm, EditorPerspectiveFitMinDistanceCm),
+		EditorPerspectiveFitYawDegrees,
+		EditorPerspectiveFitPitchDegrees);
+}
+
+// Resolves a viewport-aspect-aware frame for the current authored scenario.
+bool AScenarioEditorController::TryResolveEditorViewportFrame(
+	FScenarioPreviewFrame& outFrame,
+	FScenarioMapBounds& outBounds) const
+{
+	outFrame = FScenarioPreviewFrame{};
+	outBounds = FScenarioMapBounds{};
+
+	const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!IsValid(authoringSubsystem)
+		|| !authoringSubsystem->TryResolveScenarioEditorViewportMapBounds(outBounds))
+	{
+		return false;
+	}
+
+	int32 viewportWidth = 0;
+	int32 viewportHeight = 0;
+	GetViewportSize(viewportWidth, viewportHeight);
+	if (viewportWidth <= 0 || viewportHeight <= 0)
+	{
+		viewportWidth = 1280;
+		viewportHeight = 720;
+	}
+
+	FScenarioPreviewFramingSettings framingSettings;
+	framingSettings.OutputWidth = viewportWidth;
+	framingSettings.OutputHeight = viewportHeight;
+	framingSettings.ScenarioPreviewFitScale = FMath::Max(EditorViewportFitScale, 1.0);
+
+	return FScenarioPreviewFramingResolver::TryResolveScenario(
+		outBounds,
+		framingSettings,
+		outFrame);
 }
 
 void AScenarioEditorController::SetPlacementSnapToGridEnabled(const bool bEnabled)
@@ -842,7 +957,15 @@ bool AScenarioEditorController::LoadProjectScenarioJsonFile(
 	}
 
 	CancelPlacement();
-	return authoringSubsystem->LoadProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+	const bool bLoaded = authoringSubsystem->LoadProjectScenarioJsonFile(
+		jsonFilePath,
+		outResolvedJsonFilePath,
+		outDiagnostics);
+	if (bLoaded)
+	{
+		RequestFitEditorViewToScenario();
+	}
+	return bLoaded;
 }
 
 void AScenarioEditorController::NewScenarioDraft()
@@ -851,6 +974,7 @@ void AScenarioEditorController::NewScenarioDraft()
 	if (UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
 	{
 		authoringSubsystem->NewDraft();
+		RequestFitEditorViewToScenario();
 	}
 }
 
@@ -1003,6 +1127,7 @@ UPlatformRootWidget* AScenarioEditorController::ShowPlatformRootWidget()
 void AScenarioEditorController::RemovePlatformRootWidget()
 {
 	RemoveEditorRootWidget();
+	bPlatformRootScenarioEditorActive = false;
 
 	if (IsValid(PlatformRootWidget))
 	{
@@ -1049,7 +1174,12 @@ void AScenarioEditorController::ClearRegisteredEditorRootWidget(UScenarioEditorR
 
 void AScenarioEditorController::HandlePlatformRootScreenChanged(const EPlatformRootScreen screen)
 {
-	if (screen == EPlatformRootScreen::ScenarioEditor)
+	const bool bIsScenarioEditorScreen = screen == EPlatformRootScreen::ScenarioEditor;
+	const bool bEnteredScenarioEditorScreen =
+		bIsScenarioEditorScreen && !bPlatformRootScenarioEditorActive;
+	bPlatformRootScenarioEditorActive = bIsScenarioEditorScreen;
+
+	if (bIsScenarioEditorScreen)
 	{
 		if (!IsValid(EditorRootWidget))
 		{
@@ -1058,6 +1188,10 @@ void AScenarioEditorController::HandlePlatformRootScreenChanged(const EPlatformR
 		if (IsValid(EditorRootWidget))
 		{
 			ShowRouteMarkerOverlayWidget(EditorRootWidget.Get());
+		}
+		if (bEnteredScenarioEditorScreen)
+		{
+			RequestFitEditorViewToScenario();
 		}
 		return;
 	}

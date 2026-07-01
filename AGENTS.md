@@ -30,3 +30,4 @@
 
 ## Skill Routing
 - UE5, Unreal, C++, Blueprint, UMG, module dependency, packaging, PIE, runtime log, or Unreal asset workflow: use `.agents/skills/ue5-dev/SKILL.md`
+- UMG/WBP ownership, Platform widget boundary, or widget C++ fallback/layout risk: also use `.agents/skills/ue5-widget-boundary/SKILL.md`

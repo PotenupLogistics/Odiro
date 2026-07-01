@@ -360,6 +360,10 @@ public:
 
 	void GetEditorPlacementIgnoredActors(TArray<AActor*>& outActors) const;
 
+	// Resolves editor viewport fit bounds from corridor, authored objects, and scenario marker anchors.
+	bool TryResolveScenarioEditorViewportMapBounds(
+		FScenarioMapBounds& outBounds) const;
+
 	// 현재 Editor Preview Surface만 기준으로 촬영용 Map Bounds를 계산한다.
 	bool TryResolveScenarioPreviewMapBounds(
 		FScenarioMapBounds& outBounds) const;

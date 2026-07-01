@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.agents.common.llm_json_client import AgentLlmClient, AgentLlmJsonClient
-from app.agents.common.spec_context_loader import SpecContextLoader
+from app.agents.common.spec_context_loader import SCENARIO_GENERATION_SPEC_CONTEXT_ALLOWLIST, SpecContextLoader
 from app.core.settings import Settings
 from app.agents.scenario_generation_v2.intent_parser import IntentParser, ScenarioIntent
 from app.agents.scenario_generation_v2.repair_diagnostics import RepairDiagnosticCollector
@@ -248,9 +248,10 @@ class ScenarioGenerationV2Agent:
                 self._read_prompt("template_writer_prompt.md"),
                 self._spec_context_prompt_block(),
                 "Project Scenario schema version 1 JSON 객체만 생성한다.",
-                "필수 root: schema, version, scenario_id, intent, corridor, obstacles, pedestrians, robot.",
-                "금지: template_id, template_path, current_template, sample_count, episode_count, base_seed, experiment_id, run_id, ground_model, static_obstacles, pedestrians.path.",
-                "surface/prop/persona/encounter type은 catalog 허용값만 사용한다.",
+                "필수 root: schema, version, scenario_id, intent, corridor, robot.",
+                "선택 root: obstacles. 정적 장애물이 없으면 obstacles root를 생략한다.",
+                "금지: pedestrians, template_id, template_path, current_template, sample_count, episode_count, base_seed, experiment_id, run_id, ground_model, static_obstacles.",
+                "surface/prop은 SPEC_CONTEXT의 scenario.json.md와 environment-catalog.md 허용값만 사용한다.",
                 f"사용자 prompt:\n{prompt}",
             ]
         )
@@ -270,7 +271,7 @@ class ScenarioGenerationV2Agent:
     def _spec_context_prompt_block(self) -> str:
         """Load v2 Agent spec context lazily for LLM-only prompt paths."""
         if self.spec_context_loader is None:
-            self.spec_context_loader = SpecContextLoader()
+            self.spec_context_loader = SpecContextLoader(allowlist=SCENARIO_GENERATION_SPEC_CONTEXT_ALLOWLIST)
         return self.spec_context_loader.build_prompt_block()
 
     def _read_prompt(self, filename: str) -> str:
@@ -297,7 +298,8 @@ class ScenarioGenerationV2Agent:
 
     def _postprocess_base_scenario_for_intent(self, scenario: dict, intent: ScenarioIntent) -> dict:
         """Apply prompt-specific corrections that are independent of optional presets."""
-        self._apply_alpha_pedestrian_policy(scenario)
+        self._remove_unimplemented_pedestrians(scenario)
+        self._normalize_authoring_contract(scenario)
         self._prefer_corridor_pose_robot_anchors(scenario)
         self._apply_requested_obstacle_sequence(scenario, intent)
         if intent.robot_anchor_only:
@@ -310,6 +312,8 @@ class ScenarioGenerationV2Agent:
             placements = obstacles.get("placements")
             if isinstance(placements, list) and len(placements) > 2:
                 obstacles["placements"] = self._first_gate_pair(placements)
+        self._remove_empty_optional_obstacles(scenario)
+        self._sanitize_external_intent_text(scenario)
         return scenario
 
     def _apply_requested_obstacle_sequence(self, scenario: dict, intent: ScenarioIntent) -> None:
@@ -332,7 +336,7 @@ class ScenarioGenerationV2Agent:
         seen_ids: set[str] = set()
         for index in range(desired_count):
             placement = deepcopy(placements[index]) if index < len(placements) and isinstance(placements[index], dict) else deepcopy(placement_template)
-            placement["kind"] = placement.get("kind") if placement.get("kind") in {"fixed", "pattern"} else "fixed"
+            placement["kind"] = "fixed"
             placement["id"] = self._requested_obstacle_id(placement, index, seen_ids)
             seen_ids.add(placement["id"])
             placement["prop"] = intent.requested_props[index % len(intent.requested_props)]
@@ -408,7 +412,9 @@ class ScenarioGenerationV2Agent:
 
     def _preset_has_blocking_contract_issue(self, preset: dict[str, Any]) -> bool:
         """Return whether a loaded preset has catalog or root fields that must fallback."""
-        if any(field in preset for field in FORBIDDEN_ROOT_FIELDS):
+        repairable_legacy_roots = {"pedestrians"}
+        blocking_roots = FORBIDDEN_ROOT_FIELDS - repairable_legacy_roots
+        if any(field in preset for field in blocking_roots):
             return True
         obstacles = preset.get("obstacles")
         if not isinstance(obstacles, dict):
@@ -423,16 +429,72 @@ class ScenarioGenerationV2Agent:
         if not isinstance(placement, dict):
             return False
         kind = placement.get("kind")
-        if kind not in {"fixed", "pattern"}:
-            return False
+        if kind != "fixed":
+            return True
         prop = placement.get("prop")
         return not isinstance(prop, str) or (
             prop not in ALLOWED_PROPS and prop not in LEGACY_STATIC_OBSTACLE_PROP_ALIASES
         )
 
-    def _apply_alpha_pedestrian_policy(self, scenario: dict) -> None:
-        """Keep pedestrian generation out of the external alpha scenario body."""
-        scenario["pedestrians"] = {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    def _remove_unimplemented_pedestrians(self, scenario: dict) -> None:
+        """Remove the unimplemented pedestrian authoring root from external scenario output."""
+        scenario.pop("pedestrians", None)
+
+    def _sanitize_external_intent_text(self, scenario: dict) -> None:
+        """Replace root intent wording that conflicts with omitted public roots."""
+        intent_text = scenario.get("intent")
+        if not isinstance(intent_text, str):
+            return
+        obstacles = scenario.get("obstacles")
+        placements = obstacles.get("placements") if isinstance(obstacles, dict) else []
+        has_obstacles = isinstance(placements, list) and bool(placements)
+        pedestrian_terms = ("보행자", "pedestrian", "횡단 보행자")
+        obstacle_terms = ("장애물", "obstacle")
+        needs_replacement = any(term in intent_text for term in pedestrian_terms) or (
+            not has_obstacles and any(term in intent_text for term in obstacle_terms)
+        )
+        if not needs_replacement:
+            return
+        scenario["intent"] = (
+            "건물 측 보행로와 차도 측 영역이 있는 도심 보도에서 "
+            "로봇이 고정 장애물을 고려해 목적지까지 이동하는지 검증한다."
+            if has_obstacles
+            else "건물 측 보행로와 차도 측 영역이 있는 도심 보도에서 "
+            "로봇이 목적지까지 이동하는 기본 주행을 검증한다."
+        )
+
+    def _normalize_authoring_contract(self, scenario: dict) -> None:
+        """Normalize authoring fields that are intentionally narrower than legacy presets."""
+        corridor = scenario.get("corridor")
+        if isinstance(corridor, dict):
+            for side_name, surface in (("building_side", "building"), ("curb_side", "road")):
+                side = corridor.get(side_name)
+                if isinstance(side, list):
+                    for entry in side:
+                        if isinstance(entry, dict):
+                            entry["surface"] = surface
+            segments = corridor.get("segments")
+            if isinstance(segments, list):
+                for segment in segments:
+                    if isinstance(segment, dict):
+                        segment["type"] = "straight"
+        obstacles = scenario.get("obstacles")
+        if isinstance(obstacles, dict):
+            placements = obstacles.get("placements")
+            if isinstance(placements, list):
+                for placement in placements:
+                    if isinstance(placement, dict):
+                        placement["kind"] = "fixed"
+
+    def _remove_empty_optional_obstacles(self, scenario: dict) -> None:
+        """Omit optional obstacles when no placements remain."""
+        obstacles = scenario.get("obstacles")
+        if not isinstance(obstacles, dict):
+            scenario.pop("obstacles", None)
+            return
+        placements = obstacles.get("placements")
+        if not isinstance(placements, list) or not placements:
+            scenario.pop("obstacles", None)
 
     def _prefer_corridor_pose_robot_anchors(self, scenario: dict) -> None:
         """Replace abstract default robot anchors with UE-friendly corridor poses when possible."""

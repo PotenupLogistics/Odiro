@@ -25,8 +25,11 @@ class _FakeSpecContextLoader:
                 "<SPEC_CONTEXT>",
                 "# SPEC FILE: docs/specs/simulation-interface.md",
                 "scenario context",
+                "# SPEC FILE: Client/Json/Schema/scenario.json.md",
+                "Project Scenario authoring contract",
                 "# SPEC FILE: Client/Json/environment-catalog.md",
-                "Prop Bounding Boxes",
+                "## Props",
+                "bounding box를 직접 작성하지 않는다",
                 "</SPEC_CONTEXT>",
             ]
         )
@@ -54,8 +57,10 @@ def test_scenario_template_prompt_includes_spec_context() -> None:
     assert "공식 문서 우선 적용 안내" in prompt
     assert "<SPEC_CONTEXT>" in prompt
     assert "# SPEC FILE: docs/specs/simulation-interface.md" in prompt
+    assert "# SPEC FILE: Client/Json/Schema/scenario.json.md" in prompt
     assert "# SPEC FILE: Client/Json/environment-catalog.md" in prompt
-    assert "Prop Bounding Boxes" in prompt
+    assert "## Props" in prompt
+    assert "bounding box를 직접 작성하지 않는다" in prompt
     assert "</SPEC_CONTEXT>" in prompt
     assert "사용자 prompt:\n좁은 보도에서 대향 보행자" in prompt
     assert loader.calls == 1
@@ -74,6 +79,18 @@ def test_scenario_template_prompt_uses_catalog_prop_examples() -> None:
     assert prompt_prop_ids <= _catalog_prop_ids()
 
 
+def test_scenario_template_prompt_excludes_project_runtime_spec_context() -> None:
+    agent = ScenarioGenerationV2Agent(settings=Settings(_env_file=None, v2AgentLlmEnabled=True))
+
+    prompt = agent._template_user_prompt("도심 보도에서 정적 장애물")
+
+    assert "# SPEC FILE: Client/Json/Schema/scenario.json.md" in prompt
+    assert "# SPEC FILE: Client/Json/environment-catalog.md" in prompt
+    assert "# SPEC FILE: contracts/specs/user-project-data.md" not in prompt
+    assert "pedestrians.encounters[].type" not in prompt
+    assert "Project Scenario의 `pedestrians`" not in prompt
+
+
 def test_scenario_repair_prompt_includes_spec_context() -> None:
     loader = _FakeSpecContextLoader()
     agent = ScenarioGenerationV2Agent(
@@ -89,8 +106,10 @@ def test_scenario_repair_prompt_includes_spec_context() -> None:
 
     assert "<SPEC_CONTEXT>" in prompt
     assert "# SPEC FILE: docs/specs/simulation-interface.md" in prompt
+    assert "# SPEC FILE: Client/Json/Schema/scenario.json.md" in prompt
     assert "# SPEC FILE: Client/Json/environment-catalog.md" in prompt
-    assert "Prop Bounding Boxes" in prompt
+    assert "## Props" in prompt
+    assert "bounding box를 직접 작성하지 않는다" in prompt
     assert "검증 결과:" in prompt
     assert "수정 대상 JSON:" in prompt
     assert loader.calls == 1
@@ -109,10 +128,8 @@ def test_scenario_deterministic_path_does_not_load_spec_context() -> None:
 
 
 def test_result_analysis_prompt_includes_spec_context() -> None:
-    loader = _FakeSpecContextLoader()
     agent = ResultAnalysisV2Agent(
         settings=Settings(_env_file=None, v2AgentLlmEnabled=True),
-        spec_context_loader=loader,
     )
 
     prompt = agent._analysis_user_prompt({"summary": {"overall_judgement": "change_recommended"}})
@@ -120,11 +137,12 @@ def test_result_analysis_prompt_includes_spec_context() -> None:
     assert "공식 문서 우선 적용 안내" in prompt
     assert "<SPEC_CONTEXT>" in prompt
     assert "# SPEC FILE: docs/specs/simulation-interface.md" in prompt
+    assert "# SPEC FILE: Client/Json/Schema/scenario.json.md" not in prompt
     assert "# SPEC FILE: Client/Json/environment-catalog.md" in prompt
-    assert "Prop Bounding Boxes" in prompt
+    assert "## Props" in prompt
+    assert "bounding box를 직접 작성하지 않는다" in prompt
     assert "</SPEC_CONTEXT>" in prompt
     assert '"overall_judgement": "change_recommended"' in prompt
-    assert loader.calls == 1
 
 
 def test_result_analysis_prompt_does_not_request_full_raw_jsonl() -> None:

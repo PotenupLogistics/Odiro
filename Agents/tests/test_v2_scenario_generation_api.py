@@ -105,7 +105,7 @@ class _InvalidScenarioPresetLoader:
                 "corridor": {
                     "axis": {"type": "polyline", "points_m": [[0.0, 0.0], [4.0, 0.0]]},
                     "walkway_width_m": 3.0,
-                    "building_side": [{"surface": "wall", "width_m": 0.5}],
+                    "building_side": [{"surface": "building", "width_m": 0.5}],
                     "curb_side": [{"surface": "road", "width_m": 4.0}],
                     "segments": [{"id": "main", "type": "straight", "along_range_m": [0.0, 4.0]}],
                 },
@@ -121,7 +121,6 @@ class _InvalidScenarioPresetLoader:
                         }
                     ],
                 },
-                "pedestrians": {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []},
                 "robot": {
                     "start": {
                         "type": "corridor_pose",
@@ -174,19 +173,15 @@ def _llm_scenario(scenario_id: str = "llm_narrow_sidewalk") -> dict:
         "corridor": {
             "axis": {"type": "polyline", "points_m": [[0.0, 0.0], [18.0, 0.0]]},
             "walkway_width_m": {"min": 1.4, "max": 1.8},
-            "building_side": [{"surface": "wall", "width_m": 0.3}],
+            "building_side": [{"surface": "building", "width_m": 0.3}],
             "curb_side": [{"surface": "road", "width_m": 4.0}],
             "segments": [
                 {"id": "approach", "type": "straight", "along_range_m": [0.0, 5.0]},
-                {"id": "conflict", "type": "narrowing", "along_range_m": [5.0, 11.0]},
+                {"id": "conflict", "type": "straight", "along_range_m": [5.0, 11.0]},
                 {"id": "exit", "type": "straight", "along_range_m": [11.0, 18.0]},
             ],
         },
         "obstacles": {"min_clear_width_m": 0.9, "placements": []},
-        "pedestrians": {
-            "background": {"count": 0, "speed_mps": 1.0},
-            "encounters": [],
-        },
         "robot": {
             "start": {
                 "type": "corridor_pose",
@@ -223,14 +218,28 @@ def _llm_scenario_with_obstacle(scenario_id: str = "llm_narrow_sidewalk") -> dic
     return scenario
 
 
+def _ensure_obstacles(scenario: dict) -> dict:
+    """Add optional obstacles root for validator mutation tests."""
+    return scenario.setdefault("obstacles", {"min_clear_width_m": 0.9, "placements": []})
+
+
+def _fixed_placement() -> dict:
+    """Return a valid fixed placement anchored to the default conflict segment."""
+    return {
+        "kind": "fixed",
+        "id": "center_obstacle",
+        "prop": "obstacle.road_cone_01",
+        "at": {"segment": "conflict", "along_m": 7.0, "offset_m": 0.0, "lane": "center"},
+        "yaw_deg": 0,
+    }
+
+
 def _assert_raw_scenario(payload: dict) -> None:
     assert payload["schema"] == "scenario"
     assert payload["version"] == 1
     assert payload["scenario_id"]
     assert payload["intent"]
     assert "corridor" in payload
-    assert "obstacles" in payload
-    assert "pedestrians" in payload
     assert "robot" in payload
     wrapper_fields = {
         "status",
@@ -244,9 +253,18 @@ def _assert_raw_scenario(payload: dict) -> None:
         "repair_events",
     }
     assert wrapper_fields.isdisjoint(payload)
-    legacy_fields = {"ground_model", "static_obstacles"}
+    legacy_fields = {"ground_model", "static_obstacles", "template_id", "scenario_template", "pedestrians"}
     assert legacy_fields.isdisjoint(payload)
-    assert "path" not in payload["pedestrians"]
+    if "obstacles" in payload:
+        assert "placements" in payload["obstacles"]
+        for placement in payload["obstacles"]["placements"]:
+            assert placement["kind"] == "fixed"
+            assert "segment" not in placement
+            assert {"segment", "along_m", "offset_m", "lane"} <= set(placement["at"])
+    for segment in payload["corridor"]["segments"]:
+        assert segment["type"] == "straight"
+    assert all(item["surface"] == "building" for item in payload["corridor"]["building_side"])
+    assert all(item["surface"] == "road" for item in payload["corridor"]["curb_side"])
 
 
 def _assert_alpha_static_scenario_contract(payload: dict) -> None:
@@ -259,8 +277,8 @@ def _assert_alpha_static_scenario_contract(payload: dict) -> None:
     assert len(payload["corridor"]["axis"]["points_m"]) >= 2
     assert payload["corridor"]["walkway_width_m"]
     assert payload["corridor"]["segments"]
-    assert payload["pedestrians"]["background"]["count"] == 0
-    assert payload["pedestrians"]["encounters"] == []
+    assert "pedestrians" not in payload
+    assert "obstacles" in payload
     for placement in payload["obstacles"]["placements"]:
         assert "segment" not in placement
         assert {"segment", "along_m", "offset_m", "lane"} <= set(placement["at"])
@@ -283,7 +301,7 @@ def _assert_curved_road_scenario_contract(payload: dict, *, expect_obstacle: boo
         assert anchor["segment"] in segment_ranges
         start_m, end_m = segment_ranges[anchor["segment"]]
         assert start_m <= anchor["along_m"] <= end_m
-    placements = payload["obstacles"]["placements"]
+    placements = payload.get("obstacles", {}).get("placements", [])
     assert bool(placements) is expect_obstacle
     for placement in placements:
         segment = placement["at"]["segment"]
@@ -294,7 +312,7 @@ def _assert_curved_road_scenario_contract(payload: dict, *, expect_obstacle: boo
             assert start_m <= along_m["min"] <= along_m["max"] <= end_m
         else:
             assert start_m <= along_m <= end_m
-    assert payload["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    assert "pedestrians" not in payload
 
 
 def _axis_path_length(points: list[list[float]]) -> float:
@@ -393,9 +411,10 @@ def _assert_scenario_quality_guardrails(
         assert float(start_m) <= float(anchor["along_m"]) <= float(end_m)
         assert anchor.get("lane") in ALLOWED_LANES
 
-    placements = payload["obstacles"]["placements"]
+    obstacles = payload.get("obstacles")
+    placements = obstacles.get("placements", []) if isinstance(obstacles, dict) else []
     walkway_width_m = _min_numeric_value(corridor["walkway_width_m"])
-    min_clear_width_m = _max_numeric_value(payload["obstacles"].get("min_clear_width_m"))
+    min_clear_width_m = _max_numeric_value(obstacles.get("min_clear_width_m")) if isinstance(obstacles, dict) else None
     for placement in placements:
         assert placement["prop"] in allowed_props
         at = placement["at"]
@@ -468,7 +487,7 @@ def _assert_complex_g_shape_construction_scenario(payload: dict) -> None:
     assert "pre_corner_construction" in segment_by_id
     assert "turn_and_exit" in segment_by_id
     pre_corner = segment_by_id["pre_corner_construction"]
-    assert pre_corner["type"] == "narrowing"
+    assert pre_corner["type"] == "straight"
     pre_corner_range = pre_corner["along_range_m"]
     assert 6.5 <= float(pre_corner_range[0]) <= 7.5
     assert 9.5 <= float(pre_corner_range[1]) <= 10.5
@@ -493,11 +512,11 @@ def _assert_complex_g_shape_construction_scenario(payload: dict) -> None:
     assert any(offset < 0 for offset in offsets)
     assert any(offset > 0 for offset in offsets)
 
-    assert payload["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    assert "pedestrians" not in payload
 
 
 def _add_valid_encounter(scenario: dict) -> dict:
-    """Attach one valid pedestrian encounter for validator-specific tests."""
+    """Attach one legacy pedestrian encounter for forbidden-root validator tests."""
     encounter = {
         "id": "main_conflict",
         "type": "oncoming_pass",
@@ -509,6 +528,7 @@ def _add_valid_encounter(scenario: dict) -> dict:
             "awareness_horizon_s": {"min": 1.5, "max": 2.5},
         },
     }
+    scenario.setdefault("pedestrians", {"background": {"count": 0}, "encounters": []})
     scenario["pedestrians"]["encounters"] = [encounter]
     return encounter
 
@@ -709,7 +729,6 @@ def test_v2_scenario_schema_includes_validator_required_shape() -> None:
         "intent",
         "corridor",
         "obstacles",
-        "pedestrians",
         "robot",
     }
     assert schema["properties"]["schema"]["const"] == "scenario"
@@ -717,10 +736,11 @@ def test_v2_scenario_schema_includes_validator_required_shape() -> None:
     corridor = schema["properties"]["corridor"]
     assert {"axis", "walkway_width_m", "building_side", "curb_side", "segments"} <= set(corridor["required"])
     assert corridor["properties"]["axis"]["properties"]["type"]["const"] == "polyline"
-    assert "placements" in schema["properties"]["obstacles"]["required"]
-    encounter = schema["properties"]["pedestrians"]["properties"]["encounters"]["items"]
-    assert set(encounter["properties"]["type"]["enum"]) >= {"oncoming_pass", "cross_path"}
-    assert set(encounter["properties"]["persona"]["enum"]) >= {"normal", "assertive"}
+    assert "pedestrians" not in schema["properties"]
+    obstacles_variants = schema["properties"]["obstacles"]["anyOf"]
+    obstacle_schema = next(variant for variant in obstacles_variants if variant.get("type") == "object")
+    assert "placements" in obstacle_schema["required"]
+    assert {"type": "null"} in obstacles_variants
     assert {"start", "goal"} <= set(schema["properties"]["robot"]["required"])
 
 
@@ -730,10 +750,8 @@ def test_v2_scenario_contract_accepts_corridor_pose_and_fixed_numbers() -> None:
     scenario = response.scenario
     assert scenario is not None
     scenario["corridor"]["walkway_width_m"] = 1.6
-    scenario["obstacles"]["min_clear_width_m"] = 0.95
-    scenario["pedestrians"]["background"]["count"] = 1
-    scenario["pedestrians"]["background"]["speed_mps"] = 1.0
-    scenario["pedestrians"]["background"]["spawn_zone"] = {"segments": ["approach", "exit"]}
+    obstacles = _ensure_obstacles(scenario)
+    obstacles["min_clear_width_m"] = 0.95
     scenario["robot"]["start"] = {
         "type": "corridor_pose",
         "segment": "approach",
@@ -750,14 +768,7 @@ def test_v2_scenario_contract_accepts_corridor_pose_and_fixed_numbers() -> None:
         "lane": "walkway",
         "heading": "auto",
     }
-    encounter = _add_valid_encounter(scenario)
-    encounter["overrides"] = {
-        "cooperation": {"min": 0.15, "max": 0.4},
-        "personal_space_m": {"min": 0.6, "max": 0.9},
-        "awareness_horizon_s": 2.0,
-    }
-    encounter["meet_offset_m"] = {"min": -0.1, "max": 0.1}
-    scenario["obstacles"]["placements"] = [
+    obstacles["placements"] = [
         {
             "kind": "fixed",
             "id": "center_obstacle",
@@ -790,14 +801,12 @@ def test_v2_scenario_contract_rejects_invalid_corridor_pose_and_spawn_zone() -> 
         "along_m": 99.0,
         "offset_m": 0.0,
     }
-    scenario["pedestrians"]["background"]["spawn_zone"] = {"segments": ["missing"]}
 
     validation = agent.validator.validate(scenario)
 
     assert validation.valid is False
     fields = {issue.field for issue in validation.errors}
     assert "robot.goal.segment" in fields
-    assert "pedestrians.background.spawn_zone.segments[0]" in fields
 
 
 def test_v2_scenario_contract_rejects_corridor_pose_along_out_of_range() -> None:
@@ -830,6 +839,52 @@ def test_v2_scenario_contract_accepts_abstract_robot_anchors() -> None:
 
     assert validation.valid is True
     assert validation.errors == []
+
+
+def test_v2_scenario_contract_rejects_pedestrians_and_non_fixed_placements() -> None:
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+    response = agent.generate(ScenarioGenerateV2Request(prompt="좁은 보도에 장애물이 있는 시나리오"))
+    scenario = response.scenario
+    assert scenario is not None
+    scenario["pedestrians"] = {"background": {"count": 0}, "encounters": []}
+    scenario["obstacles"]["placements"][0]["kind"] = "pattern"
+
+    validation = agent.validator.validate(scenario)
+
+    assert validation.valid is False
+    fields = {issue.field for issue in validation.errors}
+    assert "pedestrians" in fields
+    assert "obstacles.placements[0].kind" in fields
+
+
+def test_v2_deterministic_no_obstacle_prompt_omits_optional_obstacles_and_pedestrians() -> None:
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="장애물 없는 12m 직선 보도 시나리오를 만들어줘"))
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    assert not any(term in response.scenario["intent"] for term in ("보행자", "pedestrian", "횡단 보행자"))
+    assert "장애물" not in response.scenario["intent"]
+    assert "obstacles" not in response.scenario
+    assert "pedestrians" not in response.scenario
+
+
+def test_v2_deterministic_basic_sidewalk_intent_omits_pedestrian_wording() -> None:
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(
+            prompt="도심 보도에서 로봇이 건물 쪽 보행로를 따라 목적지까지 이동하는 기본 시나리오를 만들어줘. 장애물은 없어도 돼."
+        )
+    )
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    assert not any(term in response.scenario["intent"] for term in ("보행자", "pedestrian", "횡단 보행자"))
+    assert "장애물" not in response.scenario["intent"]
+    assert "obstacles" not in response.scenario
+    assert "pedestrians" not in response.scenario
 
 
 def test_v2_scenario_contract_rejects_mixed_abstract_robot_anchors() -> None:
@@ -918,24 +973,14 @@ def test_v2_scenario_structured_schema_allows_contract_extensions() -> None:
 
     walkway_width = schema["properties"]["corridor"]["properties"]["walkway_width_m"]
     assert {"type": "number"} in walkway_width["anyOf"]
-    placement = schema["properties"]["obstacles"]["properties"]["placements"]["items"]
+    obstacles_variants = schema["properties"]["obstacles"]["anyOf"]
+    obstacle_schema = next(variant for variant in obstacles_variants if variant.get("type") == "object")
+    placement = obstacle_schema["properties"]["placements"]["items"]
     assert "allow_blocking" in placement["required"]
     assert "allow_blocking" in placement["properties"]
-    assert set(placement["properties"]["kind"]["enum"]) >= {"fixed", "pattern", "scatter"}
-    assert {"pattern", "zone", "density_per_10m", "palette"} <= set(placement["properties"])
-    background = schema["properties"]["pedestrians"]["properties"]["background"]
-    assert "spawn_zone" in background["required"]
-    assert "spawn_zone" in background["properties"]
-    encounter = schema["properties"]["pedestrians"]["properties"]["encounters"]["items"]
-    override_keys = encounter["properties"]["overrides"]["properties"]
-    assert {
-        "cooperation",
-        "evasiveness",
-        "personal_space_m",
-        "awareness_horizon_s",
-        "max_yield_wait_s",
-        "sidestep_distance_m",
-    } <= set(override_keys)
+    assert placement["properties"]["kind"]["enum"] == ["fixed"]
+    assert {"pattern", "zone", "density_per_10m", "palette"}.isdisjoint(placement["properties"])
+    assert "pedestrians" not in schema["properties"]
     robot_anchor = schema["properties"]["robot"]["properties"]["goal"]
     robot_anchor_variants = robot_anchor["anyOf"]
     assert {"entry", "exit", "corridor_pose"} == {variant["properties"]["type"]["const"] for variant in robot_anchor_variants}
@@ -959,10 +1004,9 @@ def test_v2_repair_handler_removes_nullable_structured_output_fields() -> None:
         "lane": None,
         "heading": None,
     }
-    scenario["pedestrians"]["background"]["spawn_zone"] = None
-    encounter = _add_valid_encounter(scenario)
-    encounter["overrides"]["cooperation"] = None
-    scenario["obstacles"]["placements"] = [
+    scenario["pedestrians"] = {"background": {"count": 0}, "encounters": []}
+    obstacles = _ensure_obstacles(scenario)
+    obstacles["placements"] = [
         {
             "kind": "fixed",
             "id": "center_obstacle",
@@ -981,43 +1025,23 @@ def test_v2_repair_handler_removes_nullable_structured_output_fields() -> None:
     repaired = agent.repair_handler.repair(scenario)
 
     assert repaired["robot"]["start"] == {"type": "entry"}
-    assert "spawn_zone" not in repaired["pedestrians"]["background"]
-    assert "cooperation" not in repaired["pedestrians"]["encounters"][0]["overrides"]
+    assert "pedestrians" not in repaired
     assert "allow_blocking" not in repaired["obstacles"]["placements"][0]
 
 
-def test_v2_scenario_contract_accepts_pattern_and_scatter_placements() -> None:
+def test_v2_scenario_contract_accepts_fixed_placement_only() -> None:
     agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
     response = agent.generate(ScenarioGenerateV2Request(prompt="좁은 보도에서 대향 보행자"))
     scenario = response.scenario
     assert scenario is not None
-    scenario["obstacles"]["placements"] = [
+    obstacles = _ensure_obstacles(scenario)
+    obstacles["placements"] = [
         {
             "kind": "fixed",
             "id": "center_obstacle",
             "prop": "obstacle.road_cone_01",
             "at": {"segment": "conflict", "along_m": 7.0, "offset_m": 0.0, "lane": "center"},
             "yaw_deg": {"min": -5.0, "max": 5.0},
-            "allow_blocking": False,
-        },
-        {
-            "kind": "pattern",
-            "id": "gate_obstacles",
-            "pattern": "gate",
-            "prop": "obstacle.road_cone_01",
-            "at": {"segment": "conflict", "along_m": 7.0, "offset_m": 0.0, "lane": "across"},
-            "count": {"min": 2, "max": 3},
-            "spacing_m": 0.6,
-            "gap_width_m": {"min": 0.8, "max": 1.0},
-            "yaw_deg": 0,
-            "allow_blocking": False,
-        },
-        {
-            "kind": "scatter",
-            "id": "random_small_obstacles",
-            "zone": {"segments": ["approach", "conflict"], "lanes": ["center"]},
-            "density_per_10m": {"min": 0.5, "max": 1.0},
-            "palette": {"categories": ["small_obstacle"], "classes": ["obstacle.road_cone_01"]},
             "allow_blocking": False,
         },
     ]
@@ -1033,7 +1057,8 @@ def test_v2_scenario_contract_rejects_invalid_pattern_and_scatter_placements() -
     response = agent.generate(ScenarioGenerateV2Request(prompt="좁은 보도에서 대향 보행자"))
     scenario = response.scenario
     assert scenario is not None
-    scenario["obstacles"]["placements"] = [
+    obstacles = _ensure_obstacles(scenario)
+    obstacles["placements"] = [
         {
             "kind": "pattern",
             "id": "bad_pattern",
@@ -1051,10 +1076,8 @@ def test_v2_scenario_contract_rejects_invalid_pattern_and_scatter_placements() -
 
     assert validation.valid is False
     fields = {issue.field for issue in validation.errors}
-    assert "obstacles.placements[0].prop" in fields
-    assert "obstacles.placements[0].at.segment" in fields
-    assert "obstacles.placements[1].density_per_10m" in fields
-    assert "obstacles.placements[1].zone.segments[0]" in fields
+    assert "obstacles.placements[0].kind" in fields
+    assert "obstacles.placements[1].kind" in fields
 
 
 def test_v2_scenario_contract_rejects_direct_obstacle_segment() -> None:
@@ -1086,21 +1109,12 @@ def test_v2_scenario_contract_accepts_all_unreal_override_keys_and_optional_meet
     response = agent.generate(ScenarioGenerateV2Request(prompt="좁은 보도에서 대향 보행자"))
     scenario = response.scenario
     assert scenario is not None
-    encounter = _add_valid_encounter(scenario)
-    encounter.pop("meet_offset_m", None)
-    encounter["overrides"] = {
-        "cooperation": {"min": 0.15, "max": 0.4},
-        "evasiveness": {"min": 0.2, "max": 0.5},
-        "personal_space_m": {"min": 0.6, "max": 0.9},
-        "awareness_horizon_s": {"min": 1.5, "max": 2.5},
-        "max_yield_wait_s": 2.0,
-        "sidestep_distance_m": 0.4,
-    }
+    scenario["pedestrians"] = {"background": {"count": 0}, "encounters": []}
 
     validation = agent.validator.validate(scenario)
 
-    assert validation.valid is True
-    assert validation.errors == []
+    assert validation.valid is False
+    assert "pedestrians" in {issue.field for issue in validation.errors}
 
 
 def test_v2_scenario_contract_accepts_segment_replaced_by_string_or_choices() -> None:
@@ -1123,7 +1137,8 @@ def test_v2_scenario_contract_rejects_choices_for_catalog_strings() -> None:
     scenario = response.scenario
     assert scenario is not None
     scenario["corridor"]["building_side"][0]["surface"] = {"choices": ["grass", "road"]}
-    scenario["obstacles"]["placements"] = [
+    obstacles = _ensure_obstacles(scenario)
+    obstacles["placements"] = [
         {
             "kind": "fixed",
             "id": "center_obstacle",
@@ -1131,9 +1146,7 @@ def test_v2_scenario_contract_rejects_choices_for_catalog_strings() -> None:
             "at": {"segment": "conflict", "along_m": 7.0, "offset_m": 0.0, "lane": {"choices": ["center"]}},
         }
     ]
-    encounter = _add_valid_encounter(scenario)
-    encounter["persona"] = {"choices": ["assertive"]}
-    encounter["type"] = {"choices": ["oncoming_pass"]}
+    scenario["pedestrians"] = {"background": {"count": 0}, "encounters": []}
     scenario["robot"]["goal"] = {
         "type": "corridor_pose",
         "segment": "exit",
@@ -1149,8 +1162,7 @@ def test_v2_scenario_contract_rejects_choices_for_catalog_strings() -> None:
     assert "corridor.building_side[0].surface" in fields
     assert "obstacles.placements[0].prop" in fields
     assert "obstacles.placements[0].at.lane" in fields
-    assert "pedestrians.encounters[0].persona" in fields
-    assert "pedestrians.encounters[0].type" in fields
+    assert "pedestrians" in fields
     assert "robot.goal.heading" in fields
 
 
@@ -1261,13 +1273,13 @@ def test_v2_scenario_llm_prompt_includes_validator_required_template_shape() -> 
         '"walkway_width_m"',
         '"segments"',
         '"obstacles":',
-        '"placements": []',
-        '"pedestrians":',
-        '"encounters"',
+        '"placements":',
+        '"surface": "building"',
+        '"surface": "road"',
         '"robot":',
         '"type": "corridor_pose"',
         '"segment"',
-        "pedestrians.path",
+        "pedestrians root는 만들지 않는다",
         "robot.start_area",
         "robot.goal_area",
     ]
@@ -1407,7 +1419,7 @@ def test_v2_endpoint_curved_prompt_returns_patched_scenario_without_raw_preset_o
     assert response.status_code == 200, response.text
     payload = response.json()
     _assert_curved_road_scenario_contract(payload, expect_obstacle=False)
-    assert payload["obstacles"]["placements"] == []
+    assert "obstacles" not in payload
 
 
 def test_v2_deterministic_curved_prompt_without_obstacle_removes_preset_obstacles() -> None:
@@ -1418,7 +1430,7 @@ def test_v2_deterministic_curved_prompt_without_obstacle_removes_preset_obstacle
 
     assert response.scenario is not None
     _assert_curved_road_scenario_contract(response.scenario, expect_obstacle=False)
-    assert response.scenario["obstacles"]["placements"] == []
+    assert "obstacles" not in response.scenario
 
 
 def test_v2_deterministic_curved_no_obstacle_prompt_overrides_preset_obstacles() -> None:
@@ -1429,7 +1441,7 @@ def test_v2_deterministic_curved_no_obstacle_prompt_overrides_preset_obstacles()
 
     assert response.scenario is not None
     _assert_curved_road_scenario_contract(response.scenario, expect_obstacle=False)
-    assert response.scenario["obstacles"]["placements"] == []
+    assert "obstacles" not in response.scenario
 
 
 def test_v2_deterministic_curved_obstacle_count_patches_preset_count() -> None:
@@ -1497,7 +1509,7 @@ def test_v2_deterministic_line_length_no_obstacle_phrase_overrides_default_obsta
     assert response.scenario is not None
     assert response.validation.valid is True
     scenario = response.scenario
-    assert scenario["obstacles"]["placements"] == []
+    assert "obstacles" not in scenario
     assert scenario["corridor"]["axis"]["points_m"][-1] == [10.0, 0.0]
     segment_ranges = {segment["id"]: segment["along_range_m"] for segment in scenario["corridor"]["segments"]}
     assert max(along_range[1] for along_range in segment_ranges.values()) == 10.0
@@ -1572,13 +1584,14 @@ def test_v2_endpoint_complex_long_s_curve_corner_prompt_preserves_obstacle_inten
     assert 30.0 <= _axis_path_length(points) <= 40.0
     assert _has_s_curve_shape(points)
     assert _has_late_corner_turn(points)
-    assert sum(1 for segment in payload["corridor"]["segments"] if segment["type"] == "narrowing") >= 2
+    target_segments = {"middle_construction", "pre_corner_conflict"}
+    assert target_segments <= {segment["id"] for segment in payload["corridor"]["segments"]}
 
     placements = payload["obstacles"]["placements"]
     assert len(placements) == 8
     assert {placement["prop"] for placement in placements} == {"obstacle.road_cone_01"}
     assert len({placement["at"]["segment"] for placement in placements}) >= 2
-    assert payload["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    assert "pedestrians" not in payload
 
 
 def test_v2_endpoint_complex_conflict_count_prompt_splits_cones_across_conflicts(monkeypatch) -> None:
@@ -1599,15 +1612,15 @@ def test_v2_endpoint_complex_conflict_count_prompt_splits_cones_across_conflicts
     assert _has_s_curve_shape(points)
     assert _has_late_corner_turn(points)
 
-    narrowing_segments = [segment["id"] for segment in payload["corridor"]["segments"] if segment["type"] == "narrowing"]
-    assert len(narrowing_segments) >= 2
+    conflict_segments = ["middle_construction", "pre_corner_conflict"]
+    assert set(conflict_segments) <= {segment["id"] for segment in payload["corridor"]["segments"]}
 
     placements = payload["obstacles"]["placements"]
     assert len(placements) == 8
     assert {placement["prop"] for placement in placements} == {"obstacle.road_cone_01"}
     placement_segments = {placement["at"]["segment"] for placement in placements}
-    assert len(placement_segments & set(narrowing_segments)) >= 2
-    assert payload["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    assert len(placement_segments & set(conflict_segments)) >= 2
+    assert "pedestrians" not in payload
 
 
 def test_v2_deterministic_g_shape_prompt_without_obstacles_builds_corner_corridor() -> None:
@@ -1622,7 +1635,7 @@ def test_v2_deterministic_g_shape_prompt_without_obstacles_builds_corner_corrido
     points = scenario["corridor"]["axis"]["points_m"]
     assert len(points) >= 3
     assert points != [[0.0, 0.0], [20.0, 0.0]]
-    assert scenario["obstacles"]["placements"] == []
+    assert "obstacles" not in scenario
 
 
 def test_v2_deterministic_s_curve_prompt_uses_s_curve_preset_skeleton() -> None:
@@ -1694,7 +1707,7 @@ def test_v2_missing_preset_curved_prompt_uses_intent_based_curved_fallback() -> 
     points = response.scenario["corridor"]["axis"]["points_m"]
     assert len(points) >= 3
     assert len({point[1] for point in points}) > 1
-    assert response.scenario["obstacles"]["placements"] == []
+    assert "obstacles" not in response.scenario
 
 
 def test_v2_missing_preset_length_prompt_uses_intent_based_10m_fallback() -> None:
@@ -1865,7 +1878,7 @@ def test_v2_deterministic_global_no_obstacle_prompt_stays_empty() -> None:
     assert response.validation.valid is True
     scenario = response.scenario
     _assert_scenario_quality_guardrails(scenario)
-    assert scenario["obstacles"]["placements"] == []
+    assert "obstacles" not in scenario
     _assert_no_catalog_metadata_leaked(scenario)
 
 
@@ -1974,7 +1987,7 @@ def test_v2_deterministic_pedestrian_alias_work_keeps_alpha_policy() -> None:
 
     assert response.scenario is not None
     assert response.validation.valid is True
-    assert response.scenario["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    assert "pedestrians" not in response.scenario
 
 
 def test_v2_missing_preset_unknown_prop_fallback_keeps_catalog_safe_output() -> None:
@@ -2052,7 +2065,7 @@ def test_v2_deterministic_straight_obstacle_prompt_keeps_safe_line_preset() -> N
     points = scenario["corridor"]["axis"]["points_m"]
     assert points == [[0.0, 0.0], [4.0, 0.0]]
     assert scenario["scenario_id"] == "demo_sidewalk_obstacle"
-    assert scenario["obstacles"]["placements"] == []
+    assert "obstacles" not in scenario
 
 
 def test_v2_deterministic_straight_obstacle_count_prompt_prioritizes_anchor_clearance() -> None:
@@ -2066,7 +2079,7 @@ def test_v2_deterministic_straight_obstacle_count_prompt_prioritizes_anchor_clea
     scenario = response.scenario
     _assert_scenario_quality_guardrails(scenario)
     assert scenario["corridor"]["axis"]["points_m"] == [[0.0, 0.0], [4.0, 0.0]]
-    assert scenario["obstacles"]["placements"] == []
+    assert "obstacles" not in scenario
 
 
 def test_v2_deterministic_pedestrian_prompt_keeps_alpha_pedestrians_empty() -> None:
@@ -2077,7 +2090,7 @@ def test_v2_deterministic_pedestrian_prompt_keeps_alpha_pedestrians_empty() -> N
     )
 
     assert response.scenario is not None
-    assert response.scenario["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    assert "pedestrians" not in response.scenario
 
 
 def test_v2_deterministic_gate_prompt_does_not_mark_obstacles_blocking_by_default() -> None:
@@ -2142,9 +2155,8 @@ def test_v2_deterministic_corridor_pose_only_prompt_minimizes_risk_elements() ->
         "lane": "center",
         "heading": "forward",
     }
-    assert scenario["obstacles"]["placements"] == []
-    assert scenario["pedestrians"]["background"]["count"] == 0
-    assert scenario["pedestrians"]["encounters"] == []
+    assert "obstacles" not in scenario
+    assert "pedestrians" not in scenario
     assert scenario["schema"] == "scenario"
     assert "scenario_id" in scenario
     assert "template_id" not in scenario
@@ -2209,6 +2221,7 @@ def test_v2_llm_gate_prompt_trims_duplicated_two_object_gate_pair() -> None:
 def test_v2_llm_corridor_pose_only_prompt_removes_unrequested_encounters() -> None:
     llm_scenario = _llm_scenario("llm_corridor_pose_with_extra_encounter")
     llm_scenario["obstacles"]["placements"] = []
+    llm_scenario["pedestrians"] = {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
     llm_scenario["pedestrians"]["background"]["count"] = {"min": 0, "max": 0}
     llm_scenario["pedestrians"]["encounters"] = [
         {
@@ -2253,9 +2266,8 @@ def test_v2_llm_corridor_pose_only_prompt_removes_unrequested_encounters() -> No
 
     assert response.scenario is not None
     scenario = response.scenario
-    assert scenario["obstacles"]["placements"] == []
-    assert scenario["pedestrians"]["background"]["count"] == 0
-    assert scenario["pedestrians"]["encounters"] == []
+    assert "obstacles" not in scenario
+    assert "pedestrians" not in scenario
     assert scenario["robot"]["start"]["type"] == "corridor_pose"
     assert scenario["robot"]["goal"]["type"] == "corridor_pose"
     _assert_raw_scenario(scenario)
@@ -2399,6 +2411,22 @@ def test_v2_scenario_agent_uses_llm_scenario_when_enabled() -> None:
     assert fake.calls[0]["response_name"] == "scenario"
 
 
+def test_v2_llm_path_sanitizes_unimplemented_pedestrian_intent_wording() -> None:
+    llm_scenario = _llm_scenario("llm_pedestrian_wording")
+    llm_scenario["intent"] = "좁은 보도에서 횡단 보행자와 pedestrian risk를 검증한다."
+    fake = _FakeJsonClient([llm_scenario])
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=True),
+        llm_client=fake,
+    )
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="좁은 보도에서 기본 이동 시나리오"))
+
+    assert response.generation_mode == "llm"
+    assert response.scenario is not None
+    assert not any(term in response.scenario["intent"] for term in ("보행자", "pedestrian", "횡단 보행자"))
+
+
 def test_v2_scenario_agent_accepts_valid_llm_before_deterministic_pattern_selection() -> None:
     fake = _FakeJsonClient([_llm_scenario("llm_first_agent_scenario")])
     agent = ScenarioGenerationV2Agent(
@@ -2497,7 +2525,7 @@ def test_v2_llm_path_normalizes_legacy_obstacle_prop_before_response() -> None:
     assert response.validation.valid is True
 
 
-def test_v2_llm_path_removes_catalog_metadata_and_keeps_alpha_pedestrians() -> None:
+def test_v2_llm_path_removes_catalog_metadata_and_unimplemented_pedestrians() -> None:
     """Strip catalog-only fields from valid LLM output before returning scenario JSON."""
     llm_template = _llm_scenario_with_obstacle("llm_catalog_metadata_leak")
     llm_template["obstacles"]["placements"][0]["prop"] = "obstacle.trash_bin"
@@ -2522,7 +2550,7 @@ def test_v2_llm_path_removes_catalog_metadata_and_keeps_alpha_pedestrians() -> N
 
     assert response.generation_mode == "llm"
     assert response.scenario is not None
-    assert response.scenario["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    assert "pedestrians" not in response.scenario
     _assert_no_catalog_metadata_leaked(response.scenario)
     assert response.validation.valid is True
 
@@ -2696,8 +2724,7 @@ def test_v2_scenario_generate_uses_current_template_contract() -> None:
     _assert_raw_scenario(payload)
     assert {"schema", "version", "scenario_id", "intent", "corridor", "robot"} <= set(payload)
     assert all(placement["at"]["segment"] in segment_ids for placement in payload["obstacles"]["placements"])
-    assert all(encounter["at"] in segment_ids for encounter in payload["pedestrians"]["encounters"])
-    assert "encounters" in payload["pedestrians"]
+    assert "pedestrians" not in payload
     assert "placements" in payload["obstacles"]
     forbidden = {"sample_count", "base_seed", "experiment_id", "run_id", "template_id"}
     assert forbidden.isdisjoint(payload)
@@ -2717,8 +2744,7 @@ def test_v2_validator_rejects_catalog_violations() -> None:
     assert validation.valid is False
     fields = {issue.field for issue in validation.errors}
     assert "corridor.building_side[0].surface" in fields
-    assert "pedestrians.encounters[0].type" in fields
-    assert "pedestrians.encounters[0].persona" in fields
+    assert "pedestrians" in fields
 
 
 def test_v2_validator_uses_static_obstacle_catalog_prop_ids() -> None:
@@ -2811,7 +2837,7 @@ def test_v2_preset_success_complex_prompt_applies_intent_count_prop_and_pedestri
     assert any(point[1] > 0 for point in points)
     assert len(scenario["obstacles"]["placements"]) == 2
     assert {placement["prop"] for placement in scenario["obstacles"]["placements"]} == {"obstacle.road_cone_01"}
-    assert scenario["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    assert "pedestrians" not in scenario
 
 
 def test_v2_fallback_complex_prompt_applies_same_core_intent_conditions() -> None:
@@ -2836,7 +2862,7 @@ def test_v2_fallback_complex_prompt_applies_same_core_intent_conditions() -> Non
     assert any(point[1] > 0 for point in points)
     assert len(scenario["obstacles"]["placements"]) == 2
     assert {placement["prop"] for placement in scenario["obstacles"]["placements"]} == {"obstacle.road_cone_01"}
-    assert scenario["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    assert "pedestrians" not in scenario
 
 
 def test_v2_unknown_non_catalog_preset_prop_uses_fallback_without_legacy_prop() -> None:
@@ -2872,7 +2898,8 @@ def test_v2_testclient_obstacle_responses_do_not_expose_legacy_props() -> None:
 
         assert response.status_code == 200
         payload = response.json()
-        props = {placement["prop"] for placement in payload["obstacles"]["placements"]}
+        placements = payload.get("obstacles", {}).get("placements", [])
+        props = {placement["prop"] for placement in placements}
         response_text = response.text
         _assert_raw_scenario(payload)
         assert validator.validate(payload).valid is True
@@ -2908,11 +2935,10 @@ def test_v2_scenario_generate_openapi_requires_only_prompt() -> None:
         "scenario_id",
         "intent",
         "corridor",
-        "obstacles",
-        "pedestrians",
         "robot",
     ]
-    assert set(response_schema["properties"]) == set(response_schema["required"])
+    assert "obstacles" in response_schema["properties"]
+    assert "pedestrians" not in response_schema["properties"]
     assert "template_id" not in response_schema["properties"]
 
 

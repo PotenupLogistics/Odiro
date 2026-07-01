@@ -111,6 +111,60 @@ void AScenarioEditorPawn::EnterPerspectiveView()
 	ApplyMovementSettings();
 }
 
+// Fits the top-down editor camera to the resolved scenario viewport frame.
+void AScenarioEditorPawn::ApplyTopDownFrame(const FVector2D& centerXY, const double orthoWidthCm)
+{
+	if (!CameraComponent || !FloatingMovementComponent) return;
+
+	if (!bTopDownViewActive)
+	{
+		SavedPerspectiveTransform = GetActorTransform();
+		bTopDownViewActive = true;
+	}
+
+	const FRotator topDownRotation(-90.0, 0.0, 0.0);
+	SetActorLocationAndRotation(
+		FVector(centerXY.X, centerXY.Y, TopDownCameraHeightCm),
+		topDownRotation);
+
+	CurrentOrthoWidthCm = FMath::Clamp(
+		orthoWidthCm,
+		TopDownOrthoWidthMinCm,
+		TopDownOrthoWidthMaxCm);
+	CameraComponent->SetProjectionMode(ECameraProjectionMode::Orthographic);
+	CameraComponent->SetOrthoWidth(CurrentOrthoWidthCm);
+	ApplyTopDownOrthoPlanes();
+
+	FloatingMovementComponent->StopMovementImmediately();
+	ApplyTopDownPanSpeed();
+}
+
+// Places the perspective editor camera at a fixed oblique pose aimed at the resolved scenario viewport frame.
+void AScenarioEditorPawn::ApplyPerspectiveFrame(
+	const FVector2D& targetXY,
+	const double targetZ,
+	const double distanceCm,
+	const double yawDegrees,
+	const double pitchDegrees)
+{
+	if (!CameraComponent || !FloatingMovementComponent) return;
+
+	bTopDownViewActive = false;
+	CameraComponent->SetProjectionMode(ECameraProjectionMode::Perspective);
+
+	const FRotator cameraRotation(pitchDegrees, yawDegrees, 0.0);
+	const FVector targetLocation(targetXY.X, targetXY.Y, targetZ);
+	const FVector viewDirection = cameraRotation.Vector().GetSafeNormal();
+	const FVector cameraLocation =
+		targetLocation - viewDirection * FMath::Max(distanceCm, 1.0);
+
+	SetActorLocationAndRotation(cameraLocation, cameraRotation);
+	SavedPerspectiveTransform = GetActorTransform();
+
+	FloatingMovementComponent->StopMovementImmediately();
+	ApplyMovementSettings();
+}
+
 void AScenarioEditorPawn::ApplyTopDownPanInput(float forwardValue, float rightValue)
 {
 	if (!Controller) return;

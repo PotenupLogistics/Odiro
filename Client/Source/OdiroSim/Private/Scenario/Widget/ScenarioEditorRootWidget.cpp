@@ -270,14 +270,14 @@ UScenarioPlaceableContextMenuWidget* UScenarioEditorRootWidget::GetPlaceableCont
 	return Cast<UScenarioPlaceableContextMenuWidget>(PlaceableContextMenuWidget.Get());
 }
 
-void UScenarioEditorRootWidget::SetLlmPanelVisible(const bool bVisible)
+void UScenarioEditorRootWidget::SetLlmPanelVisible(const bool)
 {
 	if (ShellViewModel)
 	{
-		ShellViewModel->SetLlmPanelVisible(bVisible);
+		ShellViewModel->SetLlmPanelVisible(true);
 	}
-	SetPanelVisibility(ResolveLlmPanelVisibilityTarget(), bVisible);
-	SetPanelVisibility(ScenarioEditorLlmWidget.Get(), bVisible);
+	SetPanelVisibility(ResolveLlmPanelVisibilityTarget(), true);
+	SetPanelVisibility(ScenarioEditorLlmWidget.Get(), true);
 }
 
 void UScenarioEditorRootWidget::ShowInspectorTab(const EScenarioEditorInspectorTab tab)
@@ -287,37 +287,10 @@ void UScenarioEditorRootWidget::ShowInspectorTab(const EScenarioEditorInspectorT
 	{
 		ShellViewModel->SelectInspectorTab(tab);
 	}
-	const bool bShowDetail = tab == EScenarioEditorInspectorTab::Detail;
 	ApplyInspectorTabVisualState();
 
-	if (InspectorSwitcher)
-	{
-		UWidget* activeWidget = nullptr;
-		if (bShowDetail && DetailInspectorPanel)
-		{
-			activeWidget = DetailInspectorPanel.Get();
-			InspectorSwitcher->SetActiveWidget(activeWidget);
-		}
-		else if (!bShowDetail && LlmInspectorPanel)
-		{
-			activeWidget = LlmInspectorPanel.Get();
-			InspectorSwitcher->SetActiveWidget(activeWidget);
-		}
-		else
-		{
-			const int32 activeIndex = bShowDetail ? 0 : 1;
-			InspectorSwitcher->SetActiveWidgetIndex(activeIndex);
-			activeWidget = InspectorSwitcher->GetWidgetAtIndex(activeIndex);
-		}
-		if (activeWidget)
-		{
-			SetPanelVisibility(activeWidget, true);
-		}
-		return;
-	}
-
-	SetPanelVisibility(ResolveDetailInspectorVisibilityTarget(), bShowDetail);
-	SetLlmPanelVisible(!bShowDetail);
+	SetPanelVisibility(ResolveDetailInspectorVisibilityTarget(), true);
+	SetLlmPanelVisible(true);
 }
 
 void UScenarioEditorRootWidget::CacheInspectorTabButtonStyles()

@@ -146,17 +146,31 @@ Client, Agents, Simulator 간 JSON-lines IPC 송수신 규약.
 {
   "scenarioPresetIds": ["blank", "curved-road", "demo"],
   "profilePresetIds": ["basic", "full"],
-  "policyPresetIds": ["blank", "demo"]
+  "policyPresetIds": ["blank", "demo"],
+  "scenarioPresets": [
+    {
+      "id": "blank",
+      "kind": "scenario",
+      "title": "Blank",
+      "subtitle": "",
+      "description": "",
+      "thumbnailPath": "X:/Odiro/static/presets/scenario/blank/thumbnail.png",
+      "sortOrder": 0
+    }
+  ],
+  "profilePresets": [],
+  "policyPresets": []
 }
 ```
 
 규칙:
 
-- preset id source: 실행 resource의 `templates/` category
-- 개발 source: `static/templates/{scenario/*.json,profile/*.json,policy/<PresetId>/}`
-- release resource: `resources/templates/{scenario/*.json,profile/*.json,policy/<PresetId>/}`
-- scenario/profile preset id: `.json` 파일 basename
-- policy preset id: `policy/` 직접 하위 폴더 이름
+- preset id source: 실행 resource의 `presets/` category
+- 개발 source: `static/presets/{scenario/<PresetId>,profile/<PresetId>,policy/<PresetId>}/`
+- release resource: `resources/presets/{scenario/<PresetId>,profile/<PresetId>,policy/<PresetId>}/`
+- preset id: 각 category의 직접 하위 folder 이름
+- `manifest.json`: UI metadata, `id`는 folder 이름과 일치
+- `thumbnail.png`: 같은 preset folder의 optional card thumbnail
 - preset id: 안전한 단일 경로 조각
 - preset id 금지값: 경로 구분자, `..`, 절대 경로
 - `workspace.createProject`: 선택 preset 조합 계약 검증
@@ -217,13 +231,13 @@ Client, Agents, Simulator 간 JSON-lines IPC 송수신 규약.
 - `presetSelection.scenarioPresetId`, `profilePresetId`, `policyPresetId` 필수
 - 지원 preset id 목록: `workspace.listProjectPresets`
 - target project root: preset source와 같거나 서로의 하위 경로이면 `INVALID_REQUEST`
-- preset source: `static/templates/` 또는 `resources/templates/`
+- preset source: `static/presets/` 또는 `resources/presets/`
 - preset 검증: 복사 전 [User Project Data Contract](./user-project-data.md)의 project preset contract
 - preset 누락/불완전: `PROJECT_PRESET_INVALID`, target project 미생성
 - preset 금지 file: `Client/Resources/policy-runtime.py` 같은 runtime file 또는 tool 문서
 - preset 금지 항목 위반: `PROJECT_PRESET_INVALID`, target project 미생성
 - `runs/`: project 생성 시 빈 directory 생성
-- copy 제외: `__pycache__`, `.pyc`, `.pyo`
+- copy 제외: `manifest.json`, `thumbnail.png`, `__pycache__`, `.pyc`, `.pyo`
 
 ### `workspace.createRun`
 

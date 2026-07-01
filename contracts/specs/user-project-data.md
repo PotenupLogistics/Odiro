@@ -951,30 +951,46 @@ snapshot 복사 규칙:
 개발 위치:
 
 ```text
-static/templates/
+static/presets/
 ```
 
 배포 위치:
 
 ```text
-build/Release/resources/templates/
+build/Release/resources/presets/
 ```
 
 구조:
 
 ```text
 setting.json
-scenario/<ScenarioPresetId>.json
-profile/<ProfilePresetId>.json
-policy/<PolicyPresetId>/__init__.py
+scenario/<ScenarioPresetId>/
+  manifest.json
+  thumbnail.png
+  scenario.json
+profile/<ProfilePresetId>/
+  manifest.json
+  thumbnail.png
+  profile.json
+policy/<PolicyPresetId>/
+  manifest.json
+  thumbnail.png
+  policy/__init__.py
 ```
 
 Preset id:
 
 - 이 문서는 지원 preset id 목록을 소유하지 않음
-- scenario/profile preset id: 각 category directory의 직접 하위 `.json` 파일 basename
-- policy preset id: `policy/` 직접 하위 폴더 이름
+- scenario/profile/policy preset id: 각 category directory의 직접 하위 folder 이름
 - `ScenarioPresetId`, `ProfilePresetId`, `PolicyPresetId`: 안전한 단일 경로 조각
+
+Manifest:
+
+- `manifest.json`은 `schema: "project_preset_manifest"`, `version: 1`, `id`, `kind` 필수
+- `id`는 folder 이름과 같아야 함
+- `kind`: `scenario`, `profile`, `policy`
+- UI metadata: `title`, `subtitle`, `description`, `sort_order`
+- `thumbnail.png`는 같은 preset folder의 optional card thumbnail
 
 생성 결과:
 
@@ -987,11 +1003,12 @@ policy/__init__.py
 
 규칙:
 
-- `setting.json`은 `static/templates/setting.json` 하나를 사용하며 UI preset으로 노출하지 않음
+- `setting.json`은 `static/presets/setting.json` 하나를 사용하며 UI preset으로 노출하지 않음
 - project 생성 시 scenario/profile/policy preset을 각각 하나씩 선택해 사용자 project root에 복사
 - scenario preset은 최소 유효 `scenario.json` 포함
 - profile preset은 최소 유효 `profile.json` 포함
 - policy preset은 `policy/__init__.py:create_policy` 포함
+- `manifest.json`, `thumbnail.png`는 UI metadata이며 사용자 project payload로 복사하지 않음
 - 실행 예시용 policy preset을 최소 골격 policy 기준으로 사용하지 않음
 
 금지 내용:

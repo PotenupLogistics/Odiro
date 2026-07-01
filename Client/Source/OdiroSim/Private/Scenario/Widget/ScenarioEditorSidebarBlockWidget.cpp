@@ -207,6 +207,14 @@ namespace
 		image->SetColorAndOpacity(tint);
 		image->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	}
+
+	// Returns whether the current pointer is inside a visible child control.
+	bool IsPointerOverVisibleWidget(const UWidget* widget, const FPointerEvent& mouseEvent)
+	{
+		return widget
+			&& widget->IsVisible()
+			&& widget->GetCachedGeometry().IsUnderLocation(mouseEvent.GetScreenSpacePosition());
+	}
 }
 
 void UScenarioEditorSidebarBlockWidget::NativeConstruct()
@@ -355,13 +363,11 @@ void UScenarioEditorSidebarBlockWidget::HandleToggleClicked()
 
 void UScenarioEditorSidebarBlockWidget::HandleAddActionClicked()
 {
-	BroadcastBlockSelected();
 	OnAddActionRequested.Broadcast();
 }
 
 void UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked()
 {
-	BroadcastBlockSelected();
 	OnRemoveActionRequested.Broadcast();
 }
 
@@ -373,6 +379,13 @@ void UScenarioEditorSidebarBlockWidget::BroadcastBlockSelected()
 bool UScenarioEditorSidebarBlockWidget::ShouldBroadcastSelectionForPointer(
 	const FPointerEvent& mouseEvent) const
 {
+	if (IsPointerOverVisibleWidget(AddActionButton.Get(), mouseEvent)
+		|| IsPointerOverVisibleWidget(RemoveActionButton.Get(), mouseEvent)
+		|| IsPointerOverVisibleWidget(ToggleButton.Get(), mouseEvent))
+	{
+		return false;
+	}
+
 	if (!BodyBox
 		|| !BodyBox->IsVisible()
 		|| !BodyBox->GetCachedGeometry().IsUnderLocation(mouseEvent.GetScreenSpacePosition()))

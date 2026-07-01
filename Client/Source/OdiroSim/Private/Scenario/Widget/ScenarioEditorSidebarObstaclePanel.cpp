@@ -20,7 +20,27 @@ namespace
 	// Returns true for concrete static obstacle placement detail blocks.
 	bool IsObstaclePlacementItemBlockPath(const FString& blockPath)
 	{
-		return blockPath.StartsWith(TEXT("root.obstacles.placements["));
+		const FString prefix(TEXT("root.obstacles.placements["));
+		if (!blockPath.StartsWith(prefix) || !blockPath.EndsWith(TEXT("]")))
+		{
+			return false;
+		}
+
+		const int32 indexStart = prefix.Len();
+		const int32 indexLength = blockPath.Len() - indexStart - 1;
+		if (indexLength <= 0)
+		{
+			return false;
+		}
+
+		for (int32 charIndex = 0; charIndex < indexLength; ++charIndex)
+		{
+			if (!FChar::IsDigit(blockPath[indexStart + charIndex]))
+			{
+				return false;
+			}
+		}
+		return true;
 	}
 }
 
@@ -503,7 +523,7 @@ void UScenarioEditorSidebarObstaclePanel::ApplySelectedBlockPath()
 	SidebarWidgetHelpers::ApplySelectedBlockPath(MinClearWidthBlockWidget.Get(), selectedBlockPath);
 	SidebarWidgetHelpers::ApplySelectedBlockPath(PlacementsBlockWidget.Get(), selectedBlockPath);
 
-	const bool bSelectedPlacementItem = selectedBlockPath.StartsWith(TEXT("root.obstacles.placements["));
+	const bool bSelectedPlacementItem = IsObstaclePlacementItemBlockPath(selectedBlockPath);
 	if (PlacementsBlockWidget && bSelectedPlacementItem)
 	{
 		PlacementsBlockWidget->SetExpanded(true);

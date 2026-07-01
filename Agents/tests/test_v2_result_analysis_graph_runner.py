@@ -6,9 +6,48 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.agents.common.llm_json_client import AgentLlmJsonClient
+from app.agents.result_analysis_v2.agent import ResultAnalysisV2Agent
 from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2
 from app.core.settings import Settings
 from app.main import app
+
+
+# Internal source markers that unsafe LLM output must not expose publicly.
+FORBIDDEN_LLM_PUBLIC_TEXT = (
+    "KOR-",
+    "policy card",
+    "관련 정책 문서",
+    "p.33",
+    "근거 문서",
+    "RAG",
+)
+
+
+class _FakeJsonClient:
+    """Capture result-analysis LLM calls while returning deterministic JSON payloads."""
+
+    def __init__(self, responses: list[dict]) -> None:
+        self.responses = list(responses)
+        self.calls: list[dict[str, str]] = []
+
+    def generate_json(self, *, system_prompt: str, user_prompt: str, response_name: str) -> dict:
+        """Record the prompt boundary and return the next fake JSON response."""
+        self.calls.append(
+            {
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "response_name": response_name,
+            }
+        )
+        return self.responses.pop(0)
+
+
+class _FakeSpecContextLoader:
+    """Provide stable spec context so LLM prompt tests do not read broad project docs."""
+
+    def build_prompt_block(self) -> str:
+        """Return a small prompt block compatible with SpecContextLoader callers."""
+        return "<SPEC_CONTEXT>\n테스트용 결과 분석 문맥\n</SPEC_CONTEXT>"
 
 
 def _write_blocked_episode(experiments, episode_id: str) -> None:
@@ -88,6 +127,47 @@ def _upsert_summary_row(run_dir, episode_id: str, *, blocked: bool) -> None:
     summary_path.write_text(json.dumps(summary), encoding="utf-8")
 
 
+def _llm_policy_recommendation(*, reason: str, recommendation: str) -> dict:
+    """Create a complete LLM recommendation payload with real episode evidence."""
+    return {
+        "id": "REC-LLM-001",
+        "target": "policy",
+        "priority": "high",
+        "title": "보행 경계 이탈 가능성 검토",
+        "reason": reason,
+        "recommendation": recommendation,
+        "evidence": [
+            {
+                "experiment_id": "Experiment1",
+                "run_id": "000001",
+                "episode_id": "000001",
+            }
+        ],
+        "proposed_change": {
+            "type": "policy_parameter_adjustment",
+            "content": {
+                "maxPathErrorM_max": 0.8,
+            },
+        },
+    }
+
+
+def _runner_with_fake_llm(experiments, fake: _FakeJsonClient) -> ResultAnalysisGraphRunnerV2:
+    """Build a graph runner that exercises the real analysis nodes with a fake LLM boundary."""
+    settings = Settings(_env_file=None, v2AgentLlmEnabled=True)
+    agent = ResultAnalysisV2Agent(
+        experiments_root=experiments,
+        settings=settings,
+        llm_client=fake,
+        spec_context_loader=_FakeSpecContextLoader(),
+    )
+    return ResultAnalysisGraphRunnerV2(
+        experiments_root=experiments,
+        settings=settings,
+        fallback_agent=agent,
+    )
+
+
 @pytest.fixture(autouse=True)
 def _disable_endpoint_llm(monkeypatch) -> None:
     """Keep endpoint tests on the deterministic recommendation path."""
@@ -137,6 +217,88 @@ def test_graph_runner_exposes_node_state_without_response_schema_changes(tmp_pat
     assert "analysis_context" in state
     assert "episode_timelines" not in response.model_dump(by_alias=True)
     assert "rag_queries" not in response.model_dump(by_alias=True)
+
+
+def test_graph_runner_passes_result_analysis_system_prompt_to_llm(tmp_path) -> None:
+    experiments = tmp_path / "experiments"
+    _write_blocked_episode(experiments, "000001")
+    _write_blocked_episode(experiments, "000002")
+    fake = _FakeJsonClient(
+        [
+            {
+                "recommendations": [
+                    _llm_policy_recommendation(
+                        reason="차단 구역 침범이 반복되어 주행 정책 조건 검토가 필요합니다.",
+                        recommendation="보행 경계 이탈 가능성을 줄이도록 감속 조건을 검토하는 것이 좋습니다.",
+                    )
+                ]
+            }
+        ]
+    )
+    runner = _runner_with_fake_llm(experiments, fake)
+
+    response = runner.run()
+
+    assert fake.calls
+    assert fake.calls[0]["response_name"] == "analysis_recommendations_v2"
+    assert "결과 분석 에이전트" in fake.calls[0]["system_prompt"]
+    assert "episode evidence" in fake.calls[0]["system_prompt"]
+    assert response.recommendations[0]["recommendation"] == (
+        "보행 경계 이탈 가능성을 줄이도록 감속 조건을 검토하는 것이 좋습니다."
+    )
+
+
+def test_graph_runner_falls_back_when_llm_public_text_contains_internal_source_terms(tmp_path) -> None:
+    experiments = tmp_path / "experiments"
+    _write_blocked_episode(experiments, "000001")
+    _write_blocked_episode(experiments, "000002")
+    fake = _FakeJsonClient(
+        [
+            {
+                "recommendations": [
+                    _llm_policy_recommendation(
+                        reason="KOR-003 p.33 관련 정책 문서 RAG 근거 문서가 있습니다.",
+                        recommendation="policy card 기준을 반영했습니다.",
+                    )
+                ]
+            }
+        ]
+    )
+    runner = _runner_with_fake_llm(experiments, fake)
+
+    response = runner.run()
+
+    public_text = "\n".join(
+        [
+            response.summary.message,
+            *(
+                f"{item.get('reason', '')}\n{item.get('recommendation', '')}"
+                for item in response.recommendations
+            ),
+            *(insight.description for insight in response.insights),
+        ]
+    )
+    assert all(forbidden not in public_text for forbidden in FORBIDDEN_LLM_PUBLIC_TEXT)
+    assert any("rule-based recommendation fallback" in warning for warning in response.warnings)
+    assert response.recommendations[0]["recommendation"] != "policy card 기준을 반영했습니다."
+
+
+def test_graph_runner_falls_back_when_llm_policy_parameter_change_is_invalid(tmp_path) -> None:
+    experiments = tmp_path / "experiments"
+    _write_blocked_episode(experiments, "000001")
+    _write_blocked_episode(experiments, "000002")
+    recommendation = _llm_policy_recommendation(
+        reason="차단 구역 침범이 반복되어 주행 정책 조건 검토가 필요합니다.",
+        recommendation="LLM invalid change should not be public.",
+    )
+    recommendation["proposed_change"]["content"] = {"unsupportedPolicyParameter_max": 1.0}
+    fake = _FakeJsonClient([{"recommendations": [recommendation]}])
+    runner = _runner_with_fake_llm(experiments, fake)
+
+    response = runner.run()
+
+    assert any("rule-based recommendation fallback" in warning for warning in response.warnings)
+    assert response.recommendations[0]["recommendation"] != "LLM invalid change should not be public."
 
 
 def test_analysis_api_preserves_response_schema(tmp_path) -> None:

@@ -12,6 +12,8 @@ Scenario generation v2는 `/api/v2/scenarios/generate`에서 항상 LangGraph ru
 
 Result analysis v2는 `/api/v2/analysis/run`에서 항상 `ResultAnalysisGraphRunnerV2`를 사용합니다.
 
+로컬 실행에서 `Settings()`는 실행 위치의 `.env`를 읽으므로 `Agents/.env`의 `V2_AGENT_LLM_ENABLED=true`가 result analysis LLM 경로를 켤 수 있습니다. `Settings(_env_file=None)`는 `.env`를 읽지 않고 코드 fallback 기본값을 확인할 때만 사용합니다.
+
 두 v2 endpoint 모두 provider chain을 순회하지 않습니다. 선택된 provider의 LLM 호출이 실패하면 scenario generation은 deterministic fallback, result analysis는 rule-based fallback으로 degraded 처리합니다.
 
 주의: 일부 내부 node 이름에 남은 `template`은 legacy 구현 명칭입니다. 외부 계약과 저장 대상은 `scenario` JSON입니다.
@@ -104,6 +106,8 @@ Scenario validation 결과는 `valid`, `repair`, `fallback`으로 route합니다
 
 Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터가 없으면 insufficient data response, 반복 패턴이 없으면 no-change response를 만듭니다. 반복 패턴이 있으면 RAG query/context를 구성하고 optional LLM 또는 rule-based recommendation 경로를 탑니다.
 
+`V2_AGENT_LLM_ENABLED=true`이면 `analyze_failure_node`가 result analysis `prompts/system_prompt.md`와 요약 context를 LLM JSON client에 전달합니다. system prompt는 run summary, metrics, patterns, warnings, refs만 근거로 쓰도록 제한하고 JSON-only 출력과 public 응답 안전 규칙을 정의합니다. `V2_AGENT_LLM_ENABLED=false`이거나 LLM 출력 검증이 실패하면 `LlmFailureAnalyzer`와 rule-based recommendation 경로로 fallback합니다. 현재 `LlmFailureAnalyzer` 자체는 실제 LLM 호출자가 아니라 deterministic 전처리 단계입니다.
+
 ## 8. Tool 목록
 
 * `RequestNormalizer`
@@ -142,6 +146,7 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 * raw log 전체를 LLM에 전달하지 않습니다.
 * graph 내부 diagnostics, validation, generation mode는 외부 scenario generation response wrapper로 노출하지 않습니다.
 * LLM 출력은 validator와 evidence validation을 통과해야 합니다.
+* Result analysis public 응답에는 내부 RAG/source 문구를 노출하지 않습니다.
 * 실패 시 기존 deterministic/rule-based fallback을 사용합니다.
 
 ## 10. HITL 후보

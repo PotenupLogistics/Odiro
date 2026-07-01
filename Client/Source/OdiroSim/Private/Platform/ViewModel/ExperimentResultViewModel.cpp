@@ -180,6 +180,11 @@ void UExperimentResultViewModel::RefreshDisplayLabels()
 		TotalDurationLabel,
 		FString::Printf(TEXT("%.1f s"), DashboardData.TotalDurationSeconds));
 
+	const FString averageDuration = DashboardData.EpisodeCount > 0
+		? FString::Printf(TEXT("%.1f s"), DashboardData.TotalDurationSeconds / DashboardData.EpisodeCount)
+		: FString(TEXT("-"));
+	UE_MVVM_SET_PROPERTY_VALUE(AverageDurationLabel, averageDuration);
+
 	const FString successRate = DashboardData.EpisodeCount > 0
 		? FString::Printf(TEXT("%.0f%%"), 100.0 * static_cast<double>(DashboardData.SuccessCount) / DashboardData.EpisodeCount)
 		: FString(TEXT("-"));

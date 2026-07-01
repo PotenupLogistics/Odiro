@@ -125,8 +125,9 @@ void UProjectWorkspaceViewModel::RefreshProjectRuns()
 
 	TArray<FString> runDirectories = subsystem->ListProjectRunDirectories(ActiveProjectPath);
 	const FSimulatorRunInfo activeRunInfo = subsystem->GetActiveRunInfo();
+	const FString activeRunProjectPath = NormalizeWorkspaceVmPath(activeRunInfo.ProjectPath);
 	if (activeRunInfo.bProjectRun
-		&& activeRunInfo.ProjectPath.Equals(ActiveProjectPath, ESearchCase::IgnoreCase)
+		&& activeRunProjectPath.Equals(ActiveProjectPath, ESearchCase::IgnoreCase)
 		&& !activeRunInfo.RunId.IsEmpty())
 	{
 		runDirectories.AddUnique(BuildRunDirectory(activeRunInfo.RunId));
@@ -316,7 +317,7 @@ bool UProjectWorkspaceViewModel::ReturnToStartup()
 	FString errorText;
 	if (!platformUiSubsystem->ReturnToStartupMap(errorText))
 	{
-		SetDiagnosticsText(errorText.IsEmpty() ? TEXT("StartupMap 복귀 실패.") : errorText);
+		SetDiagnosticsText(errorText.IsEmpty() ? TEXT("Startup screen 복귀 실패.") : errorText);
 		return false;
 	}
 
@@ -371,8 +372,14 @@ UPlatformAnalysisAiSubsystem* UProjectWorkspaceViewModel::ResolvePlatformAnalysi
 
 void UProjectWorkspaceViewModel::HandleRunInfoChanged(const FSimulatorRunInfo& runInfo)
 {
-	if (runInfo.bProjectRun && !runInfo.RunId.IsEmpty())
+	const FString normalizedRunProjectPath = NormalizeWorkspaceVmPath(runInfo.ProjectPath);
+	const bool bMatchesActiveProject =
+		!normalizedRunProjectPath.IsEmpty()
+		&& !ActiveProjectPath.IsEmpty()
+		&& normalizedRunProjectPath.Equals(ActiveProjectPath, ESearchCase::IgnoreCase);
+	if (runInfo.bProjectRun && !runInfo.RunId.IsEmpty() && bMatchesActiveProject)
 	{
+		RefreshProjectRuns();
 		SelectRun(runInfo.RunId);
 	}
 	SetStatusText(runInfo.LastError.IsEmpty()

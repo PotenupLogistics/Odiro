@@ -8,7 +8,6 @@
 class SWindow;
 class UButton;
 class UTextBlock;
-class UWidgetAnimation;
 
 // Windows caption button에 표시할 system glyph 종류.
 UENUM(BlueprintType)
@@ -17,15 +16,6 @@ enum class EPlatformWindowCaptionGlyph : uint8
 	Minimize,
 	Maximize,
 	Restore,
-	Close
-};
-
-// Windows caption control slot.
-UENUM(BlueprintType)
-enum class EWindowsCaptionControlSlot : uint8
-{
-	Minimize,
-	MaximizeRestore,
 	Close
 };
 
@@ -91,27 +81,6 @@ private:
 	// TextBlock에 WBP default font size로 Windows caption glyph를 적용한다.
 	bool ApplyConfiguredWindowsCaptionGlyph(UTextBlock* textBlock, EPlatformWindowCaptionGlyph glyph) const;
 
-	// Button hover/press animation delegate를 연결한다.
-	void BindAnimationControls();
-
-	// Button hover/press animation delegate를 해제한다.
-	void UnbindAnimationControls();
-
-	// Slot별 hover animation을 forward/reverse 재생한다.
-	void PlayHoverAnimation(EWindowsCaptionControlSlot slot, bool bForward);
-
-	// Slot별 press animation을 forward/reverse 재생한다.
-	void PlayPressAnimation(EWindowsCaptionControlSlot slot, bool bForward);
-
-	// Slot별 hover animation asset을 반환한다.
-	UWidgetAnimation* ResolveHoverAnimation(EWindowsCaptionControlSlot slot) const;
-
-	// Slot별 press animation asset을 반환한다.
-	UWidgetAnimation* ResolvePressAnimation(EWindowsCaptionControlSlot slot) const;
-
-	// Animation을 방향에 맞춰 재생한다.
-	void PlayCaptionAnimation(UWidgetAnimation* animation, bool bForward);
-
 	// 이 widget이 실제로 표시되는 Slate window를 반환한다.
 	TSharedPtr<SWindow> ResolveGameWindow() const;
 
@@ -150,54 +119,6 @@ private:
 	UFUNCTION()
 	void HandleCloseClicked();
 
-	// Minimize hover 시작을 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleMinimizeHovered();
-
-	// Minimize hover 종료를 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleMinimizeUnhovered();
-
-	// Minimize press 시작을 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleMinimizePressed();
-
-	// Minimize press 종료를 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleMinimizeReleased();
-
-	// Maximize/restore hover 시작을 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleMaximizeRestoreHovered();
-
-	// Maximize/restore hover 종료를 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleMaximizeRestoreUnhovered();
-
-	// Maximize/restore press 시작을 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleMaximizeRestorePressed();
-
-	// Maximize/restore press 종료를 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleMaximizeRestoreReleased();
-
-	// Close hover 시작을 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleCloseHovered();
-
-	// Close hover 종료를 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleCloseUnhovered();
-
-	// Close press 시작을 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleClosePressed();
-
-	// Close press 종료를 WBP animation으로 변환한다.
-	UFUNCTION()
-	void HandleCloseReleased();
-
 	// WBP layout이 소유하는 minimize button.
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UButton> MinimizeButton;
@@ -221,30 +142,6 @@ private:
 	// WBP layout이 소유하는 close glyph text.
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> CloseText;
-
-	// Minimize hover UMG animation.
-	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
-	TObjectPtr<UWidgetAnimation> MinimizeHoverAnimation;
-
-	// Maximize/restore hover UMG animation.
-	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
-	TObjectPtr<UWidgetAnimation> MaximizeRestoreHoverAnimation;
-
-	// Close hover UMG animation.
-	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
-	TObjectPtr<UWidgetAnimation> CloseHoverAnimation;
-
-	// Minimize press UMG animation.
-	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
-	TObjectPtr<UWidgetAnimation> MinimizePressAnimation;
-
-	// Maximize/restore press UMG animation.
-	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
-	TObjectPtr<UWidgetAnimation> MaximizeRestorePressAnimation;
-
-	// Close press UMG animation.
-	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
-	TObjectPtr<UWidgetAnimation> ClosePressAnimation;
 
 	// 마지막으로 Blueprint에 전달한 maximize state.
 	bool bLastKnownMaximized = false;

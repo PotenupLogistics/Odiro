@@ -7,6 +7,7 @@
 class UButton;
 class UExperimentResultEpisodeViewModel;
 class UProjectEpisodeReplayCardWidget;
+class UTextBlock;
 
 // Episode replay card 클릭을 부모 UI로 전달하는 native event channel.
 DECLARE_MULTICAST_DELEGATE_OneParam(
@@ -49,6 +50,22 @@ private:
 	// Card click target을 덮는 optional WBP button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> ReplayCardButton;
+
+	// Episode id label owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EpisodeIdText;
+
+	// Episode success/failure label owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EpisodeStateText;
+
+	// Episode duration label owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EpisodeDurationText;
+
+	// Replay availability label owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayAvailabilityText;
 
 	// Command routing을 위해 item ViewModel에서 복사한 episode id.
 	UPROPERTY(Transient)

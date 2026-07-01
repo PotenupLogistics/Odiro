@@ -70,7 +70,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|Workspace")
 	bool OpenScenarioEditor();
 
-	// active project를 비우고 StartupMap으로 돌아간다.
+	// active project를 비우고 root shell startup screen으로 돌아간다.
 	UFUNCTION(BlueprintCallable, Category = "Platform|Workspace")
 	bool ReturnToStartup();
 

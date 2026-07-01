@@ -7,13 +7,12 @@
 
 class UButton;
 class UOdiroListItemViewModel;
-class UProgressBar;
 class UTextBlock;
 class UWidget;
 
 class UProjectExperimentRunRowWidget;
 
-// Project experiment status table row에서 분석 요청을 MainMenu로 전달한다.
+// Project experiment status table row에서 분석 요청을 상위 화면으로 전달한다.
 DECLARE_MULTICAST_DELEGATE_OneParam(FProjectExperimentRunRowAnalyzeRequestedNative, UProjectExperimentRunRowWidget*);
 
 // Project run 한 줄의 UMG-owned layout과 state visual을 데이터로 갱신하는 widget.
@@ -34,14 +33,18 @@ public:
 		const FString& runDirectory,
 		const FString& runId,
 		ESimulationRunState state,
-		float progressPercent,
+		bool bCompleted,
+		const FString& successRateLabel,
+		const FString& totalDurationLabel,
 		bool bCanAnalyze);
 
 	// 공통 item ViewModel의 run id/path와 표시 상태를 run row UI에 반영한다.
 	void InitializeFromItemViewModel(
 		UOdiroListItemViewModel* itemViewModel,
 		ESimulationRunState state,
-		float progressPercent,
+		bool bCompleted,
+		const FString& successRateLabel,
+		const FString& totalDurationLabel,
 		bool bCanAnalyze);
 
 	// row가 대표하는 run directory를 반환한다.
@@ -75,13 +78,17 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> RunIdText;
 
-	// run 진행도 bar.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UProgressBar> ProgressBar;
-
-	// run 진행도 percent 텍스트.
+	// 완료 run은 100%, 그 외 상태는 dash로 표시하는 상태 텍스트.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ProgressText;
+
+	// summary.json 기반 성공률 표시 텍스트.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> SuccessRateText;
+
+	// summary.json 기반 총 실행 시간 표시 텍스트.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TotalDurationText;
 
 	// 분석 상세를 여는 버튼.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

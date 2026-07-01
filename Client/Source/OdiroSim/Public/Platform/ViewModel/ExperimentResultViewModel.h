@@ -49,6 +49,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
 	FString GetTotalDurationLabel() const { return TotalDurationLabel; }
 
+	// 평균 episode 실행 시간 표시 문자열을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	FString GetAverageDurationLabel() const { return AverageDurationLabel; }
+
 	// 성공률 표시 문자열을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
 	FString GetSuccessRateLabel() const { return SuccessRateLabel; }
@@ -101,6 +105,10 @@ private:
 	// 총 플레이 시간 metric 표시 문자열.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	FString TotalDurationLabel;
+
+	// 평균 episode 실행 시간 metric 표시 문자열.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	FString AverageDurationLabel;
 
 	// 성공률 metric 표시 문자열.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))

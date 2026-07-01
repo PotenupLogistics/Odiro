@@ -1,7 +1,6 @@
 #include "Platform/Widget/ProjectExperimentRunRowWidget.h"
 
 #include "Components/Button.h"
-#include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Misc/Paths.h"
@@ -68,7 +67,9 @@ void UProjectExperimentRunRowWidget::InitializeRunRow(
 	const FString& runDirectory,
 	const FString& runId,
 	const ESimulationRunState state,
-	const float progressPercent,
+	const bool bCompleted,
+	const FString& successRateLabel,
+	const FString& totalDurationLabel,
 	const bool bCanAnalyze)
 {
 	ItemViewModel = nullptr;
@@ -81,16 +82,21 @@ void UProjectExperimentRunRowWidget::InitializeRunRow(
 		RunIdText->SetText(FText::FromString(FormatProjectExperimentRunRowDisplayId(sourceRunId)));
 	}
 
-	const float clampedProgress = FMath::Clamp(progressPercent, 0.0f, 100.0f);
-	if (ProgressBar)
-	{
-		ProgressBar->SetPercent(clampedProgress / 100.0f);
-	}
-
 	if (ProgressText)
 	{
-		const int32 roundedProgress = FMath::RoundToInt(clampedProgress);
-		ProgressText->SetText(FText::Format(NSLOCTEXT("ProjectExperimentRunRow", "ProgressPercent", "{0}%"), roundedProgress));
+		ProgressText->SetText(bCompleted
+			? NSLOCTEXT("ProjectExperimentRunRow", "ProgressCompleted", "100%")
+			: NSLOCTEXT("ProjectExperimentRunRow", "ProgressUnavailable", "-"));
+	}
+
+	if (SuccessRateText)
+	{
+		SuccessRateText->SetText(FText::FromString(successRateLabel));
+	}
+
+	if (TotalDurationText)
+	{
+		TotalDurationText->SetText(FText::FromString(totalDurationLabel));
 	}
 
 	if (AnalyzeButton)
@@ -105,7 +111,9 @@ void UProjectExperimentRunRowWidget::InitializeRunRow(
 void UProjectExperimentRunRowWidget::InitializeFromItemViewModel(
 	UOdiroListItemViewModel* itemViewModel,
 	const ESimulationRunState state,
-	const float progressPercent,
+	const bool bCompleted,
+	const FString& successRateLabel,
+	const FString& totalDurationLabel,
 	const bool bCanAnalyze)
 {
 	ItemViewModel = itemViewModel;
@@ -113,7 +121,9 @@ void UProjectExperimentRunRowWidget::InitializeFromItemViewModel(
 		ItemViewModel ? ItemViewModel->GetPayloadPath() : FString(),
 		ItemViewModel ? ItemViewModel->GetItemId() : FString(),
 		state,
-		progressPercent,
+		bCompleted,
+		successRateLabel,
+		totalDurationLabel,
 		bCanAnalyze && (!ItemViewModel || ItemViewModel->IsEnabled()));
 	ItemViewModel = itemViewModel;
 }

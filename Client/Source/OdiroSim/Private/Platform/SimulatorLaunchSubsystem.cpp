@@ -1,9 +1,13 @@
 
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
+#include "Dom/JsonObject.h"
 #include "IPAddress.h"
+#include "Misc/FileHelper.h"
 #include "SocketSubsystem.h"
 #include "Sockets.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Shared/ScenarioDocumentJson.h"
 #include "Shared/UserProjectDataTypes.h"
 
@@ -28,7 +32,7 @@ namespace
 	const TCHAR* ProjectRunPolicyHost = TEXT("127.0.0.1");
 	const TCHAR* UserProjectStaticDirectory = TEXT("static");
 	const TCHAR* UserProjectResourcesDirectory = TEXT("resources");
-	const TCHAR* UserProjectPresetDirectory = TEXT("templates");
+	const TCHAR* UserProjectPresetDirectory = TEXT("presets");
 	const TCHAR* UserProjectScenarioPresetsDirectory = TEXT("scenario");
 	const TCHAR* UserProjectProfilePresetsDirectory = TEXT("profile");
 	const TCHAR* UserProjectPolicyPresetsDirectory = TEXT("policy");
@@ -45,6 +49,10 @@ namespace
 	const TCHAR* ProjectPresetDefaultScenarioId = TEXT("blank");
 	const TCHAR* ProjectPresetDefaultProfileId = TEXT("basic");
 	const TCHAR* ProjectPresetDefaultPolicyId = TEXT("blank");
+	const TCHAR* ProjectPresetManifestFileName = TEXT("manifest.json");
+	const TCHAR* ProjectPresetThumbnailFileName = TEXT("thumbnail.png");
+	const TCHAR* ProjectPresetManifestSchema = TEXT("project_preset_manifest");
+	const int32 ProjectPresetManifestVersion = 1;
 
 	FString ToProjectRelativePath(FString filePath)
 	{
@@ -192,39 +200,243 @@ namespace
 		return IsSameOrChildPath(leftPath, rightPath) || IsSameOrChildPath(rightPath, leftPath);
 	}
 
-	TArray<FString> ListSafePresetIds(const FString& presetCategoryPath)
+	const TCHAR* ToProjectPresetKindString(const EProjectPresetKind kind)
 	{
-		TArray<FString> presetIds;
-		IFileManager::Get().FindFiles(presetIds, *FPaths::Combine(presetCategoryPath, TEXT("*")), false, true);
-
-		TArray<FString> safePresetIds;
-		for (const FString& presetId : presetIds)
+		switch (kind)
 		{
-			if (IsSafeUserProjectSegment(presetId))
-			{
-				safePresetIds.Add(presetId);
-			}
+		case EProjectPresetKind::Scenario:
+			return TEXT("scenario");
+		case EProjectPresetKind::Profile:
+			return TEXT("profile");
+		case EProjectPresetKind::Policy:
+			return TEXT("policy");
+		default:
+			return TEXT("unknown");
 		}
-		safePresetIds.Sort();
-		return safePresetIds;
 	}
 
-	TArray<FString> ListSafePresetJsonIds(const FString& presetCategoryPath)
+	const TCHAR* ToProjectPresetCategoryDirectory(const EProjectPresetKind kind)
 	{
-		TArray<FString> presetFiles;
-		IFileManager::Get().FindFiles(presetFiles, *FPaths::Combine(presetCategoryPath, TEXT("*.json")), true, false);
-
-		TArray<FString> safePresetIds;
-		for (const FString& presetFile : presetFiles)
+		switch (kind)
 		{
-			const FString presetId = FPaths::GetBaseFilename(presetFile);
-			if (IsSafeUserProjectSegment(presetId))
-			{
-				safePresetIds.Add(presetId);
-			}
+		case EProjectPresetKind::Scenario:
+			return UserProjectScenarioPresetsDirectory;
+		case EProjectPresetKind::Profile:
+			return UserProjectProfilePresetsDirectory;
+		case EProjectPresetKind::Policy:
+			return UserProjectPolicyPresetsDirectory;
+		default:
+			return TEXT("");
 		}
-		safePresetIds.Sort();
-		return safePresetIds;
+	}
+
+	FString MakeProjectPresetDisplayName(const FString& presetId)
+	{
+		FString displayName = presetId.TrimStartAndEnd();
+		displayName.ReplaceInline(TEXT("-"), TEXT(" "));
+		displayName.ReplaceInline(TEXT("_"), TEXT(" "));
+		return FName::NameToDisplayString(displayName, false);
+	}
+
+	FString BuildProjectPresetPayloadPath(const FString& presetRoot, const EProjectPresetKind kind)
+	{
+		switch (kind)
+		{
+		case EProjectPresetKind::Scenario:
+			return NormalizeAbsolutePath(FPaths::Combine(presetRoot, UserProjectScenarioFileName));
+		case EProjectPresetKind::Profile:
+			return NormalizeAbsolutePath(FPaths::Combine(presetRoot, UserProjectProfileFileName));
+		case EProjectPresetKind::Policy:
+			return NormalizeAbsolutePath(FPaths::Combine(presetRoot, UserProjectPolicyDirectory));
+		default:
+			return FString();
+		}
+	}
+
+	bool TryReadProjectPresetManifest(
+		const FString& presetRoot,
+		const EProjectPresetKind expectedKind,
+		FProjectPresetInfo& outInfo,
+		TArray<FString>* outDiagnostics)
+	{
+		outInfo = FProjectPresetInfo();
+		outInfo.Kind = expectedKind;
+
+		const FString normalizedPresetRoot = NormalizeAbsolutePath(presetRoot);
+		const FString folderId = FPaths::GetCleanFilename(normalizedPresetRoot);
+		if (!IsSafeUserProjectSegment(folderId))
+		{
+			if (outDiagnostics)
+			{
+				outDiagnostics->Add(FString::Printf(TEXT("preset folder id is invalid: %s"), *folderId));
+			}
+			return false;
+		}
+
+		const FString manifestPath = NormalizeAbsolutePath(FPaths::Combine(normalizedPresetRoot, ProjectPresetManifestFileName));
+		if (!IsFile(manifestPath))
+		{
+			if (outDiagnostics)
+			{
+				outDiagnostics->Add(FString::Printf(TEXT("preset manifest missing: %s"), *manifestPath));
+			}
+			return false;
+		}
+
+		FString manifestJson;
+		if (!FFileHelper::LoadFileToString(manifestJson, *manifestPath))
+		{
+			if (outDiagnostics)
+			{
+				outDiagnostics->Add(FString::Printf(TEXT("preset manifest read failed: %s"), *manifestPath));
+			}
+			return false;
+		}
+
+		TSharedPtr<FJsonObject> manifestObject;
+		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(manifestJson);
+		if (!FJsonSerializer::Deserialize(reader, manifestObject) || !manifestObject.IsValid())
+		{
+			if (outDiagnostics)
+			{
+				outDiagnostics->Add(FString::Printf(TEXT("preset manifest parse failed: %s"), *manifestPath));
+			}
+			return false;
+		}
+
+		FString schema;
+		if (!manifestObject->TryGetStringField(TEXT("schema"), schema)
+			|| !schema.Equals(ProjectPresetManifestSchema, ESearchCase::CaseSensitive))
+		{
+			if (outDiagnostics)
+			{
+				outDiagnostics->Add(FString::Printf(TEXT("preset manifest schema mismatch: %s"), *manifestPath));
+			}
+			return false;
+		}
+
+		double versionNumber = 0.0;
+		if (!manifestObject->TryGetNumberField(TEXT("version"), versionNumber)
+			|| !FMath::IsNearlyEqual(versionNumber, static_cast<double>(ProjectPresetManifestVersion)))
+		{
+			if (outDiagnostics)
+			{
+				outDiagnostics->Add(FString::Printf(TEXT("preset manifest version mismatch: %s"), *manifestPath));
+			}
+			return false;
+		}
+
+		FString manifestId;
+		if (!manifestObject->TryGetStringField(TEXT("id"), manifestId)
+			|| !manifestId.Equals(folderId, ESearchCase::CaseSensitive)
+			|| !IsSafeUserProjectSegment(manifestId))
+		{
+			if (outDiagnostics)
+			{
+				outDiagnostics->Add(FString::Printf(TEXT("preset manifest id must match folder: %s"), *manifestPath));
+			}
+			return false;
+		}
+
+		FString manifestKind;
+		if (!manifestObject->TryGetStringField(TEXT("kind"), manifestKind)
+			|| !manifestKind.Equals(ToProjectPresetKindString(expectedKind), ESearchCase::CaseSensitive))
+		{
+			if (outDiagnostics)
+			{
+				outDiagnostics->Add(FString::Printf(TEXT("preset manifest kind mismatch: %s"), *manifestPath));
+			}
+			return false;
+		}
+
+		outInfo.Id = manifestId;
+		outInfo.Kind = expectedKind;
+		if (!manifestObject->TryGetStringField(TEXT("title"), outInfo.Title) || outInfo.Title.TrimStartAndEnd().IsEmpty())
+		{
+			outInfo.Title = MakeProjectPresetDisplayName(manifestId);
+		}
+		manifestObject->TryGetStringField(TEXT("subtitle"), outInfo.Subtitle);
+		manifestObject->TryGetStringField(TEXT("description"), outInfo.Description);
+
+		double sortOrderNumber = 1000.0;
+		if (manifestObject->TryGetNumberField(TEXT("sort_order"), sortOrderNumber))
+		{
+			outInfo.SortOrder = FMath::RoundToInt(sortOrderNumber);
+		}
+
+		const FString thumbnailPath = NormalizeAbsolutePath(FPaths::Combine(normalizedPresetRoot, ProjectPresetThumbnailFileName));
+		outInfo.ThumbnailPath = IsFile(thumbnailPath) ? thumbnailPath : FString();
+		return true;
+	}
+
+	TArray<FProjectPresetInfo> ListProjectPresetInfos(
+		const FString& projectPresetsPath,
+		const EProjectPresetKind kind)
+	{
+		const FString categoryPath = NormalizeAbsolutePath(FPaths::Combine(
+			projectPresetsPath,
+			ToProjectPresetCategoryDirectory(kind)));
+
+		TArray<FString> presetFolderNames;
+		IFileManager::Get().FindFiles(presetFolderNames, *FPaths::Combine(categoryPath, TEXT("*")), false, true);
+
+		TArray<FProjectPresetInfo> presetInfos;
+		for (const FString& presetFolderName : presetFolderNames)
+		{
+			if (!IsSafeUserProjectSegment(presetFolderName))
+			{
+				UE_LOG(
+					LogSimulatorLaunch,
+					Warning,
+					TEXT("Skipping unsafe %s preset folder: %s"),
+					ToProjectPresetKindString(kind),
+					*presetFolderName);
+				continue;
+			}
+
+			const FString presetRoot = NormalizeAbsolutePath(FPaths::Combine(categoryPath, presetFolderName));
+			FProjectPresetInfo presetInfo;
+			TArray<FString> diagnostics;
+			if (!TryReadProjectPresetManifest(presetRoot, kind, presetInfo, &diagnostics))
+			{
+				UE_LOG(
+					LogSimulatorLaunch,
+					Warning,
+					TEXT("Skipping invalid %s preset %s: %s"),
+					ToProjectPresetKindString(kind),
+					*presetFolderName,
+					*FString::Join(diagnostics, TEXT(" | ")));
+				continue;
+			}
+
+			presetInfos.Add(MoveTemp(presetInfo));
+		}
+
+		presetInfos.Sort(
+			[](const FProjectPresetInfo& left, const FProjectPresetInfo& right)
+			{
+				if (left.SortOrder != right.SortOrder)
+				{
+					return left.SortOrder < right.SortOrder;
+				}
+				if (!left.Title.Equals(right.Title, ESearchCase::IgnoreCase))
+				{
+					return left.Title < right.Title;
+				}
+				return left.Id < right.Id;
+			});
+		return presetInfos;
+	}
+
+	TArray<FString> ExtractProjectPresetIds(const TArray<FProjectPresetInfo>& presetInfos)
+	{
+		TArray<FString> presetIds;
+		presetIds.Reserve(presetInfos.Num());
+		for (const FProjectPresetInfo& presetInfo : presetInfos)
+		{
+			presetIds.Add(presetInfo.Id);
+		}
+		return presetIds;
 	}
 
 	bool TryFindUserProjectResourcesFromRoot(
@@ -293,6 +505,7 @@ namespace
 	{
 		TArray<FString> startPaths;
 		startPaths.Add(FPaths::ProjectDir());
+		startPaths.Add(FPaths::Combine(FPaths::ProjectDir(), TEXT("..")));
 		startPaths.Add(FPlatformProcess::BaseDir());
 		startPaths.Add(FPlatformProcess::ExecutablePath());
 
@@ -306,7 +519,7 @@ namespace
 
 		if (outDiagnostics)
 		{
-			outDiagnostics->Add(TEXT("Project preset resources not found. Expected static/templates or resources/templates."));
+			outDiagnostics->Add(TEXT("Project preset resources not found. Expected static/presets or resources/presets."));
 		}
 		return false;
 	}
@@ -506,6 +719,69 @@ namespace
 		return true;
 	}
 
+	bool ValidateProjectPresetPayload(
+		const FString& presetRoot,
+		const EProjectPresetKind kind,
+		TArray<FString>& outDiagnostics)
+	{
+		const FString payloadPath = BuildProjectPresetPayloadPath(presetRoot, kind);
+		switch (kind)
+		{
+		case EProjectPresetKind::Scenario:
+			return ValidateUserProjectScenarioJsonFile(payloadPath, TEXT("scenario preset"), outDiagnostics);
+		case EProjectPresetKind::Profile:
+			return ValidateUserProjectRootJsonFile(
+				payloadPath,
+				UserProjectProfileSchema,
+				TEXT("profile preset"),
+				outDiagnostics);
+		case EProjectPresetKind::Policy:
+			return ValidateUserProjectPolicyDirectory(payloadPath, outDiagnostics)
+				&& ValidatePresetTreeHygiene(payloadPath, TEXT("policy"), outDiagnostics);
+		default:
+			outDiagnostics.Add(TEXT("unknown preset kind."));
+			return false;
+		}
+	}
+
+	bool ResolveProjectPresetInfo(
+		const FString& projectPresetsPath,
+		const EProjectPresetKind kind,
+		const FString& requestedPresetId,
+		FProjectPresetInfo& outInfo,
+		FString& outPayloadPath,
+		TArray<FString>& outDiagnostics)
+	{
+		outInfo = FProjectPresetInfo();
+		outPayloadPath.Reset();
+
+		const FString presetId = requestedPresetId.TrimStartAndEnd();
+		if (!IsSafeUserProjectSegment(presetId))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s preset id must be a safe path segment."), ToProjectPresetKindString(kind)));
+			return false;
+		}
+
+		const FString presetRoot = NormalizeAbsolutePath(FPaths::Combine(
+			projectPresetsPath,
+			ToProjectPresetCategoryDirectory(kind),
+			presetId));
+		if (!IsDirectory(presetRoot))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s preset directory missing: %s"), ToProjectPresetKindString(kind), *presetRoot));
+			return false;
+		}
+
+		if (!TryReadProjectPresetManifest(presetRoot, kind, outInfo, &outDiagnostics)
+			|| !ValidateProjectPresetPayload(presetRoot, kind, outDiagnostics))
+		{
+			return false;
+		}
+
+		outPayloadPath = BuildProjectPresetPayloadPath(presetRoot, kind);
+		return true;
+	}
+
 	bool MakeRelativeToDirectory(const FString& path, const FString& root, FString& outRelativePath)
 	{
 		outRelativePath = path;
@@ -578,7 +854,8 @@ namespace
 		const FString& sourceRoot,
 		const FString& targetRoot,
 		const bool bSkipGitKeep,
-		TArray<FString>& outDiagnostics)
+		TArray<FString>& outDiagnostics,
+		const TSet<FString>* skippedRelativeFiles = nullptr)
 	{
 		const FString normalizedSourceRoot = NormalizeAbsolutePath(sourceRoot);
 		const FString normalizedTargetRoot = NormalizeAbsolutePath(targetRoot);
@@ -635,6 +912,11 @@ namespace
 			{
 				outDiagnostics.Add(FString::Printf(TEXT("relative file resolve failed: %s"), *file));
 				return false;
+			}
+
+			if (skippedRelativeFiles && skippedRelativeFiles->Contains(relativePath))
+			{
+				continue;
 			}
 
 			const FString targetPath = NormalizeAbsolutePath(FPaths::Combine(normalizedTargetRoot, relativePath));
@@ -1742,6 +2024,11 @@ bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, cons
 
 FProjectPresetCatalog USimulatorLaunchSubsystem::ListProjectPresets() const
 {
+	return LoadProjectPresetCatalog();
+}
+
+FProjectPresetCatalog USimulatorLaunchSubsystem::LoadProjectPresetCatalog()
+{
 	FString projectPresetsPath;
 	FString runDefaultsPath;
 	if (!LocateUserProjectResourceDirectories(projectPresetsPath, runDefaultsPath, nullptr))
@@ -1750,9 +2037,12 @@ FProjectPresetCatalog USimulatorLaunchSubsystem::ListProjectPresets() const
 	}
 
 	FProjectPresetCatalog catalog;
-	catalog.ScenarioPresetIds = ListSafePresetJsonIds(FPaths::Combine(projectPresetsPath, UserProjectScenarioPresetsDirectory));
-	catalog.ProfilePresetIds = ListSafePresetJsonIds(FPaths::Combine(projectPresetsPath, UserProjectProfilePresetsDirectory));
-	catalog.PolicyPresetIds = ListSafePresetIds(FPaths::Combine(projectPresetsPath, UserProjectPolicyPresetsDirectory));
+	catalog.ScenarioPresets = ListProjectPresetInfos(projectPresetsPath, EProjectPresetKind::Scenario);
+	catalog.ProfilePresets = ListProjectPresetInfos(projectPresetsPath, EProjectPresetKind::Profile);
+	catalog.PolicyPresets = ListProjectPresetInfos(projectPresetsPath, EProjectPresetKind::Policy);
+	catalog.ScenarioPresetIds = ExtractProjectPresetIds(catalog.ScenarioPresets);
+	catalog.ProfilePresetIds = ExtractProjectPresetIds(catalog.ProfilePresets);
+	catalog.PolicyPresetIds = ExtractProjectPresetIds(catalog.PolicyPresets);
 	return catalog;
 }
 
@@ -1796,18 +2086,12 @@ bool USimulatorLaunchSubsystem::CreateProjectFromPresets(
 	const FString settingPresetPath = NormalizeAbsolutePath(FPaths::Combine(
 		projectPresetsPath,
 		UserProjectSettingFileName));
-	const FString scenarioPresetPath = NormalizeAbsolutePath(FPaths::Combine(
-		projectPresetsPath,
-		UserProjectScenarioPresetsDirectory,
-		normalizedSelection.ScenarioPresetId + TEXT(".json")));
-	const FString profilePresetPath = NormalizeAbsolutePath(FPaths::Combine(
-		projectPresetsPath,
-		UserProjectProfilePresetsDirectory,
-		normalizedSelection.ProfilePresetId + TEXT(".json")));
-	const FString policyPresetPath = NormalizeAbsolutePath(FPaths::Combine(
-		projectPresetsPath,
-		UserProjectPolicyPresetsDirectory,
-		normalizedSelection.PolicyPresetId));
+	FProjectPresetInfo scenarioPresetInfo;
+	FProjectPresetInfo profilePresetInfo;
+	FProjectPresetInfo policyPresetInfo;
+	FString scenarioPresetPath;
+	FString profilePresetPath;
+	FString policyPresetPath;
 
 	bool bValidPreset = true;
 	bValidPreset &= ValidateUserProjectRootJsonFile(
@@ -1815,17 +2099,27 @@ bool USimulatorLaunchSubsystem::CreateProjectFromPresets(
 		UserProjectSettingSchema,
 		TEXT("setting preset"),
 		outDiagnostics);
-	bValidPreset &= ValidateUserProjectScenarioJsonFile(
+	bValidPreset &= ResolveProjectPresetInfo(
+		projectPresetsPath,
+		EProjectPresetKind::Scenario,
+		normalizedSelection.ScenarioPresetId,
+		scenarioPresetInfo,
 		scenarioPresetPath,
-		TEXT("scenario preset"),
 		outDiagnostics);
-	bValidPreset &= ValidateUserProjectRootJsonFile(
+	bValidPreset &= ResolveProjectPresetInfo(
+		projectPresetsPath,
+		EProjectPresetKind::Profile,
+		normalizedSelection.ProfilePresetId,
+		profilePresetInfo,
 		profilePresetPath,
-		UserProjectProfileSchema,
-		TEXT("profile preset"),
 		outDiagnostics);
-	bValidPreset &= ValidateUserProjectPolicyDirectory(policyPresetPath, outDiagnostics);
-	bValidPreset &= ValidatePresetTreeHygiene(policyPresetPath, TEXT("policy"), outDiagnostics);
+	bValidPreset &= ResolveProjectPresetInfo(
+		projectPresetsPath,
+		EProjectPresetKind::Policy,
+		normalizedSelection.PolicyPresetId,
+		policyPresetInfo,
+		policyPresetPath,
+		outDiagnostics);
 	if (!bValidPreset)
 	{
 		return false;
@@ -1862,11 +2156,15 @@ bool USimulatorLaunchSubsystem::CreateProjectFromPresets(
 		}
 	}
 
+	TSet<FString> policyPresetMetadataFiles;
+	policyPresetMetadataFiles.Add(ProjectPresetManifestFileName);
+	policyPresetMetadataFiles.Add(ProjectPresetThumbnailFileName);
 	if (!CopyUserProjectTree(
 			policyPresetPath,
 			NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectPolicyDirectory)),
 			false,
-			outDiagnostics))
+			outDiagnostics,
+			&policyPresetMetadataFiles))
 	{
 		return false;
 	}

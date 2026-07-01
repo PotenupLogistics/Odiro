@@ -4,19 +4,9 @@
 #include "Platform/ViewModel/ExperimentResultViewModel.h"
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 #include "Platform/ViewModel/RobotProfileViewModel.h"
-#include "Platform/ViewModel/StartupMenuViewModel.h"
 #include "Platform/PlatformUiDeveloperSettings.h"
-#include "Platform/Widget/MainMenuWidget.h"
-#include "Platform/Widget/OdiroActivatableScreenWidget.h"
-#include "Platform/Widget/OdiroCommonButtonWidget.h"
-#include "Platform/Widget/ExperimentResultIterationSelectorWidget.h"
-#include "Platform/Widget/ProjectExperimentRunRowWidget.h"
-#include "Platform/Widget/ProjectTemplateCardWidget.h"
-#include "Platform/Widget/StartupMenuWidget.h"
+#include "Platform/Widget/PlatformRootWidget.h"
 
-#include "CommonActivatableWidget.h"
-#include "CommonButtonBase.h"
-#include "Blueprint/UserWidget.h"
 #include "Engine/GameInstance.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ConfigCacheIni.h"
@@ -28,12 +18,6 @@
 
 namespace
 {
-	// Startup ViewModel이 기존 StartupMenu와 공유하는 recent-project config section.
-	const TCHAR* PlatformUiVmProjectOpenConfigSection = TEXT("OdiroSim.StartupMenu.ProjectOpen");
-
-	// Startup ViewModel이 기존 StartupMenu와 공유하는 recent-project config key.
-	const TCHAR* PlatformUiVmRecentProjectPathsConfigKey = TEXT("RecentProjectPaths");
-
 	FString MakePlatformUiVmTestRoot()
 	{
 		return FPaths::ConvertRelativePathToFull(FPaths::Combine(
@@ -41,55 +25,6 @@ namespace
 			TEXT("Automation/PlatformUiViewModel"),
 			FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 	}
-
-	// 테스트 중 변경한 recent-project config를 원래 사용자 값으로 복원한다.
-	struct FScopedPlatformUiVmRecentProjectConfigRestore
-	{
-		FScopedPlatformUiVmRecentProjectConfigRestore()
-		{
-			if (GConfig)
-			{
-				GConfig->GetArray(
-					PlatformUiVmProjectOpenConfigSection,
-					PlatformUiVmRecentProjectPathsConfigKey,
-					OriginalRecentProjectPaths,
-					GGameUserSettingsIni);
-				GConfig->RemoveKey(
-					PlatformUiVmProjectOpenConfigSection,
-					PlatformUiVmRecentProjectPathsConfigKey,
-					GGameUserSettingsIni);
-				GConfig->Flush(false, GGameUserSettingsIni);
-			}
-		}
-
-		~FScopedPlatformUiVmRecentProjectConfigRestore()
-		{
-			if (!GConfig)
-			{
-				return;
-			}
-
-			if (OriginalRecentProjectPaths.IsEmpty())
-			{
-				GConfig->RemoveKey(
-					PlatformUiVmProjectOpenConfigSection,
-					PlatformUiVmRecentProjectPathsConfigKey,
-					GGameUserSettingsIni);
-			}
-			else
-			{
-				GConfig->SetArray(
-					PlatformUiVmProjectOpenConfigSection,
-					PlatformUiVmRecentProjectPathsConfigKey,
-					OriginalRecentProjectPaths,
-					GGameUserSettingsIni);
-			}
-			GConfig->Flush(false, GGameUserSettingsIni);
-		}
-
-		// 테스트 시작 전 사용자의 recent project path snapshot.
-		TArray<FString> OriginalRecentProjectPaths;
-	};
 
 	FProjectPresetSelection MakePlatformUiVmDemoPresetSelection()
 	{
@@ -112,51 +47,6 @@ namespace
 				outDiagnostics)
 			&& simulatorLaunchSubsystem->ValidateUserProject(projectPath, outDiagnostics);
 	}
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FPlatformUiViewModelStartupTest,
-	"OdiroSim.PlatformUi.ViewModel.Startup",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FPlatformUiViewModelStartupTest::RunTest(const FString& parameters)
-{
-	(void)parameters;
-
-	const FScopedPlatformUiVmRecentProjectConfigRestore recentProjectConfigRestore;
-	UGameInstance* gameInstance = NewObject<UGameInstance>();
-	USimulatorLaunchSubsystem* simulatorLaunchSubsystem = NewObject<USimulatorLaunchSubsystem>(gameInstance);
-	UStartupMenuViewModel* viewModel = NewObject<UStartupMenuViewModel>();
-	TestNotNull(TEXT("game instance created"), gameInstance);
-	TestNotNull(TEXT("simulator launch subsystem created"), simulatorLaunchSubsystem);
-	TestNotNull(TEXT("startup viewmodel created"), viewModel);
-	if (!gameInstance || !simulatorLaunchSubsystem || !viewModel)
-	{
-		return false;
-	}
-
-	viewModel->SetSubsystemOverrides(simulatorLaunchSubsystem, nullptr, nullptr);
-	viewModel->InitializeForGameInstance(gameInstance);
-	TestTrue(TEXT("scenario preset items available"), viewModel->GetScenarioPresetItems().Num() > 0);
-
-	const FString testRoot = MakePlatformUiVmTestRoot();
-	const FString projectName = TEXT("StartupVmProject");
-	const FString projectPath = FPaths::Combine(testRoot, projectName);
-	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
-
-	TestTrue(
-		TEXT("create project through startup viewmodel"),
-		viewModel->CreateProject(testRoot, projectName, MakePlatformUiVmDemoPresetSelection()));
-	TestEqual(TEXT("project path set"), viewModel->GetProjectPathForPrototype(), projectPath);
-	TestTrue(TEXT("created project exists"), FPaths::DirectoryExists(projectPath));
-	TestEqual(TEXT("recent project stored"), viewModel->GetRecentProjectPaths().Num(), 1);
-	TestEqual(TEXT("recent item stored"), viewModel->GetRecentProjectItems().Num(), 1);
-
-	TestTrue(TEXT("remove recent project"), viewModel->RemoveRecentProject(projectPath));
-	TestEqual(TEXT("recent project removed"), viewModel->GetRecentProjectPaths().Num(), 0);
-
-	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
-	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -443,30 +333,6 @@ bool FPlatformUiViewModelExperimentResultTest::RunTest(const FString& parameters
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FPlatformUiCommonUiActivationSmokeTest,
-	"OdiroSim.PlatformUi.CommonUI.Activatable",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FPlatformUiCommonUiActivationSmokeTest::RunTest(const FString& parameters)
-{
-	(void)parameters;
-
-	UOdiroActivatableScreenWidget* screenWidget = NewObject<UOdiroActivatableScreenWidget>();
-	UOdiroCommonButtonWidget* buttonWidget = NewObject<UOdiroCommonButtonWidget>();
-	TestNotNull(TEXT("activatable screen widget created"), screenWidget);
-	TestNotNull(TEXT("common button widget created"), buttonWidget);
-	if (!screenWidget || !buttonWidget)
-	{
-		return false;
-	}
-
-	TestTrue(TEXT("screen derives from CommonActivatableWidget"), screenWidget->IsA<UCommonActivatableWidget>());
-	TestTrue(TEXT("screen handles back action by default"), screenWidget->CanHandleBackAction());
-	TestTrue(TEXT("button derives from CommonButtonBase"), buttonWidget->IsA<UCommonButtonBase>());
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlatformUiStartupToScenarioEditorMapSmokeTest,
 	"OdiroSim.PlatformUi.Map.StartupToScenarioEditorSmoke",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -480,6 +346,25 @@ bool FPlatformUiStartupToScenarioEditorMapSmokeTest::RunTest(const FString& para
 	TestTrue(TEXT("StartupMap package exists"), FPackageName::DoesPackageExist(StartupMapPackage));
 	TestTrue(TEXT("ScenarioEditorMap package exists"), FPackageName::DoesPackageExist(ScenarioEditorMapPackage));
 
+	FString gameDefaultMap;
+	FString editorStartupMap;
+	GConfig->GetString(
+		TEXT("/Script/EngineSettings.GameMapsSettings"),
+		TEXT("GameDefaultMap"),
+		gameDefaultMap,
+		GEngineIni);
+	GConfig->GetString(
+		TEXT("/Script/EngineSettings.GameMapsSettings"),
+		TEXT("EditorStartupMap"),
+		editorStartupMap,
+		GEngineIni);
+	TestTrue(
+		TEXT("GameDefaultMap uses ScenarioEditorMap root shell"),
+		gameDefaultMap.Contains(ScenarioEditorMapPackage));
+	TestTrue(
+		TEXT("EditorStartupMap uses ScenarioEditorMap root shell"),
+		editorStartupMap.Contains(ScenarioEditorMapPackage));
+
 	const UPlatformUiDeveloperSettings* settings = GetDefault<UPlatformUiDeveloperSettings>();
 	TestNotNull(TEXT("Platform UI settings available"), settings);
 	if (!settings)
@@ -487,52 +372,16 @@ bool FPlatformUiStartupToScenarioEditorMapSmokeTest::RunTest(const FString& para
 		return false;
 	}
 
-	UClass* startupMenuClass = settings->StartupMenuWidgetClass.LoadSynchronous();
-	UClass* mainMenuClass = settings->MainMenuWidgetClass.LoadSynchronous();
-	UClass* projectTemplateCardClass = settings->ProjectTemplateCardWidgetClass.LoadSynchronous();
-	UClass* projectExperimentRunRowClass = settings->ProjectExperimentRunRowWidgetClass.LoadSynchronous();
-	UClass* projectEpisodeReplayCardClass = settings->ProjectEpisodeReplayCardWidgetClass.LoadSynchronous();
-	UClass* projectAiSuggestionRowClass = settings->ProjectAiSuggestionRowWidgetClass.LoadSynchronous();
-	UClass* experimentResultIterationSelectorClass = settings->ExperimentResultIterationSelectorWidgetClass.LoadSynchronous();
-	TestNotNull(TEXT("StartupMenu widget class configured"), startupMenuClass);
-	TestNotNull(TEXT("MainMenu widget class configured"), mainMenuClass);
-	TestNotNull(TEXT("Project template card widget class configured"), projectTemplateCardClass);
-	TestNotNull(TEXT("Project experiment run row widget class configured"), projectExperimentRunRowClass);
-	TestNotNull(TEXT("Project episode replay card widget class configured"), projectEpisodeReplayCardClass);
-	TestNotNull(TEXT("Project AI suggestion row widget class configured"), projectAiSuggestionRowClass);
-	TestNotNull(TEXT("Experiment result iteration selector widget class configured"), experimentResultIterationSelectorClass);
-	if (!startupMenuClass
-		|| !mainMenuClass
-		|| !projectTemplateCardClass
-		|| !projectExperimentRunRowClass
-		|| !projectEpisodeReplayCardClass
-		|| !projectAiSuggestionRowClass
-		|| !experimentResultIterationSelectorClass)
+	UClass* platformRootClass = settings->PlatformRootWidgetClass.LoadSynchronous();
+	TestNotNull(TEXT("Platform root widget class configured"), platformRootClass);
+	if (!platformRootClass)
 	{
 		return false;
 	}
 
 	TestTrue(
-		TEXT("StartupMap class derives from UStartupMenuWidget"),
-		startupMenuClass->IsChildOf(UStartupMenuWidget::StaticClass()));
-	TestTrue(
-		TEXT("ScenarioEditorMap workspace class derives from UMainMenuWidget"),
-		mainMenuClass->IsChildOf(UMainMenuWidget::StaticClass()));
-	TestTrue(
-		TEXT("Project template card class derives from UProjectTemplateCardWidget"),
-		projectTemplateCardClass->IsChildOf(UProjectTemplateCardWidget::StaticClass()));
-	TestTrue(
-		TEXT("Project experiment run row class derives from UProjectExperimentRunRowWidget"),
-		projectExperimentRunRowClass->IsChildOf(UProjectExperimentRunRowWidget::StaticClass()));
-	TestTrue(
-		TEXT("Project episode replay card class derives from UUserWidget"),
-		projectEpisodeReplayCardClass->IsChildOf(UUserWidget::StaticClass()));
-	TestTrue(
-		TEXT("Project AI suggestion row class derives from UUserWidget"),
-		projectAiSuggestionRowClass->IsChildOf(UUserWidget::StaticClass()));
-	TestTrue(
-		TEXT("Experiment result iteration selector class derives from UExperimentResultIterationSelectorWidget"),
-		experimentResultIterationSelectorClass->IsChildOf(UExperimentResultIterationSelectorWidget::StaticClass()));
+		TEXT("Platform root class derives from UPlatformRootWidget"),
+		platformRootClass->IsChildOf(UPlatformRootWidget::StaticClass()));
 	return true;
 }
 

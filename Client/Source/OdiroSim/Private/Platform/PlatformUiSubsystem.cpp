@@ -17,7 +17,6 @@
 #include "Platform/ViewModel/OdiroListItemViewModel.h"
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 #include "Platform/ViewModel/RobotProfileViewModel.h"
-#include "Platform/ViewModel/StartupMenuViewModel.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -386,16 +385,11 @@ void UPlatformUiSubsystem::Initialize(FSubsystemCollectionBase& collection)
 {
 	Super::Initialize(collection);
 
-	StartupMenuViewModel = NewObject<UStartupMenuViewModel>(this);
 	ProjectWorkspaceViewModel = NewObject<UProjectWorkspaceViewModel>(this);
 	ExperimentConfigViewModel = NewObject<UExperimentConfigViewModel>(this);
 	RobotProfileViewModel = NewObject<URobotProfileViewModel>(this);
 	ExperimentResultViewModel = NewObject<UExperimentResultViewModel>(this);
 
-	if (StartupMenuViewModel)
-	{
-		StartupMenuViewModel->InitializeForGameInstance(GetGameInstance());
-	}
 	if (ProjectWorkspaceViewModel)
 	{
 		ProjectWorkspaceViewModel->InitializeForGameInstance(GetGameInstance());
@@ -437,7 +431,6 @@ void UPlatformUiSubsystem::Deinitialize()
 		analysisSubsystem->OnAnalysisCompleted.RemoveAll(this);
 	}
 
-	StartupMenuViewModel = nullptr;
 	ProjectWorkspaceViewModel = nullptr;
 	ExperimentConfigViewModel = nullptr;
 	RobotProfileViewModel = nullptr;
@@ -523,14 +516,14 @@ bool UPlatformUiSubsystem::ReturnToStartupMap(FString& outErrorText) const
 	UWorld* world = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
 	if (!world)
 	{
-		outErrorText = TEXT("StartupMap으로 돌아갈 World가 없습니다.");
+		outErrorText = TEXT("Startup screen을 표시할 World가 없습니다.");
 		return false;
 	}
 
 	const FString mapId = StartupMapId.TrimStartAndEnd();
 	if (mapId.IsEmpty())
 	{
-		outErrorText = TEXT("StartupMap id가 없습니다.");
+		outErrorText = TEXT("Startup screen map id가 없습니다.");
 		return false;
 	}
 

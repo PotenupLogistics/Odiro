@@ -1,6 +1,5 @@
 #include "Platform/Widget/WindowsControlWidget.h"
 
-#include "Animation/WidgetAnimation.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Engine/Engine.h"
@@ -139,7 +138,6 @@ void UWindowsControlWidget::NativeConstruct()
 	}
 #endif
 	BindControls();
-	BindAnimationControls();
 	RefreshWindowControlButtons();
 }
 
@@ -148,7 +146,6 @@ void UWindowsControlWidget::NativeDestruct()
 #if WITH_EDITOR
 	StopEditorImmersiveStateRefreshTimer();
 #endif
-	UnbindAnimationControls();
 	UnbindControls();
 	Super::NativeDestruct();
 }
@@ -170,133 +167,6 @@ void UWindowsControlWidget::RefreshWindowControlButtons()
 	ApplyConfiguredWindowsCaptionGlyph(
 		MaximizeRestoreText.Get(),
 		bIsMaximized ? EPlatformWindowCaptionGlyph::Restore : EPlatformWindowCaptionGlyph::Maximize);
-}
-
-void UWindowsControlWidget::BindAnimationControls()
-{
-	if (UButton* minimizeButton = MinimizeButton.Get())
-	{
-		minimizeButton->OnHovered.RemoveDynamic(this, &UWindowsControlWidget::HandleMinimizeHovered);
-		minimizeButton->OnHovered.AddDynamic(this, &UWindowsControlWidget::HandleMinimizeHovered);
-		minimizeButton->OnUnhovered.RemoveDynamic(this, &UWindowsControlWidget::HandleMinimizeUnhovered);
-		minimizeButton->OnUnhovered.AddDynamic(this, &UWindowsControlWidget::HandleMinimizeUnhovered);
-		minimizeButton->OnPressed.RemoveDynamic(this, &UWindowsControlWidget::HandleMinimizePressed);
-		minimizeButton->OnPressed.AddDynamic(this, &UWindowsControlWidget::HandleMinimizePressed);
-		minimizeButton->OnReleased.RemoveDynamic(this, &UWindowsControlWidget::HandleMinimizeReleased);
-		minimizeButton->OnReleased.AddDynamic(this, &UWindowsControlWidget::HandleMinimizeReleased);
-	}
-
-	if (UButton* maximizeRestoreButton = MaximizeRestoreButton.Get())
-	{
-		maximizeRestoreButton->OnHovered.RemoveDynamic(this, &UWindowsControlWidget::HandleMaximizeRestoreHovered);
-		maximizeRestoreButton->OnHovered.AddDynamic(this, &UWindowsControlWidget::HandleMaximizeRestoreHovered);
-		maximizeRestoreButton->OnUnhovered.RemoveDynamic(this, &UWindowsControlWidget::HandleMaximizeRestoreUnhovered);
-		maximizeRestoreButton->OnUnhovered.AddDynamic(this, &UWindowsControlWidget::HandleMaximizeRestoreUnhovered);
-		maximizeRestoreButton->OnPressed.RemoveDynamic(this, &UWindowsControlWidget::HandleMaximizeRestorePressed);
-		maximizeRestoreButton->OnPressed.AddDynamic(this, &UWindowsControlWidget::HandleMaximizeRestorePressed);
-		maximizeRestoreButton->OnReleased.RemoveDynamic(this, &UWindowsControlWidget::HandleMaximizeRestoreReleased);
-		maximizeRestoreButton->OnReleased.AddDynamic(this, &UWindowsControlWidget::HandleMaximizeRestoreReleased);
-	}
-
-	if (UButton* closeButton = CloseButton.Get())
-	{
-		closeButton->OnHovered.RemoveDynamic(this, &UWindowsControlWidget::HandleCloseHovered);
-		closeButton->OnHovered.AddDynamic(this, &UWindowsControlWidget::HandleCloseHovered);
-		closeButton->OnUnhovered.RemoveDynamic(this, &UWindowsControlWidget::HandleCloseUnhovered);
-		closeButton->OnUnhovered.AddDynamic(this, &UWindowsControlWidget::HandleCloseUnhovered);
-		closeButton->OnPressed.RemoveDynamic(this, &UWindowsControlWidget::HandleClosePressed);
-		closeButton->OnPressed.AddDynamic(this, &UWindowsControlWidget::HandleClosePressed);
-		closeButton->OnReleased.RemoveDynamic(this, &UWindowsControlWidget::HandleCloseReleased);
-		closeButton->OnReleased.AddDynamic(this, &UWindowsControlWidget::HandleCloseReleased);
-	}
-}
-
-void UWindowsControlWidget::UnbindAnimationControls()
-{
-	if (UButton* minimizeButton = MinimizeButton.Get())
-	{
-		minimizeButton->OnHovered.RemoveDynamic(this, &UWindowsControlWidget::HandleMinimizeHovered);
-		minimizeButton->OnUnhovered.RemoveDynamic(this, &UWindowsControlWidget::HandleMinimizeUnhovered);
-		minimizeButton->OnPressed.RemoveDynamic(this, &UWindowsControlWidget::HandleMinimizePressed);
-		minimizeButton->OnReleased.RemoveDynamic(this, &UWindowsControlWidget::HandleMinimizeReleased);
-	}
-
-	if (UButton* maximizeRestoreButton = MaximizeRestoreButton.Get())
-	{
-		maximizeRestoreButton->OnHovered.RemoveDynamic(this, &UWindowsControlWidget::HandleMaximizeRestoreHovered);
-		maximizeRestoreButton->OnUnhovered.RemoveDynamic(this, &UWindowsControlWidget::HandleMaximizeRestoreUnhovered);
-		maximizeRestoreButton->OnPressed.RemoveDynamic(this, &UWindowsControlWidget::HandleMaximizeRestorePressed);
-		maximizeRestoreButton->OnReleased.RemoveDynamic(this, &UWindowsControlWidget::HandleMaximizeRestoreReleased);
-	}
-
-	if (UButton* closeButton = CloseButton.Get())
-	{
-		closeButton->OnHovered.RemoveDynamic(this, &UWindowsControlWidget::HandleCloseHovered);
-		closeButton->OnUnhovered.RemoveDynamic(this, &UWindowsControlWidget::HandleCloseUnhovered);
-		closeButton->OnPressed.RemoveDynamic(this, &UWindowsControlWidget::HandleClosePressed);
-		closeButton->OnReleased.RemoveDynamic(this, &UWindowsControlWidget::HandleCloseReleased);
-	}
-}
-
-void UWindowsControlWidget::PlayHoverAnimation(
-	const EWindowsCaptionControlSlot slot,
-	const bool bForward)
-{
-	PlayCaptionAnimation(ResolveHoverAnimation(slot), bForward);
-}
-
-void UWindowsControlWidget::PlayPressAnimation(
-	const EWindowsCaptionControlSlot slot,
-	const bool bForward)
-{
-	PlayCaptionAnimation(ResolvePressAnimation(slot), bForward);
-}
-
-UWidgetAnimation* UWindowsControlWidget::ResolveHoverAnimation(const EWindowsCaptionControlSlot slot) const
-{
-	switch (slot)
-	{
-	case EWindowsCaptionControlSlot::Minimize:
-		return MinimizeHoverAnimation.Get();
-	case EWindowsCaptionControlSlot::MaximizeRestore:
-		return MaximizeRestoreHoverAnimation.Get();
-	case EWindowsCaptionControlSlot::Close:
-		return CloseHoverAnimation.Get();
-	default:
-		return nullptr;
-	}
-}
-
-UWidgetAnimation* UWindowsControlWidget::ResolvePressAnimation(const EWindowsCaptionControlSlot slot) const
-{
-	switch (slot)
-	{
-	case EWindowsCaptionControlSlot::Minimize:
-		return MinimizePressAnimation.Get();
-	case EWindowsCaptionControlSlot::MaximizeRestore:
-		return MaximizeRestorePressAnimation.Get();
-	case EWindowsCaptionControlSlot::Close:
-		return ClosePressAnimation.Get();
-	default:
-		return nullptr;
-	}
-}
-
-void UWindowsControlWidget::PlayCaptionAnimation(UWidgetAnimation* animation, const bool bForward)
-{
-	if (!animation)
-	{
-		return;
-	}
-
-	if (bForward)
-	{
-		PlayAnimationForward(animation);
-	}
-	else
-	{
-		PlayAnimationReverse(animation);
-	}
 }
 
 void UWindowsControlWidget::MinimizeWindow()
@@ -596,67 +466,4 @@ void UWindowsControlWidget::HandleMaximizeRestoreClicked()
 void UWindowsControlWidget::HandleCloseClicked()
 {
 	CloseWindow();
-}
-
-void UWindowsControlWidget::HandleMinimizeHovered()
-{
-	PlayHoverAnimation(EWindowsCaptionControlSlot::Minimize, true);
-}
-
-void UWindowsControlWidget::HandleMinimizeUnhovered()
-{
-	PlayPressAnimation(EWindowsCaptionControlSlot::Minimize, false);
-	PlayHoverAnimation(EWindowsCaptionControlSlot::Minimize, false);
-}
-
-void UWindowsControlWidget::HandleMinimizePressed()
-{
-	PlayPressAnimation(EWindowsCaptionControlSlot::Minimize, true);
-}
-
-void UWindowsControlWidget::HandleMinimizeReleased()
-{
-	PlayPressAnimation(EWindowsCaptionControlSlot::Minimize, false);
-}
-
-void UWindowsControlWidget::HandleMaximizeRestoreHovered()
-{
-	PlayHoverAnimation(EWindowsCaptionControlSlot::MaximizeRestore, true);
-}
-
-void UWindowsControlWidget::HandleMaximizeRestoreUnhovered()
-{
-	PlayPressAnimation(EWindowsCaptionControlSlot::MaximizeRestore, false);
-	PlayHoverAnimation(EWindowsCaptionControlSlot::MaximizeRestore, false);
-}
-
-void UWindowsControlWidget::HandleMaximizeRestorePressed()
-{
-	PlayPressAnimation(EWindowsCaptionControlSlot::MaximizeRestore, true);
-}
-
-void UWindowsControlWidget::HandleMaximizeRestoreReleased()
-{
-	PlayPressAnimation(EWindowsCaptionControlSlot::MaximizeRestore, false);
-}
-
-void UWindowsControlWidget::HandleCloseHovered()
-{
-	PlayHoverAnimation(EWindowsCaptionControlSlot::Close, true);
-}
-
-void UWindowsControlWidget::HandleCloseUnhovered()
-{
-	PlayPressAnimation(EWindowsCaptionControlSlot::Close, false);
-	PlayHoverAnimation(EWindowsCaptionControlSlot::Close, false);
-}
-
-void UWindowsControlWidget::HandleClosePressed()
-{
-	PlayPressAnimation(EWindowsCaptionControlSlot::Close, true);
-}
-
-void UWindowsControlWidget::HandleCloseReleased()
-{
-	PlayPressAnimation(EWindowsCaptionControlSlot::Close, false);
 }

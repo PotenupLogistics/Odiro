@@ -133,24 +133,38 @@ bool FPlatformAnalysisAiDisplayTextTest::RunTest(const FString& Parameters)
 	(void)Parameters;
 
 	const FString ResponseJson = TEXT(R"({
+		"schema": "result_analysis_response",
+		"version": 2,
+		"status": "ok",
 		"review_id": "0002",
 		"run_id": "000005",
-		"analysis_mode": "llm",
+		"run_overview": {
+			"display": {
+				"total_play_time": "42.0초",
+				"success_rate": "25%",
+				"collision_count": "152회"
+			}
+		},
+		"episodes": [
+			{
+				"episode_id": "000001",
+				"display": {
+					"duration": "10.5초",
+					"outcome": "실패"
+				}
+			}
+		],
 		"summary": {
 			"overall_judgement": "change_recommended",
 			"message": "환경 또는 장애물 배치 검토가 필요합니다."
 		},
-		"metrics": {
-			"success_count": 1,
-			"failure_count": 3,
-			"collision_count": 152,
-			"static_obstacle_collision_count": 152,
-			"pedestrian_collision_count": 0,
-			"near_miss_count": 1,
-			"repath_count": 0,
-			"robot_tip_over_count": 0
-		},
-		"recommendation_type": "environment_review",
+		"insights": [
+			{
+				"severity": "high",
+				"title": "정적 장애물 충돌 반복",
+				"description": "정적 장애물 충돌이 반복되었습니다."
+			}
+		],
 		"recommendations": [
 			{
 				"id": "REC-001",
@@ -161,7 +175,6 @@ bool FPlatformAnalysisAiDisplayTextTest::RunTest(const FString& Parameters)
 				"recommendation": "최소 통로 폭을 늘린 환경 수정 후보로 재실행하세요."
 			}
 		],
-		"analysis_text": "[결과 요약]\n총 4개 episode 중 성공 1회, 실패 3회가 확인되었습니다.",
 		"warnings": ["skipped large file: runs/000005/episodes/000001/actions.jsonl"]
 	})");
 
@@ -170,8 +183,10 @@ bool FPlatformAnalysisAiDisplayTextTest::RunTest(const FString& Parameters)
 		ResponseJson,
 		Diagnostics);
 	TestEqual(TEXT("diagnostics"), Diagnostics.Num(), 0);
-	TestTrue(TEXT("contains analysis text"), DisplayText.Contains(TEXT("총 4개 episode")));
-	TestTrue(TEXT("contains metric"), DisplayText.Contains(TEXT("Collision")));
+	TestTrue(TEXT("contains summary message"), DisplayText.Contains(TEXT("환경 또는 장애물")));
+	TestTrue(TEXT("contains run overview display"), DisplayText.Contains(TEXT("42.0초")));
+	TestTrue(TEXT("contains insight"), DisplayText.Contains(TEXT("충돌 반복")));
+	TestTrue(TEXT("contains episode display"), DisplayText.Contains(TEXT("10.5초")));
 	TestTrue(TEXT("contains v2 recommendation title"), DisplayText.Contains(TEXT("정적 장애물 배치")));
 	TestTrue(TEXT("contains v2 recommendation text"), DisplayText.Contains(TEXT("최소 통로 폭")));
 	TestTrue(TEXT("contains v2 warning"), DisplayText.Contains(TEXT("skipped large file")));

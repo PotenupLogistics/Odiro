@@ -7,7 +7,9 @@
 
 class UGameInstance;
 class UExperimentResultEpisodeViewModel;
+class UExperimentResultInsightViewModel;
 class UExperimentResultSuggestionViewModel;
+class UOdiroListItemViewModel;
 class UPlatformUiSubsystem;
 struct FPlatformAnalysisAiResponse;
 
@@ -73,6 +75,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
 	TArray<UExperimentResultSuggestionViewModel*> GetSuggestionItems() const;
 
+	// Analysis insight card item ViewModel 목록을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	TArray<UExperimentResultInsightViewModel*> GetInsightItems() const;
+
+	// Analysis warning row item ViewModel 목록을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	TArray<UOdiroListItemViewModel*> GetWarningItems() const;
+
 private:
 	UPlatformUiSubsystem* ResolvePlatformUiSubsystem() const;
 	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);
@@ -130,6 +140,17 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	TArray<TObjectPtr<UExperimentResultSuggestionViewModel>> SuggestionItems;
 
+	// Analysis insight 반복 card ViewModel 목록.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	TArray<TObjectPtr<UExperimentResultInsightViewModel>> InsightItems;
+
+	// Analysis warning 반복 row ViewModel 목록.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	TArray<TObjectPtr<UOdiroListItemViewModel>> WarningItems;
+
 	// 진행 중인 AI 분석이 대상으로 삼은 run id.
 	FString PendingAnalysisRunId;
+
+	// 진행 중인 AI 분석이 대상으로 삼은 run directory.
+	FString PendingAnalysisRunDirectory;
 };

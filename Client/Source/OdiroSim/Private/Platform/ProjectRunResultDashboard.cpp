@@ -81,6 +81,17 @@ namespace
 		return OutObject.IsValid();
 	}
 
+	FString ReadDashboardDisplayString(
+		const FJsonObject& Object,
+		const FString& DisplayFieldName,
+		const FString& DefaultValue = FString())
+	{
+		TSharedPtr<FJsonObject> DisplayObject;
+		return TryGetDashboardObjectField(Object, TEXT("display"), DisplayObject)
+			? ReadDashboardStringOrDefault(*DisplayObject, DisplayFieldName, DefaultValue).TrimStartAndEnd()
+			: DefaultValue;
+	}
+
 	bool TryGetDashboardArrayField(const FJsonObject& Object, const FString& FieldName, TArray<TSharedPtr<FJsonValue>>& OutArray)
 	{
 		OutArray.Reset();
@@ -258,23 +269,29 @@ namespace
 		return FPaths::FileExists(PreviewPath) ? PreviewPath : FString();
 	}
 
-	void ApplySuggestionSeverityLabel(FProjectRunAiSuggestionDashboardItem& Item)
+	FString MakeDashboardSeverityLabel(const EProjectRunAiSuggestionSeverity Severity)
 	{
-		switch (Item.Severity)
+		switch (Severity)
 		{
 		case EProjectRunAiSuggestionSeverity::High:
-			Item.SeverityLabel = TEXT("높음");
-			break;
+			return TEXT("높음");
 		case EProjectRunAiSuggestionSeverity::Medium:
-			Item.SeverityLabel = TEXT("중간");
-			break;
+			return TEXT("중간");
 		case EProjectRunAiSuggestionSeverity::Low:
-			Item.SeverityLabel = TEXT("낮음");
-			break;
+			return TEXT("낮음");
 		default:
-			Item.SeverityLabel = TEXT("정보");
-			break;
+			return TEXT("정보");
 		}
+	}
+
+	void ApplySuggestionSeverityLabel(FProjectRunAiSuggestionDashboardItem& Item)
+	{
+		Item.SeverityLabel = MakeDashboardSeverityLabel(Item.Severity);
+	}
+
+	void ApplyInsightSeverityLabel(FProjectRunAnalysisInsightDashboardItem& Item)
+	{
+		Item.SeverityLabel = MakeDashboardSeverityLabel(Item.Severity);
 	}
 
 	EProjectRunAiSuggestionSeverity ParseSuggestionSeverity(const FJsonObject& Object)
@@ -339,6 +356,11 @@ namespace
 			|| !Item.SuggestedValue.IsEmpty();
 	}
 
+	bool HasInsightDisplayContent(const FProjectRunAnalysisInsightDashboardItem& Item)
+	{
+		return !Item.Title.IsEmpty() || !Item.Description.IsEmpty();
+	}
+
 	FProjectRunAiSuggestionDashboardItem MakeSuggestion(const FJsonObject& Object)
 	{
 		FProjectRunAiSuggestionDashboardItem Item;
@@ -360,6 +382,214 @@ namespace
 		Item.CurrentValue = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("current"))).TrimStartAndEnd();
 		Item.SuggestedValue = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("suggested"))).TrimStartAndEnd();
 		return Item;
+	}
+
+	FProjectRunAnalysisInsightDashboardItem MakeInsight(const FJsonObject& Object)
+	{
+		FProjectRunAnalysisInsightDashboardItem Item;
+		Item.Severity = ParseSuggestionSeverity(Object);
+		ApplyInsightSeverityLabel(Item);
+		Item.Title = ReadTrimmedDashboardString(Object, TEXT("title"));
+		Item.Description = ReadTrimmedDashboardString(Object, TEXT("description"));
+		if (Item.Description.IsEmpty())
+		{
+			Item.Description = ReadTrimmedDashboardString(Object, TEXT("detail"));
+		}
+		if (Item.Description.IsEmpty())
+		{
+			Item.Description = ReadTrimmedDashboardString(Object, TEXT("message"));
+		}
+		return Item;
+	}
+
+	void AppendWarningsArray(
+		const FJsonObject& RootObject,
+		FProjectRunResultDashboardData& OutDashboardData)
+	{
+		TArray<TSharedPtr<FJsonValue>> WarningValues;
+		if (!TryGetDashboardArrayField(RootObject, TEXT("warnings"), WarningValues))
+		{
+			return;
+		}
+
+		for (const TSharedPtr<FJsonValue>& WarningValue : WarningValues)
+		{
+			FString WarningText;
+			if (WarningValue.IsValid() && WarningValue->Type == EJson::String)
+			{
+				WarningText = WarningValue->AsString().TrimStartAndEnd();
+			}
+			else if (WarningValue.IsValid() && WarningValue->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject> WarningObject = WarningValue->AsObject();
+				if (WarningObject.IsValid())
+				{
+					WarningText = ReadTrimmedDashboardString(*WarningObject, TEXT("message"));
+				}
+			}
+
+			if (!WarningText.IsEmpty())
+			{
+				OutDashboardData.Warnings.Add(WarningText);
+			}
+		}
+	}
+
+	void AppendInsightsArray(
+		const FJsonObject& RootObject,
+		FProjectRunResultDashboardData& OutDashboardData)
+	{
+		TArray<TSharedPtr<FJsonValue>> InsightValues;
+		if (!TryGetDashboardArrayField(RootObject, TEXT("insights"), InsightValues))
+		{
+			return;
+		}
+
+		for (const TSharedPtr<FJsonValue>& InsightValue : InsightValues)
+		{
+			if (!InsightValue.IsValid() || InsightValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject> InsightObject = InsightValue->AsObject();
+			if (!InsightObject.IsValid())
+			{
+				continue;
+			}
+
+			FProjectRunAnalysisInsightDashboardItem Insight = MakeInsight(*InsightObject);
+			if (HasInsightDisplayContent(Insight))
+			{
+				OutDashboardData.Insights.Add(MoveTemp(Insight));
+			}
+		}
+	}
+
+	void ApplyRunOverview(
+		const FJsonObject& RootObject,
+		FProjectRunResultDashboardData& OutDashboardData)
+	{
+		TSharedPtr<FJsonObject> RunOverviewObject;
+		if (!TryGetDashboardObjectField(RootObject, TEXT("run_overview"), RunOverviewObject))
+		{
+			return;
+		}
+
+		double TotalPlayTimeSeconds = 0.0;
+		if (RunOverviewObject->TryGetNumberField(TEXT("total_play_time_s"), TotalPlayTimeSeconds))
+		{
+			OutDashboardData.TotalDurationSeconds = TotalPlayTimeSeconds;
+		}
+
+		double SuccessRate = 0.0;
+		const bool bHasSuccessRate = RunOverviewObject->TryGetNumberField(TEXT("success_rate"), SuccessRate);
+		double EpisodeCountValue = 0.0;
+		if (RunOverviewObject->TryGetNumberField(TEXT("episode_count"), EpisodeCountValue)
+			&& FMath::RoundToInt(EpisodeCountValue) > 0)
+		{
+			const int32 EpisodeCount = FMath::RoundToInt(EpisodeCountValue);
+			OutDashboardData.EpisodeCount = EpisodeCount;
+			if (bHasSuccessRate)
+			{
+				const double SuccessRateRatio = SuccessRate > 1.0 ? SuccessRate / 100.0 : SuccessRate;
+				OutDashboardData.SuccessCount = FMath::RoundToInt(SuccessRateRatio * EpisodeCount);
+			}
+		}
+
+		double CollisionCountValue = 0.0;
+		if (RunOverviewObject->TryGetNumberField(TEXT("collision_count"), CollisionCountValue))
+		{
+			OutDashboardData.CollisionCount = FMath::RoundToInt(CollisionCountValue);
+		}
+		OutDashboardData.TotalPlayTimeLabel = ReadDashboardDisplayString(
+			*RunOverviewObject,
+			TEXT("total_play_time"),
+			OutDashboardData.TotalPlayTimeLabel);
+		OutDashboardData.SuccessRateLabel = ReadDashboardDisplayString(
+			*RunOverviewObject,
+			TEXT("success_rate"),
+			OutDashboardData.SuccessRateLabel);
+		OutDashboardData.CollisionCountLabel = ReadDashboardDisplayString(
+			*RunOverviewObject,
+			TEXT("collision_count"),
+			OutDashboardData.CollisionCountLabel);
+	}
+
+	void ApplyEpisodeDisplayData(
+		FProjectRunEpisodeDashboardItem& Episode,
+		const FJsonObject& EpisodeObject,
+		const FString& RunDirectory)
+	{
+		Episode.EpisodeId = ReadDashboardStringOrDefault(EpisodeObject, TEXT("episode_id"), Episode.EpisodeId);
+		Episode.DurationSeconds = ReadDashboardNumberOrDefault(EpisodeObject, TEXT("duration_s"), Episode.DurationSeconds);
+		Episode.DurationLabel = ReadDashboardDisplayString(EpisodeObject, TEXT("duration"), Episode.DurationLabel);
+		Episode.Outcome = ReadDashboardStringOrDefault(EpisodeObject, TEXT("outcome"), Episode.Outcome);
+		Episode.OutcomeLabel = ReadDashboardDisplayString(EpisodeObject, TEXT("outcome"), Episode.OutcomeLabel);
+
+		if (!Episode.Outcome.IsEmpty())
+		{
+			Episode.bSuccess = Episode.Outcome.Equals(TEXT("success"), ESearchCase::IgnoreCase)
+				|| Episode.Outcome.Equals(TEXT("Success"), ESearchCase::IgnoreCase);
+		}
+		if (Episode.EpisodeDirectory.IsEmpty() && !RunDirectory.IsEmpty())
+		{
+			Episode.EpisodeDirectory = MakeEpisodeDirectory(RunDirectory, Episode.EpisodeId);
+			Episode.bReplayAvailable = HasEpisodeReplayArtifacts(Episode.EpisodeDirectory);
+			Episode.PreviewImagePath = MakePreviewImagePath(RunDirectory, Episode.EpisodeId);
+		}
+	}
+
+	void ApplyEpisodesArray(
+		const FJsonObject& RootObject,
+		const FString& RunDirectory,
+		FProjectRunResultDashboardData& OutDashboardData)
+	{
+		TArray<TSharedPtr<FJsonValue>> EpisodeValues;
+		if (!TryGetDashboardArrayField(RootObject, TEXT("episodes"), EpisodeValues))
+		{
+			return;
+		}
+
+		for (const TSharedPtr<FJsonValue>& EpisodeValue : EpisodeValues)
+		{
+			if (!EpisodeValue.IsValid() || EpisodeValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject> EpisodeObject = EpisodeValue->AsObject();
+			if (!EpisodeObject.IsValid())
+			{
+				continue;
+			}
+
+			const FString EpisodeId = ReadDashboardStringOrDefault(*EpisodeObject, TEXT("episode_id")).TrimStartAndEnd();
+			if (EpisodeId.IsEmpty())
+			{
+				continue;
+			}
+
+			FProjectRunEpisodeDashboardItem* ExistingEpisode = OutDashboardData.Episodes.FindByPredicate(
+				[&EpisodeId](const FProjectRunEpisodeDashboardItem& Candidate)
+				{
+					return Candidate.EpisodeId.Equals(EpisodeId, ESearchCase::IgnoreCase);
+				});
+			if (ExistingEpisode)
+			{
+				ApplyEpisodeDisplayData(*ExistingEpisode, *EpisodeObject, RunDirectory);
+				continue;
+			}
+
+			FProjectRunEpisodeDashboardItem Episode;
+			ApplyEpisodeDisplayData(Episode, *EpisodeObject, RunDirectory);
+			OutDashboardData.Episodes.Add(MoveTemp(Episode));
+		}
+
+		if (!EpisodeValues.IsEmpty())
+		{
+			OutDashboardData.EpisodeCount = OutDashboardData.Episodes.Num();
+		}
 	}
 
 	bool AppendRecommendationsArray(
@@ -425,6 +655,64 @@ namespace
 				OutDashboardData);
 		}
 		return false;
+	}
+
+	bool AppendAiFromAnalysisResponseJsonObject(
+		const FJsonObject& RootObject,
+		const FString& RunDirectory,
+		FProjectRunResultDashboardData& OutDashboardData)
+	{
+		AppendWarningsArray(RootObject, OutDashboardData);
+
+		const FString Status = ReadDashboardStringOrDefault(RootObject, TEXT("status")).TrimStartAndEnd();
+		if (Status.Equals(TEXT("failed"), ESearchCase::IgnoreCase))
+		{
+			TSharedPtr<FJsonObject> ErrorObject;
+			if (TryGetDashboardObjectField(RootObject, TEXT("error"), ErrorObject))
+			{
+				const FString ErrorMessage = ReadTrimmedDashboardString(*ErrorObject, TEXT("message"));
+				if (!ErrorMessage.IsEmpty())
+				{
+					OutDashboardData.AiSummary = ErrorMessage;
+					OutDashboardData.Diagnostics.Add(ErrorMessage);
+				}
+			}
+			OutDashboardData.bAiLoaded = true;
+			return true;
+		}
+
+		if (OutDashboardData.RunId.IsEmpty())
+		{
+			OutDashboardData.RunId = ReadDashboardStringOrDefault(RootObject, TEXT("run_id"));
+		}
+
+		ApplyRunOverview(RootObject, OutDashboardData);
+		ApplyEpisodesArray(RootObject, RunDirectory, OutDashboardData);
+
+		const TSharedPtr<FJsonValue> SummaryValue = RootObject.TryGetField(TEXT("summary"));
+		if (SummaryValue.IsValid())
+		{
+			if (SummaryValue->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject> SummaryObject = SummaryValue->AsObject();
+				if (SummaryObject.IsValid())
+				{
+					OutDashboardData.AiSummary = ReadDashboardStringOrDefault(
+						*SummaryObject,
+						TEXT("message"),
+						OutDashboardData.AiSummary).TrimStartAndEnd();
+				}
+			}
+			else if (SummaryValue->Type == EJson::String)
+			{
+				OutDashboardData.AiSummary = SummaryValue->AsString().TrimStartAndEnd();
+			}
+		}
+
+		AppendInsightsArray(RootObject, OutDashboardData);
+		AppendRecommendationsArray(RootObject, OutDashboardData);
+		OutDashboardData.bAiLoaded = true;
+		return true;
 	}
 }
 
@@ -540,13 +828,24 @@ bool FProjectRunResultDashboardJson::AppendAiFromRunDirectory(
 	const int32 InitialSuggestionCount = outDashboardData.Suggestions.Num();
 
 	const FString AnalysisResponsePath = NormalizeDashboardPath(FPaths::Combine(ReviewDirectory, MainAnalysisResponseFileName));
+	bool bAnalysisResponseFailed = false;
 	FString AnalysisResponseJson;
 	if (FFileHelper::LoadFileToString(AnalysisResponseJson, *AnalysisResponsePath))
 	{
-		AppendAiFromAnalysisResponseJsonString(AnalysisResponseJson, outDashboardData);
+		TSharedPtr<FJsonObject> RootObject;
+		if (TryParseDashboardJsonObject(AnalysisResponseJson, RootObject) && RootObject.IsValid())
+		{
+			const FString Status = ReadDashboardStringOrDefault(*RootObject, TEXT("status")).TrimStartAndEnd();
+			bAnalysisResponseFailed = Status.Equals(TEXT("failed"), ESearchCase::IgnoreCase);
+			AppendAiFromAnalysisResponseJsonObject(*RootObject, RunDirectory, outDashboardData);
+		}
+		else
+		{
+			outDashboardData.Diagnostics.Add(TEXT("analysis_run_response_v2.json JSON 파싱 실패"));
+		}
 	}
 
-	if (outDashboardData.Suggestions.Num() == InitialSuggestionCount)
+	if (!bAnalysisResponseFailed && outDashboardData.Suggestions.Num() == InitialSuggestionCount)
 	{
 		AppendLatestRecommendationsFile(ReviewDirectory, outDashboardData);
 	}
@@ -565,32 +864,7 @@ bool FProjectRunResultDashboardJson::AppendAiFromAnalysisResponseJsonString(
 		return false;
 	}
 
-	FString AnalysisText;
-	if (RootObject->TryGetStringField(TEXT("analysis_text"), AnalysisText) && !AnalysisText.TrimStartAndEnd().IsEmpty())
-	{
-		outDashboardData.AiSummary = AnalysisText.TrimStartAndEnd();
-	}
-
-	const TSharedPtr<FJsonValue> SummaryValue = RootObject->TryGetField(TEXT("summary"));
-	if (outDashboardData.AiSummary.IsEmpty() && SummaryValue.IsValid())
-	{
-		if (SummaryValue->Type == EJson::Object)
-		{
-			const TSharedPtr<FJsonObject> SummaryObject = SummaryValue->AsObject();
-			if (SummaryObject.IsValid())
-			{
-				outDashboardData.AiSummary = ReadDashboardStringOrDefault(*SummaryObject, TEXT("message"), outDashboardData.AiSummary);
-			}
-		}
-		else if (SummaryValue->Type == EJson::String)
-		{
-			outDashboardData.AiSummary = SummaryValue->AsString();
-		}
-	}
-
-	AppendRecommendationsArray(*RootObject, outDashboardData);
-	outDashboardData.bAiLoaded = true;
-	return true;
+	return AppendAiFromAnalysisResponseJsonObject(*RootObject, FString(), outDashboardData);
 }
 
 bool FProjectRunResultDashboardJson::AppendAiFromRecommendationsJsonString(
@@ -610,6 +884,7 @@ bool FProjectRunResultDashboardJson::AppendAiFromRecommendationsJsonString(
 		outDashboardData.AiSummary = Reason;
 	}
 
+	AppendWarningsArray(*RootObject, outDashboardData);
 	AppendRecommendationsArray(*RootObject, outDashboardData);
 	outDashboardData.bAiLoaded = true;
 	return true;

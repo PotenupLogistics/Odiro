@@ -26,6 +26,18 @@ struct ODIROSIM_API FPlatformAnalysisAiResponse
 
 	UPROPERTY(BlueprintReadOnly, Category = "Platform|AI")
 	FString ResponseBody;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|AI")
+	FString ProjectPath;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|AI")
+	FString RunId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|AI")
+	FString RunDirectory;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|AI")
+	FString ReviewOutputPath;
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformAnalysisAiCompletedNative, const FPlatformAnalysisAiResponse&);
@@ -76,9 +88,19 @@ private:
 		TSharedPtr<IHttpResponse, ESPMode::ThreadSafe> httpResponse,
 		bool bWasSuccessful);
 
-	void BroadcastFailure(int32 responseCode, const FString& message, const FString& responseBody = FString());
+	void BroadcastFailure(
+		int32 responseCode,
+		const FString& message,
+		const FString& responseBody = FString(),
+		const FString& projectPath = FString(),
+		const FString& runId = FString(),
+		const FString& runDirectory = FString(),
+		const FString& reviewOutputPath = FString());
 
 	FString PendingRequestId;
+	FString PendingProjectPath;
+	FString PendingRunId;
+	FString PendingRunDirectory;
 	FString PendingReviewOutputPath;
 	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> PendingHttpRequest;
 };

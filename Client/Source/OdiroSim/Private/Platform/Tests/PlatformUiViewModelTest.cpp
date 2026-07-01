@@ -4,6 +4,7 @@
 #include "Platform/ViewModel/ExperimentResultViewModel.h"
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 #include "Platform/ViewModel/RobotProfileViewModel.h"
+#include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/PlatformUiDeveloperSettings.h"
 #include "Platform/Widget/PlatformRootWidget.h"
 
@@ -293,6 +294,8 @@ bool FPlatformUiViewModelExperimentResultTest::RunTest(const FString& parameters
 	{
 		return false;
 	}
+	UPlatformUiSubsystem* platformUiSubsystem = NewObject<UPlatformUiSubsystem>();
+	viewModel->SetSubsystemOverride(platformUiSubsystem);
 
 	const FString testRoot = MakePlatformUiVmTestRoot();
 	const FString runDirectory = FPaths::Combine(testRoot, TEXT("runs/000123"));
@@ -327,6 +330,56 @@ bool FPlatformUiViewModelExperimentResultTest::RunTest(const FString& parameters
 	TestEqual(TEXT("total duration label"), viewModel->GetTotalDurationLabel(), FString(TEXT("2.5 s")));
 	TestEqual(TEXT("success rate label"), viewModel->GetSuccessRateLabel(), FString(TEXT("100%")));
 	TestEqual(TEXT("collision count label"), viewModel->GetCollisionCountLabel(), FString(TEXT("0")));
+
+	const FString reviewDirectory = FPaths::Combine(runDirectory, TEXT("review"));
+	TestTrue(TEXT("create review fixture directory"), IFileManager::Get().MakeDirectory(*reviewDirectory, true));
+	const FString analysisResponseJson = TEXT(R"({
+		"schema": "analysis_run_response_v2",
+		"version": 2,
+		"status": "success",
+		"run_id": "000123",
+		"summary": {
+			"overall_judgement": "change_recommended",
+			"message": "AI 분석 완료 후 결과를 다시 읽었습니다."
+		},
+		"insights": [
+			{
+				"severity": "high",
+				"title": "정체 후 제한 시간 초과",
+				"description": "제한 시간 내 목표에 도달하지 못했습니다."
+			}
+		],
+		"recommendations": [
+			{
+				"target": "policy",
+				"priority": "high",
+				"title": "정책 파라미터 검토",
+				"reason": "실패 episode가 감지되었습니다.",
+				"recommendation": "감속 조건을 보수적으로 조정하세요."
+			}
+		],
+		"warnings": [
+			"skipped large file: actions.jsonl"
+		]
+	})");
+	TestTrue(
+		TEXT("write analysis response fixture"),
+		FFileHelper::SaveStringToFile(
+			analysisResponseJson,
+			*FPaths::Combine(reviewDirectory, TEXT("analysis_run_response_v2.json")),
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM));
+
+	FPlatformAnalysisAiResponse analysisResponse;
+	analysisResponse.bSuccess = true;
+	analysisResponse.RunId = TEXT("000123");
+	analysisResponse.RunDirectory = runDirectory;
+	platformUiSubsystem->OnAnalysisCompleted.Broadcast(analysisResponse);
+
+	TestTrue(TEXT("completion reloads saved AI response"), viewModel->GetDashboardData().bAiLoaded);
+	TestTrue(TEXT("completion updates AI summary"), viewModel->GetAiSummaryText().Contains(TEXT("다시 읽었습니다")));
+	TestEqual(TEXT("completion updates insights"), viewModel->GetInsightItems().Num(), 1);
+	TestEqual(TEXT("completion updates suggestions"), viewModel->GetSuggestionItems().Num(), 1);
+	TestEqual(TEXT("completion updates warnings"), viewModel->GetWarningItems().Num(), 1);
 
 	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
 	return true;
@@ -382,6 +435,7 @@ bool FPlatformUiStartupToScenarioEditorMapSmokeTest::RunTest(const FString& para
 	TestTrue(
 		TEXT("Platform root class derives from UPlatformRootWidget"),
 		platformRootClass->IsChildOf(UPlatformRootWidget::StaticClass()));
+
 	return true;
 }
 

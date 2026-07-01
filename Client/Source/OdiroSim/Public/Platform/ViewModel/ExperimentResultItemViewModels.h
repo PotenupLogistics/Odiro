@@ -39,6 +39,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentResult")
 	void SetSuccess(bool bInSuccess);
 
+	// Episode outcome 표시 문자열을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	FString GetOutcomeLabel() const { return OutcomeLabel; }
+
+	// Episode outcome 표시 문자열을 갱신한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentResult")
+	void SetOutcomeLabel(const FString& outcomeLabel);
+
 	// Episode preview image 표시 여부를 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
 	bool HasPreviewImage() const { return bHasPreviewImage; }
@@ -75,6 +83,10 @@ private:
 	// Episode 성공 표시 상태.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	bool bSuccess = false;
+
+	// Episode outcome 표시 문자열.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	FString OutcomeLabel;
 
 	// Episode preview image 존재 여부.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
@@ -183,4 +195,52 @@ private:
 	// AI suggestion 제안 값.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	FString SuggestedValue;
+};
+
+// Project run result dashboard의 analysis insight card item ViewModel.
+UCLASS(BlueprintType)
+class ODIROSIM_API UExperimentResultInsightViewModel : public UOdiroListItemViewModel
+{
+	GENERATED_BODY()
+
+public:
+	// Dashboard insight 데이터를 card 표시 상태로 변환한다.
+	void InitializeFromDashboardItem(const FProjectRunAnalysisInsightDashboardItem& insightItem);
+
+	// 표시 심각도를 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	EProjectRunAiSuggestionSeverity GetSeverity() const { return Severity; }
+
+	// 표시 심각도를 갱신한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentResult")
+	void SetSeverity(EProjectRunAiSuggestionSeverity severity);
+
+	// 표시 심각도 label을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	FString GetSeverityLabel() const { return SeverityLabel; }
+
+	// 표시 심각도 label을 갱신한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentResult")
+	void SetSeverityLabel(const FString& severityLabel);
+
+	// Insight 설명 표시 문자열을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	FString GetDescription() const { return Description; }
+
+	// Insight 설명 표시 문자열을 갱신한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentResult")
+	void SetDescription(const FString& description);
+
+private:
+	// Analysis insight 표시 심각도.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	EProjectRunAiSuggestionSeverity Severity = EProjectRunAiSuggestionSeverity::Info;
+
+	// Analysis insight 심각도 label.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	FString SeverityLabel;
+
+	// Analysis insight 설명.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	FString Description;
 };

@@ -84,18 +84,19 @@ void AScenarioEditorController::CaptureScenarioPreviewAfterSave(
 		return;
 	}
 
-	// 현재 Corridor, GroundRegion과 DeliveryBot 경로로 Map Bounds를 계산한다.
+	// Saved preview framing follows the same authored scenario bounds used by editor viewport fit.
 	FScenarioMapBounds mapBounds;
-	if (!authoringSubsystem->TryResolveScenarioPreviewMapBounds(mapBounds))
+	if (!authoringSubsystem->TryResolveScenarioEditorViewportMapBounds(mapBounds))
 	{
 		handleCaptureFailure(
 			TEXT("map_bounds"),
-			TEXT("Current editor preview does not provide valid map bounds."));
+			TEXT("Current editor viewport does not provide valid map bounds."));
 		return;
 	}
 
-	// 4:3 설정으로 전체 Map Bounds가 들어오는 프레임을 계산한다.
+	// The preview image keeps its own output aspect while sharing the editor fit margin.
 	FScenarioPreviewFramingSettings framingSettings;
+	framingSettings.ScenarioPreviewFitScale = FMath::Max(EditorViewportFitScale, 1.0);
 	FScenarioPreviewFrame frame;
 	if (!FScenarioPreviewFramingResolver::TryResolveScenario(
 		mapBounds,

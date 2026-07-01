@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "CommonButtonBase.h"
+#include "UI/BaseFormElementTypes.h"
 #include "UI/BaseWidgetTokens.h"
 #include "UI/BaseWidgetTypes.h"
 #include "BaseButtonWidget.generated.h"
@@ -29,7 +30,7 @@ public:
 	UBaseTransparentButtonStyle();
 };
 
-// CommonUI button view with base-token styling and bindable view API.
+// CommonUI button view with split base visual catalogs and bindable view API.
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UBaseButtonWidget : public UCommonButtonBase
 {
@@ -39,19 +40,23 @@ public:
 	// Creates the transparent CommonUI shell used by WBP-owned visuals.
 	UBaseButtonWidget(const FObjectInitializer& objectInitializer = FObjectInitializer::Get());
 
-	// Resolves the configured base tokens, falling back to the project default asset or built-in defaults.
+	// Resolves the configured base colors through the project default color asset.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
-	const UBaseWidgetTokenCatalog* GetResolvedBaseTokens() const;
+	const UBaseWidgetColorCatalog* GetResolvedBaseColors() const;
 
-	// Returns a text token from the configured token catalog.
+	// Resolves the configured base sizes through the project default medium-size asset.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
+	const UBaseWidgetSizeCatalog* GetResolvedBaseSizes() const;
+
+	// Returns a resolved text token from the configured color and size catalogs.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
 	FBaseTextStyleToken ResolveTextStyle(EBaseTextRole role) const;
 
-	// Returns a variant color from the configured token catalog.
+	// Returns a variant color from the configured color catalog.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
 	FLinearColor ResolveVariantColor(EBaseWidgetVariant variant) const;
 
-	// Returns a state color from the configured token catalog.
+	// Returns a state color from the configured color catalog.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
 	FLinearColor ResolveStateColor(EBaseWidgetState state) const;
 
@@ -107,19 +112,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
 	bool IsPrimary() const { return bPrimary; }
 
-	// Updates the size hint used by the WBP layout.
+	// Updates the optional color catalog override.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Button")
-	void SetBaseSize(EBaseWidgetSize inSize);
+	void SetColorsOverride(TSoftObjectPtr<UBaseWidgetColorCatalog> inColorsOverride);
 
-	// Returns the size hint used by the WBP layout.
-	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
-	EBaseWidgetSize GetBaseSize() const { return Size; }
+	// Updates the optional size catalog override.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Button")
+	void SetSizesOverride(TSoftObjectPtr<UBaseWidgetSizeCatalog> inSizesOverride);
 
-	// Updates optional min/max desired-size constraints for the WBP root wrapper.
+	// Updates responsive min/max desired-size constraints for the WBP root wrapper.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Button")
 	void SetSizeConstraints(FBaseWidgetSizeConstraints inSizeConstraints);
 
-	// Returns optional min/max desired-size constraints for the WBP root wrapper.
+	// Returns responsive min/max desired-size constraints for the WBP root wrapper.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
 	FBaseWidgetSizeConstraints GetSizeConstraints() const { return SizeConstraints; }
 
@@ -147,27 +152,42 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
 	bool IsDisabled() const { return bDisabled; }
 
+	// Updates horizontal content alignment inside the WBP-owned button surface.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Button")
+	void SetContentAlign(EBaseHorizontalContentAlign inContentAlign);
+
+	// Returns horizontal content alignment inside the WBP-owned button surface.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
+	EBaseHorizontalContentAlign GetContentAlign() const { return ContentAlign; }
+
 	// Broadcasts after CommonUI reports a click.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Button|Events", meta = (DisplayName = "On Clicked"))
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events", meta = (DisplayName = "On Clicked"))
 	FBaseButtonWidgetEvent OnBaseClicked;
 
 	// Broadcasts after CommonUI reports a hover start.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Button|Events", meta = (DisplayName = "On Hovered"))
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events", meta = (DisplayName = "On Hovered"))
 	FBaseButtonWidgetEvent OnBaseHovered;
 
 	// Broadcasts after CommonUI reports a hover end.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Button|Events", meta = (DisplayName = "On Unhovered"))
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events", meta = (DisplayName = "On Unhovered"))
 	FBaseButtonWidgetEvent OnBaseUnhovered;
 
 	// Broadcasts after CommonUI reports a press.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Button|Events", meta = (DisplayName = "On Pressed"))
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events", meta = (DisplayName = "On Pressed"))
 	FBaseButtonWidgetEvent OnBasePressed;
 
 	// Broadcasts after CommonUI reports a release.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Button|Events", meta = (DisplayName = "On Released"))
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events", meta = (DisplayName = "On Released"))
 	FBaseButtonWidgetEvent OnBaseReleased;
 
 protected:
+	// Lets Widget Blueprints own visual transitions for CommonUI interaction states.
+	UFUNCTION(BlueprintImplementableEvent, Category = "UI|Events")
+	void ReceiveBaseVisualStateChanged(EBaseWidgetState state);
+
+	// Emits a visual-state event without C++ color transitions or Tick.
+	void NotifyBaseVisualStateChanged(bool bForce = false);
+
 	// Feeds the rounded surface material its painted size each paint (capture-safe).
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
@@ -224,67 +244,79 @@ protected:
 	// Returns the visual state after disabled, interaction, and selected overrides.
 	EBaseWidgetState GetEffectiveState() const;
 
-	// Optional token catalog override; empty uses the shared DA_BaseTokens asset.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Button", meta = (DisplayName = "Base Token Overrides", ExposeOnSpawn = "true"))
-	TSoftObjectPtr<UBaseWidgetTokenCatalog> BaseTokens;
+	// Optional color catalog override; empty uses the shared DA_BaseColors asset.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Style", meta = (DisplayName = "Colors Override", ExposeOnSpawn = "true"))
+	TSoftObjectPtr<UBaseWidgetColorCatalog> ColorsOverride;
+
+	// Optional size catalog override; empty uses the shared DA_MediumSizes asset.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Style", meta = (DisplayName = "Sizes Override", ExposeOnSpawn = "true"))
+	TSoftObjectPtr<UBaseWidgetSizeCatalog> SizesOverride;
 
 	// Button text.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabel", Setter = "SetLabel", BlueprintGetter = "GetLabel", BlueprintSetter = "SetLabel", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabel", Setter = "SetLabel", BlueprintGetter = "GetLabel", BlueprintSetter = "SetLabel", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText Label;
 
 	// Optional icon texture shown before the label.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIcon", Setter = "SetIcon", BlueprintGetter = "GetIcon", BlueprintSetter = "SetIcon", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIcon", Setter = "SetIcon", BlueprintGetter = "GetIcon", BlueprintSetter = "SetIcon", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	TObjectPtr<UTexture2D> Icon;
 
 	// Optional fallback glyph shown only when no icon image resource is assigned.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconGlyphText", Setter = "SetIconGlyphText", BlueprintGetter = "GetIconGlyphText", BlueprintSetter = "SetIconGlyphText", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconGlyphText", Setter = "SetIconGlyphText", BlueprintGetter = "GetIconGlyphText", BlueprintSetter = "SetIconGlyphText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText IconGlyphText;
 
-	// Icon box and image size in pixels.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconSize", Setter = "SetIconSize", BlueprintGetter = "GetIconSize", BlueprintSetter = "SetIconSize", Category = "UI|Base Button", meta = (DisplayName = "Icon Size (px)", ClampMin = "1.0", UIMin = "8.0", UIMax = "64.0", ExposeOnSpawn = "true"))
-	float IconSize = 24.0f;
+	// Icon box and image size override in pixels; 0 uses the resolved size catalog value.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconSize", Setter = "SetIconSize", BlueprintGetter = "GetIconSize", BlueprintSetter = "SetIconSize", Category = "UI|Contents", meta = (DisplayName = "Icon Size Override (px)", ClampMin = "0.0", UIMin = "0.0", UIMax = "64.0", ExposeOnSpawn = "true"))
+	float IconSize = 0.0f;
+
+	// Horizontal alignment for icon and label content inside the button surface.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetContentAlign", Setter = "SetContentAlign", BlueprintGetter = "GetContentAlign", BlueprintSetter = "SetContentAlign", Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
+	EBaseHorizontalContentAlign ContentAlign = EBaseHorizontalContentAlign::Center;
 
 	// Forces the primary variant for the uncommon single-primary-action case.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsPrimary", Setter = "SetPrimary", BlueprintGetter = "IsPrimary", BlueprintSetter = "SetPrimary", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsPrimary", Setter = "SetPrimary", BlueprintGetter = "IsPrimary", BlueprintSetter = "SetPrimary", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bPrimary = false;
 
 	// Button semantic variant used when bPrimary is false.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetVariant", Setter = "SetVariant", BlueprintGetter = "GetVariant", BlueprintSetter = "SetVariant", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true", EditCondition = "!bPrimary"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetVariant", Setter = "SetVariant", BlueprintGetter = "GetVariant", BlueprintSetter = "SetVariant", Category = "UI|State", meta = (ExposeOnSpawn = "true", EditCondition = "!bPrimary"))
 	EBaseWidgetVariant Variant = EBaseWidgetVariant::Secondary;
 
-	// Button size hint used by WBP variants.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseSize", Setter = "SetBaseSize", BlueprintGetter = "GetBaseSize", BlueprintSetter = "SetBaseSize", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
-	EBaseWidgetSize Size = EBaseWidgetSize::Medium;
-
-	// Optional desired-size constraints applied when RootSize or RootSizeBox is bound.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSizeConstraints", Setter = "SetSizeConstraints", BlueprintGetter = "GetSizeConstraints", BlueprintSetter = "SetSizeConstraints", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	// Responsive desired-size constraints applied when RootSize or RootSizeBox is bound.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSizeConstraints", Setter = "SetSizeConstraints", BlueprintGetter = "GetSizeConstraints", BlueprintSetter = "SetSizeConstraints", Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
 	FBaseWidgetSizeConstraints SizeConstraints;
 
 	// Button semantic state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseState", Setter = "SetBaseState", BlueprintGetter = "GetBaseState", BlueprintSetter = "SetBaseState", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseState", Setter = "SetBaseState", BlueprintGetter = "GetBaseState", BlueprintSetter = "SetBaseState", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	EBaseWidgetState State = EBaseWidgetState::Default;
 
 	// Selected button state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsBaseSelected", Setter = "SetSelected", BlueprintGetter = "IsBaseSelected", BlueprintSetter = "SetSelected", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsBaseSelected", Setter = "SetSelected", BlueprintGetter = "IsBaseSelected", BlueprintSetter = "SetSelected", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bSelected = false;
 
 	// Disabled button state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
 
 	// Interaction state generated by CommonUI hover and press callbacks.
 	UPROPERTY(Transient)
 	EBaseWidgetState InteractionState = EBaseWidgetState::Default;
 
+	// Last visual state sent to the Widget Blueprint event graph.
+	UPROPERTY(Transient)
+	EBaseWidgetState LastBroadcastVisualState = EBaseWidgetState::Default;
+
+	// Whether a visual state has been sent since the current widget object was constructed.
+	UPROPERTY(Transient)
+	bool bHasBroadcastVisualState = false;
+
 	// Optional outer frame owned by the Widget Blueprint for button stroke states.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BorderFrame;
 
-	// Optional WBP root size wrapper used for min/max desired-size constraints.
+	// Optional WBP root size wrapper used for responsive min/max desired-size constraints.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> RootSize;
 
-	// Optional alternate WBP root size wrapper used for min/max desired-size constraints.
+	// Optional alternate WBP root size wrapper used for responsive min/max desired-size constraints.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> RootSizeBox;
 

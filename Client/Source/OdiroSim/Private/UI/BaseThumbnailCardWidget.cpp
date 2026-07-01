@@ -15,7 +15,8 @@ void UBaseThumbnailCardWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
 	SetImageTexture(MediaImage.Get(), MediaTexture.Get());
 	SetOptionalWidgetVisible(MediaOverlay.Get(), bShowMedia);
 	SetOptionalWidgetVisible(ContentSlot.Get(), !bMediaOnly);
@@ -37,24 +38,24 @@ void UBaseThumbnailCardWidget::SynchronizeBaseProperties()
 			mediaSlot->SetVerticalAlignment(VAlign_Fill);
 		}
 	}
-	if (MediaBorder && tokens)
+	if (MediaBorder && sizes)
 	{
 		MediaBorder->SetPadding(MediaPaddingMode == EBaseThumbnailMediaPaddingMode::Inset
-			? FMargin(tokens->Space4)
+			? FMargin(sizes->Space4)
 			: FMargin());
 	}
-	if (tokens)
+	if (colors && sizes)
 	{
-		FLinearColor fillColor = tokens->SurfacePanelColor;
-		FLinearColor strokeColor = tokens->LineFieldColor;
+		FLinearColor fillColor = colors->SurfacePanelColor;
+		FLinearColor strokeColor = colors->LineFieldColor;
 		if (bDisabled)
 		{
-			fillColor = tokens->SurfaceChromeColor;
-			strokeColor = tokens->LineSubtleColor;
+			fillColor = colors->SurfaceChromeColor;
+			strokeColor = colors->LineSubtleColor;
 		}
 		else if (bSelected)
 		{
-			strokeColor = tokens->AccentColor;
+			strokeColor = colors->AccentColor;
 		}
 
 		BaseWidgetPrivate::ApplyRoundedSurface(
@@ -62,8 +63,8 @@ void UBaseThumbnailCardWidget::SynchronizeBaseProperties()
 			SurfaceBorder.Get(),
 			fillColor,
 			strokeColor,
-			tokens->Radius,
-			tokens->BorderWidth);
+			sizes->Radius,
+			sizes->BorderWidth);
 	}
 }
 

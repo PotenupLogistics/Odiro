@@ -1,0 +1,10 @@
+{
+  "schema": "project_preset_manifest",
+  "version": 1,
+  "id": "demo",
+  "kind": "policy",
+  "title": "데모 경로 추종",
+  "subtitle": "A* · LiDAR · 정지 정책",
+  "description": "경로 추종과 장애물 대응 예제를 포함한 데모 정책입니다.",
+  "sort_order": 20
+}

@@ -2,7 +2,9 @@ id: root-dev-workflow
 owner: Root
 description: Root setup, build, run, hooks, CI, and repo tools.
 paths:
+  - .cursor/**
   - .vscode/**
+  - .mcp.json
   - .github/workflows/**
   - .githooks/**
   - .lfsconfig
@@ -23,6 +25,7 @@ entry:
       - task-dev.bat
       - tools/common.ps1
       - tools/install.ps1
+      - tools/setup-agent-mcp.ps1
       - tools/build.ps1
       - tools/run-preview.ps1
       - tools/dev-session.ps1
@@ -40,6 +43,7 @@ entry:
 guardrails:
   - Root scripts orchestrate project-owned task scripts; project startup details stay in each project.
   - Root tools use `tools/common.ps1`; project tools use their own `Common.ps1`.
+  - "`task-setup.bat` installs MCP configs for detected Codex, Claude Code, Cursor, and VS Code Copilot targets; Codex is user-scope, repo-local generated configs stay ignored because they contain machine-local absolute paths."
   - Root build covers Bridge and Client; Agents has setup/test/run but no build phase.
   - Git hooks and CI protect main-branch flow, source sanity, and Unreal asset lock ownership.
   - Unreal binary assets stay Git blobs; Git LFS is for lock/read-only/push checks only.

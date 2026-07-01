@@ -1,0 +1,4 @@
+interface:
+  display_name: "UE5 Widget Boundary"
+  short_description: "Review UMG/WBP and C++ ownership"
+  default_prompt: "Use $ue5-widget-boundary to review a UE5 widget C++ change for WBP ownership issues."

@@ -6,8 +6,8 @@
 
 class UTextBlock;
 
-// Standalone text component for base widget layouts.
-UCLASS(BlueprintType, Blueprintable)
+// Standalone text component base for WBP-owned text layouts.
+UCLASS(Abstract, BlueprintType, Blueprintable)
 class ODIROSIM_API UBaseTextWidget : public UBaseWidget
 {
 	GENERATED_BODY()
@@ -42,15 +42,15 @@ public:
 
 protected:
 	// Display text shown by this component.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter, Setter, BlueprintGetter = "GetText", BlueprintSetter = "SetText", Category = "UI|Base Text", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter, Setter, BlueprintGetter = "GetText", BlueprintSetter = "SetText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText Text;
 
 	// Semantic typography role used for this text component.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetTextRole", Setter = "SetTextRole", BlueprintGetter = "GetTextRole", BlueprintSetter = "SetTextRole", Category = "UI|Base Text", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetTextRole", Setter = "SetTextRole", BlueprintGetter = "GetTextRole", BlueprintSetter = "SetTextRole", Category = "UI|Style", meta = (ExposeOnSpawn = "true"))
 	EBaseTextRole TextRole = EBaseTextRole::Body;
 
 	// Disabled text state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Text", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
 
 	// Text visual owned by the Widget Blueprint.

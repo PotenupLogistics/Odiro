@@ -3,7 +3,7 @@
 <desc>Spec with consistent number-range field sizing, project caret icons at half size, and parent-child indeterminate checkboxes.</desc>
 <rect width="1180" height="1230" fill="#1A1A1A"/>
 <text x="40" y="46" fill="#FFFFFF" font-size="24" font-weight="700">Spec — Inputs &amp; selection controls</text>
-<text x="40" y="70" fill="#A8A8A8" font-size="12">States, types and variants · DA_BaseTokens · accent #0070E0 · radius 4px · caret = T_Icon_Caret</text>
+<text x="40" y="70" fill="#A8A8A8" font-size="12">States, types and variants · Split Base DA · accent #0070E0 · radius 4px · caret = T_Icon_Caret</text>
 <rect x="40" y="86" width="1100" height="1" fill="#333333"/>
 
 <g transform="translate(40,110)">
@@ -208,5 +208,5 @@
 
 <rect x="40" y="1196" width="1100" height="1" fill="#262626"/>
 <text x="40" y="1220" fill="#7A7A7A" font-size="10">Mockup only — native widget + WBP implementation starts after approval.</text>
-<text x="1140" y="1220" fill="#5E5E5E" font-size="10" text-anchor="end">DA_BaseTokens · Freesentation · 1 of 2</text>
+<text x="1140" y="1220" fill="#5E5E5E" font-size="10" text-anchor="end">Split Base DA · Freesentation · 1 of 2</text>
 </svg>

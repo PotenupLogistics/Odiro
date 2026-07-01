@@ -4,14 +4,14 @@
 
 namespace
 {
-	const FSoftObjectPath BaseTokensPath(
-		TEXT("/Game/Widgets/Common/DA_BaseTokens.DA_BaseTokens"));
-	const TCHAR* RegularFontPath =
-		TEXT("/Game/Fonts/Freesentation/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
-	const TCHAR* MediumFontPath =
-		TEXT("/Game/Fonts/Freesentation/Freesentation-5Medium_Font.Freesentation-5Medium_Font");
-	const TCHAR* BoldFontPath =
-		TEXT("/Game/Fonts/Freesentation/Freesentation-7Bold_Font.Freesentation-7Bold_Font");
+	const FSoftObjectPath BaseColorsPath(
+		TEXT("/Game/Widgets/Common/DA_BaseColors.DA_BaseColors"));
+	const FSoftObjectPath SmallSizesPath(
+		TEXT("/Game/Widgets/Common/DA_SmallSizes.DA_SmallSizes"));
+	const FSoftObjectPath MediumSizesPath(
+		TEXT("/Game/Widgets/Common/DA_MediumSizes.DA_MediumSizes"));
+	const FSoftObjectPath LargeSizesPath(
+		TEXT("/Game/Widgets/Common/DA_LargeSizes.DA_LargeSizes"));
 
 	// Converts documented sRGB hex tokens into Slate brush colors.
 	// Slate applies UI vertex colors without an sRGB->linear decode, so the
@@ -24,39 +24,38 @@ namespace
 		return color;
 	}
 
-	// Loads the Freesentation font asset for one semantic weight.
-	FSlateFontInfo MakeBaseFont(const FName typefaceName, const float size)
-	{
-		const TCHAR* fontPath = RegularFontPath;
-		if (typefaceName == FName(TEXT("Bold")))
-		{
-			fontPath = BoldFontPath;
-		}
-		else if (typefaceName == FName(TEXT("Medium")))
-		{
-			fontPath = MediumFontPath;
-		}
-
-		UObject* fontObject = LoadObject<UObject>(nullptr, fontPath);
-		FSlateFontInfo fontInfo(fontObject, size, typefaceName);
-		fontInfo.Size = size;
-		return fontInfo;
-	}
 }
 
 FBaseTextStyleToken::FBaseTextStyleToken()
-	: Font(MakeBaseFont(TEXT("Regular"), 16.0f))
-	, Color(MakeBaseColor(TEXT("CFCFCF")))
 {
+	Font.Size = 0.0f;
+	Color = FLinearColor::Transparent;
 }
 
-FBaseTextStyleToken::FBaseTextStyleToken(const FSlateFontInfo& inFont, const FLinearColor& inColor)
+FBaseTextStyleToken::FBaseTextStyleToken(
+	const FSlateFontInfo& inFont,
+	const FLinearColor& inColor,
+	const float inLineHeightPercentage)
 	: Font(inFont)
 	, Color(inColor)
+	, LineHeightPercentage(inLineHeightPercentage)
 {
 }
 
-UBaseWidgetTokenCatalog::UBaseWidgetTokenCatalog()
+FBaseTypographyToken::FBaseTypographyToken()
+{
+	Font.Size = 0.0f;
+}
+
+FBaseTypographyToken::FBaseTypographyToken(
+	const FSlateFontInfo& inFont,
+	const float inLineHeightPercentage)
+	: Font(inFont)
+	, LineHeightPercentage(inLineHeightPercentage)
+{
+}
+
+UBaseWidgetColorCatalog::UBaseWidgetColorCatalog()
 	: BackgroundColor(MakeBaseColor(TEXT("1A1A1A")))
 	, SurfaceColor(MakeBaseColor(TEXT("242424")))
 	, SurfaceRaisedColor(MakeBaseColor(TEXT("2E2E2E")))
@@ -121,68 +120,27 @@ UBaseWidgetTokenCatalog::UBaseWidgetTokenCatalog()
 	, TabExperimentColor(MakeBaseColor(TEXT("4A9FF5")))
 	, TabSettingsColor(MakeBaseColor(TEXT("9A9A9A")))
 	, TabDetailColor(MakeBaseColor(TEXT("5CBA60")))
-	, TitleText(MakeDefaultTextStyle(EBaseTextRole::Title))
-	, LabelText(MakeDefaultTextStyle(EBaseTextRole::Label))
-	, BodyText(MakeDefaultTextStyle(EBaseTextRole::Body))
-	, CaptionText(MakeDefaultTextStyle(EBaseTextRole::Caption))
-	, ValueText(MakeDefaultTextStyle(EBaseTextRole::Value))
 {
 }
 
-TSoftObjectPtr<UBaseWidgetTokenCatalog> UBaseWidgetTokenCatalog::MakeDefaultCatalogReference()
+TSoftObjectPtr<UBaseWidgetColorCatalog> UBaseWidgetColorCatalog::MakeDefaultCatalogReference()
 {
-	return TSoftObjectPtr<UBaseWidgetTokenCatalog>(BaseTokensPath);
+	return TSoftObjectPtr<UBaseWidgetColorCatalog>(BaseColorsPath);
 }
 
-FBaseTextStyleToken UBaseWidgetTokenCatalog::MakeDefaultTextStyle(const EBaseTextRole role)
+const UBaseWidgetColorCatalog* UBaseWidgetColorCatalog::ResolveCatalog(
+	const TSoftObjectPtr<UBaseWidgetColorCatalog>& catalogReference)
 {
-	switch (role)
-	{
-	case EBaseTextRole::Title:
-		return FBaseTextStyleToken(MakeBaseFont(TEXT("Bold"), 17.5f), MakeBaseColor(TEXT("F2F2F2")));
-	case EBaseTextRole::Label:
-		return FBaseTextStyleToken(MakeBaseFont(TEXT("Medium"), 15.0f), MakeBaseColor(TEXT("CFCFCF")));
-	case EBaseTextRole::Caption:
-		return FBaseTextStyleToken(MakeBaseFont(TEXT("Regular"), 14.0f), MakeBaseColor(TEXT("A8A8A8")));
-	case EBaseTextRole::Value:
-		return FBaseTextStyleToken(MakeBaseFont(TEXT("Bold"), 35.0f), MakeBaseColor(TEXT("FFFFFF")));
-	case EBaseTextRole::Body:
-	default:
-		return FBaseTextStyleToken(MakeBaseFont(TEXT("Regular"), 16.0f), MakeBaseColor(TEXT("CFCFCF")));
-	}
-}
-
-const UBaseWidgetTokenCatalog* UBaseWidgetTokenCatalog::ResolveCatalog(
-	const TSoftObjectPtr<UBaseWidgetTokenCatalog>& catalogReference)
-{
-	if (const UBaseWidgetTokenCatalog* catalog = catalogReference.LoadSynchronous())
+	if (const UBaseWidgetColorCatalog* catalog = catalogReference.LoadSynchronous())
 	{
 		return catalog;
 	}
 
-	TSoftObjectPtr<UBaseWidgetTokenCatalog> defaultCatalog = MakeDefaultCatalogReference();
+	TSoftObjectPtr<UBaseWidgetColorCatalog> defaultCatalog = MakeDefaultCatalogReference();
 	return defaultCatalog.LoadSynchronous();
 }
 
-FBaseTextStyleToken UBaseWidgetTokenCatalog::GetTextStyle(const EBaseTextRole role) const
-{
-	switch (role)
-	{
-	case EBaseTextRole::Title:
-		return TitleText;
-	case EBaseTextRole::Label:
-		return LabelText;
-	case EBaseTextRole::Caption:
-		return CaptionText;
-	case EBaseTextRole::Value:
-		return ValueText;
-	case EBaseTextRole::Body:
-	default:
-		return BodyText;
-	}
-}
-
-FLinearColor UBaseWidgetTokenCatalog::GetVariantColor(const EBaseWidgetVariant variant) const
+FLinearColor UBaseWidgetColorCatalog::GetVariantColor(const EBaseWidgetVariant variant) const
 {
 	switch (variant)
 	{
@@ -206,7 +164,7 @@ FLinearColor UBaseWidgetTokenCatalog::GetVariantColor(const EBaseWidgetVariant v
 	}
 }
 
-FLinearColor UBaseWidgetTokenCatalog::GetStateColor(const EBaseWidgetState state) const
+FLinearColor UBaseWidgetColorCatalog::GetStateColor(const EBaseWidgetState state) const
 {
 	switch (state)
 	{
@@ -229,5 +187,77 @@ FLinearColor UBaseWidgetTokenCatalog::GetStateColor(const EBaseWidgetState state
 	case EBaseWidgetState::Default:
 	default:
 		return SurfacePanelColor;
+	}
+}
+
+FLinearColor UBaseWidgetColorCatalog::GetTextColor(const EBaseTextRole role) const
+{
+	switch (role)
+	{
+	case EBaseTextRole::Title:
+		return TextBrightColor;
+	case EBaseTextRole::Label:
+	case EBaseTextRole::Body:
+		return TextPrimaryColor;
+	case EBaseTextRole::Caption:
+		return TextSecondaryColor;
+	case EBaseTextRole::Value:
+		return TextStrongColor;
+	default:
+		return TextPrimaryColor;
+	}
+}
+
+UBaseWidgetSizeCatalog::UBaseWidgetSizeCatalog()
+{
+}
+
+TSoftObjectPtr<UBaseWidgetSizeCatalog> UBaseWidgetSizeCatalog::MakeDefaultCatalogReference()
+{
+	return TSoftObjectPtr<UBaseWidgetSizeCatalog>(MediumSizesPath);
+}
+
+TSoftObjectPtr<UBaseWidgetSizeCatalog> UBaseWidgetSizeCatalog::MakePresetCatalogReference(
+	const EBaseWidgetSize size)
+{
+	switch (size)
+	{
+	case EBaseWidgetSize::Small:
+		return TSoftObjectPtr<UBaseWidgetSizeCatalog>(SmallSizesPath);
+	case EBaseWidgetSize::Large:
+		return TSoftObjectPtr<UBaseWidgetSizeCatalog>(LargeSizesPath);
+	case EBaseWidgetSize::Medium:
+	default:
+		return TSoftObjectPtr<UBaseWidgetSizeCatalog>(MediumSizesPath);
+	}
+}
+
+const UBaseWidgetSizeCatalog* UBaseWidgetSizeCatalog::ResolveCatalog(
+	const TSoftObjectPtr<UBaseWidgetSizeCatalog>& catalogReference)
+{
+	if (const UBaseWidgetSizeCatalog* catalog = catalogReference.LoadSynchronous())
+	{
+		return catalog;
+	}
+
+	TSoftObjectPtr<UBaseWidgetSizeCatalog> defaultCatalog = MakeDefaultCatalogReference();
+	return defaultCatalog.LoadSynchronous();
+}
+
+FBaseTypographyToken UBaseWidgetSizeCatalog::GetTypography(const EBaseTextRole role) const
+{
+	switch (role)
+	{
+	case EBaseTextRole::Title:
+		return TitleText;
+	case EBaseTextRole::Label:
+		return LabelText;
+	case EBaseTextRole::Caption:
+		return CaptionText;
+	case EBaseTextRole::Value:
+		return ValueText;
+	case EBaseTextRole::Body:
+	default:
+		return BodyText;
 	}
 }

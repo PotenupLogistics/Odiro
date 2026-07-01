@@ -22,43 +22,46 @@ void UBaseDropdownOptionWidget::NativeConstruct()
 void UBaseDropdownOptionWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
-
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
-	if (!tokens)
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	if (SurfaceBorder)
 	{
-		return;
+		SurfaceBorder->SetVerticalAlignment(VAlign_Center);
 	}
-
-	const bool bRowSelected = IsBaseSelected();
-	const EBaseWidgetState effectiveState = GetEffectiveState();
-	const bool bRowHovered = effectiveState == EBaseWidgetState::Hovered;
-	const bool bRowActive = bRowSelected
-		|| effectiveState == EBaseWidgetState::Pressed
-		|| effectiveState == EBaseWidgetState::Selected;
-	const FLinearColor fillColor = bRowActive
-		? tokens->SurfaceControlActiveColor
-		: (bRowHovered ? tokens->SurfaceHoverColor : FLinearColor::Transparent);
-
-	// Borderless row: idle stays transparent; hover/active draw only the row fill.
-	BaseWidgetPrivate::ApplyRoundedSurface(
-		BorderFrame.Get(),
-		SurfaceBorder.Get(),
-		fillColor,
-		FLinearColor::Transparent,
-		tokens->Radius,
-		0.0f);
-
-	if (LabelTextBlock)
+	if (colors && sizes)
 	{
-		const FLinearColor labelColor = effectiveState == EBaseWidgetState::Disabled
-			? tokens->TextFaintColor
-			: (bRowSelected ? tokens->AccentColor : tokens->TextPrimaryColor);
-		LabelTextBlock->SetColorAndOpacity(FSlateColor(labelColor));
+		const bool bRowSelected = IsBaseSelected();
+		const EBaseWidgetState effectiveState = GetEffectiveState();
+		const bool bRowHovered = effectiveState == EBaseWidgetState::Hovered;
+		const bool bRowActive = bRowSelected
+			|| effectiveState == EBaseWidgetState::Pressed
+			|| effectiveState == EBaseWidgetState::Selected;
+		const FLinearColor fillColor = bRowActive
+			? colors->SurfaceControlActiveColor
+			: (bRowHovered ? colors->SurfaceHoverColor : FLinearColor::Transparent);
+		BaseWidgetPrivate::ApplyRoundedSurface(
+			BorderFrame.Get(),
+			SurfaceBorder.Get(),
+			fillColor,
+			FLinearColor::Transparent,
+			sizes->Radius,
+			0.0f);
+
+		if (LabelTextBlock)
+		{
+			const FLinearColor labelColor = effectiveState == EBaseWidgetState::Disabled
+				? colors->TextFaintColor
+				: (bRowSelected ? colors->AccentColor : colors->TextPrimaryColor);
+			LabelTextBlock->SetColorAndOpacity(FSlateColor(labelColor));
+		}
 	}
 	if (CheckImage)
 	{
-		CheckImage->SetColorAndOpacity(tokens->AccentColor);
-		CheckImage->SetVisibility(bRowSelected
+		if (colors)
+		{
+			CheckImage->SetColorAndOpacity(colors->AccentColor);
+		}
+		CheckImage->SetVisibility(IsBaseSelected()
 			? ESlateVisibility::SelfHitTestInvisible
 			: ESlateVisibility::Collapsed);
 	}

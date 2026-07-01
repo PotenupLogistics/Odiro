@@ -11,21 +11,55 @@
 
 using namespace BaseFormElementPrivate;
 
+namespace
+{
+	// Finds the WBP-authored indent size box even when it is wrapped by a panel.
+	USizeBox* ResolveIndentSizeBox(UWidget* indentWidget)
+	{
+		if (USizeBox* sizeBox = Cast<USizeBox>(indentWidget))
+		{
+			return sizeBox;
+		}
+		if (UPanelWidget* panel = Cast<UPanelWidget>(indentWidget))
+		{
+			for (int32 childIndex = 0; childIndex < panel->GetChildrenCount(); ++childIndex)
+			{
+				if (USizeBox* childSizeBox = Cast<USizeBox>(panel->GetChildAt(childIndex)))
+				{
+					return childSizeBox;
+				}
+			}
+		}
+		return nullptr;
+	}
+}
+
 void UBaseTreeRowWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
+	FBaseWidgetSizeConstraints effectiveSizeConstraints = SizeConstraints;
+	if (effectiveSizeConstraints.MinWidth <= 0.0f)
+	{
+		effectiveSizeConstraints.MinWidth = 360.0f;
+	}
+	BaseWidgetPrivate::ApplySizeConstraints(RootSize.Get(), effectiveSizeConstraints);
+	if (RootSizeBox.Get() != RootSize.Get())
+	{
+		BaseWidgetPrivate::ApplySizeConstraints(RootSizeBox.Get(), effectiveSizeConstraints);
+	}
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
-	if (USizeBox* indentSizeBox = Cast<USizeBox>(IndentBox))
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	if (USizeBox* indentSizeBox = ResolveIndentSizeBox(IndentBox.Get()))
 	{
 		const float resolvedIndentWidth = IndentWidth > 0.0f
 			? IndentWidth
-			: (tokens ? tokens->Space4 : 0.0f);
+			: (sizes ? sizes->Space8 : 16.0f);
 		indentSizeBox->SetWidthOverride(FMath::Max(0, Item.Depth) * resolvedIndentWidth);
 	}
-	SetOptionalWidgetVisible(ExpanderImage.Get(), Item.bHasChildren);
 	if (ExpanderImage)
 	{
+		ExpanderImage->SetVisibility(Item.bHasChildren ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Hidden);
 		ExpanderImage->SetRenderTransformAngle(Item.bExpanded ? 90.0f : 0.0f);
 	}
 	SetImageTexture(IconImage.Get(), Item.Icon);
@@ -33,38 +67,41 @@ void UBaseTreeRowWidget::SynchronizeBaseProperties()
 	{
 		SetTextBlockValue(LabelTextBlock.Get(), Item.Label, false);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
+		BaseWidgetPrivate::ApplySlotVerticalAlignment(LabelTextBlock.Get(), EBaseVerticalContentAlign::Bottom);
 	}
 	if (SubLabelTextBlock)
 	{
 		SetTextBlockValue(SubLabelTextBlock.Get(), Item.SubLabel);
 		ApplyTextStyle(SubLabelTextBlock.Get(), EBaseTextRole::Caption);
+		BaseWidgetPrivate::ApplySlotVerticalAlignment(SubLabelTextBlock.Get(), EBaseVerticalContentAlign::Bottom);
 	}
 	if (RightLabelTextBlock)
 	{
 		SetTextBlockValue(RightLabelTextBlock.Get(), Item.RightLabel);
 		ApplyTextStyle(RightLabelTextBlock.Get(), EBaseTextRole::Caption);
+		BaseWidgetPrivate::ApplySlotVerticalAlignment(RightLabelTextBlock.Get(), EBaseVerticalContentAlign::Bottom);
 	}
-	if (SelectionBar && tokens)
+	if (SelectionBar && colors)
 	{
-		ApplyBorderColor(SelectionBar.Get(), tokens->AccentColor);
+		ApplyBorderColor(SelectionBar.Get(), colors->AccentColor);
 		SetOptionalWidgetVisible(SelectionBar.Get(), Item.bSelected);
 	}
-	if (tokens)
+	if (colors && sizes)
 	{
-		const FLinearColor fillColor = Item.bSelected ? tokens->SurfacePanelColor : FLinearColor::Transparent;
+		const FLinearColor fillColor = Item.bSelected ? colors->SurfacePanelColor : FLinearColor::Transparent;
 		const FLinearColor strokeColor = FLinearColor::Transparent;
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			BorderFrame.Get(),
 			SurfaceBorder.Get(),
 			fillColor,
 			strokeColor,
-			tokens->Radius,
+			sizes->Radius,
 			0.0f);
 		if (Item.bDisabled)
 		{
-			ApplyTextColor(LabelTextBlock.Get(), tokens->TextFaintColor);
-			ApplyTextColor(SubLabelTextBlock.Get(), tokens->TextFaintColor);
-			ApplyTextColor(RightLabelTextBlock.Get(), tokens->TextFaintColor);
+			ApplyTextColor(LabelTextBlock.Get(), colors->TextFaintColor);
+			ApplyTextColor(SubLabelTextBlock.Get(), colors->TextFaintColor);
+			ApplyTextColor(RightLabelTextBlock.Get(), colors->TextFaintColor);
 		}
 	}
 }
@@ -95,6 +132,30 @@ FReply UBaseTreeRowWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 		OnExpansionRequested.Broadcast(this, Item.Id);
 	}
 	return FReply::Handled();
+}
+
+UBaseTreeViewWidget::UBaseTreeViewWidget(const FObjectInitializer& objectInitializer)
+	: Super(objectInitializer)
+{
+	FBaseTreeRowItem rootRow;
+	rootRow.Id = TEXT("root");
+	rootRow.Depth = 0;
+	rootRow.Label = NSLOCTEXT("BaseTreeViewWidget", "DefaultRootLabel", "Parent row");
+	rootRow.SubLabel = NSLOCTEXT("BaseTreeViewWidget", "DefaultRootSubLabel", "depth 0");
+	rootRow.RightLabel = NSLOCTEXT("BaseTreeViewWidget", "DefaultRootRightLabel", "Open");
+	rootRow.bHasChildren = true;
+	rootRow.bExpanded = true;
+	rootRow.bSelected = true;
+
+	FBaseTreeRowItem childRow;
+	childRow.Id = TEXT("child");
+	childRow.Depth = 1;
+	childRow.Label = NSLOCTEXT("BaseTreeViewWidget", "DefaultChildLabel", "Child row");
+	childRow.SubLabel = NSLOCTEXT("BaseTreeViewWidget", "DefaultChildSubLabel", "depth 1");
+	childRow.RightLabel = NSLOCTEXT("BaseTreeViewWidget", "DefaultChildRightLabel", "Ready");
+
+	Items = { rootRow, childRow };
+	SelectedId = rootRow.Id;
 }
 
 void UBaseTreeViewWidget::SynchronizeBaseProperties()
@@ -161,6 +222,8 @@ void UBaseTreeViewWidget::RebuildRows()
 		rowWidget->OnRowClicked.AddDynamic(this, &UBaseTreeViewWidget::HandleGeneratedRowClicked);
 		rowWidget->OnExpansionRequested.RemoveDynamic(this, &UBaseTreeViewWidget::HandleGeneratedExpansionRequested);
 		rowWidget->OnExpansionRequested.AddDynamic(this, &UBaseTreeViewWidget::HandleGeneratedExpansionRequested);
+		rowWidget->SetColorsOverride(ColorsOverride);
+		rowWidget->SetSizesOverride(SizesOverride);
 		RowContainer->AddChild(rowWidget);
 	}
 	RefreshRows();
@@ -183,7 +246,9 @@ void UBaseTreeViewWidget::RefreshRows()
 		}
 
 		FBaseTreeRowItem renderedItem = Items[itemIndex];
-		renderedItem.bSelected = renderedItem.Id == SelectedId || renderedItem.bSelected;
+		renderedItem.bSelected = SelectedId.IsNone() ? renderedItem.bSelected : renderedItem.Id == SelectedId;
+		rowWidget->SetColorsOverride(ColorsOverride);
+		rowWidget->SetSizesOverride(SizesOverride);
 		rowWidget->SetItem(renderedItem);
 	}
 }

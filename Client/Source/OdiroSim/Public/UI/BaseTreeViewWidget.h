@@ -30,11 +30,11 @@ public:
 	FBaseTreeRowItem GetItem() const { return Item; }
 
 	// Broadcasts after the row is clicked.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Tree|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseTreeRowEvent OnRowClicked;
 
 	// Broadcasts after a row with children requests expansion handling.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Tree|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseTreeRowEvent OnExpansionRequested;
 
 protected:
@@ -45,11 +45,11 @@ protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 	// Row data rendered by this widget.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetItem", Setter = "SetItem", BlueprintGetter = "GetItem", BlueprintSetter = "SetItem", Category = "UI|Base Tree", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetItem", Setter = "SetItem", BlueprintGetter = "GetItem", BlueprintSetter = "SetItem", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FBaseTreeRowItem Item;
 
 	// Per-depth indentation width; zero uses the active base spacing token.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Layout", meta = (ClampMin = "0.0"))
 	float IndentWidth = 0.0f;
 
 	// Rounded row surface owned by the Widget Blueprint.
@@ -92,6 +92,9 @@ class ODIROSIM_API UBaseTreeViewWidget : public UBaseWidget
 	GENERATED_BODY()
 
 public:
+	// Creates designer-readable depth 0/1 rows for newly created tree views.
+	UBaseTreeViewWidget(const FObjectInitializer& objectInitializer = FObjectInitializer::Get());
+
 	// Applies flattened item data to generated row widgets.
 	virtual void SynchronizeBaseProperties() override;
 
@@ -112,15 +115,15 @@ public:
 	FName GetSelectedId() const { return SelectedId; }
 
 	// Broadcasts after selected row changes.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Tree|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseSelectionChangedEvent OnSelectionChanged;
 
 	// Broadcasts after a generated row is clicked.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Tree|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseTreeRowEvent OnRowClicked;
 
 	// Broadcasts after a generated row with children requests expansion handling.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Tree|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseTreeRowEvent OnExpansionRequested;
 
 protected:
@@ -139,15 +142,15 @@ protected:
 	void HandleGeneratedExpansionRequested(UWidget* widget, FName rowId);
 
 	// Flattened row data owned by the caller.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	TArray<FBaseTreeRowItem> Items;
 
 	// Stable id for the selected row.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSelectedId", Category = "UI|Base Tree", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSelectedId", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	FName SelectedId;
 
 	// Widget class used for generated tree rows.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Classes")
 	TSubclassOf<UBaseTreeRowWidget> RowWidgetClass;
 
 	// Panel that receives generated row widgets.

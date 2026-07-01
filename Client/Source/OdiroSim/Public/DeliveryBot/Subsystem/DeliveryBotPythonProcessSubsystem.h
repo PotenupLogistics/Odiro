@@ -25,7 +25,7 @@ class ODIROSIM_API UDeliveryBotPythonProcessSubsystem : public UGameInstanceSubs
 	GENERATED_BODY()
 
 public:
-	virtual void Initialize(FSubsystemCollectionBase& collection) override; // Python 서버 생명주기 시작
+	virtual void Initialize(FSubsystemCollectionBase& collection) override; // Python 서버 설정과 ProjectRun command line을 초기화
 	virtual void Deinitialize() override; // Python 서버 생명주기 종료
 
 public:

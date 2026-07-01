@@ -1,72 +1,56 @@
 #include "UI/BaseWidgetPrivate.h"
 
 #include "Components/Border.h"
+#include "Components/ButtonSlot.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
+#include "Components/OverlaySlot.h"
+#include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/Widget.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 
 namespace BaseWidgetPrivate
 {
-	const UBaseWidgetTokenCatalog* ResolveBaseTokenCatalog(
-		const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens)
+	const UBaseWidgetColorCatalog* ResolveBaseColorCatalog(
+		const TSoftObjectPtr<UBaseWidgetColorCatalog>& baseColors)
 	{
-		if (const UBaseWidgetTokenCatalog* catalog = UBaseWidgetTokenCatalog::ResolveCatalog(baseTokens))
-		{
-			return catalog;
-		}
-
-		return GetDefault<UBaseWidgetTokenCatalog>();
+		return UBaseWidgetColorCatalog::ResolveCatalog(baseColors);
 	}
 
-	FBaseTextStyleToken ResolveTextStyle(
-		const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens,
-		const EBaseTextRole role)
+	const UBaseWidgetSizeCatalog* ResolveBaseSizeCatalog(
+		const TSoftObjectPtr<UBaseWidgetSizeCatalog>& baseSizes)
 	{
-		if (const UBaseWidgetTokenCatalog* catalog = ResolveBaseTokenCatalog(baseTokens))
-		{
-			return catalog->GetTextStyle(role);
-		}
-
-		return UBaseWidgetTokenCatalog::MakeDefaultTextStyle(role);
+		return UBaseWidgetSizeCatalog::ResolveCatalog(baseSizes);
 	}
 
-	EBaseTextRole ResolveSizedTextRole(const EBaseTextRole role, const EBaseWidgetSize size)
+	bool ResolveTextStyle(
+		const TSoftObjectPtr<UBaseWidgetColorCatalog>& baseColors,
+		const TSoftObjectPtr<UBaseWidgetSizeCatalog>& baseSizes,
+		const EBaseTextRole role,
+		FBaseTextStyleToken& outStyle)
 	{
-		if (size == EBaseWidgetSize::Small)
+		const UBaseWidgetSizeCatalog* sizes = ResolveBaseSizeCatalog(baseSizes);
+		if (!sizes)
 		{
-			switch (role)
-			{
-			case EBaseTextRole::Title:
-				return EBaseTextRole::Label;
-			case EBaseTextRole::Label:
-			case EBaseTextRole::Body:
-			case EBaseTextRole::Value:
-				return EBaseTextRole::Caption;
-			default:
-				return role;
-			}
+			return false;
 		}
 
-		if (size == EBaseWidgetSize::Large)
+		const UBaseWidgetColorCatalog* colors = ResolveBaseColorCatalog(baseColors);
+		if (!colors)
 		{
-			switch (role)
-			{
-			case EBaseTextRole::Caption:
-				return EBaseTextRole::Label;
-			case EBaseTextRole::Label:
-				return EBaseTextRole::Body;
-			case EBaseTextRole::Body:
-			case EBaseTextRole::Value:
-				return EBaseTextRole::Title;
-			default:
-				return role;
-			}
+			return false;
 		}
 
-		return role;
+		const FBaseTypographyToken typography = sizes->GetTypography(role);
+		outStyle = FBaseTextStyleToken(
+			typography.Font,
+			colors->GetTextColor(role),
+			typography.LineHeightPercentage);
+		return true;
 	}
 
 	FBaseWidgetSizeConstraints NormalizeSizeConstraints(FBaseWidgetSizeConstraints constraints)
@@ -94,6 +78,8 @@ namespace BaseWidgetPrivate
 		}
 
 		const FBaseWidgetSizeConstraints normalized = NormalizeSizeConstraints(constraints);
+		sizeBox->ClearWidthOverride();
+		sizeBox->ClearHeightOverride();
 		if (normalized.MinWidth > 0.0f)
 		{
 			sizeBox->SetMinDesiredWidth(normalized.MinWidth);
@@ -128,28 +114,138 @@ namespace BaseWidgetPrivate
 		}
 	}
 
+	EHorizontalAlignment ToSlateHorizontalAlignment(const EBaseHorizontalContentAlign alignment)
+	{
+		switch (alignment)
+		{
+		case EBaseHorizontalContentAlign::Left:
+			return HAlign_Left;
+		case EBaseHorizontalContentAlign::Right:
+			return HAlign_Right;
+		case EBaseHorizontalContentAlign::Center:
+		default:
+			return HAlign_Center;
+		}
+	}
+
+	EVerticalAlignment ToSlateVerticalAlignment(const EBaseVerticalContentAlign alignment)
+	{
+		switch (alignment)
+		{
+		case EBaseVerticalContentAlign::Top:
+			return VAlign_Top;
+		case EBaseVerticalContentAlign::Bottom:
+			return VAlign_Bottom;
+		case EBaseVerticalContentAlign::Middle:
+		default:
+			return VAlign_Center;
+		}
+	}
+
+	void ApplySlotHorizontalAlignment(UWidget* widget, const EBaseHorizontalContentAlign alignment)
+	{
+		if (!IsValid(widget) || !widget->Slot)
+		{
+			return;
+		}
+
+		const EHorizontalAlignment slateAlignment = ToSlateHorizontalAlignment(alignment);
+		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(widget->Slot))
+		{
+			horizontalSlot->SetHorizontalAlignment(slateAlignment);
+		}
+		else if (UVerticalBoxSlot* verticalSlot = Cast<UVerticalBoxSlot>(widget->Slot))
+		{
+			verticalSlot->SetHorizontalAlignment(slateAlignment);
+		}
+		else if (UOverlaySlot* overlaySlot = Cast<UOverlaySlot>(widget->Slot))
+		{
+			overlaySlot->SetHorizontalAlignment(slateAlignment);
+		}
+		else if (UButtonSlot* buttonSlot = Cast<UButtonSlot>(widget->Slot))
+		{
+			buttonSlot->SetHorizontalAlignment(slateAlignment);
+		}
+		else if (UScrollBoxSlot* scrollBoxSlot = Cast<UScrollBoxSlot>(widget->Slot))
+		{
+			scrollBoxSlot->SetHorizontalAlignment(slateAlignment);
+		}
+	}
+
+	void ApplySlotVerticalAlignment(UWidget* widget, const EBaseVerticalContentAlign alignment)
+	{
+		if (!IsValid(widget) || !widget->Slot)
+		{
+			return;
+		}
+
+		const EVerticalAlignment slateAlignment = ToSlateVerticalAlignment(alignment);
+		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(widget->Slot))
+		{
+			horizontalSlot->SetVerticalAlignment(slateAlignment);
+		}
+		else if (UVerticalBoxSlot* verticalSlot = Cast<UVerticalBoxSlot>(widget->Slot))
+		{
+			verticalSlot->SetVerticalAlignment(slateAlignment);
+		}
+		else if (UOverlaySlot* overlaySlot = Cast<UOverlaySlot>(widget->Slot))
+		{
+			overlaySlot->SetVerticalAlignment(slateAlignment);
+		}
+		else if (UButtonSlot* buttonSlot = Cast<UButtonSlot>(widget->Slot))
+		{
+			buttonSlot->SetVerticalAlignment(slateAlignment);
+		}
+		else if (UScrollBoxSlot* scrollBoxSlot = Cast<UScrollBoxSlot>(widget->Slot))
+		{
+			scrollBoxSlot->SetVerticalAlignment(slateAlignment);
+		}
+	}
+
+	void ApplySlotFill(UWidget* widget, const float fillWeight)
+	{
+		if (!IsValid(widget) || !widget->Slot)
+		{
+			return;
+		}
+
+		FSlateChildSize childSize;
+		childSize.SizeRule = ESlateSizeRule::Fill;
+		childSize.Value = FMath::Max(fillWeight, 0.0f);
+		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(widget->Slot))
+		{
+			horizontalSlot->SetSize(childSize);
+			horizontalSlot->SetHorizontalAlignment(HAlign_Fill);
+		}
+		else if (UVerticalBoxSlot* verticalSlot = Cast<UVerticalBoxSlot>(widget->Slot))
+		{
+			verticalSlot->SetSize(childSize);
+			verticalSlot->SetVerticalAlignment(VAlign_Fill);
+		}
+	}
+
 	FLinearColor ResolveVariantColor(
-		const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens,
+		const TSoftObjectPtr<UBaseWidgetColorCatalog>& baseColors,
 		const EBaseWidgetVariant variant)
 	{
-		if (const UBaseWidgetTokenCatalog* catalog = ResolveBaseTokenCatalog(baseTokens))
+		if (const UBaseWidgetColorCatalog* catalog = ResolveBaseColorCatalog(baseColors))
 		{
 			return catalog->GetVariantColor(variant);
 		}
 
-		return FLinearColor::White;
+		return FLinearColor::Transparent;
 	}
 
 	FLinearColor ResolveStateColor(
-		const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens,
+		const TSoftObjectPtr<UBaseWidgetColorCatalog>& baseColors,
 		const EBaseWidgetState state)
 	{
-		if (const UBaseWidgetTokenCatalog* catalog = ResolveBaseTokenCatalog(baseTokens))
+		if (const UBaseWidgetColorCatalog* catalog = ResolveBaseColorCatalog(baseColors))
 		{
 			return catalog->GetStateColor(state);
 		}
 
-		return FLinearColor::White;
+		return FLinearColor::Transparent;
 	}
 
 	void ApplyTextStyle(UTextBlock* textBlock, const FBaseTextStyleToken& style)
@@ -160,6 +256,7 @@ namespace BaseWidgetPrivate
 		}
 
 		textBlock->SetFont(style.Font);
+		textBlock->SetLineHeightPercentage(style.LineHeightPercentage);
 		textBlock->SetColorAndOpacity(FSlateColor(style.Color));
 	}
 
@@ -367,6 +464,11 @@ namespace BaseWidgetPrivate
 		if (IsValid(frameBorder))
 		{
 			MakeBorderLayoutNeutral(frameBorder);
+		}
+		if (fillColor.A <= KINDA_SMALL_NUMBER && strokeColor.A <= KINDA_SMALL_NUMBER)
+		{
+			MakeBorderVisualTransparent(surfaceBorder);
+			return;
 		}
 		ApplyRoundedMaterial(surfaceBorder, RoundedMaterialPath, fillColor, strokeColor, radiusPx, borderWidthPx);
 	}

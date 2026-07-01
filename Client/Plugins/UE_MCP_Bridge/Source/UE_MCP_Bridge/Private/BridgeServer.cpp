@@ -1,4 +1,5 @@
 #include "BridgeServer.h"
+#include "EditorCoordination.h"
 #include "UE_MCP_BridgeModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -58,6 +59,76 @@
 #include "Windows/HideWindowsPlatformTypes.h"
 #pragma comment(lib, "advapi32.lib")
 #endif
+
+namespace
+{
+	/** Tracks one accepted non-coordination request until it has really stopped executing. */
+	class FBridgeActiveRequestLease : public TSharedFromThis<FBridgeActiveRequestLease>
+	{
+	public:
+		/** Begin tracking an accepted bridge request. */
+		void Begin()
+		{
+			FScopeLock Lock(&Mutex);
+			if (!bTracking)
+			{
+				bTracking = true;
+				FMCPBridgeCoordination::BeginActiveRequest();
+			}
+		}
+
+		/** Mark that the request reached the game-thread handler body. */
+		void MarkStarted()
+		{
+			FScopeLock Lock(&Mutex);
+			bStarted = true;
+		}
+
+		/** Release the active request counter exactly once. */
+		void Release()
+		{
+			bool bShouldRelease = false;
+			{
+				FScopeLock Lock(&Mutex);
+				bShouldRelease = bTracking && !bReleased;
+				if (bShouldRelease)
+				{
+					bReleased = true;
+				}
+			}
+
+			if (bShouldRelease)
+			{
+				FMCPBridgeCoordination::EndActiveRequest();
+			}
+		}
+
+		/** Release if the request timed out before the game-thread body started. */
+		void ReleaseIfNeverStarted()
+		{
+			bool bShouldRelease = false;
+			{
+				FScopeLock Lock(&Mutex);
+				bShouldRelease = bTracking && !bStarted && !bReleased;
+				if (bShouldRelease)
+				{
+					bReleased = true;
+				}
+			}
+
+			if (bShouldRelease)
+			{
+				FMCPBridgeCoordination::EndActiveRequest();
+			}
+		}
+
+	private:
+		FCriticalSection Mutex;
+		bool bTracking = false;
+		bool bStarted = false;
+		bool bReleased = false;
+	};
+}
 
 FMCPBridgeServer::FMCPBridgeServer(int32 Port)
 	: ServerPort(Port)
@@ -425,6 +496,11 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	}
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Processing method: %s"), *Method);
+	const bool bCoordinationMethod = FMCPBridgeCoordination::IsCoordinationMethod(Method);
+	if (!bCoordinationMethod && FMCPBridgeCoordination::IsMaintenanceActive())
+	{
+		return CreateJsonRpcResponse(Request, FMCPBridgeCoordination::MakeMaintenancePendingResult(Method));
+	}
 
 	TSharedPtr<FJsonObject> Params;
 	if (Request->HasField(TEXT("params")))
@@ -444,10 +520,20 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		Params = MakeShared<FJsonObject>();
 	}
 
-	// Execute handler on game thread
-	FMCPHandlerRegistry::FHandlerFunction Handler = [this, Method](const TSharedPtr<FJsonObject>& HandlerParams) -> TSharedPtr<FJsonValue>
+	TSharedRef<FBridgeActiveRequestLease> ActiveLease = MakeShared<FBridgeActiveRequestLease>();
+	if (!bCoordinationMethod)
 	{
-		return HandlerRegistry.ExecuteHandler(Method, HandlerParams);
+		ActiveLease->Begin();
+	}
+
+	// Execute handler on game thread
+	FMCPHandlerRegistry::FHandlerFunction Handler = [this, Method, ActiveLease](const TSharedPtr<FJsonObject>& HandlerParams) -> TSharedPtr<FJsonValue>
+	{
+		FDialogHandlers::FScopedAutomationDialogPolicy DialogPolicyScope;
+		ActiveLease->MarkStarted();
+		TSharedPtr<FJsonValue> HandlerResult = HandlerRegistry.ExecuteHandler(Method, HandlerParams);
+		ActiveLease->Release();
+		return HandlerResult;
 	};
 
 	// Some handlers (create_cpp_class regenerates IDE project files;
@@ -457,6 +543,7 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	TSharedPtr<FJsonValue> Result = (PerHandlerTimeout > 0.0f)
 		? GameThreadExecutor.ExecuteOnGameThread(Handler, Params, PerHandlerTimeout)
 		: GameThreadExecutor.ExecuteOnGameThread(Handler, Params);
+	ActiveLease->ReleaseIfNeverStarted();
 
 	if (Result.IsValid())
 	{

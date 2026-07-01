@@ -3,6 +3,10 @@ owner: Client
 description: Project UI flow, Platform UI MVVM state, launch/process subsystems, run dashboard, and analysis integration.
 paths:
   - Client/README.md
+  - docs/plans/platform-ui/**
+  - Client/Config/DefaultEngine.ini
+  - Client/Config/DefaultGame.ini
+  - Client/Content/Widgets/Platform/**
   - Client/Source/OdiroSim/Public/Platform/**
   - Client/Source/OdiroSim/Private/Platform/**
   - Client/Docs/RobotPreviewAgent.local.md
@@ -19,8 +23,10 @@ entry:
       - Client/Source/OdiroSim/Public/Platform
       - Client/Source/OdiroSim/Private/Platform
   - id: platform-ui-mvvm
-    description: Common UI native bases, PlatformUiSubsystem, and MVVM ViewModel state/command layer.
+    description: Platform root shell, Common UI native bases, PlatformUiSubsystem, and MVVM ViewModel state/command layer.
     read:
+      - Client/Source/OdiroSim/Public/Platform/Widget/PlatformRootWidget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/PlatformRootWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/PlatformUiSubsystem.h
       - Client/Source/OdiroSim/Private/Platform/PlatformUiSubsystem.cpp
       - Client/Source/OdiroSim/Public/Platform/PlatformUiDeveloperSettings.h
@@ -41,12 +47,13 @@ entry:
 guardrails:
   - Platform UI reads ProjectSession state and canonical user-project run artifacts, not simulator world objects.
   - ProjectSessionSubsystem is the runtime source of truth for the active user project root.
-  - Startup UI owns project selection/creation; MainMenu owns the project workspace surface.
+  - PlatformRootWidget is the runtime root shell for Startup/Create and the project workspace.
   - PlatformUiSubsystem owns ViewModel lifecycle only; it must not store widget pointers.
   - Platform widgets resolve PlatformUiSubsystem/ViewModels only; ProjectSession, SimulatorLaunch, and AnalysisAI lookup or event relay stays behind PlatformUiSubsystem/ViewModels except explicit test seams.
   - UUserWidget/Common UI classes are view adapters; project/file/run/AI command logic belongs in ViewModels or Platform subsystems.
   - ViewModel repeatable UI data uses UObject item ViewModels for ListView/TileView-style rows/cards, including project result iteration selectors.
-  - StartupMenuViewModel owns open/create form state, persisted project-open options, and recent-project list state; project path existence checks go through PlatformUiSubsystem path helpers.
+  - StartupScreenViewModel and ProjectCreateScreenViewModel own open/create form state, persisted project-open options, and recent-project list state; project path existence checks go through PlatformUiSubsystem path helpers.
+  - Project preset resource structure and manifest payload-copy rules are owned by contracts/specs/user-project-data.md and contracts/specs/bridge-ipc.md.
   - ExperimentConfigViewModel owns FieldNotify input state only; user-project setting.json file/JSON I/O stays behind PlatformUiSubsystem experiment setting APIs.
   - RobotProfileViewModel owns FieldNotify input state only; user-project profile.json robot.body, robot.drive, and robot.lidar file/JSON I/O stays behind PlatformUiSubsystem robot profile APIs.
   - ExperimentResultViewModel owns dashboard display state only; project run summary/review JSON loading and AI request relay stay behind PlatformUiSubsystem APIs.
@@ -60,17 +67,22 @@ guardrails:
   - Project experiment launch commands create a fresh user-project run through ProjectWorkspaceViewModel before starting; selected historical runs are analysis/navigation targets and must not be overwritten.
   - SimulatorLaunchSubsystem treats run output artifacts such as status.json, summary.json, and episode result.json as immutable start guards.
   - Project-run AI analysis uses the v2 `project_path` plus `run_id` request path and stores review artifacts under the run.
-  - C++ writes state/text/visibility into WBP-owned layouts; structural UMG ownership stays in client-runtime-foundation.
-  - Robot profile Preview UI is a view adapter over a preview service; it must not make slider edits save profile.json or make widgets own long-lived world actor lifecycle.
-  - StartupMenu/MainMenu UMG edits must complete UE_MCP_Bridge widget tree readback, Blueprint compile/save, layout data, overlap check, and runtime or Slate capture verification before completion; property or geometry MCP queries require a scoped safety check because broad JsonUtilities serialization can stack-overflow editor sessions.
+  - C++ writes runtime state text and visibility into WBP-owned layouts; static labels, dialog copy, layout sizing, styling, and design defaults stay in WBP defaults.
+  - WindowsControlWidget owns native window commands and glyph binding only; hover/press transitions stay in WBP-authored UMG animations.
+  - Platform UMG edits must complete UE_MCP_Bridge widget tree readback, Blueprint compile/save, layout data, overlap check, and runtime or Slate capture verification before completion; property or geometry MCP queries require a scoped safety check because broad JsonUtilities serialization can stack-overflow editor sessions.
+  - Content/Widgets/MainMenu runtime dependencies are not allowed for Platform UI.
   - UE_MCP_Bridge `replace_widget_classes` is the scoped widget-class migration entry point; preserve existing BindWidget names, parent slots, and WBP-owned layout/style when replacing child widgets.
-  - StartupMap and ScenarioEditorMap root widget classes are configured by PlatformUiDeveloperSettings or exposed controller/widget properties, not hardcoded class paths.
-  - Platform UI dynamic row/card widget classes, including startup recent-project cards and project run/result rows, are configured by WBP exposed properties first, with PlatformUiDeveloperSettings soft-class fallbacks for project-level defaults.
+  - UE_MCP_Bridge editor lifecycle control is split: rich Unreal tools stay editor-backed, while EditorReloadMcp owns coordinated Live Coding, rebuild, restart, stale maintenance recovery, and crash/closed-editor recover-and-restart cold starts.
+  - UE_MCP_Bridge dialog auto-response policies apply only inside bridge-owned automation scopes; user-driven editor modals must pass through to normal Unreal UI.
+  - Do not use direct UE_MCP_Bridge `hot_reload` or `live_coding_compile` for agent C++ verification when Editor Reload MCP is exposed; source fingerprint coverage belongs to Reload MCP.
+  - UE_MCP_Bridge reload scripts stay plugin-contained; resolve Unreal project/build/editor paths through `Resources/Automation/UnrealProjectTools.ps1`, not `Client/Tools/Common.ps1`.
+  - ScenarioEditorMap is the default root shell map; StartupMap is legacy compatibility only, and root widget classes are configured by PlatformUiDeveloperSettings or exposed controller/widget properties.
+  - Platform UI dynamic row/card widget classes are configured by parent WBP exposed properties; PlatformUiDeveloperSettings is for root bootstrap only.
   - Client tools use `Client/Tools/Common.ps1`, never root `tools/common.ps1`.
 verify:
   - when: launch, process, or project-session behavior changes
     run:
-      - focused SimulatorLaunch, SimulatorProcess, ProjectSession, and MainMenu project-mode tests
+      - focused SimulatorLaunch, SimulatorProcess, ProjectSession, and Platform project-mode tests
       - runtime log plus status JSON check for process lifecycle changes
   - when: analysis or dashboard behavior changes
     run:
@@ -78,10 +90,20 @@ verify:
   - when: platform UI or UMG tool flow changes
     run:
       - focused OdiroSim.PlatformUi automation tests for ViewModel/Common UI native changes
+      - Platform root transition/status smoke covering Startup, ProjectCreate, ProjectOverview, ScenarioEditor, RobotConfig, RunList, RunDetail, Back, and result-tab close
       - UE_MCP_Bridge widget tree readback for touched assets; avoid broad property/layout queries unless first scoped to a known-safe widget
       - Blueprint compile/save for touched widgets
       - UE_MCP_Bridge get_layout_data and check_widget_overlap after every user-facing UMG mutation
       - preview or MCP geometry/capture smoke for every user-facing layout change
+      - dependency audit for no Content/Widgets/MainMenu references
+      - optional `.agents/skills/ue5-widget-boundary/scripts/check_widget_boundary.ps1` review after Platform widget C++ boundary-risk changes
+  - when: UE_MCP_Bridge coordination, reload MCP, or editor lifecycle scripts change
+    run:
+      - PowerShell parser check for Client/Plugins/UE_MCP_Bridge/Resources/MCP/EditorReloadMcp.ps1
+      - PowerShell parser check for Client/Plugins/UE_MCP_Bridge/Resources/Automation/RebuildAndRestart.ps1
+      - PowerShell parser check for Client/Plugins/UE_MCP_Bridge/Resources/Automation/UnrealProjectTools.ps1
+      - Client/Tools/Build.ps1 when safe to rebuild the shared editor
+      - Editor Reload MCP status, check-only, hot reload, and rebuild/restart smoke when the updated bridge is loaded
 links:
   - Client/README.md
   - Client/Docs/plans/PLAN-platform-architecture.md

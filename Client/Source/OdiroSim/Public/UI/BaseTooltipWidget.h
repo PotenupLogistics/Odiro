@@ -32,8 +32,8 @@ protected:
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
 	// Tooltip body text.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetMessage", Setter = "SetMessage", BlueprintGetter = "GetMessage", BlueprintSetter = "SetMessage", Category = "UI|Base Tooltip", meta = (ExposeOnSpawn = "true"))
-	FText Message;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetMessage", Setter = "SetMessage", BlueprintGetter = "GetMessage", BlueprintSetter = "SetMessage", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
+	FText Message = NSLOCTEXT("BaseTooltipWidget", "DefaultMessage", "Tooltip message");
 
 	// Rounded tooltip surface owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -51,6 +51,9 @@ class ODIROSIM_API UBaseTooltipAnchorWidget : public UBaseWidget
 	GENERATED_BODY()
 
 public:
+	// Applies design-time placeholder text for the hover-spawn helper anchor.
+	virtual void SynchronizeBaseProperties() override;
+
 	// Updates the tooltip message passed to spawned tooltip widgets.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Tooltip")
 	void SetTooltipMessage(FText inMessage);
@@ -90,24 +93,32 @@ protected:
 	void HideTooltip();
 
 	// Tooltip widget class to spawn on hover.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tooltip")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Classes")
 	TSubclassOf<UBaseTooltipWidget> TooltipWidgetClass;
 
 	// Tooltip message passed to spawned tooltip widgets.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetTooltipMessage", Setter = "SetTooltipMessage", BlueprintGetter = "GetTooltipMessage", BlueprintSetter = "SetTooltipMessage", Category = "UI|Base Tooltip", meta = (ExposeOnSpawn = "true"))
-	FText TooltipMessage;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetTooltipMessage", Setter = "SetTooltipMessage", BlueprintGetter = "GetTooltipMessage", BlueprintSetter = "SetTooltipMessage", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
+	FText TooltipMessage = NSLOCTEXT("BaseTooltipAnchorWidget", "DefaultTooltipMessage", "Tooltip preview");
 
 	// Hover delay before the tooltip appears.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetTooltipDelay", Setter = "SetTooltipDelay", BlueprintGetter = "GetTooltipDelay", BlueprintSetter = "SetTooltipDelay", Category = "UI|Base Tooltip", meta = (ClampMin = "0.0", ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetTooltipDelay", Setter = "SetTooltipDelay", BlueprintGetter = "GetTooltipDelay", BlueprintSetter = "SetTooltipDelay", Category = "UI|Interaction", meta = (ClampMin = "0.0", ExposeOnSpawn = "true"))
 	float TooltipDelaySeconds = 1.0f;
 
 	// Optional WBP-provided tooltip size estimate used for viewport-edge alignment before layout is measured.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tooltip", meta = (ClampMin = "0.0", ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Layout", meta = (ClampMin = "0.0", ExposeOnSpawn = "true"))
 	FVector2D EstimatedTooltipSize = FVector2D::ZeroVector;
 
 	// Viewport layer used for spawned tooltip widgets.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tooltip", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
 	int32 TooltipZOrder = 0;
+
+	// Designer-visible hint rendered by the WBP when present.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
+	FText PlaceholderText = NSLOCTEXT("BaseTooltipAnchorWidget", "PlaceholderText", "Hover for tooltip");
+
+	// Optional anchor hint text owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> PlaceholderTextBlock;
 
 	// Active tooltip widget owned by this anchor while visible.
 	UPROPERTY(Transient)

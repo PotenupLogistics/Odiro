@@ -23,6 +23,18 @@ namespace
 		return path;
 	}
 
+	FString BuildExperimentResultVmRunDirectory(const FString& projectPath, const FString& runId)
+	{
+		const FString normalizedProjectPath = NormalizeExperimentResultVmPath(projectPath);
+		const FString normalizedRunId = runId.TrimStartAndEnd();
+		if (normalizedProjectPath.IsEmpty() || normalizedRunId.IsEmpty())
+		{
+			return FString();
+		}
+
+		return NormalizeExperimentResultVmPath(FPaths::Combine(normalizedProjectPath, TEXT("runs"), normalizedRunId));
+	}
+
 	template <typename ItemT>
 	TArray<ItemT*> CopyExperimentResultItems(const TArray<TObjectPtr<ItemT>>& sourceItems)
 	{
@@ -105,10 +117,12 @@ bool UExperimentResultViewModel::RequestAiAnalysis(const FString& projectPath, c
 	const FString normalizedProjectPath = NormalizeExperimentResultVmPath(projectPath);
 	const FString normalizedRunId = runId.TrimStartAndEnd();
 	PendingAnalysisRunId = normalizedRunId;
+	PendingAnalysisRunDirectory = BuildExperimentResultVmRunDirectory(normalizedProjectPath, normalizedRunId);
 	FString errorText;
 	if (!subsystem->RequestProjectRunAnalysis(normalizedProjectPath, normalizedRunId, errorText))
 	{
 		PendingAnalysisRunId.Reset();
+		PendingAnalysisRunDirectory.Reset();
 		SetDiagnosticsText(errorText.IsEmpty() ? TEXT("AI 분석 요청 실패.") : errorText);
 		return false;
 	}
@@ -128,6 +142,16 @@ TArray<UExperimentResultSuggestionViewModel*> UExperimentResultViewModel::GetSug
 	return CopyExperimentResultItems(SuggestionItems);
 }
 
+TArray<UExperimentResultInsightViewModel*> UExperimentResultViewModel::GetInsightItems() const
+{
+	return CopyExperimentResultItems(InsightItems);
+}
+
+TArray<UOdiroListItemViewModel*> UExperimentResultViewModel::GetWarningItems() const
+{
+	return CopyExperimentResultItems(WarningItems);
+}
+
 UPlatformUiSubsystem* UExperimentResultViewModel::ResolvePlatformUiSubsystem() const
 {
 	if (PlatformUiOverride)
@@ -139,22 +163,52 @@ UPlatformUiSubsystem* UExperimentResultViewModel::ResolvePlatformUiSubsystem() c
 
 void UExperimentResultViewModel::HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response)
 {
+	const FString responseRunId = response.RunId.TrimStartAndEnd();
+	if (!responseRunId.IsEmpty())
+	{
+		const FString currentRunId = RunId.IsEmpty()
+			? FPaths::GetCleanFilename(SelectedRunDirectory)
+			: RunId;
+		const bool bPendingDifferentRun = !PendingAnalysisRunId.IsEmpty()
+			&& !responseRunId.Equals(PendingAnalysisRunId, ESearchCase::IgnoreCase);
+		const bool bDisplayedDifferentRun = PendingAnalysisRunId.IsEmpty()
+			&& !currentRunId.IsEmpty()
+			&& !responseRunId.Equals(currentRunId, ESearchCase::IgnoreCase);
+		if (bPendingDifferentRun || bDisplayedDifferentRun)
+		{
+			return;
+		}
+	}
+
 	SetBusy(false);
 	if (response.bSuccess)
 	{
-		if (!SelectedRunDirectory.IsEmpty())
+		const FString responseRunDirectory = NormalizeExperimentResultVmPath(response.RunDirectory);
+		const FString runDirectory = !responseRunDirectory.IsEmpty()
+			? responseRunDirectory
+			: !PendingAnalysisRunDirectory.IsEmpty()
+			? PendingAnalysisRunDirectory
+			: SelectedRunDirectory;
+		if (!runDirectory.IsEmpty())
 		{
-			LoadRunDirectory(SelectedRunDirectory);
+			LoadRunDirectory(runDirectory);
 		}
 		PendingAnalysisRunId.Reset();
+		PendingAnalysisRunDirectory.Reset();
 		return;
 	}
 
-	const FString runId = PendingAnalysisRunId.IsEmpty() ? RunId : PendingAnalysisRunId;
+	const FString runId = !responseRunId.IsEmpty()
+		? responseRunId
+		: PendingAnalysisRunId.IsEmpty()
+		? RunId
+		: PendingAnalysisRunId;
+	const FString errorMessage = response.ErrorMessage.IsEmpty() ? response.DisplayText : response.ErrorMessage;
 	SetDiagnosticsText(runId.IsEmpty()
-		? response.DisplayText
-		: FString::Printf(TEXT("AI analysis failed for %s: %s"), *runId, *response.DisplayText));
+		? errorMessage
+		: FString::Printf(TEXT("AI analysis failed for %s: %s"), *runId, *errorMessage));
 	PendingAnalysisRunId.Reset();
+	PendingAnalysisRunDirectory.Reset();
 }
 
 void UExperimentResultViewModel::SetSelectedRunDirectory(const FString& runDirectory)
@@ -176,16 +230,32 @@ void UExperimentResultViewModel::SetDashboardData(const FProjectRunResultDashboa
 
 void UExperimentResultViewModel::RefreshDisplayLabels()
 {
+	const FString totalDurationLabel = DashboardData.TotalPlayTimeLabel.TrimStartAndEnd();
 	UE_MVVM_SET_PROPERTY_VALUE(
 		TotalDurationLabel,
-		FString::Printf(TEXT("%.1f s"), DashboardData.TotalDurationSeconds));
+		totalDurationLabel.IsEmpty()
+			? FString::Printf(TEXT("%.1f s"), DashboardData.TotalDurationSeconds)
+			: totalDurationLabel);
 
-	const FString successRate = DashboardData.EpisodeCount > 0
+	const FString averageDuration = DashboardData.EpisodeCount > 0
+		? FString::Printf(TEXT("%.1f s"), DashboardData.TotalDurationSeconds / DashboardData.EpisodeCount)
+		: FString(TEXT("-"));
+	UE_MVVM_SET_PROPERTY_VALUE(AverageDurationLabel, averageDuration);
+
+	const FString successRateOverride = DashboardData.SuccessRateLabel.TrimStartAndEnd();
+	const FString successRate = !successRateOverride.IsEmpty()
+		? successRateOverride
+		: DashboardData.EpisodeCount > 0
 		? FString::Printf(TEXT("%.0f%%"), 100.0 * static_cast<double>(DashboardData.SuccessCount) / DashboardData.EpisodeCount)
 		: FString(TEXT("-"));
 	UE_MVVM_SET_PROPERTY_VALUE(SuccessRateLabel, successRate);
 
-	UE_MVVM_SET_PROPERTY_VALUE(CollisionCountLabel, FString::Printf(TEXT("%d"), DashboardData.CollisionCount));
+	const FString collisionCountOverride = DashboardData.CollisionCountLabel.TrimStartAndEnd();
+	UE_MVVM_SET_PROPERTY_VALUE(
+		CollisionCountLabel,
+		collisionCountOverride.IsEmpty()
+			? FString::Printf(TEXT("%d"), DashboardData.CollisionCount)
+			: collisionCountOverride);
 	UE_MVVM_SET_PROPERTY_VALUE(
 		AiSummaryText,
 		DashboardData.AiSummary.IsEmpty() ? FString(TEXT("AI 분석 결과가 없습니다.")) : DashboardData.AiSummary);
@@ -222,4 +292,34 @@ void UExperimentResultViewModel::RebuildDashboardItemViewModels()
 		SuggestionItems.Add(item);
 	}
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(SuggestionItems);
+
+	InsightItems.Reset();
+	InsightItems.Reserve(DashboardData.Insights.Num());
+	for (const FProjectRunAnalysisInsightDashboardItem& insightItem : DashboardData.Insights)
+	{
+		UExperimentResultInsightViewModel* item = NewObject<UExperimentResultInsightViewModel>(this);
+		if (!item)
+		{
+			continue;
+		}
+
+		item->InitializeFromDashboardItem(insightItem);
+		InsightItems.Add(item);
+	}
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(InsightItems);
+
+	WarningItems.Reset();
+	WarningItems.Reserve(DashboardData.Warnings.Num());
+	for (const FString& warningText : DashboardData.Warnings)
+	{
+		UOdiroListItemViewModel* item = NewObject<UOdiroListItemViewModel>(this);
+		if (!item)
+		{
+			continue;
+		}
+
+		item->InitializeItem(warningText, warningText, FString(), FString());
+		WarningItems.Add(item);
+	}
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(WarningItems);
 }

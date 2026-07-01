@@ -27,6 +27,10 @@ struct ODIROSIM_API FProjectRunEpisodeDashboardItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	double DurationSeconds = 0.0;
 
+	// API 응답 display.duration이 제공하는 episode 시간 표시 문자열.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString DurationLabel;
+
 	// episode가 성공으로 판정되었는지 여부.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	bool bSuccess = false;
@@ -34,6 +38,10 @@ struct ODIROSIM_API FProjectRunEpisodeDashboardItem
 	// summary.json의 outcome 문자열.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	FString Outcome;
+
+	// API 응답 display.outcome이 제공하는 outcome 표시 문자열.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString OutcomeLabel;
 
 	// summary.json의 terminal_reason 문자열.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
@@ -99,6 +107,29 @@ struct ODIROSIM_API FProjectRunAiSuggestionDashboardItem
 	FString SuggestedValue;
 };
 
+// Result dashboard의 핵심 분석 포인트 card 하나에 필요한 데이터.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FProjectRunAnalysisInsightDashboardItem
+{
+	GENERATED_BODY()
+
+	// 표시 심각도.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	EProjectRunAiSuggestionSeverity Severity = EProjectRunAiSuggestionSeverity::Info;
+
+	// 사용자에게 표시할 심각도 label.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString SeverityLabel;
+
+	// 분석 포인트 제목.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString Title;
+
+	// 분석 포인트 설명.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString Description;
+};
+
 // Result dashboard 화면 하나를 채우는 집계 데이터.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FProjectRunResultDashboardData
@@ -121,6 +152,10 @@ struct ODIROSIM_API FProjectRunResultDashboardData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	double TotalDurationSeconds = 0.0;
 
+	// run_overview.display.total_play_time 또는 summary 기반 표시 문자열.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString TotalPlayTimeLabel;
+
 	// summary rows 기준 episode 수.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	int32 EpisodeCount = 0;
@@ -129,9 +164,17 @@ struct ODIROSIM_API FProjectRunResultDashboardData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	int32 SuccessCount = 0;
 
+	// run_overview.display.success_rate 또는 summary 기반 표시 문자열.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString SuccessRateLabel;
+
 	// 주요 충돌 카운트 합계.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	int32 CollisionCount = 0;
+
+	// run_overview.display.collision_count 또는 summary 기반 표시 문자열.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString CollisionCountLabel;
 
 	// AI 분석 요약 문장.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
@@ -144,6 +187,14 @@ struct ODIROSIM_API FProjectRunResultDashboardData
 	// AI 개선 제안 row 데이터.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	TArray<FProjectRunAiSuggestionDashboardItem> Suggestions;
+
+	// 핵심 분석 포인트 row 데이터.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	TArray<FProjectRunAnalysisInsightDashboardItem> Insights;
+
+	// AI 분석 중 발생한 비치명 경고 표시 문자열.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	TArray<FString> Warnings;
 
 	// JSON 읽기/해석 중 발생한 비치명 진단.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")

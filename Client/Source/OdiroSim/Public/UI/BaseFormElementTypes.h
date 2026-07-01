@@ -15,7 +15,33 @@ enum class EBaseTextInputMode : uint8
 	Text,
 	Number,
 	NumberRange,
-	Multiline
+	Multiline UMETA(Hidden)
+};
+
+// Horizontal content alignment used by compact base components.
+UENUM(BlueprintType)
+enum class EBaseHorizontalContentAlign : uint8
+{
+	Left,
+	Center,
+	Right
+};
+
+// Vertical content alignment used when a component has spare height.
+UENUM(BlueprintType)
+enum class EBaseVerticalContentAlign : uint8
+{
+	Top,
+	Middle,
+	Bottom
+};
+
+// Label/slider/input composition variants for slider combo widgets.
+UENUM(BlueprintType)
+enum class EBaseSliderComboStyle : uint8
+{
+	Compact,
+	Modern
 };
 
 // Toggle presentation variants sharing one checked-state contract.
@@ -41,19 +67,19 @@ struct ODIROSIM_API FBaseSwitcherItem
 	GENERATED_BODY()
 
 	// Stable item id used for selection.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Switcher")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FName Id;
 
 	// Visible segment label.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Switcher")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FText Label;
 
 	// Optional segment icon texture.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Switcher")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	TObjectPtr<UTexture2D> Icon = nullptr;
 
 	// Whether the segment can be selected.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Switcher")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	bool bDisabled = false;
 };
 
@@ -64,19 +90,19 @@ struct ODIROSIM_API FBaseDropdownItem
 	GENERATED_BODY()
 
 	// Stable item id used for selection.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Dropdown")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FName Id;
 
 	// Visible option label.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Dropdown")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FText Label;
 
 	// Optional option icon texture.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Dropdown")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	TObjectPtr<UTexture2D> Icon = nullptr;
 
 	// Whether the option can be selected.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Dropdown")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	bool bDisabled = false;
 };
 
@@ -87,23 +113,23 @@ struct ODIROSIM_API FBaseCheckBoxGroupItem
 	GENERATED_BODY()
 
 	// Stable item id used for updates and events.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Check Box")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FName Id;
 
 	// Optional parent id used to derive parent indeterminate state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Check Box")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Hierarchy")
 	FName ParentId;
 
 	// Visible checkbox label.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Check Box")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FText Label;
 
 	// Current check state owned by the group.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Check Box")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	ECheckBoxState CheckState = ECheckBoxState::Unchecked;
 
 	// Whether this item can be toggled by the user.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Check Box")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	bool bDisabled = false;
 };
 
@@ -114,43 +140,43 @@ struct ODIROSIM_API FBaseTreeRowItem
 	GENERATED_BODY()
 
 	// Stable row id used for selection.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FName Id;
 
 	// Indentation depth in the already-flattened row list.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Hierarchy", meta = (ClampMin = "0"))
 	int32 Depth = 0;
 
 	// Primary row label.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FText Label;
 
 	// Muted inline label shown after the primary row label.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FText SubLabel;
 
 	// Optional label aligned to the row's right edge.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FText RightLabel;
 
 	// Optional row icon texture.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	TObjectPtr<UTexture2D> Icon = nullptr;
 
 	// Whether this row has children and should show an expander slot.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Hierarchy")
 	bool bHasChildren = false;
 
 	// Whether the expander should show the expanded state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	bool bExpanded = false;
 
 	// Whether this row should render selected.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	bool bSelected = false;
 
 	// Whether this row is inactive.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Tree")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	bool bDisabled = false;
 };
 
@@ -161,35 +187,35 @@ struct ODIROSIM_API FBaseContextMenuItem
 	GENERATED_BODY()
 
 	// Stable command id emitted when the item is selected.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FName Id;
 
 	// Visible item label.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FText Label;
 
 	// Optional shortcut label aligned to the right.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	FText Shortcut;
 
 	// Optional item icon texture.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents")
 	TObjectPtr<UTexture2D> Icon = nullptr;
 
 	// Whether this item is a visual separator instead of a command.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	bool bSeparator = false;
 
 	// Whether this command is destructive and should use danger text.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	bool bDanger = false;
 
 	// Whether this command can be selected.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	bool bDisabled = false;
 
 	// Whether this row should show a submenu caret.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|State")
 	bool bHasSubMenu = false;
 };
 

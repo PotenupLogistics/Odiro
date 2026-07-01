@@ -1,8 +1,229 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "UI/BaseFormElements.h"
+#include "UI/BaseCheckBoxWidget.h"
+#include "UI/BaseContextMenuWidget.h"
+#include "UI/BaseDropdownWidget.h"
+#include "UI/BaseFormElementTypes.h"
+#include "UI/BaseSliderComboWidget.h"
+#include "UI/BaseSliderWidget.h"
+#include "UI/BaseSwitcherWidget.h"
+#include "UI/BaseTextInputWidget.h"
+#include "UI/BaseThumbnailCardWidget.h"
+#include "UI/BaseToggleButtonWidget.h"
+#include "UI/BaseTooltipWidget.h"
+#include "UI/BaseTreeViewWidget.h"
+#include "UI/BaseWidgetPrivate.h"
+#include "UI/BaseWidgetTokens.h"
+#include "UI/DisplayDpiScalingRule.h"
 
+#include "Components/SizeBox.h"
+#include "Components/TextBlock.h"
+#include "Engine/UserInterfaceSettings.h"
+#include "Fonts/SlateFontInfo.h"
 #include "Misc/AutomationTest.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseFormElementsSizeConstraintsTest,
+	"OdiroSim.UI.BaseFormElements.SizeConstraints",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Verifies Base Widget root SizeBox constraints behave as responsive desired-size limits.
+bool FBaseFormElementsSizeConstraintsTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	FBaseWidgetSizeConstraints constraints;
+	constraints.MinWidth = 640.0f;
+	constraints.MaxWidth = 320.0f;
+	constraints.MinHeight = -12.0f;
+	constraints.MaxHeight = 72.0f;
+
+	const FBaseWidgetSizeConstraints normalized = BaseWidgetPrivate::NormalizeSizeConstraints(constraints);
+	TestEqual(TEXT("width min and max are ordered"), normalized.MinWidth, 320.0f);
+	TestEqual(TEXT("width max and min are ordered"), normalized.MaxWidth, 640.0f);
+	TestEqual(TEXT("negative min height clamps to zero"), normalized.MinHeight, 0.0f);
+	TestEqual(TEXT("positive max height is preserved"), normalized.MaxHeight, 72.0f);
+
+	USizeBox* sizeBox = NewObject<USizeBox>();
+	TestNotNull(TEXT("size box created"), sizeBox);
+	if (!sizeBox)
+	{
+		return false;
+	}
+
+	sizeBox->SetWidthOverride(500.0f);
+	sizeBox->SetHeightOverride(80.0f);
+
+	BaseWidgetPrivate::ApplySizeConstraints(sizeBox, constraints);
+	TestFalse(TEXT("fixed width override is cleared"), sizeBox->IsWidthOverride());
+	TestFalse(TEXT("fixed height override is cleared"), sizeBox->IsHeightOverride());
+	TestTrue(TEXT("min desired width is applied"), sizeBox->IsMinDesiredWidthOverride());
+	TestTrue(TEXT("max desired width is applied"), sizeBox->IsMaxDesiredWidthOverride());
+	TestFalse(TEXT("zero min desired height is cleared"), sizeBox->IsMinDesiredHeightOverride());
+	TestTrue(TEXT("max desired height is applied"), sizeBox->IsMaxDesiredHeightOverride());
+	TestEqual(TEXT("applied min desired width"), sizeBox->GetMinDesiredWidth(), 320.0f);
+	TestEqual(TEXT("applied max desired width"), sizeBox->GetMaxDesiredWidth(), 640.0f);
+	TestEqual(TEXT("applied max desired height"), sizeBox->GetMaxDesiredHeight(), 72.0f);
+
+	BaseWidgetPrivate::ApplySizeConstraints(sizeBox, FBaseWidgetSizeConstraints());
+	TestFalse(TEXT("zero min width clears override"), sizeBox->IsMinDesiredWidthOverride());
+	TestFalse(TEXT("zero min height clears override"), sizeBox->IsMinDesiredHeightOverride());
+	TestFalse(TEXT("zero max width clears override"), sizeBox->IsMaxDesiredWidthOverride());
+	TestFalse(TEXT("zero max height clears override"), sizeBox->IsMaxDesiredHeightOverride());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseFormElementsTokenScaleTest,
+	"OdiroSim.UI.BaseFormElements.TokenScale",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Verifies source defaults stay neutral while size DA assets own authored token values.
+bool FBaseFormElementsTokenScaleTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	const UBaseWidgetSizeCatalog* defaultSizes = GetDefault<UBaseWidgetSizeCatalog>();
+	TestNotNull(TEXT("size catalog class defaults exist"), defaultSizes);
+	if (!defaultSizes)
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("class default space stays neutral"), defaultSizes->Space1, 0.0f);
+	TestEqual(TEXT("class default control height stays neutral"), defaultSizes->ControlHeight, 0.0f);
+	TestEqual(TEXT("class default icon size stays neutral"), defaultSizes->IconSize, 0.0f);
+	TestEqual(TEXT("class default title typography stays neutral"), defaultSizes->TitleText.Font.Size, 0.0f);
+	TestEqual(TEXT("class default body typography stays neutral"), defaultSizes->BodyText.Font.Size, 0.0f);
+
+	const FBaseTextStyleToken defaultTextToken;
+	TestEqual(TEXT("default text token size stays neutral"), defaultTextToken.Font.Size, 0.0f);
+
+	const auto testSizeAsset = [this](
+		const TCHAR* testPrefix,
+		const EBaseWidgetSize size,
+		const float titleSize,
+		const float labelSize,
+		const float bodySize,
+		const float captionSize,
+		const float valueSize)
+	{
+		const UBaseWidgetSizeCatalog* asset =
+			UBaseWidgetSizeCatalog::MakePresetCatalogReference(size).LoadSynchronous();
+		const FString existsLabel = FString::Printf(TEXT("%s size asset exists"), testPrefix);
+		TestNotNull(*existsLabel, asset);
+		if (!asset)
+		{
+			return;
+		}
+
+		const FString titleLabel = FString::Printf(TEXT("%s title text size"), testPrefix);
+		const FString labelLabel = FString::Printf(TEXT("%s label text size"), testPrefix);
+		const FString bodyLabel = FString::Printf(TEXT("%s body text size"), testPrefix);
+		const FString captionLabel = FString::Printf(TEXT("%s caption text size"), testPrefix);
+		const FString valueLabel = FString::Printf(TEXT("%s value text size"), testPrefix);
+		TestEqual(*titleLabel, asset->TitleText.Font.Size, titleSize);
+		TestEqual(*labelLabel, asset->LabelText.Font.Size, labelSize);
+		TestEqual(*bodyLabel, asset->BodyText.Font.Size, bodySize);
+		TestEqual(*captionLabel, asset->CaptionText.Font.Size, captionSize);
+		TestEqual(*valueLabel, asset->ValueText.Font.Size, valueSize);
+	};
+	testSizeAsset(TEXT("small DA"), EBaseWidgetSize::Small, 14.0f, 12.0f, 12.0f, 11.0f, 22.0f);
+	testSizeAsset(TEXT("medium DA"), EBaseWidgetSize::Medium, 16.0f, 14.0f, 14.0f, 12.0f, 28.0f);
+	testSizeAsset(TEXT("large DA"), EBaseWidgetSize::Large, 18.0f, 16.0f, 16.0f, 14.0f, 36.0f);
+
+	const UBaseWidgetSizeCatalog* mediumAsset =
+		UBaseWidgetSizeCatalog::MakePresetCatalogReference(EBaseWidgetSize::Medium).LoadSynchronous();
+	TestNotNull(TEXT("medium size asset exists for metrics"), mediumAsset);
+	if (mediumAsset)
+	{
+		TestEqual(TEXT("medium space 1"), mediumAsset->Space1, 2.0f);
+		TestEqual(TEXT("medium space 2"), mediumAsset->Space2, 4.0f);
+		TestEqual(TEXT("medium space 3"), mediumAsset->Space3, 6.0f);
+		TestEqual(TEXT("medium space 4"), mediumAsset->Space4, 8.0f);
+		TestEqual(TEXT("medium space 5"), mediumAsset->Space5, 10.0f);
+		TestEqual(TEXT("medium space 6"), mediumAsset->Space6, 12.0f);
+		TestEqual(TEXT("medium space 8"), mediumAsset->Space8, 16.0f);
+		TestEqual(TEXT("medium space 10"), mediumAsset->Space10, 20.0f);
+		TestEqual(TEXT("medium space 12"), mediumAsset->Space12, 24.0f);
+		TestEqual(TEXT("medium space 16"), mediumAsset->Space16, 36.0f);
+		TestEqual(TEXT("medium space 20"), mediumAsset->Space20, 40.0f);
+		TestEqual(TEXT("medium compat small spacing"), mediumAsset->SpacingSmall, 4.0f);
+		TestEqual(TEXT("medium compat medium spacing"), mediumAsset->SpacingMedium, 8.0f);
+		TestEqual(TEXT("medium compat large spacing"), mediumAsset->SpacingLarge, 12.0f);
+		TestEqual(TEXT("medium control height"), mediumAsset->ControlHeight, 30.0f);
+		TestEqual(TEXT("medium small control height"), mediumAsset->ControlHeightSmall, 28.0f);
+		TestEqual(TEXT("medium field height"), mediumAsset->FieldHeight, 24.0f);
+		TestEqual(TEXT("medium row height"), mediumAsset->RowHeight, 24.0f);
+		TestEqual(TEXT("medium property row height"), mediumAsset->PropertyRowHeight, 26.0f);
+		TestEqual(TEXT("medium title bar height"), mediumAsset->TitleBarHeight, 32.0f);
+		TestEqual(TEXT("medium tab bar height"), mediumAsset->TabBarHeight, 36.0f);
+		TestEqual(TEXT("medium panel header height"), mediumAsset->PanelHeaderHeight, 30.0f);
+		TestEqual(TEXT("medium icon size"), mediumAsset->IconSize, 20.0f);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseFormElementsTextPreservationTest,
+	"OdiroSim.UI.BaseFormElements.TextPreservation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBaseFormElementsTextPreservationTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UTextBlock* textBlock = NewObject<UTextBlock>();
+	TestNotNull(TEXT("text block created"), textBlock);
+	if (!textBlock)
+	{
+		return false;
+	}
+
+	textBlock->SetText(FText::FromString(TEXT("Designer placeholder")));
+	BaseWidgetPrivate::ApplyTextIfSet(textBlock, FText::GetEmpty());
+	TestEqual(
+		TEXT("empty property text preserves WBP-authored text"),
+		textBlock->GetText().ToString(),
+		FString(TEXT("Designer placeholder")));
+
+	BaseWidgetPrivate::ApplyTextIfSet(textBlock, FText::FromString(TEXT("Property text")));
+	TestEqual(
+		TEXT("non-empty property text overrides WBP-authored text"),
+		textBlock->GetText().ToString(),
+		FString(TEXT("Property text")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseFormElementsDpiScaleTest,
+	"OdiroSim.UI.BaseFormElements.DpiScale",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// DPI rule은 display scale bridge이며 DA font size를 역보정하지 않는다.
+bool FBaseFormElementsDpiScaleTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UDisplayDpiScalingRule* rule = NewObject<UDisplayDpiScalingRule>();
+	TestNotNull(TEXT("display dpi scaling rule created"), rule);
+	if (!rule)
+	{
+		return false;
+	}
+
+	const float viewportScale = rule->GetDPIScaleBasedOnSize(FIntPoint(3840, 2160));
+	TestTrue(TEXT("display dpi scale is finite"), FMath::IsFinite(viewportScale));
+	TestTrue(TEXT("display dpi scale stays positive"), viewportScale >= 0.01f);
+
+	const UUserInterfaceSettings* uiSettings = GetDefault<UUserInterfaceSettings>();
+	TestNotNull(TEXT("UI settings exist"), uiSettings);
+	if (uiSettings)
+	{
+		TestEqual(TEXT("font details display native Slate units"), uiSettings->GetFontDisplayDPI(), FontConstants::RenderDPI);
+	}
+	return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FBaseFormElementsTextInputTest,
@@ -21,6 +242,14 @@ bool FBaseFormElementsTextInputTest::RunTest(const FString& parameters)
 	}
 
 	input->SetInputMode(EBaseTextInputMode::Text);
+	input->SetTextWrap(true);
+	TestTrue(TEXT("text wrap option stores"), input->IsTextWrapEnabled());
+	input->SetTextWrap(false);
+	TestFalse(TEXT("text wrap option clears"), input->IsTextWrapEnabled());
+	input->SetInputMode(EBaseTextInputMode::Multiline);
+	TestEqual(TEXT("legacy multiline maps to text mode"), input->GetInputMode(), EBaseTextInputMode::Text);
+	TestTrue(TEXT("legacy multiline enables wrapping"), input->IsTextWrapEnabled());
+	input->SetTextWrap(false);
 	input->SetText(FText::FromString(TEXT("draft path")));
 	TestEqual(TEXT("current text returns stored text without bound editable"), input->GetCurrentText().ToString(), FString(TEXT("draft path")));
 	TestTrue(TEXT("commit current text succeeds in text mode"), input->CommitCurrentText());
@@ -74,6 +303,22 @@ bool FBaseFormElementsSliderTest::RunTest(const FString& parameters)
 	slider->SetRangeValue(75.0f, 25.0f);
 	TestEqual(TEXT("range slider lower ordered"), slider->GetLowerValue(), 25.0f);
 	TestEqual(TEXT("range slider upper ordered"), slider->GetUpperValue(), 75.0f);
+
+	UBaseSliderComboWidget* combo = NewObject<UBaseSliderComboWidget>();
+	TestNotNull(TEXT("slider combo created"), combo);
+	if (!combo)
+	{
+		return false;
+	}
+	combo->SetComboStyle(EBaseSliderComboStyle::Modern);
+	TestEqual(TEXT("slider combo style stores"), combo->GetComboStyle(), EBaseSliderComboStyle::Modern);
+	combo->SetValueRange(0.0f, 10.0f);
+	combo->SetValue(12.0f);
+	TestEqual(TEXT("slider combo value clamps"), combo->GetValue(), 10.0f);
+	combo->SetRangeMode(true);
+	combo->SetRangeValue(9.0f, 2.0f);
+	TestEqual(TEXT("slider combo lower ordered"), combo->GetLowerValue(), 2.0f);
+	TestEqual(TEXT("slider combo upper ordered"), combo->GetUpperValue(), 9.0f);
 	return true;
 }
 
@@ -161,6 +406,7 @@ bool FBaseFormElementsCheckBoxGroupTest::RunTest(const FString& parameters)
 	{
 		return false;
 	}
+	TestEqual(TEXT("checkbox group constructor examples"), group->GetItems().Num(), 2);
 
 	group->SetItems({ parent, childA, childB });
 	TestTrue(TEXT("child A checked"), group->SetItemCheckState(childA.Id, ECheckBoxState::Checked));
@@ -216,6 +462,7 @@ bool FBaseFormElementsSurfaceSmokeTest::RunTest(const FString& parameters)
 	{
 		return false;
 	}
+	TestEqual(TEXT("tree constructor examples"), tree->GetItems().Num(), 2);
 	tree->SetItems({ treeRow, disabledRow });
 	TestTrue(TEXT("tree selects enabled row"), tree->SelectItemById(treeRow.Id));
 	TestFalse(TEXT("tree rejects disabled row"), tree->SelectItemById(disabledRow.Id));

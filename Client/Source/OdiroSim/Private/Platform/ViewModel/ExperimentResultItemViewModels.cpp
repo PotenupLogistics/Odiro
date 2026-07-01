@@ -27,8 +27,11 @@ void UExperimentResultEpisodeViewModel::InitializeFromDashboardItem(
 	const FProjectRunEpisodeDashboardItem& episodeItem)
 {
 	SetEpisodeId(episodeItem.EpisodeId);
-	SetDurationLabel(FormatExperimentResultEpisodeDuration(episodeItem.DurationSeconds));
+	SetDurationLabel(episodeItem.DurationLabel.IsEmpty()
+		? FormatExperimentResultEpisodeDuration(episodeItem.DurationSeconds)
+		: episodeItem.DurationLabel);
 	SetSuccess(episodeItem.bSuccess);
+	SetOutcomeLabel(episodeItem.OutcomeLabel);
 	SetHasPreviewImage(!episodeItem.PreviewImagePath.IsEmpty());
 	SetEpisodeDirectory(episodeItem.EpisodeDirectory);
 	SetReplayAvailable(episodeItem.bReplayAvailable);
@@ -52,6 +55,11 @@ void UExperimentResultEpisodeViewModel::SetDurationLabel(const FString& duration
 void UExperimentResultEpisodeViewModel::SetSuccess(const bool bInSuccess)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(bSuccess, bInSuccess);
+}
+
+void UExperimentResultEpisodeViewModel::SetOutcomeLabel(const FString& outcomeLabel)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(OutcomeLabel, outcomeLabel.TrimStartAndEnd());
 }
 
 void UExperimentResultEpisodeViewModel::SetHasPreviewImage(const bool bInHasPreviewImage)
@@ -121,4 +129,32 @@ void UExperimentResultSuggestionViewModel::SetCurrentValue(const FString& curren
 void UExperimentResultSuggestionViewModel::SetSuggestedValue(const FString& suggestedValue)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(SuggestedValue, suggestedValue.TrimStartAndEnd());
+}
+
+void UExperimentResultInsightViewModel::InitializeFromDashboardItem(
+	const FProjectRunAnalysisInsightDashboardItem& insightItem)
+{
+	SetSeverity(insightItem.Severity);
+	SetSeverityLabel(insightItem.SeverityLabel);
+	SetDescription(insightItem.Description);
+	InitializeItem(
+		insightItem.Title,
+		insightItem.Title,
+		insightItem.Description,
+		FString());
+}
+
+void UExperimentResultInsightViewModel::SetSeverity(const EProjectRunAiSuggestionSeverity severity)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(Severity, severity);
+}
+
+void UExperimentResultInsightViewModel::SetSeverityLabel(const FString& severityLabel)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(SeverityLabel, severityLabel.TrimStartAndEnd());
+}
+
+void UExperimentResultInsightViewModel::SetDescription(const FString& description)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(Description, description.TrimStartAndEnd());
 }

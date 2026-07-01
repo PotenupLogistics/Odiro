@@ -23,7 +23,7 @@
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Platform/PlatformUiDeveloperSettings.h"
-#include "Platform/Widget/MainMenuWidget.h"
+#include "Platform/Widget/PlatformRootWidget.h"
 #include "Shared/ScenarioViewportPresentation.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorController, Log, All);
@@ -284,14 +284,20 @@ void AScenarioEditorController::BeginPlay()
 	AddEditorInputMappingContext();
 	EnsureAuthoringOutlineCustomDepthEnabled();
 	SetObserverMode();
-	ShowMainMenuWidget();
-	ShowEditorRootWidget();
+	if (UPlatformRootWidget* platformRootWidget = ShowPlatformRootWidget())
+	{
+		const EPlatformRootScreen activeScreen = platformRootWidget->GetActiveScreen();
+		if (activeScreen != EPlatformRootScreen::Startup && activeScreen != EPlatformRootScreen::ProjectCreate)
+		{
+			ShowEditorRootWidget();
+		}
+	}
 }
 
 void AScenarioEditorController::EndPlay(const EEndPlayReason::Type endPlayReason)
 {
 	RemoveEditorRootWidget();
-	RemoveMainMenuWidget();
+	RemovePlatformRootWidget();
 	Super::EndPlay(endPlayReason);
 }
 
@@ -914,13 +920,13 @@ UScenarioEditorRootWidget* AScenarioEditorController::ShowEditorRootWidget()
 {
 	if (IsValid(EditorRootWidget))
 	{
-		if (IsValid(MainMenuWidget))
+		if (IsValid(PlatformRootWidget))
 		{
-			if (!MainMenuWidget->IsInViewport())
+			if (!PlatformRootWidget->IsInViewport())
 			{
-				MainMenuWidget->AddToViewport(MainMenuWidgetViewportZOrder);
+				PlatformRootWidget->AddToViewport(PlatformRootWidgetViewportZOrder);
 			}
-			ShowRouteMarkerOverlayWidget(EditorRootWidget.Get());
+			HandlePlatformRootScreenChanged(PlatformRootWidget->GetActiveScreen());
 			return EditorRootWidget.Get();
 		}
 
@@ -928,19 +934,19 @@ UScenarioEditorRootWidget* AScenarioEditorController::ShowEditorRootWidget()
 		EditorRootWidget = nullptr;
 	}
 
-	if (UMainMenuWidget* mainMenuWidget = ShowMainMenuWidget())
+	if (UPlatformRootWidget* platformRootWidget = ShowPlatformRootWidget())
 	{
-		if (UScenarioEditorRootWidget* mainMenuRootWidget = mainMenuWidget->GetScenarioEditorRootWidget())
+		if (UScenarioEditorRootWidget* rootWidget = platformRootWidget->GetScenarioEditorRootWidget())
 		{
-			RegisterEditorRootWidget(mainMenuRootWidget);
-			return mainMenuRootWidget;
+			RegisterEditorRootWidget(rootWidget);
+			return rootWidget;
 		}
 	}
 
 	UE_LOG(
 		LogScenarioEditorController,
 		Error,
-		TEXT("WBP_MainMenu did not provide ScenarioEditorRootWidget."));
+		TEXT("WBP_Root did not provide ScenarioEditorRootWidget."));
 	return nullptr;
 }
 
@@ -950,23 +956,23 @@ void AScenarioEditorController::RemoveEditorRootWidget()
 	EditorRootWidget = nullptr;
 }
 
-UMainMenuWidget* AScenarioEditorController::ShowMainMenuWidget()
+UPlatformRootWidget* AScenarioEditorController::ShowPlatformRootWidget()
 {
-	if (IsValid(MainMenuWidget))
+	if (IsValid(PlatformRootWidget))
 	{
-		if (!MainMenuWidget->IsInViewport())
+		if (!PlatformRootWidget->IsInViewport())
 		{
-			MainMenuWidget->AddToViewport(MainMenuWidgetViewportZOrder);
+			PlatformRootWidget->AddToViewport(PlatformRootWidgetViewportZOrder);
 		}
-		return MainMenuWidget.Get();
+		return PlatformRootWidget.Get();
 	}
 
-	TSubclassOf<UMainMenuWidget> widgetClass = MainMenuWidgetClass;
+	TSubclassOf<UPlatformRootWidget> widgetClass = PlatformRootWidgetClass;
 	if (!widgetClass)
 	{
 		const UPlatformUiDeveloperSettings* platformUiSettings = GetDefault<UPlatformUiDeveloperSettings>();
 		widgetClass = platformUiSettings
-			? platformUiSettings->MainMenuWidgetClass.LoadSynchronous()
+			? platformUiSettings->PlatformRootWidgetClass.LoadSynchronous()
 			: nullptr;
 	}
 
@@ -975,31 +981,36 @@ UMainMenuWidget* AScenarioEditorController::ShowMainMenuWidget()
 		UE_LOG(
 			LogScenarioEditorController,
 			Error,
-			TEXT("MainMenuWidgetClass is not set on the controller or Platform UI project settings."));
+			TEXT("PlatformRootWidgetClass is not set on the controller or Platform UI project settings."));
 		return nullptr;
 	}
 
-	MainMenuWidget = CreateWidget<UMainMenuWidget>(this, widgetClass);
-	if (!MainMenuWidget)
+	PlatformRootWidget = CreateWidget<UPlatformRootWidget>(this, widgetClass);
+	if (!PlatformRootWidget)
 	{
-		UE_LOG(LogScenarioEditorController, Error, TEXT("Failed to create main menu widget."));
+		UE_LOG(LogScenarioEditorController, Error, TEXT("Failed to create platform root widget."));
 		return nullptr;
 	}
 
-	MainMenuWidget->AddToViewport(MainMenuWidgetViewportZOrder);
-	return MainMenuWidget.Get();
+	PlatformRootWidget->OnActiveScreenChangedNative.RemoveAll(this);
+	PlatformRootWidget->OnActiveScreenChangedNative.AddUObject(
+		this,
+		&AScenarioEditorController::HandlePlatformRootScreenChanged);
+	PlatformRootWidget->AddToViewport(PlatformRootWidgetViewportZOrder);
+	return PlatformRootWidget.Get();
 }
 
-void AScenarioEditorController::RemoveMainMenuWidget()
+void AScenarioEditorController::RemovePlatformRootWidget()
 {
 	RemoveEditorRootWidget();
 
-	if (IsValid(MainMenuWidget))
+	if (IsValid(PlatformRootWidget))
 	{
-		MainMenuWidget->RemoveFromParent();
+		PlatformRootWidget->OnActiveScreenChangedNative.RemoveAll(this);
+		PlatformRootWidget->RemoveFromParent();
 	}
 
-	MainMenuWidget = nullptr;
+	PlatformRootWidget = nullptr;
 }
 
 void AScenarioEditorController::RegisterEditorRootWidget(UScenarioEditorRootWidget* rootWidget)
@@ -1009,17 +1020,20 @@ void AScenarioEditorController::RegisterEditorRootWidget(UScenarioEditorRootWidg
 		return;
 	}
 
-	if (!IsValid(MainMenuWidget) || MainMenuWidget->GetScenarioEditorRootWidget() != rootWidget)
+	if (IsValid(PlatformRootWidget) && PlatformRootWidget->GetScenarioEditorRootWidget() != rootWidget)
 	{
 		UE_LOG(
 			LogScenarioEditorController,
 			Error,
-			TEXT("ScenarioEditorRootWidget registration rejected because it is not owned by WBP_MainMenu."));
+			TEXT("ScenarioEditorRootWidget registration rejected because it is not owned by WBP_Root."));
 		return;
 	}
 
 	EditorRootWidget = rootWidget;
-	ShowRouteMarkerOverlayWidget(rootWidget);
+	if (IsValid(PlatformRootWidget))
+	{
+		HandlePlatformRootScreenChanged(PlatformRootWidget->GetActiveScreen());
+	}
 }
 
 void AScenarioEditorController::ClearRegisteredEditorRootWidget(UScenarioEditorRootWidget* rootWidget)
@@ -1031,6 +1045,24 @@ void AScenarioEditorController::ClearRegisteredEditorRootWidget(UScenarioEditorR
 
 	RemoveRouteMarkerOverlayWidget();
 	EditorRootWidget = nullptr;
+}
+
+void AScenarioEditorController::HandlePlatformRootScreenChanged(const EPlatformRootScreen screen)
+{
+	if (screen == EPlatformRootScreen::ScenarioEditor)
+	{
+		if (!IsValid(EditorRootWidget))
+		{
+			ShowEditorRootWidget();
+		}
+		if (IsValid(EditorRootWidget))
+		{
+			ShowRouteMarkerOverlayWidget(EditorRootWidget.Get());
+		}
+		return;
+	}
+
+	RemoveRouteMarkerOverlayWidget();
 }
 
 void AScenarioEditorController::ShowRouteMarkerOverlayWidget(UScenarioEditorRootWidget* rootWidget)
@@ -1059,7 +1091,7 @@ void AScenarioEditorController::ShowRouteMarkerOverlayWidget(UScenarioEditorRoot
 	if (!RouteMarkerOverlayWidget->IsInViewport())
 	{
 		RouteMarkerOverlayWidget->AddToViewport(
-			MainMenuWidgetViewportZOrder + RouteMarkerOverlayViewportZOrderOffset);
+			PlatformRootWidgetViewportZOrder + RouteMarkerOverlayViewportZOrderOffset);
 	}
 }
 

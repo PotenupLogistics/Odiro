@@ -18,63 +18,56 @@ void UBaseCardWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
 	const bool bStateDisabled = bDisabled || State == EBaseWidgetState::Disabled;
 	if (LabelTextBlock)
 	{
 		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
-		if (bStateDisabled)
+		if (bStateDisabled && colors)
 		{
-			LabelTextBlock->SetColorAndOpacity(FSlateColor(ResolveStateColor(EBaseWidgetState::Disabled)));
+			LabelTextBlock->SetColorAndOpacity(FSlateColor(colors->GetStateColor(EBaseWidgetState::Disabled)));
 		}
 	}
 	if (DescriptionTextBlock)
 	{
 		BaseWidgetPrivate::ApplyTextIfSet(DescriptionTextBlock.Get(), Description);
 		ApplyTextStyle(DescriptionTextBlock.Get(), EBaseTextRole::Caption);
-		if (bStateDisabled)
+		if (bStateDisabled && colors)
 		{
-			DescriptionTextBlock->SetColorAndOpacity(FSlateColor(ResolveStateColor(EBaseWidgetState::Disabled)));
+			DescriptionTextBlock->SetColorAndOpacity(FSlateColor(colors->GetStateColor(EBaseWidgetState::Disabled)));
 		}
 	}
 
-	if (!tokens)
+	if (!colors || !sizes)
 	{
 		return;
 	}
 
-	FLinearColor surfaceColor = tokens->SurfacePanelColor;
-	FLinearColor frameColor = tokens->LineFieldColor;
+	FLinearColor surfaceColor = colors->SurfacePanelColor;
+	FLinearColor frameColor = colors->LineFieldColor;
 	const bool bVariantColored = Variant != EBaseWidgetVariant::Neutral && Variant != EBaseWidgetVariant::Ghost;
-	const FLinearColor variantColor = ResolveVariantColor(Variant);
-	if (State == EBaseWidgetState::Hovered)
+	const FLinearColor variantColor = colors->GetVariantColor(Variant);
+	if (bStateDisabled)
 	{
-		surfaceColor = tokens->SurfaceHoverColor;
-	}
-	else if (bStateDisabled)
-	{
-		surfaceColor = tokens->SurfaceControlColor;
+		surfaceColor = colors->SurfaceControlColor;
 	}
 	if (bSelected)
 	{
-		frameColor = tokens->AccentColor;
+		frameColor = colors->AccentColor;
 	}
 	else if (bStateDisabled)
 	{
-		frameColor = tokens->LineSubtleColor;
-	}
-	else if (State == EBaseWidgetState::Hovered)
-	{
-		frameColor = tokens->LineFieldHoverColor;
+		frameColor = colors->LineSubtleColor;
 	}
 	else if (State != EBaseWidgetState::Default && State != EBaseWidgetState::Hovered)
 	{
-		frameColor = ResolveStateColor(State);
+		frameColor = colors->GetStateColor(State);
 	}
 	else if (bVariantColored)
 	{
-		frameColor = MixCardLineColor(tokens->LineFieldColor, variantColor);
+		frameColor = MixCardLineColor(colors->LineFieldColor, variantColor);
 	}
 
 	BaseWidgetPrivate::ApplyRoundedSurface(
@@ -82,8 +75,8 @@ void UBaseCardWidget::SynchronizeBaseProperties()
 		SurfaceBorder.Get(),
 		surfaceColor,
 		frameColor,
-		tokens->Radius,
-		tokens->BorderWidth);
+		sizes->Radius,
+		sizes->BorderWidth);
 
 	if (StateMarker)
 	{
@@ -91,17 +84,17 @@ void UBaseCardWidget::SynchronizeBaseProperties()
 		bool bShowMarker = bVariantColored;
 		if (bSelected)
 		{
-			markerColor = ResolveStateColor(EBaseWidgetState::Selected);
+			markerColor = colors->GetStateColor(EBaseWidgetState::Selected);
 			bShowMarker = true;
 		}
 		if (bStateDisabled)
 		{
-			markerColor = ResolveStateColor(EBaseWidgetState::Disabled);
+			markerColor = colors->GetStateColor(EBaseWidgetState::Disabled);
 			bShowMarker = true;
 		}
 		else if (State != EBaseWidgetState::Default && State != EBaseWidgetState::Hovered)
 		{
-			markerColor = ResolveStateColor(State);
+			markerColor = colors->GetStateColor(State);
 			bShowMarker = true;
 		}
 		ApplyBorderColor(StateMarker.Get(), markerColor);
@@ -139,23 +132,30 @@ void UBaseCardWidget::SetBaseState(const EBaseWidgetState inState)
 {
 	State = inState;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(State);
 }
 
 void UBaseCardWidget::SetSelected(const bool bInSelected)
 {
 	bSelected = bInSelected;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(bSelected ? EBaseWidgetState::Selected : State);
 }
 
 void UBaseCardWidget::SetDisabled(const bool bInDisabled)
 {
 	bDisabled = bInDisabled;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(bDisabled ? EBaseWidgetState::Disabled : State);
 }
 
 void UBaseMetricCardWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
+	if (SurfaceBorder)
+	{
+		SurfaceBorder->SetVerticalAlignment(BaseWidgetPrivate::ToSlateVerticalAlignment(ContentVAlign));
+	}
 
 	if (ValueTextBlock)
 	{
@@ -167,5 +167,11 @@ void UBaseMetricCardWidget::SynchronizeBaseProperties()
 void UBaseMetricCardWidget::SetValueText(const FText inValueText)
 {
 	ValueText = inValueText;
+	SynchronizeBaseProperties();
+}
+
+void UBaseMetricCardWidget::SetContentVAlign(const EBaseVerticalContentAlign inContentVAlign)
+{
+	ContentVAlign = inContentVAlign;
 	SynchronizeBaseProperties();
 }

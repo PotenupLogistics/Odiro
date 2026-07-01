@@ -103,8 +103,6 @@ entry:
       - Client/Source/OdiroSim/Private/Episode
       - Client/Source/OdiroSim/Public/Shared
       - Client/Source/OdiroSim/Private/Shared
-      - Client/Source/OdiroSim/Public/Platform/Widget/MainMenuWidget.h
-      - Client/Source/OdiroSim/Private/Platform/Widget/MainMenuWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayCardWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
@@ -133,9 +131,9 @@ guardrails:
   - ScenarioEditorToolbarWidget is the left command rail for template panel switching and transform gizmo mode/orientation commands; save, return, and status remain outside the toolbar surface.
   - Scenario editor viewport navigation input is owned by ScenarioEditorController with Enhanced Input assets under Client/Content/Input; keep mouse capture, selection, and cancel bindings explicit.
   - ScenarioEditorLaunchSubsystem owns ScenarioEditorMap travel gating for shared visual asset preload before the viewport becomes visible.
-  - SimulatorProcessSubsystem gates project-run ScenarioSimulationMap travel behind the same shared visual asset preload when launching from StartupMap.
+  - SimulatorProcessSubsystem gates project-run ScenarioSimulationMap travel behind the same shared visual asset preload when launching from the Platform root shell.
   - ScenarioViewportPresentation owns shared scenario map preload assets, the global grey-background enable switch, and grey background post-process application for editor cameras, runtime unbound post-process volumes, and preview SceneCapture components.
-  - Scenario editor robot Start/Goal markers use authoring-subsystem proxy actors for selection and a ScenarioEditorController-owned viewport overlay below WBP_MainMenu for visible markers.
+  - Scenario editor robot Start/Goal markers use authoring-subsystem proxy actors for selection and a ScenarioEditorController-owned viewport overlay below the active Platform root shell for visible markers.
   - Scenario editor Corridor vertex/segment handles use invisible proxy actors for selection and transform gizmo ownership, with ScenarioEditorRouteMarkerOverlayWidget painting and hit-testing the visible screen-space grips.
   - Scenario simulation robot Start/Goal markers are runtime overlay items owned by ScenarioSimulationSubsystem; simulation no longer spawns visible BP_StartPoint/BP_GoalPoint marker actors.
   - Scenario Object Palette commands must be backed by scenario.json authoring contracts; currently it creates only fixed static-obstacle rows in obstacles.placements.
@@ -159,8 +157,8 @@ guardrails:
   - Embedded Replay camera input and mode changes require loaded replay frames and capture actors; re-clicking Free refocuses the camera on the current replay robot.
   - Embedded Replay camera tuning values are project settings owned by Scenario Replay developer settings; tune camera feel there before changing replay frame data.
   - Embedded Replay timeline UI displays replay subsystem time/frame/speed state and seeks through ScenarioReplaySubsystem.Seek rather than mutating replay artifacts.
-  - Embedded Replay fullscreen in WBP_MainMenu moves the same ProjectEpisodeReplayViewerWidget between normal and fullscreen Overlay hosts; do not create a second replay viewer instance for fullscreen.
-  - Embedded Replay fullscreen controls use dedicated WBP_Replay button names for playback, direct camera selection, and map/point-cloud/LiDAR-ray layer toggles; the normal view can keep its single camera-cycle button.
+  - Embedded Replay fullscreen moves the same ProjectEpisodeReplayViewerWidget between normal and fullscreen Overlay hosts; do not create a second replay viewer instance for fullscreen.
+  - Embedded Replay fullscreen controls use dedicated replay button names for playback, direct camera selection, and map/point-cloud/LiDAR-ray layer toggles; the normal view can keep its single camera-cycle button.
   - Embedded Replay map and point-cloud toggles are render-layer visibility only; they must not alter replay frames, robot playback, policy, or physics.
   - Embedded Replay point-cloud review uses LidarPointCloudRuntime rendering for Orbit, Free, and VehicleFront views, while TopDown uses review-actor-owned HISM sphere instances because the plugin renderer is not reliable in orthographic capture.
   - DeliveryBot LiDAR raw hits are preserved for point-cloud/replay review, while floor/corridor/walkable surfaces are separated from policy obstacle behavior through the per-ray blocksPolicy flag.

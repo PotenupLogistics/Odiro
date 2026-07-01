@@ -32,20 +32,20 @@ struct ODIROSIM_API FBaseWidgetSizeConstraints
 {
 	GENERATED_BODY()
 
-	// Minimum desired width in Slate units; zero leaves the WBP-authored value unchanged.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets|Sizing", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	// Minimum desired width in Slate units; zero clears the desired-size constraint.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Layout", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
 	float MinWidth = 0.0f;
 
-	// Minimum desired height in Slate units; zero leaves the WBP-authored value unchanged.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets|Sizing", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	// Minimum desired height in Slate units; zero clears the desired-size constraint.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Layout", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
 	float MinHeight = 0.0f;
 
-	// Maximum desired width in Slate units; zero leaves the WBP-authored value unchanged.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets|Sizing", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	// Maximum desired width in Slate units; zero clears the desired-size constraint.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Layout", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
 	float MaxWidth = 0.0f;
 
-	// Maximum desired height in Slate units; zero leaves the WBP-authored value unchanged.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets|Sizing", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	// Maximum desired height in Slate units; zero clears the desired-size constraint.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Layout", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
 	float MaxHeight = 0.0f;
 };
 
@@ -74,4 +74,3 @@ enum class EBaseTextRole : uint8
 	Caption,
 	Value
 };
-

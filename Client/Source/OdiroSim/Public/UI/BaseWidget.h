@@ -17,35 +17,39 @@ class ODIROSIM_API UBaseWidget : public UCommonUserWidget
 	GENERATED_BODY()
 
 public:
-	// Resolves the configured base tokens, falling back to the project default asset or built-in defaults.
+	// Resolves the configured base colors through the project default color asset.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Widgets")
-	const UBaseWidgetTokenCatalog* GetResolvedBaseTokens() const;
+	const UBaseWidgetColorCatalog* GetResolvedBaseColors() const;
 
-	// Returns a text token from the configured token catalog.
+	// Resolves the configured base sizes through the project default medium-size asset.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Widgets")
+	const UBaseWidgetSizeCatalog* GetResolvedBaseSizes() const;
+
+	// Returns a resolved text token from the configured color and size catalogs.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Widgets")
 	FBaseTextStyleToken ResolveTextStyle(EBaseTextRole role) const;
 
-	// Returns a variant color from the configured token catalog.
+	// Returns a variant color from the configured color catalog.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Widgets")
 	FLinearColor ResolveVariantColor(EBaseWidgetVariant variant) const;
 
-	// Returns a state color from the configured token catalog.
+	// Returns a state color from the configured color catalog.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Widgets")
 	FLinearColor ResolveStateColor(EBaseWidgetState state) const;
 
-	// Updates the shared size preset used when resolving token typography.
+	// Updates the optional color catalog override.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Widgets")
-	void SetBaseSize(EBaseWidgetSize inSize);
+	void SetColorsOverride(TSoftObjectPtr<UBaseWidgetColorCatalog> inColorsOverride);
 
-	// Returns the shared size preset used when resolving token typography.
-	UFUNCTION(BlueprintPure, Category = "UI|Base Widgets")
-	EBaseWidgetSize GetBaseSize() const { return Size; }
+	// Updates the optional size catalog override.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Widgets")
+	void SetSizesOverride(TSoftObjectPtr<UBaseWidgetSizeCatalog> inSizesOverride);
 
-	// Updates optional min/max desired-size constraints for the WBP root wrapper.
+	// Updates responsive min/max desired-size constraints for the WBP root wrapper.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Widgets")
 	void SetSizeConstraints(FBaseWidgetSizeConstraints inSizeConstraints);
 
-	// Returns optional min/max desired-size constraints for the WBP root wrapper.
+	// Returns responsive min/max desired-size constraints for the WBP root wrapper.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Widgets")
 	FBaseWidgetSizeConstraints GetSizeConstraints() const { return SizeConstraints; }
 
@@ -54,6 +58,13 @@ public:
 	virtual void SynchronizeBaseProperties();
 
 protected:
+	// Lets Widget Blueprints own visual transitions for logical state changes.
+	UFUNCTION(BlueprintImplementableEvent, Category = "UI|Events")
+	void ReceiveBaseVisualStateChanged(EBaseWidgetState state);
+
+	// Emits a visual-state event without relying on Tick or C++ color transitions.
+	void NotifyBaseVisualStateChanged(EBaseWidgetState state, bool bForce = false);
+
 	// Reapplies WBP-owned visual state after the widget tree is rebuilt.
 	virtual void OnWidgetRebuilt() override;
 
@@ -72,27 +83,35 @@ protected:
 	// Applies a semantic tint to an optional border while preserving its WBP-owned brush.
 	void ApplyBorderColor(UBorder* border, const FLinearColor& color) const;
 
-	// Optional token catalog override; empty uses the shared DA_BaseTokens asset.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets", meta = (DisplayName = "Base Token Overrides", ExposeOnSpawn = "true"))
-	TSoftObjectPtr<UBaseWidgetTokenCatalog> BaseTokens;
+	// Optional color catalog override; empty uses the shared DA_BaseColors asset.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Style", meta = (DisplayName = "Colors Override", ExposeOnSpawn = "true"))
+	TSoftObjectPtr<UBaseWidgetColorCatalog> ColorsOverride;
 
-	// Shared size preset used by token typography; layout remains WBP-owned.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseSize", Setter = "SetBaseSize", BlueprintGetter = "GetBaseSize", BlueprintSetter = "SetBaseSize", Category = "UI|Base Widgets", meta = (ExposeOnSpawn = "true"))
-	EBaseWidgetSize Size = EBaseWidgetSize::Medium;
+	// Optional size catalog override; empty uses the shared DA_MediumSizes asset.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Style", meta = (DisplayName = "Sizes Override", ExposeOnSpawn = "true"))
+	TSoftObjectPtr<UBaseWidgetSizeCatalog> SizesOverride;
 
-	// Optional desired-size constraints applied when RootSize or RootSizeBox is bound.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSizeConstraints", Setter = "SetSizeConstraints", BlueprintGetter = "GetSizeConstraints", BlueprintSetter = "SetSizeConstraints", Category = "UI|Base Widgets", meta = (ExposeOnSpawn = "true"))
+	// Responsive desired-size constraints applied when RootSize or RootSizeBox is bound.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSizeConstraints", Setter = "SetSizeConstraints", BlueprintGetter = "GetSizeConstraints", BlueprintSetter = "SetSizeConstraints", Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
 	FBaseWidgetSizeConstraints SizeConstraints;
 
 	// Optional outer frame owned by the Widget Blueprint for stroke or selected-state highlights.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BorderFrame;
 
-	// Optional WBP root size wrapper used for min/max desired-size constraints.
+	// Optional WBP root size wrapper used for responsive min/max desired-size constraints.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> RootSize;
 
-	// Optional alternate WBP root size wrapper used for min/max desired-size constraints.
+	// Optional alternate WBP root size wrapper used for responsive min/max desired-size constraints.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> RootSizeBox;
+
+	// Last visual state sent to the Widget Blueprint event graph.
+	UPROPERTY(Transient)
+	EBaseWidgetState LastBroadcastVisualState = EBaseWidgetState::Default;
+
+	// Whether a visual state has been sent since the current widget object was constructed.
+	UPROPERTY(Transient)
+	bool bHasBroadcastVisualState = false;
 };

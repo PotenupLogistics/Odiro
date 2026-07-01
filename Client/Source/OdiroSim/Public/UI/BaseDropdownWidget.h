@@ -39,6 +39,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Dropdown")
 	FName GetSelectedId() const { return SelectedId; }
 
+	// Updates text shown when no enabled item is selected.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Dropdown")
+	void SetPlaceholderText(FText inPlaceholderText);
+
+	// Returns text shown when no enabled item is selected.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Dropdown")
+	FText GetPlaceholderText() const { return PlaceholderText; }
+
+	// Updates text shown inside an empty embedded option list.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Dropdown")
+	void SetEmptyOptionsText(FText inEmptyOptionsText);
+
+	// Returns text shown inside an empty embedded option list.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Dropdown")
+	FText GetEmptyOptionsText() const { return EmptyOptionsText; }
+
 	// Updates whether the option list is visible.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Dropdown")
 	void SetOpen(bool bInOpen);
@@ -56,7 +72,7 @@ public:
 	bool IsDisabled() const { return bDisabled; }
 
 	// Broadcasts after selection changes.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Dropdown|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseSelectionChangedEvent OnSelectionChanged;
 
 protected:
@@ -88,6 +104,9 @@ protected:
 	// Updates generated option button state without replacing the widget tree.
 	void RefreshOptions();
 
+	// Removes click bindings from generated option buttons before tree replacement or destruction.
+	void UnbindGeneratedOptions();
+
 	// Handles generated option button clicks.
 	UFUNCTION()
 	void HandleOptionClicked(UBaseButtonWidget* button);
@@ -97,31 +116,39 @@ protected:
 	void HandlePopupSelectionChanged(UWidget* widget, FName selectedId);
 
 	// Available dropdown items.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Dropdown", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	TArray<FBaseDropdownItem> Items;
 
 	// Stable id for the selected item.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSelectedId", Category = "UI|Base Dropdown", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSelectedId", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	FName SelectedId;
 
+	// Placeholder text shown when no valid selected item exists.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetPlaceholderText", Setter = "SetPlaceholderText", BlueprintGetter = "GetPlaceholderText", BlueprintSetter = "SetPlaceholderText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
+	FText PlaceholderText = NSLOCTEXT("BaseDropdownWidget", "PlaceholderText", "Select...");
+
+	// Placeholder row text shown when the embedded option list has no items.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetEmptyOptionsText", Setter = "SetEmptyOptionsText", BlueprintGetter = "GetEmptyOptionsText", BlueprintSetter = "SetEmptyOptionsText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
+	FText EmptyOptionsText = NSLOCTEXT("BaseDropdownWidget", "EmptyOptionsText", "No options");
+
 	// Whether the option list is visible.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsOpen", Setter = "SetOpen", BlueprintGetter = "IsOpen", BlueprintSetter = "SetOpen", Category = "UI|Base Dropdown", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsOpen", Setter = "SetOpen", BlueprintGetter = "IsOpen", BlueprintSetter = "SetOpen", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bOpen = false;
 
 	// Disabled dropdown state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Dropdown", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
 
 	// Widget class used for generated option buttons.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Dropdown")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Classes")
 	TSubclassOf<UBaseButtonWidget> OptionWidgetClass;
 
 	// Widget class used for the viewport option-list popup.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Dropdown")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Classes")
 	TSubclassOf<UBaseDropdownWidget> MenuWidgetClass;
 
 	// Viewport layer used for spawned dropdown option lists.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Dropdown", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
 	int32 MenuZOrder = 0;
 
 	// Rounded closed dropdown surface owned by the Widget Blueprint.
@@ -140,6 +167,10 @@ protected:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UImage> CaretImage;
 
+	// Closed-state content row owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ClosedContent;
+
 	// Rounded wrapper drawn behind the option list (toggled with the open state).
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> OptionListSurface;
@@ -148,8 +179,12 @@ protected:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UPanelWidget> OptionContainer;
 
-	// Stable ids for generated option widgets.
-	TMap<TWeakObjectPtr<UBaseButtonWidget>, FName> OptionIdByWidget;
+	// Optional empty-list text owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EmptyOptionsTextBlock;
+
+	// Stable ids aligned with generated option child indices.
+	TArray<FName> OptionIdsByChildIndex;
 
 	// Spawned option-list widget owned while this dropdown is open.
 	UPROPERTY(Transient)

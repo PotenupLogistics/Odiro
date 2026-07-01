@@ -2,7 +2,11 @@
 
 #include "Platform/ProjectRunResultDashboard.h"
 
+#include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Guid.h"
+#include "Misc/Paths.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FProjectRunResultDashboardSummaryTest,
@@ -112,15 +116,53 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 	(void)Parameters;
 
 	const FString ResponseJson = TEXT(R"({
+		"schema": "analysis_run_response_v2",
+		"version": 2,
+		"status": "success",
 		"review_id": "0002",
 		"run_id": "000123",
-		"analysis_mode": "llm",
+		"run_overview": {
+			"total_play_time_s": 26.5,
+			"episode_count": 4,
+			"success_rate": 0.5,
+			"collision_count": 6,
+			"display": {
+				"total_play_time": "26.5초",
+				"success_rate": "50%",
+				"collision_count": "6회"
+			}
+		},
+		"episodes": [
+			{
+				"episode_id": "000001",
+				"duration_s": 9.7,
+				"outcome": "success",
+				"display": {
+					"duration": "9.7초",
+					"outcome": "성공"
+				}
+			},
+			{
+				"episode_id": "000002",
+				"duration_s": 8.4,
+				"outcome": "failure",
+				"display": {
+					"duration": "8.4초",
+					"outcome": "실패"
+				}
+			}
+		],
 		"summary": {
 			"overall_judgement": "change_recommended",
 			"message": "환경 또는 장애물 배치 검토가 필요합니다."
 		},
-		"analysis_text": "[결과 요약]\n정적 장애물 충돌이 반복되었습니다.",
-		"recommendation_type": "environment_review",
+		"insights": [
+			{
+				"severity": "high",
+				"title": "정적 장애물 충돌 반복",
+				"description": "정적 장애물 충돌이 반복되었습니다."
+			}
+		],
 		"recommendations": [
 			{
 				"id": "REC-001",
@@ -138,6 +180,9 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 				"reason": "재탐색 이벤트가 반복되었습니다.",
 				"recommendation": "look-ahead 거리와 조향 변화량 상한을 보수적으로 조정하세요."
 			}
+		],
+		"warnings": [
+			"일부 episode 로그가 누락되었습니다."
 		]
 	})");
 
@@ -146,7 +191,18 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 		TEXT("AI response parsed"),
 		FProjectRunResultDashboardJson::AppendAiFromAnalysisResponseJsonString(ResponseJson, DashboardData));
 	TestTrue(TEXT("AI loaded"), DashboardData.bAiLoaded);
-	TestTrue(TEXT("analysis text parsed"), DashboardData.AiSummary.Contains(TEXT("정적 장애물 충돌")));
+	TestTrue(TEXT("summary message parsed"), DashboardData.AiSummary.Contains(TEXT("환경 또는 장애물")));
+	TestEqual(TEXT("display total play time parsed"), DashboardData.TotalPlayTimeLabel, FString(TEXT("26.5초")));
+	TestEqual(TEXT("display success rate parsed"), DashboardData.SuccessRateLabel, FString(TEXT("50%")));
+	TestEqual(TEXT("display collision count parsed"), DashboardData.CollisionCountLabel, FString(TEXT("6회")));
+	TestEqual(TEXT("episode display count"), DashboardData.Episodes.Num(), 2);
+	TestEqual(TEXT("episode display duration parsed"), DashboardData.Episodes[0].DurationLabel, FString(TEXT("9.7초")));
+	TestEqual(TEXT("episode display outcome parsed"), DashboardData.Episodes[1].OutcomeLabel, FString(TEXT("실패")));
+	TestEqual(TEXT("insight count"), DashboardData.Insights.Num(), 1);
+	TestEqual(TEXT("insight severity parsed"), DashboardData.Insights[0].Severity, EProjectRunAiSuggestionSeverity::High);
+	TestTrue(TEXT("insight title parsed"), DashboardData.Insights[0].Title.Contains(TEXT("충돌")));
+	TestTrue(TEXT("insight description parsed"), DashboardData.Insights[0].Description.Contains(TEXT("반복")));
+	TestEqual(TEXT("warning count"), DashboardData.Warnings.Num(), 1);
 	TestEqual(TEXT("suggestion count"), DashboardData.Suggestions.Num(), 2);
 	TestEqual(TEXT("string priority severity"), DashboardData.Suggestions[0].Severity, EProjectRunAiSuggestionSeverity::High);
 	TestEqual(TEXT("medium priority severity"), DashboardData.Suggestions[1].Severity, EProjectRunAiSuggestionSeverity::Medium);
@@ -188,6 +244,63 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("insufficient data suggestion count"), InsufficientData.Suggestions.Num(), 0);
 	TestTrue(TEXT("insufficient data summary parsed"), InsufficientData.AiSummary.Contains(TEXT("부족합니다")));
 
+	const FString FailedResponseJson = TEXT(R"({
+		"schema": "result_analysis_response",
+		"version": 2,
+		"status": "failed",
+		"error": {
+			"message": "결과 분석 요청 처리에 실패했습니다."
+		},
+		"warnings": [
+			"review 폴더를 확인하세요."
+		]
+	})");
+
+	FProjectRunResultDashboardData FailedData;
+	TestTrue(
+		TEXT("failed AI response parsed"),
+		FProjectRunResultDashboardJson::AppendAiFromAnalysisResponseJsonString(FailedResponseJson, FailedData));
+	TestTrue(TEXT("failed AI loaded"), FailedData.bAiLoaded);
+	TestTrue(TEXT("failed error summary parsed"), FailedData.AiSummary.Contains(TEXT("실패했습니다")));
+	TestEqual(TEXT("failed warning count"), FailedData.Warnings.Num(), 1);
+
+	const FString TestRoot = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+		FPaths::ProjectSavedDir(),
+		TEXT("Automation/ProjectRunResultDashboard"),
+		FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	const FString RunDirectory = FPaths::Combine(TestRoot, TEXT("runs/000123"));
+	const FString ReviewDirectory = FPaths::Combine(RunDirectory, TEXT("review"));
+	TestTrue(TEXT("create review fixture directory"), IFileManager::Get().MakeDirectory(*ReviewDirectory, true));
+
+	const FString SummaryJson = TEXT(R"({
+		"schema": "run_summary",
+		"version": 1,
+		"run": { "run_id": "000123" },
+		"rows": []
+	})");
+	TestTrue(
+		TEXT("write summary fixture"),
+		FFileHelper::SaveStringToFile(
+			SummaryJson,
+			*FPaths::Combine(RunDirectory, TEXT("summary.json")),
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM));
+	TestTrue(
+		TEXT("write saved AI analysis fixture"),
+		FFileHelper::SaveStringToFile(
+			ResponseJson,
+			*FPaths::Combine(ReviewDirectory, TEXT("analysis_run_response_v2.json")),
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM));
+
+	FProjectRunResultDashboardData SavedResponseData;
+	TestTrue(
+		TEXT("dashboard reloads saved AI analysis response"),
+		FProjectRunResultDashboardJson::BuildFromRunDirectory(RunDirectory, SavedResponseData));
+	TestTrue(TEXT("saved AI response loaded"), SavedResponseData.bAiLoaded);
+	TestTrue(TEXT("saved AI summary parsed"), SavedResponseData.AiSummary.Contains(TEXT("환경 또는 장애물")));
+	TestEqual(TEXT("saved AI response suggestions"), SavedResponseData.Suggestions.Num(), 2);
+	TestEqual(TEXT("saved AI response episodes"), SavedResponseData.Episodes.Num(), 2);
+
+	IFileManager::Get().DeleteDirectory(*TestRoot, false, true);
 	return true;
 }
 

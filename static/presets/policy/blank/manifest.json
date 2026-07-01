@@ -1,0 +1,10 @@
+{
+  "schema": "project_preset_manifest",
+  "version": 1,
+  "id": "blank",
+  "kind": "policy",
+  "title": "빈 정책",
+  "subtitle": "시작용 패키지",
+  "description": "정책 구현을 직접 시작하기 위한 최소 Python 패키지입니다.",
+  "sort_order": 10
+}

@@ -136,6 +136,12 @@ private:
 	static TSharedPtr<FJsonValue> SaveAsset(const TSharedPtr<FJsonObject>& Params);
 	// #378: flush dirty packages and report per-package success/failure
 	static TSharedPtr<FJsonValue> SaveDirty(const TSharedPtr<FJsonObject>& Params);
+	// Expose editor lifecycle coordination without opening the full handler gate.
+	static TSharedPtr<FJsonValue> CoordinationGetStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CoordinationPrepareMaintenance(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CoordinationSaveDirty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CoordinationLiveCodingCompile(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CoordinationRequestExit(const TSharedPtr<FJsonObject>& Params);
 	// #340: enumerate currently-dirty content/map packages
 	static TSharedPtr<FJsonValue> ListDirtyPackages(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieGetRuntimeValue(const TSharedPtr<FJsonObject>& Params);

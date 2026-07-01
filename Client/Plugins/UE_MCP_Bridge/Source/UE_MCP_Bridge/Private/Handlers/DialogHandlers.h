@@ -18,6 +18,17 @@ public:
 	// Add a default dialog policy (e.g. auto-accept overwrite dialogs)
 	static void AddDefaultPolicy(const FString& Pattern, EAppReturnType::Type Response);
 
+	/** Limits automatic dialog policy handling to one editor-automation call on the current thread. */
+	class FScopedAutomationDialogPolicy
+	{
+	public:
+		/** Enter a bridge-owned editor automation dialog scope. */
+		FScopedAutomationDialogPolicy();
+
+		/** Leave the bridge-owned editor automation dialog scope. */
+		~FScopedAutomationDialogPolicy();
+	};
+
 private:
 	// Dialog policy: pattern -> response mapping
 	struct FDialogPolicy
@@ -37,6 +48,12 @@ private:
 	static EAppReturnType::Type HandleModalDialog(EAppMsgType::Type MsgType, const FText& Text, const FText& Title);
 	// FCoreDelegates::ModalMessageDialog (UE 5.7) signature includes an EAppMsgCategory.
 	static EAppReturnType::Type HandleModalDialogV2(enum EAppMsgCategory Category, EAppMsgType::Type MsgType, const FText& Text, const FText& Title);
+
+	/** Return whether the current thread is executing a bridge-owned editor automation call. */
+	static bool IsAutomationDialogPolicyActive();
+
+	/** Show the original Unreal modal dialog without recursively entering this hook. */
+	static EAppReturnType::Type OpenUnrealModalDialog(EAppMsgType::Type MsgType, const FText& Text, const FText& Title);
 
 	// Convert string to EAppReturnType
 	static EAppReturnType::Type ParseResponseType(const FString& ResponseStr);

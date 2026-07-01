@@ -30,6 +30,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
 	EBaseTextInputMode GetInputMode() const { return Mode; }
 
+	// Updates whether text mode uses multiline wrapping instead of a single-line field.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
+	void SetTextWrap(bool bInTextWrap);
+
+	// Returns whether text mode uses multiline wrapping.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
+	bool IsTextWrapEnabled() const { return bTextWrap; }
+
 	// Updates the string value used by text and multiline modes.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
 	void SetText(FText inText);
@@ -127,31 +135,30 @@ public:
 	bool IsDisabled() const { return bDisabled; }
 
 	// Broadcasts after text or multiline input commits.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Text Input|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseTextInputTextEvent OnTextCommitted;
 
 	// Broadcasts while text or multiline input changes before commit.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Text Input|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseTextInputTextChangedEvent OnTextChanged;
 
 	// Broadcasts after number input commits.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Text Input|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseTextInputNumberEvent OnNumericValueCommitted;
 
 	// Broadcasts after range input commits.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Text Input|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseTextInputRangeEvent OnRangeValueCommitted;
 
 protected:
 	// Feeds rounded input material size on every paint.
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
-	// Drives the rounded hover highlight from pointer enter/leave events.
+	// Forwards pointer hover state to the Widget Blueprint visual event.
 	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
-	// Drives the rounded focus highlight when this widget or a child field enters
-	// or leaves the focus path (fires for the inner editable's focus too).
+	// Forwards focus state from this widget or a child field to the Widget Blueprint visual event.
 	virtual void NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent) override;
 	virtual void NativeOnRemovedFromFocusPath(const FFocusEvent& InFocusEvent) override;
 
@@ -193,75 +200,82 @@ protected:
 	UFUNCTION()
 	void HandleStepDownClicked();
 
+	// Returns true when text mode should render through the multiline field.
+	bool UsesWrappedTextMode() const;
+
 	// Input behavior mode.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetInputMode", Setter = "SetInputMode", BlueprintGetter = "GetInputMode", BlueprintSetter = "SetInputMode", Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetInputMode", Setter = "SetInputMode", BlueprintGetter = "GetInputMode", BlueprintSetter = "SetInputMode", Category = "UI|Behavior", meta = (ExposeOnSpawn = "true"))
 	EBaseTextInputMode Mode = EBaseTextInputMode::Text;
 
+	// Text mode wrapping behavior; true uses the multiline field with automatic wrapping.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsTextWrapEnabled", Setter = "SetTextWrap", BlueprintGetter = "IsTextWrapEnabled", BlueprintSetter = "SetTextWrap", Category = "UI|Behavior", meta = (ExposeOnSpawn = "true", EditCondition = "Mode == EBaseTextInputMode::Text"))
+	bool bTextWrap = false;
+
 	// Text value for text-like modes.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetText", Setter = "SetText", BlueprintGetter = "GetText", BlueprintSetter = "SetText", Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetText", Setter = "SetText", BlueprintGetter = "GetText", BlueprintSetter = "SetText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText Text;
 
 	// Placeholder text for editable controls.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetPlaceholderText", Setter = "SetPlaceholderText", BlueprintGetter = "GetPlaceholderText", BlueprintSetter = "SetPlaceholderText", Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetPlaceholderText", Setter = "SetPlaceholderText", BlueprintGetter = "GetPlaceholderText", BlueprintSetter = "SetPlaceholderText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText PlaceholderText;
 
 	// Minimum accepted numeric value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Range", meta = (ExposeOnSpawn = "true"))
 	float MinValue = 0.0f;
 
 	// Maximum accepted numeric value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Range", meta = (ExposeOnSpawn = "true"))
 	float MaxValue = 100.0f;
 
 	// Current numeric value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetNumericValue", Setter = "SetNumericValue", BlueprintGetter = "GetNumericValue", BlueprintSetter = "SetNumericValue", Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetNumericValue", Setter = "SetNumericValue", BlueprintGetter = "GetNumericValue", BlueprintSetter = "SetNumericValue", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	float NumericValue = 0.0f;
 
 	// Current lower range value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLowerValue", Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLowerValue", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	float LowerValue = 0.0f;
 
 	// Current upper range value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetUpperValue", Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetUpperValue", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	float UpperValue = 100.0f;
 
 	// Amount applied by the optional stepper buttons.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetStep", Setter = "SetStep", BlueprintGetter = "GetStep", BlueprintSetter = "SetStep", Category = "UI|Base Text Input", meta = (ClampMin = "0.0001", ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetStep", Setter = "SetStep", BlueprintGetter = "GetStep", BlueprintSetter = "SetStep", Category = "UI|Behavior", meta = (ClampMin = "0.0001", ExposeOnSpawn = "true"))
 	float Step = 1.0f;
 
 	// Decimal places for displayed numeric values; -1 keeps the compact format.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetDisplayDecimals", Setter = "SetDisplayDecimals", BlueprintGetter = "GetDisplayDecimals", BlueprintSetter = "SetDisplayDecimals", Category = "UI|Base Text Input", meta = (ClampMin = "-1", ClampMax = "6", ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetDisplayDecimals", Setter = "SetDisplayDecimals", BlueprintGetter = "GetDisplayDecimals", BlueprintSetter = "SetDisplayDecimals", Category = "UI|Behavior", meta = (ClampMin = "-1", ClampMax = "6", ExposeOnSpawn = "true"))
 	int32 DisplayDecimals = -1;
 
 	// Semantic visual state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseState", Setter = "SetBaseState", BlueprintGetter = "GetBaseState", BlueprintSetter = "SetBaseState", Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseState", Setter = "SetBaseState", BlueprintGetter = "GetBaseState", BlueprintSetter = "SetBaseState", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	EBaseWidgetState State = EBaseWidgetState::Default;
 
 	// Validation message rendered below the input surface.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetErrorText", Setter = "SetErrorText", BlueprintGetter = "GetErrorText", BlueprintSetter = "SetErrorText", Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetErrorText", Setter = "SetErrorText", BlueprintGetter = "GetErrorText", BlueprintSetter = "SetErrorText", Category = "UI|Validation", meta = (ExposeOnSpawn = "true"))
 	FText ErrorText;
 
 	// Error message used when a numeric text commit cannot be parsed.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Text Input|Validation", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Validation", meta = (ExposeOnSpawn = "true"))
 	FText InvalidNumberErrorText = NSLOCTEXT("BaseTextInputWidget", "InvalidNumberErrorText", "Invalid number");
 
 	// Error message used when a numeric range text commit cannot be parsed.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Text Input|Validation", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Validation", meta = (ExposeOnSpawn = "true"))
 	FText InvalidRangeErrorText = NSLOCTEXT("BaseTextInputWidget", "InvalidRangeErrorText", "Invalid range");
 
 	// Disabled input state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Text Input", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
 
 	// Prevents child event handlers from reacting to property synchronization.
 	UPROPERTY(Transient)
 	bool bSynchronizing = false;
 
-	// Cached hover state driving the runtime border highlight.
+	// Current pointer hover state used to resolve DA-driven field outline color.
 	UPROPERTY(Transient)
 	bool bHoverActive = false;
 
-	// Cached keyboard-focus state driving the runtime border highlight.
+	// Current focus state used to resolve DA-driven field outline color.
 	UPROPERTY(Transient)
 	bool bFocusActive = false;
 

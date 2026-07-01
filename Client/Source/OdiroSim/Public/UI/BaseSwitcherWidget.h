@@ -6,7 +6,6 @@
 #include "BaseSwitcherWidget.generated.h"
 
 class UBaseButtonWidget;
-class UBaseToggleButtonWidget;
 class UPanelWidget;
 
 // Segmented single-selection control backed by stable item ids.
@@ -44,40 +43,52 @@ public:
 	bool IsDisabled() const { return bDisabled; }
 
 	// Broadcasts after selection changes.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Switcher|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseSelectionChangedEvent OnSelectionChanged;
 
 protected:
+	// Removes generated segment bindings before destruction.
+	virtual void NativeDestruct() override;
+
+	// Returns explicit items or design-time examples for an empty designer preview.
+	TArray<FBaseSwitcherItem> BuildRenderedItems() const;
+
 	// Rebuilds generated segment buttons when a segment container is present.
-	void RebuildSegments();
+	void RebuildSegments(const TArray<FBaseSwitcherItem>& renderedItems);
+
+	// Resolves the segment class, using the icon-capable base button for icon rows.
+	TSubclassOf<UBaseButtonWidget> ResolveSegmentWidgetClass(bool bNeedsIcon) const;
 
 	// Updates generated segment button state without replacing the widget tree.
-	void RefreshSegments();
+	void RefreshSegments(const TArray<FBaseSwitcherItem>& renderedItems);
+
+	// Removes click bindings from generated segment buttons before tree replacement or destruction.
+	void UnbindGeneratedSegments();
 
 	// Handles generated segment button clicks.
 	UFUNCTION()
 	void HandleSegmentClicked(UBaseButtonWidget* button);
 
 	// Available segment items.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Switcher", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	TArray<FBaseSwitcherItem> Items;
 
 	// Stable id for the selected item.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSelectedId", Category = "UI|Base Switcher", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSelectedId", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	FName SelectedId;
 
 	// Disabled switcher state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Switcher", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
 
 	// Widget class used for generated segment buttons.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Switcher")
-	TSubclassOf<UBaseToggleButtonWidget> SegmentWidgetClass;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Classes")
+	TSubclassOf<UBaseButtonWidget> SegmentWidgetClass;
 
 	// Panel that receives generated segment buttons.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UPanelWidget> SegmentContainer;
 
-	// Stable ids for generated segment widgets.
-	TMap<TWeakObjectPtr<UBaseToggleButtonWidget>, FName> SegmentIdByWidget;
+	// Stable ids aligned with generated segment child indices.
+	TArray<FName> SegmentIdsByChildIndex;
 };

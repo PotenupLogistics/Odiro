@@ -16,7 +16,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	EScenarioTemplateSidebarPanel,
 	ActivePanel);
 
-// ScenarioEditorMap에서 저장과 Startup menu 복귀를 제공하는 최소 toolbar.
+// ScenarioEditorMap에서 저장과 root shell startup screen 복귀를 제공하는 최소 toolbar.
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UScenarioEditorToolbarWidget : public UUserWidget
 {
@@ -31,7 +31,7 @@ public:
 	FString DefaultSavePath = TEXT("Saved/UserProjects/ScenarioEditor/scenario.json");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Toolbar")
-	FString StartupMapId = TEXT("StartupMap");
+	FString StartupMapId = TEXT("ScenarioEditorMap");
 
 	// Currently selected template sidebar panel.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Toolbar")

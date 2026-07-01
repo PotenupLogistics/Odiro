@@ -44,7 +44,7 @@ public:
 	bool ShouldShowStateText() const { return bShowStateText; }
 
 	// Broadcasts after checked state changes.
-	UPROPERTY(BlueprintAssignable, Category = "UI|Base Toggle|Events")
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseCheckStateChangedEvent OnCheckStateChanged;
 
 protected:
@@ -52,27 +52,27 @@ protected:
 	virtual void NativeOnClicked() override;
 
 	// Toggle presentation style.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetToggleStyle", Setter = "SetToggleStyle", BlueprintGetter = "GetToggleStyle", BlueprintSetter = "SetToggleStyle", Category = "UI|Base Toggle", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetToggleStyle", Setter = "SetToggleStyle", BlueprintGetter = "GetToggleStyle", BlueprintSetter = "SetToggleStyle", Category = "UI|Style", meta = (ExposeOnSpawn = "true"))
 	EBaseToggleButtonStyle ToggleStyle = EBaseToggleButtonStyle::Button;
 
 	// Current checked state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetCheckState", Setter = "SetCheckState", BlueprintGetter = "GetCheckState", BlueprintSetter = "SetCheckState", Category = "UI|Base Toggle", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetCheckState", Setter = "SetCheckState", BlueprintGetter = "GetCheckState", BlueprintSetter = "SetCheckState", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	ECheckBoxState CheckState = ECheckBoxState::Unchecked;
 
 	// State text shown when the toggle is checked.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Toggle|Text", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText CheckedStateText = NSLOCTEXT("BaseToggleButtonWidget", "CheckedStateText", "On");
 
 	// State text shown when the toggle is unchecked.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Toggle|Text", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText UncheckedStateText = NSLOCTEXT("BaseToggleButtonWidget", "UncheckedStateText", "Off");
 
 	// State text shown when the toggle is indeterminate.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Toggle|Text", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText UndeterminedStateText = NSLOCTEXT("BaseToggleButtonWidget", "UndeterminedStateText", "Mixed");
 
 	// Whether button-style toggles render their checked-state text.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "ShouldShowStateText", Setter = "SetShowStateText", BlueprintGetter = "ShouldShowStateText", BlueprintSetter = "SetShowStateText", Category = "UI|Base Toggle|Text", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "ShouldShowStateText", Setter = "SetShowStateText", BlueprintGetter = "ShouldShowStateText", BlueprintSetter = "SetShowStateText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	bool bShowStateText = false;
 
 	// Optional button-style visual root owned by the Widget Blueprint.
@@ -90,4 +90,8 @@ protected:
 	// Optional state text for button-style toggles.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> StateTextBlock;
+
+	// Optional button-style content row owned by the Widget Blueprint.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ToggleContent;
 };

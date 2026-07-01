@@ -52,19 +52,19 @@ public:
 
 protected:
 	// Icon texture displayed by this component.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIcon", Setter = "SetIcon", BlueprintGetter = "GetIcon", BlueprintSetter = "SetIcon", Category = "UI|Base Icon", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIcon", Setter = "SetIcon", BlueprintGetter = "GetIcon", BlueprintSetter = "SetIcon", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	TObjectPtr<UTexture2D> Icon;
 
 	// Icon color variant.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetVariant", Setter = "SetVariant", BlueprintGetter = "GetVariant", BlueprintSetter = "SetVariant", Category = "UI|Base Icon", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetVariant", Setter = "SetVariant", BlueprintGetter = "GetVariant", BlueprintSetter = "SetVariant", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	EBaseWidgetVariant Variant = EBaseWidgetVariant::Neutral;
 
 	// Icon box and image size in pixels.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconSize", Setter = "SetIconSize", BlueprintGetter = "GetIconSize", BlueprintSetter = "SetIconSize", Category = "UI|Base Icon", meta = (DisplayName = "Icon Size (px)", ClampMin = "1.0", UIMin = "8.0", UIMax = "64.0", ExposeOnSpawn = "true"))
-	float IconSize = 24.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconSize", Setter = "SetIconSize", BlueprintGetter = "GetIconSize", BlueprintSetter = "SetIconSize", Category = "UI|Contents", meta = (DisplayName = "Icon Size (px)", ClampMin = "1.0", UIMin = "8.0", UIMax = "64.0", ExposeOnSpawn = "true"))
+	float IconSize = 20.0f;
 
 	// Disabled icon state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Icon", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
 
 	// Icon visual owned by the Widget Blueprint.

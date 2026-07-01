@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UI/BaseFormElementTypes.h"
 #include "UI/BaseWidget.h"
 #include "BaseProgressRowWidget.generated.h"
 
@@ -57,29 +58,41 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Progress Row")
 	EBaseWidgetState GetBaseState() const { return State; }
 
+	// Updates vertical placement of row content inside spare height.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Progress Row")
+	void SetContentVAlign(EBaseVerticalContentAlign inContentVAlign);
+
+	// Returns vertical placement of row content inside spare height.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Progress Row")
+	EBaseVerticalContentAlign GetContentVAlign() const { return ContentVAlign; }
+
 protected:
 	// Feeds the rounded surface material its painted size each paint (capture-safe).
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
 	// Progress row label.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabel", Setter = "SetLabel", BlueprintGetter = "GetLabel", BlueprintSetter = "SetLabel", Category = "UI|Base Progress Row", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabel", Setter = "SetLabel", BlueprintGetter = "GetLabel", BlueprintSetter = "SetLabel", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText Label;
 
 	// Optional progress row description.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetDescription", Setter = "SetDescription", BlueprintGetter = "GetDescription", BlueprintSetter = "SetDescription", Category = "UI|Base Progress Row", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetDescription", Setter = "SetDescription", BlueprintGetter = "GetDescription", BlueprintSetter = "SetDescription", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText Description;
 
 	// Numeric progress percentage in the 0-100 range.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetProgressPercent", Setter = "SetProgressPercent", BlueprintGetter = "GetProgressPercent", BlueprintSetter = "SetProgressPercent", Category = "UI|Base Progress Row", meta = (ExposeOnSpawn = "true", ClampMin = "0.0", ClampMax = "100.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetProgressPercent", Setter = "SetProgressPercent", BlueprintGetter = "GetProgressPercent", BlueprintSetter = "SetProgressPercent", Category = "UI|State", meta = (ExposeOnSpawn = "true", ClampMin = "0.0", ClampMax = "100.0"))
 	float ProgressPercent = 0.0f;
 
 	// Text shown near the progress indicator.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetValueText", Setter = "SetValueText", BlueprintGetter = "GetValueText", BlueprintSetter = "SetValueText", Category = "UI|Base Progress Row", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetValueText", Setter = "SetValueText", BlueprintGetter = "GetValueText", BlueprintSetter = "SetValueText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText ValueText;
 
 	// Row semantic state.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseState", Setter = "SetBaseState", BlueprintGetter = "GetBaseState", BlueprintSetter = "SetBaseState", Category = "UI|Base Progress Row", meta = (ExposeOnSpawn = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseState", Setter = "SetBaseState", BlueprintGetter = "GetBaseState", BlueprintSetter = "SetBaseState", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	EBaseWidgetState State = EBaseWidgetState::Default;
+
+	// Vertical placement for row content when the widget has spare height.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetContentVAlign", Setter = "SetContentVAlign", BlueprintGetter = "GetContentVAlign", BlueprintSetter = "SetContentVAlign", Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
+	EBaseVerticalContentAlign ContentVAlign = EBaseVerticalContentAlign::Bottom;
 
 	// Row surface owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

@@ -180,6 +180,172 @@ namespace
 		}
 	}
 
+	FString ReadStringField(
+		const FJsonObject& Object,
+		const FString& FieldName,
+		const FString& DefaultValue = FString())
+	{
+		FString Value;
+		return Object.TryGetStringField(FieldName, Value) ? Value.TrimStartAndEnd() : DefaultValue;
+	}
+
+	FString ReadDisplayString(
+		const FJsonObject& Object,
+		const FString& FieldName)
+	{
+		TSharedPtr<FJsonObject> DisplayObject;
+		return TryGetObjectField(Object, TEXT("display"), DisplayObject)
+			? ReadStringField(*DisplayObject, FieldName)
+			: FString();
+	}
+
+	void AppendDisplayFieldLine(
+		const FJsonObject& Object,
+		const FString& Label,
+		const FString& FieldName,
+		TArray<FString>& Lines)
+	{
+		const FString DisplayText = ReadDisplayString(Object, FieldName);
+		if (!DisplayText.IsEmpty())
+		{
+			Lines.Add(FString::Printf(TEXT("%s: %s"), *Label, *DisplayText));
+		}
+	}
+
+	void AppendAnalysisV2RunOverview(
+		const TSharedPtr<FJsonObject>& RootObject,
+		TArray<FString>& Lines)
+	{
+		TSharedPtr<FJsonObject> RunOverviewObject;
+		if (!RootObject.IsValid() || !TryGetObjectField(*RootObject, TEXT("run_overview"), RunOverviewObject))
+		{
+			return;
+		}
+
+		const int32 StartLineCount = Lines.Num();
+		Lines.Add(TEXT(""));
+		Lines.Add(TEXT("Run Overview"));
+		AppendDisplayFieldLine(*RunOverviewObject, TEXT("Total Play Time"), TEXT("total_play_time"), Lines);
+		AppendDisplayFieldLine(*RunOverviewObject, TEXT("Success Rate"), TEXT("success_rate"), Lines);
+		AppendDisplayFieldLine(*RunOverviewObject, TEXT("Collision Count"), TEXT("collision_count"), Lines);
+
+		if (Lines.Num() == StartLineCount + 2)
+		{
+			Lines.SetNum(StartLineCount);
+			AppendAnalysisV2Metrics(RootObject, Lines);
+		}
+	}
+
+	void AppendAnalysisV2Insights(
+		const TSharedPtr<FJsonObject>& RootObject,
+		TArray<FString>& Lines)
+	{
+		if (!RootObject.IsValid())
+		{
+			return;
+		}
+
+		const TSharedPtr<FJsonValue> InsightsValue = RootObject->TryGetField(TEXT("insights"));
+		if (!InsightsValue.IsValid() || InsightsValue->Type != EJson::Array)
+		{
+			return;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>& Insights = InsightsValue->AsArray();
+		if (Insights.IsEmpty())
+		{
+			return;
+		}
+
+		Lines.Add(TEXT(""));
+		Lines.Add(TEXT("Insights"));
+		for (const TSharedPtr<FJsonValue>& InsightValue : Insights)
+		{
+			if (!InsightValue.IsValid() || InsightValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject> InsightObject = InsightValue->AsObject();
+			if (!InsightObject.IsValid())
+			{
+				continue;
+			}
+
+			const FString Severity = ReadStringField(*InsightObject, TEXT("severity"));
+			const FString Title = ReadStringField(*InsightObject, TEXT("title"));
+			const FString Description = ReadStringField(*InsightObject, TEXT("description"));
+			const FString TagText = Severity.IsEmpty() ? FString() : FString::Printf(TEXT("[%s] "), *Severity);
+			if (!Title.IsEmpty())
+			{
+				Lines.Add(FString::Printf(TEXT("- %s%s"), *TagText, *Title));
+			}
+			if (!Description.IsEmpty())
+			{
+				Lines.Add(FString::Printf(TEXT("  %s"), *Description));
+			}
+		}
+	}
+
+	void AppendAnalysisV2Episodes(
+		const TSharedPtr<FJsonObject>& RootObject,
+		TArray<FString>& Lines)
+	{
+		if (!RootObject.IsValid())
+		{
+			return;
+		}
+
+		const TSharedPtr<FJsonValue> EpisodesValue = RootObject->TryGetField(TEXT("episodes"));
+		if (!EpisodesValue.IsValid() || EpisodesValue->Type != EJson::Array)
+		{
+			return;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>& Episodes = EpisodesValue->AsArray();
+		if (Episodes.IsEmpty())
+		{
+			return;
+		}
+
+		Lines.Add(TEXT(""));
+		Lines.Add(TEXT("Episodes"));
+		for (const TSharedPtr<FJsonValue>& EpisodeValue : Episodes)
+		{
+			if (!EpisodeValue.IsValid() || EpisodeValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject> EpisodeObject = EpisodeValue->AsObject();
+			if (!EpisodeObject.IsValid())
+			{
+				continue;
+			}
+
+			TArray<FString> Parts;
+			const FString EpisodeId = ReadStringField(*EpisodeObject, TEXT("episode_id"));
+			const FString Outcome = ReadDisplayString(*EpisodeObject, TEXT("outcome"));
+			const FString Duration = ReadDisplayString(*EpisodeObject, TEXT("duration"));
+			if (!EpisodeId.IsEmpty())
+			{
+				Parts.Add(EpisodeId);
+			}
+			if (!Outcome.IsEmpty())
+			{
+				Parts.Add(Outcome);
+			}
+			if (!Duration.IsEmpty())
+			{
+				Parts.Add(Duration);
+			}
+			if (!Parts.IsEmpty())
+			{
+				Lines.Add(FString::Printf(TEXT("- %s"), *FString::Join(Parts, TEXT(" | "))));
+			}
+		}
+	}
+
 	void AppendAnalysisV2Recommendations(
 		const TSharedPtr<FJsonObject>& RootObject,
 		TArray<FString>& Lines)
@@ -259,10 +425,13 @@ namespace
 		}
 
 		TSharedPtr<FJsonObject> SummaryObject;
-		return RootObject->HasField(TEXT("analysis_text"))
+		return RootObject->HasField(TEXT("status"))
 			|| RootObject->HasField(TEXT("review_id"))
 			|| RootObject->HasField(TEXT("recommendation_type"))
+			|| RootObject->HasField(TEXT("run_overview"))
 			|| RootObject->HasField(TEXT("metrics"))
+			|| RootObject->HasField(TEXT("insights"))
+			|| RootObject->HasField(TEXT("warnings"))
 			|| TryGetObjectField(*RootObject, TEXT("summary"), SummaryObject);
 	}
 
@@ -270,30 +439,34 @@ namespace
 	{
 		TArray<FString> Lines;
 
-		FString AnalysisText;
-		if (RootObject->TryGetStringField(TEXT("analysis_text"), AnalysisText) && !AnalysisText.IsEmpty())
+		const FString Status = ReadStringField(*RootObject, TEXT("status"));
+		if (Status.Equals(TEXT("failed"), ESearchCase::IgnoreCase))
 		{
-			Lines.Add(AnalysisText);
-		}
-		else
-		{
-			Lines.Add(TEXT("AI Analysis"));
-			AppendStringFieldLine(RootObject, TEXT("Review Id"), TEXT("review_id"), Lines);
-			AppendStringFieldLine(RootObject, TEXT("Run Id"), TEXT("run_id"), Lines);
-			AppendStringFieldLine(RootObject, TEXT("Mode"), TEXT("analysis_mode"), Lines);
-			AppendStringFieldLine(RootObject, TEXT("Recommendation Type"), TEXT("recommendation_type"), Lines);
-
-			TSharedPtr<FJsonObject> SummaryObject;
-			if (TryGetObjectField(*RootObject, TEXT("summary"), SummaryObject))
+			Lines.Add(TEXT("AI Analysis Failed"));
+			TSharedPtr<FJsonObject> ErrorObject;
+			if (TryGetObjectField(*RootObject, TEXT("error"), ErrorObject))
 			{
-				Lines.Add(TEXT(""));
-				Lines.Add(TEXT("Summary"));
-				AppendStringFieldLine(SummaryObject, TEXT("Judgement"), TEXT("overall_judgement"), Lines);
-				AppendStringFieldLine(SummaryObject, TEXT("Message"), TEXT("message"), Lines);
+				AppendStringFieldLine(ErrorObject, TEXT("Message"), TEXT("message"), Lines);
 			}
+			AppendStringArraySection(RootObject, TEXT("warnings"), TEXT("Warnings"), Lines);
+			return JoinLines(Lines);
 		}
 
-		AppendAnalysisV2Metrics(RootObject, Lines);
+		Lines.Add(TEXT("AI Analysis"));
+		AppendStringFieldLine(RootObject, TEXT("Review Id"), TEXT("review_id"), Lines);
+		AppendStringFieldLine(RootObject, TEXT("Run Id"), TEXT("run_id"), Lines);
+
+		TSharedPtr<FJsonObject> SummaryObject;
+		if (TryGetObjectField(*RootObject, TEXT("summary"), SummaryObject))
+		{
+			Lines.Add(TEXT(""));
+			Lines.Add(TEXT("Summary"));
+			AppendStringFieldLine(SummaryObject, TEXT("Message"), TEXT("message"), Lines);
+		}
+
+		AppendAnalysisV2RunOverview(RootObject, Lines);
+		AppendAnalysisV2Insights(RootObject, Lines);
+		AppendAnalysisV2Episodes(RootObject, Lines);
 		AppendAnalysisV2Recommendations(RootObject, Lines);
 		AppendStringArraySection(RootObject, TEXT("warnings"), TEXT("Warnings"), Lines);
 		return JoinLines(Lines);
@@ -363,7 +536,11 @@ namespace
 		int32 ResponseCode,
 		const FString& DisplayText,
 		const FString& ErrorMessage,
-		const FString& ResponseBody)
+		const FString& ResponseBody,
+		const FString& ProjectPath = FString(),
+		const FString& RunId = FString(),
+		const FString& RunDirectory = FString(),
+		const FString& ReviewOutputPath = FString())
 	{
 		FPlatformAnalysisAiResponse Response;
 		Response.bSuccess = bSuccess;
@@ -371,6 +548,10 @@ namespace
 		Response.DisplayText = DisplayText;
 		Response.ErrorMessage = ErrorMessage;
 		Response.ResponseBody = ResponseBody;
+		Response.ProjectPath = ProjectPath;
+		Response.RunId = RunId;
+		Response.RunDirectory = RunDirectory;
+		Response.ReviewOutputPath = ReviewOutputPath;
 		return Response;
 	}
 }
@@ -423,6 +604,9 @@ bool UPlatformAnalysisAiSubsystem::RequestAnalysisForProjectRun(
 
 	const FUserProjectRunSnapshotPaths Paths = FUserProjectRunSnapshot::BuildPaths(projectPath, runId);
 	PendingRequestId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+	PendingProjectPath = Paths.ProjectPath;
+	PendingRunId = Paths.RunId;
+	PendingRunDirectory = Paths.RunPath;
 	PendingReviewOutputPath = FPaths::Combine(Paths.ReviewPath, TEXT("analysis_run_response_v2.json"));
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
@@ -448,10 +632,24 @@ bool UPlatformAnalysisAiSubsystem::RequestAnalysisForProjectRun(
 	PendingHttpRequest = Request;
 	if (!Request->ProcessRequest())
 	{
+		const FString ProjectPathContext = PendingProjectPath;
+		const FString RunIdContext = PendingRunId;
+		const FString RunDirectoryContext = PendingRunDirectory;
+		const FString ReviewOutputPathContext = PendingReviewOutputPath;
 		PendingHttpRequest.Reset();
 		PendingRequestId.Reset();
+		PendingProjectPath.Reset();
+		PendingRunId.Reset();
+		PendingRunDirectory.Reset();
 		PendingReviewOutputPath.Reset();
-		BroadcastFailure(0, TEXT("Failed to start project run AI analysis request."));
+		BroadcastFailure(
+			0,
+			TEXT("Failed to start project run AI analysis request."),
+			FString(),
+			ProjectPathContext,
+			RunIdContext,
+			RunDirectoryContext,
+			ReviewOutputPathContext);
 		return false;
 	}
 
@@ -477,6 +675,9 @@ void UPlatformAnalysisAiSubsystem::CancelPendingAnalysisRequest()
 	PendingHttpRequest->CancelRequest();
 	PendingHttpRequest.Reset();
 	PendingRequestId.Reset();
+	PendingProjectPath.Reset();
+	PendingRunId.Reset();
+	PendingRunDirectory.Reset();
 	PendingReviewOutputPath.Reset();
 }
 
@@ -585,7 +786,13 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 
 	PendingHttpRequest.Reset();
 	PendingRequestId.Reset();
+	const FString ProjectPathContext = PendingProjectPath;
+	const FString RunIdContext = PendingRunId;
+	const FString RunDirectoryContext = PendingRunDirectory;
 	const FString ReviewOutputPath = PendingReviewOutputPath;
+	PendingProjectPath.Reset();
+	PendingRunId.Reset();
+	PendingRunDirectory.Reset();
 	PendingReviewOutputPath.Reset();
 
 	const int32 ResponseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
@@ -599,7 +806,14 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 			httpRequest.IsValid() ? *httpRequest->GetURL() : TEXT("<invalid>"),
 			ResponseCode,
 			*TruncateText(ResponseBody, RawResponsePreviewCharacterLimit));
-		BroadcastFailure(ResponseCode, TEXT("AI analysis HTTP request failed."), ResponseBody);
+		BroadcastFailure(
+			ResponseCode,
+			TEXT("AI analysis HTTP request failed."),
+			ResponseBody,
+			ProjectPathContext,
+			RunIdContext,
+			RunDirectoryContext,
+			ReviewOutputPath);
 		return;
 	}
 
@@ -613,7 +827,14 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 			httpRequest.IsValid() ? *httpRequest->GetURL() : TEXT("<invalid>"),
 			ResponseCode,
 			*TruncateText(ResponseBody, RawResponsePreviewCharacterLimit));
-		BroadcastFailure(ResponseCode, Message, ResponseBody);
+		BroadcastFailure(
+			ResponseCode,
+			Message,
+			ResponseBody,
+			ProjectPathContext,
+			RunIdContext,
+			RunDirectoryContext,
+			ReviewOutputPath);
 		return;
 	}
 
@@ -637,14 +858,36 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 		UE_LOG(LogPlatformAnalysisAi, Warning, TEXT("AI analysis response diagnostic | %s"), *JoinLines(Diagnostics));
 	}
 
-	OnAnalysisCompleted.Broadcast(MakeResponse(true, ResponseCode, DisplayText, FString(), ResponseBody));
+	OnAnalysisCompleted.Broadcast(MakeResponse(
+		true,
+		ResponseCode,
+		DisplayText,
+		FString(),
+		ResponseBody,
+		ProjectPathContext,
+		RunIdContext,
+		RunDirectoryContext,
+		ReviewOutputPath));
 }
 
 void UPlatformAnalysisAiSubsystem::BroadcastFailure(
 	int32 responseCode,
 	const FString& message,
-	const FString& responseBody)
+	const FString& responseBody,
+	const FString& projectPath,
+	const FString& runId,
+	const FString& runDirectory,
+	const FString& reviewOutputPath)
 {
 	UE_LOG(LogPlatformAnalysisAi, Warning, TEXT("AI analysis failed | Code: %d, Message: %s"), responseCode, *message);
-	OnAnalysisCompleted.Broadcast(MakeResponse(false, responseCode, FString(), message, responseBody));
+	OnAnalysisCompleted.Broadcast(MakeResponse(
+		false,
+		responseCode,
+		FString(),
+		message,
+		responseBody,
+		projectPath,
+		runId,
+		runDirectory,
+		reviewOutputPath));
 }

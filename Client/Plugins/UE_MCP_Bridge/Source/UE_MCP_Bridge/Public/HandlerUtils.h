@@ -7,6 +7,7 @@
 #include "UObject/UObjectIterator.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "HAL/FileManager.h"
 #include "Misc/PackageName.h"
 #include "Engine/World.h"
 #include "Engine/Blueprint.h"
@@ -561,6 +562,25 @@ T* LoadAssetByPath(const FString& AssetPath)
 
 // ── Package save ─────────────────────────────────────────────────────────────
 
+/** Resolve the disk filename that stores an asset package. */
+inline FString GetAssetPackageFileName(const UObject* Asset)
+{
+	if (!Asset) return FString();
+	const UPackage* Package = Asset->GetOutermost();
+	if (!Package) return FString();
+	return FPackageName::LongPackageNameToFilename(
+		Package->GetName(), FPackageName::GetAssetPackageExtension());
+}
+
+/** Report whether an existing asset package is locked against writes. */
+inline bool IsAssetPackageReadOnly(const UObject* Asset)
+{
+	const FString PackageFileName = GetAssetPackageFileName(Asset);
+	return !PackageFileName.IsEmpty() &&
+		IFileManager::Get().FileExists(*PackageFileName) &&
+		IFileManager::Get().IsReadOnly(*PackageFileName);
+}
+
 /** Mark the asset's package dirty and save it to disk. Used by every create/
  *  mutate handler that wants changes persisted across editor restarts.
  *  No-op if Asset or its package is null. Returns true on successful save. */
@@ -569,9 +589,15 @@ inline bool SaveAssetPackage(UObject* Asset)
 	if (!Asset) return false;
 	UPackage* Package = Asset->GetOutermost();
 	if (!Package) return false;
+	const FString PackageFileName = GetAssetPackageFileName(Asset);
+	if (PackageFileName.IsEmpty()) return false;
+	if (IsAssetPackageReadOnly(Asset))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Refusing to save read-only asset package: %s"), *PackageFileName);
+		return false;
+	}
+
 	Package->MarkPackageDirty();
-	const FString PackageFileName = FPackageName::LongPackageNameToFilename(
-		Package->GetName(), FPackageName::GetAssetPackageExtension());
 	FSavePackageArgs SaveArgs;
 	SaveArgs.TopLevelFlags = RF_Standalone;
 	return UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);

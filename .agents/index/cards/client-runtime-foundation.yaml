@@ -1,16 +1,19 @@
 id: client-runtime-foundation
 owner: Client
-description: Unreal project config, module boundaries, maps, assets, and UMG asset ownership.
+description: Unreal project config, module boundaries, maps, assets, DPI scaling, and UMG asset ownership.
 paths:
   - Client/AGENTS.md
   - Client/OdiroSim.uproject
   - Client/Source/*.Target.cs
   - Client/Source/OdiroSim/OdiroSim.Build.cs
   - Client/Source/OdiroSim/Public/UI/Base*.h
+  - Client/Source/OdiroSim/Public/UI/*Dpi*.h
   - Client/Source/OdiroSim/Private/UI/Base*.cpp
+  - Client/Source/OdiroSim/Private/UI/*Dpi*.cpp
   - Client/Config/**
   - Client/Content/**
   - Client/Plugins/UEGitPlugin/**
+  - Client/Plugins/LfsLockPoller/**
 entry:
   - id: project-config
     description: Unreal project, targets, modules, and config.
@@ -28,8 +31,9 @@ entry:
       - Client/Content/Widgets
       - Client/Content/Data
       - Client/Plugins/UEGitPlugin
+      - Client/Plugins/LfsLockPoller
   - id: base-widgets
-    description: Independent base widget token types, component view adapters, and WBP assets.
+    description: Independent base widget token types, component view adapters, DPI rules, and WBP assets.
     read:
       - Client/Source/OdiroSim/Public/UI
       - Client/Source/OdiroSim/Private/UI
@@ -37,16 +41,21 @@ entry:
 guardrails:
   - Unreal-specific config and assets stay in Client.
   - Add module dependencies only at the public/private boundary that needs them.
-  - Default startup uses StartupMap for project selection; ScenarioEditorMap owns the editor workspace.
+  - Default startup uses ScenarioEditorMap with PlatformRootWidget; StartupScreen is a root-shell screen, and StartupMap is legacy compatibility only.
   - UMG assets own layout/style and required BindWidget names; C++ should not reconstruct asset trees as fallback UI.
+  - Base UI size/font tokens are authored logical units; keep HiDPI in DisplayDpiScalingRule/ApplicationScale, not inverse-baked DA values.
+  - Keep Project User Interface font display DPI at Unreal/96 so FSlateFontInfo Details values match native DA token numbers.
+  - DA_*Sizes assets own authored Small/Medium/Large values; UBaseWidgetSizeCatalog class defaults stay neutral.
   - Base widget assets are independent common component surfaces; do not wire them into existing screens during foundation work.
   - Scenario editor widget class references are catalog-owned through Client Content data assets.
   - UEGitPlugin is for editor checkout/lock flow; do not add `filter=lfs` attributes from the plugin UI.
+  - LfsLockPoller is an editor-only guard that reconciles remote-existing lockable asset writable state from Git LFS locks, while leaving local-only lockable assets writable without locking or unlocking assets.
 verify:
   - when: Unreal module or config changes
     run:
       - smallest affected Unreal target build
       - source control provider loads as Git LFS 2 when source-control config changes
+      - LfsLockPoller module loads when plugin enablement or lock polling code changes
   - when: UMG assets or BindWidget contracts change
     run:
       - UE_MCP_Bridge widget tree readback for touched assets

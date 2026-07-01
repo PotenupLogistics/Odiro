@@ -1,0 +1,10 @@
+{
+  "schema": "project_preset_manifest",
+  "version": 1,
+  "id": "blank",
+  "kind": "scenario",
+  "title": "빈 보도",
+  "subtitle": "직선 12m · 장애물 없음",
+  "description": "새 프로젝트를 시작하기 위한 최소 보도 시나리오입니다.",
+  "sort_order": 10
+}

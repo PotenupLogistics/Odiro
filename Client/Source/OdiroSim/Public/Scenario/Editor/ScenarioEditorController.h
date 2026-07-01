@@ -16,13 +16,14 @@ class UScenarioAuthoringSubsystem;
 class UScenarioEditorRootWidget;
 class UScenarioEditorToolbarWidget;
 class UScenarioEditorRouteMarkerOverlayWidget;
-class UMainMenuWidget;
+class UPlatformRootWidget;
 class UScenarioPlaceableComponent;
 class UInputAction;
 class UInputMappingContext;
 class UMaterialInterface;
 class UWidget;
 struct FInputActionValue;
+enum class EPlatformRootScreen : uint8;
 
 // Native notification used by editor UI widgets to mirror viewport selection.
 DECLARE_MULTICAST_DELEGATE_OneParam(FScenarioSelectedPlaceableChanged, const FString&);
@@ -109,15 +110,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<AScenarioTransformGizmoActor> TransformGizmoActorClass;
 
-	// Main control UI shown by ScenarioEditorMap.
+	// Platform root shell shown by ScenarioEditorMap.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
-	TSubclassOf<UMainMenuWidget> MainMenuWidgetClass;
+	TSubclassOf<UPlatformRootWidget> PlatformRootWidgetClass;
 
-	// Viewport z-order used when ScenarioEditorMap attaches WBP_MainMenu.
+	// Viewport z-order used when ScenarioEditorMap attaches WBP_Root.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
-	int32 MainMenuWidgetViewportZOrder = 10;
+	int32 PlatformRootWidgetViewportZOrder = 10;
 
-	// Viewport z-order offset that keeps route markers below WBP_MainMenu and its editor panels.
+	// Viewport z-order offset that keeps route markers below WBP_Root and its editor panels.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
 	int32 RouteMarkerOverlayViewportZOrderOffset = -1;
 
@@ -267,15 +268,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
 	void RemoveEditorRootWidget();
 
-	// Shows the main control UI that wraps project controls and scenario editor UI.
+	// Shows the platform root UI that wraps project controls and scenario editor UI.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
-	UMainMenuWidget* ShowMainMenuWidget();
+	UPlatformRootWidget* ShowPlatformRootWidget();
 
-	// Removes the main control UI from the viewport.
+	// Removes the platform root UI from the viewport.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
-	void RemoveMainMenuWidget();
+	void RemovePlatformRootWidget();
 
-	// Registers the editor root child owned by WBP_MainMenu.
+	// Registers the editor root child owned by WBP_Root.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
 	void RegisterEditorRootWidget(UScenarioEditorRootWidget* rootWidget);
 
@@ -286,9 +287,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|UI")
 	UScenarioEditorRootWidget* GetEditorRootWidget() const { return EditorRootWidget.Get(); }
 
-	// Returns the main control UI currently owned by this controller.
+	// Returns the platform root UI currently owned by this controller.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|UI")
-	UMainMenuWidget* GetMainMenuWidget() const { return MainMenuWidget.Get(); }
+	UPlatformRootWidget* GetPlatformRootWidget() const { return PlatformRootWidget.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Selection")
 	UScenarioPlaceableComponent* GetSelectedPlaceableComponent() const { return SelectedPlaceableComponent.Get(); }
@@ -379,6 +380,8 @@ private:
 	void EnsureAuthoringOutlineCustomDepthEnabled() const;
 	void AddEditorInputMappingContext();
 	void BindEditorInputActions();
+	// Mirrors Platform root active-screen changes into editor overlay visibility.
+	void HandlePlatformRootScreenChanged(EPlatformRootScreen screen);
 	// Ensures the route marker visual overlay is present below the main editor UI.
 	void ShowRouteMarkerOverlayWidget(UScenarioEditorRootWidget* rootWidget);
 	// Removes the route marker visual overlay owned by this controller.
@@ -463,13 +466,13 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorRootWidget> EditorRootWidget;
 
-	// Viewport-level route marker overlay rendered beneath WBP_MainMenu.
+	// Viewport-level route marker overlay rendered beneath WBP_Root.
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorRouteMarkerOverlayWidget> RouteMarkerOverlayWidget;
 
-	// MainMenu widget created by ScenarioEditorMap controller.
+	// Platform root widget created by ScenarioEditorMap controller.
 	UPROPERTY(Transient)
-	TObjectPtr<UMainMenuWidget> MainMenuWidget;
+	TObjectPtr<UPlatformRootWidget> PlatformRootWidget;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|Placement")
 	FTransform CurrentPlacementTransform = FTransform::Identity;

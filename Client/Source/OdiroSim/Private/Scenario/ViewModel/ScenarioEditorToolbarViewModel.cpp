@@ -51,7 +51,7 @@ bool UScenarioEditorToolbarViewModel::ReturnToStartup()
 
 	if (!UiSubsystem->ReturnToStartup(StartupMapId))
 	{
-		SetStatusText(TEXT("Return failed: Startup map id unavailable."));
+		SetStatusText(TEXT("Return failed: startup screen map id unavailable."));
 		return false;
 	}
 

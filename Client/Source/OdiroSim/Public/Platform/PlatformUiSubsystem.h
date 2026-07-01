@@ -15,7 +15,6 @@ class UPlatformAnalysisAiSubsystem;
 class UProjectSessionSubsystem;
 class UProjectWorkspaceViewModel;
 class URobotProfileViewModel;
-class UStartupMenuViewModel;
 struct FPlatformAnalysisAiResponse;
 struct FProjectRunResultDashboardData;
 
@@ -59,10 +58,6 @@ public:
 	// AI 분석 완료를 Platform UI adapter에 중계한다.
 	FPlatformUiAnalysisCompletedNative OnAnalysisCompleted;
 
-	// Startup menu ViewModel을 반환한다.
-	UFUNCTION(BlueprintPure, Category = "Platform|UI")
-	UStartupMenuViewModel* GetStartupMenuViewModel() const { return StartupMenuViewModel; }
-
 	// Project workspace ViewModel을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|UI")
 	UProjectWorkspaceViewModel* GetProjectWorkspaceViewModel() const { return ProjectWorkspaceViewModel; }
@@ -98,7 +93,7 @@ public:
 	// Active user project scenario.json 경로를 반환한다.
 	FString GetActiveProjectScenarioPath() const;
 
-	// Active project를 비우고 StartupMap으로 전환한다.
+	// Active project를 비우고 ScenarioEditorMap의 startup screen으로 전환한다.
 	UFUNCTION(BlueprintCallable, Category = "Platform|UI")
 	bool ReturnToStartupMap(FString& outErrorText) const;
 
@@ -282,13 +277,9 @@ private:
 	void HandleRunInfoChanged(const FSimulatorRunInfo& runInfo);
 	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);
 
-	// Project workspace에서 StartupMap으로 복귀할 때 사용할 map id.
+	// Project workspace에서 startup screen을 표시할 root shell map id.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|UI", meta = (AllowPrivateAccess = "true"))
-	FString StartupMapId = TEXT("StartupMap");
-
-	// StartupMap project 선택/생성 상태.
-	UPROPERTY(Transient)
-	TObjectPtr<UStartupMenuViewModel> StartupMenuViewModel;
+	FString StartupMapId = TEXT("ScenarioEditorMap");
 
 	// ScenarioEditorMap project workspace 상태.
 	UPROPERTY(Transient)

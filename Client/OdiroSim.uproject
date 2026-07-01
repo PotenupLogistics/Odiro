@@ -26,6 +26,13 @@
 			]
 		},
 		{
+			"Name": "LfsLockPoller",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
 			"Name": "CommonUI",
 			"Enabled": true
 		},

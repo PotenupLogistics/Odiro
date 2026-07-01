@@ -33,30 +33,31 @@ void UBaseSwitchWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
-	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
-	if (!tokens)
+	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
+	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	const bool bChecked = CheckState == ECheckBoxState::Checked;
+	ApplyThumbAlignment(ThumbSlot.Get(), bChecked);
+	if (!colors || !sizes)
 	{
 		return;
 	}
 
-	const bool bChecked = CheckState == ECheckBoxState::Checked;
-	const FLinearColor trackFill = bChecked ? tokens->AccentColor : tokens->SurfaceControlColor;
-	const FLinearColor trackStroke = bChecked ? tokens->AccentColor : tokens->LineInsetColor;
+	const FLinearColor trackFill = bChecked ? colors->AccentColor : colors->SurfaceControlColor;
+	const FLinearColor trackStroke = bChecked ? colors->AccentColor : colors->LineInsetColor;
 	BaseWidgetPrivate::ApplyRoundedSurface(
 		nullptr,
 		TrackSurface.Get(),
-		bDisabled ? tokens->SurfaceChromeColor : trackFill,
-		bDisabled ? tokens->LineSubtleColor : trackStroke,
-		tokens->Radius,
-		tokens->BorderWidth);
+		bDisabled ? colors->SurfaceChromeColor : trackFill,
+		bDisabled ? colors->LineSubtleColor : trackStroke,
+		sizes->Radius,
+		sizes->BorderWidth);
 
-	ApplyThumbAlignment(ThumbSlot.Get(), bChecked);
 	BaseWidgetPrivate::ApplyRoundedSurface(
 		nullptr,
 		ThumbSurface.Get(),
-		bDisabled ? tokens->TextFaintColor : tokens->TextStrongColor,
+		bDisabled ? colors->TextFaintColor : colors->TextStrongColor,
 		FLinearColor::Transparent,
-		tokens->Radius,
+		sizes->Radius,
 		0.0f);
 }
 
@@ -71,10 +72,14 @@ void UBaseSwitchWidget::SetCheckState(const ECheckBoxState inCheckState)
 {
 	CheckState = inCheckState;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(CheckState == ECheckBoxState::Checked
+		? EBaseWidgetState::Selected
+		: EBaseWidgetState::Default);
 }
 
 void UBaseSwitchWidget::SetDisabled(const bool bInDisabled)
 {
 	bDisabled = bInDisabled;
 	SynchronizeBaseProperties();
+	NotifyBaseVisualStateChanged(bDisabled ? EBaseWidgetState::Disabled : EBaseWidgetState::Default);
 }

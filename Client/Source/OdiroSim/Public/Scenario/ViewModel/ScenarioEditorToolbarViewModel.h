@@ -23,7 +23,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	void SetDefaultSavePath(const FString& path);
 
-	// WBP/adapter가 제공한 startup map id를 보관한다.
+	// WBP/adapter가 제공한 startup screen map id를 보관한다.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	void SetStartupMapId(const FString& mapId);
 
@@ -31,7 +31,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	bool SaveScenario();
 
-	// Startup map 복귀 command를 Subsystem에 위임한다.
+	// Startup screen 복귀 command를 Subsystem에 위임한다.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	bool ReturnToStartup();
 
@@ -118,7 +118,7 @@ private:
 
 	// Startup map으로 복귀할 때 사용할 map id.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scenario|Editor|Toolbar", meta = (AllowPrivateAccess = "true"))
-	FString StartupMapId = TEXT("StartupMap");
+	FString StartupMapId = TEXT("ScenarioEditorMap");
 
 	// 현재 선택된 template sidebar panel.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scenario|Editor|Toolbar", meta = (AllowPrivateAccess = "true"))

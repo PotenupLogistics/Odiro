@@ -1,0 +1,10 @@
+{
+  "schema": "project_preset_manifest",
+  "version": 1,
+  "id": "demo",
+  "kind": "scenario",
+  "title": "데모 장애물",
+  "subtitle": "보도 4m · 연석 콘",
+  "description": "데모용 장애물과 보행 환경을 포함합니다.",
+  "sort_order": 20
+}

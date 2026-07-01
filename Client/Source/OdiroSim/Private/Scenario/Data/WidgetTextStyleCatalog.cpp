@@ -16,10 +16,8 @@ namespace
 {
 	const FSoftObjectPath DefaultWidgetTextStyleCatalogPath(
 		TEXT("/Game/Data/UI/DA_WidgetTextStyleCatalog.DA_WidgetTextStyleCatalog"));
-	const TCHAR* FreesentationRegularFontPath =
-		TEXT("/Game/Fonts/Freesentation/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
-	const TCHAR* FreesentationBoldFontPath =
-		TEXT("/Game/Fonts/Freesentation/Freesentation-7Bold_Font.Freesentation-7Bold_Font");
+	const TCHAR* FreesentationFontPath =
+		TEXT("/Game/Fonts/Freesentation/Freesentation.Freesentation");
 
 	FLinearColor MakeUiColor(const TCHAR* hex, const float alpha = 1.0f)
 	{
@@ -28,20 +26,29 @@ namespace
 		return color;
 	}
 
-	UObject* ResolveDefaultFontObject(const bool bBold)
+	UObject* ResolveDefaultFontObject()
 	{
-		return LoadObject<UObject>(nullptr, bBold ? FreesentationBoldFontPath : FreesentationRegularFontPath);
+		return LoadObject<UObject>(nullptr, FreesentationFontPath);
+	}
+
+	FName ResolveDefaultTypefaceName(const FName typefaceName)
+	{
+		if (typefaceName == FName(TEXT("Bold")))
+		{
+			return FName(TEXT("700 Bold"));
+		}
+		return FName(TEXT("400 Regular"));
 	}
 
 	FSlateFontInfo MakeDefaultFont(const FName typefaceName, const float size)
 	{
 		FSlateFontInfo fontInfo = FCoreStyle::GetDefaultFontStyle(typefaceName, size);
-		if (UObject* fontObject = ResolveDefaultFontObject(typefaceName == TEXT("Bold")))
+		if (UObject* fontObject = ResolveDefaultFontObject())
 		{
 			fontInfo.FontObject = fontObject;
 			fontInfo.CompositeFont.Reset();
 		}
-		fontInfo.TypefaceFontName = FName();
+		fontInfo.TypefaceFontName = ResolveDefaultTypefaceName(typefaceName);
 		fontInfo.Size = size;
 		return fontInfo;
 	}

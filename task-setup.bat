@@ -7,6 +7,7 @@ set "POWERSHELL=powershell.exe"
 set "SKIP_PREREQUISITES="
 set "SKIP_GIT_HOOKS="
 set "SKIP_AGENTS="
+set "SKIP_AGENT_MCP="
 
 :parse_args
 if "%~1"=="" goto run_setup
@@ -22,6 +23,11 @@ if /I "%~1"=="-SkipGitHooks" (
 )
 if /I "%~1"=="-SkipAgents" (
 	set "SKIP_AGENTS=1"
+	shift
+	goto parse_args
+)
+if /I "%~1"=="-SkipAgentMcp" (
+	set "SKIP_AGENT_MCP=1"
 	shift
 	goto parse_args
 )
@@ -49,6 +55,14 @@ if defined SKIP_AGENTS set "INSTALL_ARGS=%INSTALL_ARGS% -SkipAgents"
 if errorlevel 1 (
 	set "TASK_EXIT_CODE=1"
 	goto exit_task
+)
+
+if not defined SKIP_AGENT_MCP (
+	"%POWERSHELL%" -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%tools\setup-agent-mcp.ps1"
+	if errorlevel 1 (
+		set "TASK_EXIT_CODE=1"
+		goto exit_task
+	)
 )
 
 echo [setup] Complete.

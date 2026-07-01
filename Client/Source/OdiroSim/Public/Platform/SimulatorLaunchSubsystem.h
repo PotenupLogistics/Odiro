@@ -6,6 +6,15 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SimulatorLaunchSubsystem.generated.h"
 
+// Project 생성 preset의 resource category.
+UENUM(BlueprintType)
+enum class EProjectPresetKind : uint8
+{
+	Scenario,
+	Profile,
+	Policy
+};
+
 // 새 사용자 project를 만들 때 선택한 파일별 preset id 묶음.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FProjectPresetSelection
@@ -25,23 +34,70 @@ struct ODIROSIM_API FProjectPresetSelection
 	FString PolicyPresetId = TEXT("blank");
 };
 
-// 사용 가능한 project preset id 목록.
+// 사용 가능한 project preset 하나의 manifest metadata.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FProjectPresetInfo
+{
+	GENERATED_BODY()
+
+	// Folder name이자 선택 command에 쓰는 stable preset id.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	FString Id;
+
+	// Preset category.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	EProjectPresetKind Kind = EProjectPresetKind::Scenario;
+
+	// UI 카드 주 표시 이름.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	FString Title;
+
+	// UI 카드 보조 설명.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	FString Subtitle;
+
+	// UI가 필요할 때 보여줄 긴 설명.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	FString Description;
+
+	// Preset folder 안 thumbnail.png 절대 경로.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	FString ThumbnailPath;
+
+	// 낮을수록 먼저 표시되는 manifest 정렬값.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	int32 SortOrder = 1000;
+};
+
+// 사용 가능한 project preset id와 UI manifest metadata 목록.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FProjectPresetCatalog
 {
 	GENERATED_BODY()
 
-	// scenario.json preset id 목록.
+	// scenario preset id 목록.
 	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
 	TArray<FString> ScenarioPresetIds;
 
-	// profile.json preset id 목록.
+	// profile preset id 목록.
 	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
 	TArray<FString> ProfilePresetIds;
 
-	// policy/ preset id 목록.
+	// policy preset id 목록.
 	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
 	TArray<FString> PolicyPresetIds;
+
+	// scenario preset manifest 목록.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	TArray<FProjectPresetInfo> ScenarioPresets;
+
+	// profile preset manifest 목록.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	TArray<FProjectPresetInfo> ProfilePresets;
+
+	// policy preset manifest 목록.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	TArray<FProjectPresetInfo> PolicyPresets;
 };
 
 // Main menu process가 별도 simulator process 하나를 실행하고 status file로 추적한 결과
@@ -216,6 +272,9 @@ public:
 	// 개발/배포 resource에 포함된 project preset id 목록을 반환한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
 	FProjectPresetCatalog ListProjectPresets() const;
+
+	// 개발/배포 resource에서 project preset catalog를 object lifecycle 없이 로드한다.
+	static FProjectPresetCatalog LoadProjectPresetCatalog();
 
 	// 사용자 project root의 최소 계약을 검증한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")

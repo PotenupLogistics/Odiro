@@ -7,7 +7,9 @@
 
 class UGameInstance;
 class UExperimentResultEpisodeViewModel;
+class UExperimentResultInsightViewModel;
 class UExperimentResultSuggestionViewModel;
+class UOdiroListItemViewModel;
 class UPlatformUiSubsystem;
 struct FPlatformAnalysisAiResponse;
 
@@ -49,6 +51,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
 	FString GetTotalDurationLabel() const { return TotalDurationLabel; }
 
+	// 평균 episode 실행 시간 표시 문자열을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	FString GetAverageDurationLabel() const { return AverageDurationLabel; }
+
 	// 성공률 표시 문자열을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
 	FString GetSuccessRateLabel() const { return SuccessRateLabel; }
@@ -68,6 +74,14 @@ public:
 	// AI suggestion row item ViewModel 목록을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
 	TArray<UExperimentResultSuggestionViewModel*> GetSuggestionItems() const;
+
+	// Analysis insight card item ViewModel 목록을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	TArray<UExperimentResultInsightViewModel*> GetInsightItems() const;
+
+	// Analysis warning row item ViewModel 목록을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	TArray<UOdiroListItemViewModel*> GetWarningItems() const;
 
 private:
 	UPlatformUiSubsystem* ResolvePlatformUiSubsystem() const;
@@ -102,6 +116,10 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	FString TotalDurationLabel;
 
+	// 평균 episode 실행 시간 metric 표시 문자열.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	FString AverageDurationLabel;
+
 	// 성공률 metric 표시 문자열.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	FString SuccessRateLabel;
@@ -122,6 +140,17 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	TArray<TObjectPtr<UExperimentResultSuggestionViewModel>> SuggestionItems;
 
+	// Analysis insight 반복 card ViewModel 목록.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	TArray<TObjectPtr<UExperimentResultInsightViewModel>> InsightItems;
+
+	// Analysis warning 반복 row ViewModel 목록.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	TArray<TObjectPtr<UOdiroListItemViewModel>> WarningItems;
+
 	// 진행 중인 AI 분석이 대상으로 삼은 run id.
 	FString PendingAnalysisRunId;
+
+	// 진행 중인 AI 분석이 대상으로 삼은 run directory.
+	FString PendingAnalysisRunDirectory;
 };

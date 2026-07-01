@@ -315,6 +315,17 @@ bool FSimulatorLaunchProjectPresetsTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("profile presets include full"), catalog.ProfilePresetIds.Contains(TEXT("full")));
 	TestTrue(TEXT("policy presets include blank"), catalog.PolicyPresetIds.Contains(TEXT("blank")));
 	TestTrue(TEXT("policy presets include demo"), catalog.PolicyPresetIds.Contains(TEXT("demo")));
+	TestEqual(TEXT("scenario preset manifests match ids"), catalog.ScenarioPresets.Num(), catalog.ScenarioPresetIds.Num());
+	TestEqual(TEXT("profile preset manifests match ids"), catalog.ProfilePresets.Num(), catalog.ProfilePresetIds.Num());
+	TestEqual(TEXT("policy preset manifests match ids"), catalog.PolicyPresets.Num(), catalog.PolicyPresetIds.Num());
+	TestTrue(
+		TEXT("scenario thumbnail path available"),
+		catalog.ScenarioPresets.ContainsByPredicate(
+			[](const FProjectPresetInfo& presetInfo)
+			{
+				return presetInfo.Id.Equals(TEXT("blank"), ESearchCase::CaseSensitive)
+					&& FPaths::FileExists(presetInfo.ThumbnailPath);
+			}));
 
 	const FString projectPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
 		FPaths::ProjectSavedDir(),
@@ -336,6 +347,10 @@ bool FSimulatorLaunchProjectPresetsTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("created profile exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("profile.json"))));
 	TestTrue(TEXT("created default setting exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("setting.json"))));
 	TestTrue(TEXT("created demo policy exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/action.py"))));
+	TestFalse(TEXT("preset manifest not copied to project root"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("manifest.json"))));
+	TestFalse(TEXT("preset thumbnail not copied to project root"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("thumbnail.png"))));
+	TestFalse(TEXT("policy manifest not copied"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/manifest.json"))));
+	TestFalse(TEXT("policy thumbnail not copied"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/thumbnail.png"))));
 	TestTrue(TEXT("created runs directory exists"), IFileManager::Get().DirectoryExists(*FPaths::Combine(projectPath, TEXT("runs"))));
 
 	FProjectPresetSelection invalidSelection;

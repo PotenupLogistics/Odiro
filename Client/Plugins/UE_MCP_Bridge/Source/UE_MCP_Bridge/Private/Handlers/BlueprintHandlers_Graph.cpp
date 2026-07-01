@@ -1648,10 +1648,24 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprints(const TSharedPtr<FJ
 		}
 		else
 		{
-			if (bSave) SaveAssetPackage(Blueprint);
-			Item->SetStringField(TEXT("status"), TEXT("compiled"));
-			Item->SetNumberField(TEXT("warnings"), CompileLog.NumWarnings);
-			Compiled++;
+			if (bSave && IsAssetPackageReadOnly(Blueprint))
+			{
+				Item->SetStringField(TEXT("status"), TEXT("compiled_save_skipped_read_only"));
+				Item->SetNumberField(TEXT("warnings"), CompileLog.NumWarnings);
+				Compiled++;
+			}
+			else if (bSave && !SaveAssetPackage(Blueprint))
+			{
+				Item->SetStringField(TEXT("status"), TEXT("save_failed"));
+				Item->SetNumberField(TEXT("warnings"), CompileLog.NumWarnings);
+				Failed++;
+			}
+			else
+			{
+				Item->SetStringField(TEXT("status"), TEXT("compiled"));
+				Item->SetNumberField(TEXT("warnings"), CompileLog.NumWarnings);
+				Compiled++;
+			}
 		}
 		Results.Add(MakeShared<FJsonValueObject>(Item));
 	}

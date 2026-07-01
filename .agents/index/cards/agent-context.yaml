@@ -4,20 +4,27 @@ description: Repository agent rules and source-index ownership.
 paths:
   - AGENTS.md
   - .agents/index/**
+  - .agents/skills/**
 entry:
   - id: primary
     description: Repository agent rules and source-index format.
     read:
       - AGENTS.md
       - .agents/index/README.md
+  - id: skills
+    description: Repository-local agent skills and workflow instructions.
+    read:
+      - .agents/skills
 guardrails:
   - AGENTS.md owns repository-wide agent behavior, implementation, comment, and safety rules.
   - Project-local AGENTS.md files may narrow style or tooling rules inside their subtree.
+  - .agents/skills owns repository-local skill procedures; keep SKILL.md concise and validate metadata after edits.
   - .agents/index is a navigation aid; source, contracts, specs, and tests remain authoritative.
   - Cards should not duplicate long project docs or implementation history.
 verify:
   - when: agent context or index format changes
     run:
+      - skill quick validation for touched .agents/skills/* folders
       - YAML parse for .agents/index/cards/*.yaml
       - git diff --check
 related:

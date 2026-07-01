@@ -69,7 +69,7 @@ void UScenarioEditorShellViewModel::RefreshFromController()
 void UScenarioEditorShellViewModel::SelectInspectorTab(const EScenarioEditorInspectorTab tab)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(ActiveInspectorTab, tab);
-	UE_MVVM_SET_PROPERTY_VALUE(bLlmPanelVisible, tab == EScenarioEditorInspectorTab::Llm);
+	UE_MVVM_SET_PROPERTY_VALUE(bLlmPanelVisible, true);
 }
 
 void UScenarioEditorShellViewModel::SelectSidebarPanel(const EScenarioTemplateSidebarPanel panel)
@@ -112,13 +112,9 @@ void UScenarioEditorShellViewModel::SetAssetPaletteVisible(const bool bVisible)
 	UE_MVVM_SET_PROPERTY_VALUE(bAssetPaletteVisible, bVisible);
 }
 
-void UScenarioEditorShellViewModel::SetLlmPanelVisible(const bool bVisible)
+void UScenarioEditorShellViewModel::SetLlmPanelVisible(const bool)
 {
-	UE_MVVM_SET_PROPERTY_VALUE(bLlmPanelVisible, bVisible);
-	if (bVisible)
-	{
-		UE_MVVM_SET_PROPERTY_VALUE(ActiveInspectorTab, EScenarioEditorInspectorTab::Llm);
-	}
+	UE_MVVM_SET_PROPERTY_VALUE(bLlmPanelVisible, true);
 }
 
 bool UScenarioEditorShellViewModel::SetEditorViewMode(const EScenarioEditorViewMode viewMode)

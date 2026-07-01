@@ -5,9 +5,9 @@
 #include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "ScenarioAssetPaletteWidget.generated.h"
 
-class UHorizontalBox;
 class UScrollBox;
 class USizeBox;
+class UUniformGridPanel;
 class UWidget;
 class UScenarioAssetPaletteCatalog;
 class UScenarioAssetPaletteViewModel;
@@ -42,6 +42,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	bool bIncludeRobotRoutePlacement = false;
 
+	// Number of palette item widgets placed in one uniform-grid row.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette", meta = (ClampMin = "1"))
+	int32 PlaceableItemsPerRow = 3;
+
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<USizeBox> PaletteSizeBox;
 
@@ -49,10 +53,10 @@ public:
 	TObjectPtr<UScrollBox> PaletteScrollBox;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
-	TObjectPtr<UHorizontalBox> PlaceableItemContainer;
+	TObjectPtr<UUniformGridPanel> PlaceableItemContainer;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
-	TObjectPtr<UHorizontalBox> StaticObstacleItemContainer;
+	TObjectPtr<UUniformGridPanel> StaticObstacleItemContainer;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	bool RebuildPalette();
@@ -69,14 +73,14 @@ protected:
 
 private:
 	const UScenarioAssetPaletteCatalog* GetPaletteCatalog() const;
-	UHorizontalBox* ResolveStaticObstacleItemContainer() const;
+	UUniformGridPanel* ResolveStaticObstacleItemContainer() const;
 	UScenarioPlaceablePaletteItemWidget* CreatePaletteItemWidget() const;
 	void BindPaletteItemWidget(UScenarioPlaceablePaletteItemWidget* itemWidget);
 	bool AddPaletteItemWidget(
-		UHorizontalBox* targetContainer,
+		UUniformGridPanel* targetContainer,
 		const FScenarioPaletteItemEntry& paletteItemEntry);
 	bool AddPaletteItemWidget(
-		UHorizontalBox* targetContainer,
+		UUniformGridPanel* targetContainer,
 		UScenarioEditorListItemViewModel* itemViewModel);
 	static bool ShouldIncludeSpecialEntry(
 		const FScenarioPaletteItemEntry& entry,

@@ -1,8 +1,8 @@
 #include "Scenario/Widget/ScenarioAssetPaletteWidget.h"
 
-#include "Components/HorizontalBox.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
+#include "Components/UniformGridPanel.h"
 #include "Engine/World.h"
 #include "Scenario/Data/ScenarioAssetPaletteCatalog.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
@@ -54,7 +54,9 @@ void UScenarioAssetPaletteWidget::NativeConstruct()
 
 	if (PaletteScrollBox)
 	{
-		PaletteScrollBox->SetOrientation(Orient_Horizontal);
+		PaletteScrollBox->SetOrientation(Orient_Vertical);
+		PaletteScrollBox->SetScrollBarVisibility(ESlateVisibility::Visible);
+		PaletteScrollBox->SetAlwaysShowScrollbar(false);
 	}
 
 	if (bRebuildOnConstruct)
@@ -73,7 +75,7 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 {
 	ClearPalette();
 
-	UHorizontalBox* staticObstacleContainer = ResolveStaticObstacleItemContainer();
+	UUniformGridPanel* staticObstacleContainer = ResolveStaticObstacleItemContainer();
 	if (!staticObstacleContainer)
 	{
 		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("No palette item container is bound."));
@@ -135,7 +137,7 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 			continue;
 		}
 
-		UHorizontalBox* targetContainer = staticObstacleContainer;
+		UUniformGridPanel* targetContainer = staticObstacleContainer;
 		if (!targetContainer)
 		{
 			UE_LOG(
@@ -234,7 +236,7 @@ const UScenarioAssetPaletteCatalog* UScenarioAssetPaletteWidget::GetPaletteCatal
 	return catalog;
 }
 
-UHorizontalBox* UScenarioAssetPaletteWidget::ResolveStaticObstacleItemContainer() const
+UUniformGridPanel* UScenarioAssetPaletteWidget::ResolveStaticObstacleItemContainer() const
 {
 	return StaticObstacleItemContainer ? StaticObstacleItemContainer.Get() : PlaceableItemContainer.Get();
 }
@@ -263,7 +265,7 @@ void UScenarioAssetPaletteWidget::BindPaletteItemWidget(UScenarioPlaceablePalett
 }
 
 bool UScenarioAssetPaletteWidget::AddPaletteItemWidget(
-	UHorizontalBox* targetContainer,
+	UUniformGridPanel* targetContainer,
 	const FScenarioPaletteItemEntry& paletteItemEntry)
 {
 	if (!targetContainer)
@@ -279,12 +281,14 @@ bool UScenarioAssetPaletteWidget::AddPaletteItemWidget(
 
 	itemWidget->SetPaletteItemEntry(paletteItemEntry);
 	BindPaletteItemWidget(itemWidget);
-	targetContainer->AddChildToHorizontalBox(itemWidget);
+	const int32 childIndex = targetContainer->GetChildrenCount();
+	const int32 columnCount = FMath::Max(1, PlaceableItemsPerRow);
+	targetContainer->AddChildToUniformGrid(itemWidget, childIndex / columnCount, childIndex % columnCount);
 	return true;
 }
 
 bool UScenarioAssetPaletteWidget::AddPaletteItemWidget(
-	UHorizontalBox* targetContainer,
+	UUniformGridPanel* targetContainer,
 	UScenarioEditorListItemViewModel* itemViewModel)
 {
 	if (!targetContainer || !itemViewModel)
@@ -300,7 +304,9 @@ bool UScenarioAssetPaletteWidget::AddPaletteItemWidget(
 
 	itemWidget->InitializeFromItemViewModel(itemViewModel);
 	BindPaletteItemWidget(itemWidget);
-	targetContainer->AddChildToHorizontalBox(itemWidget);
+	const int32 childIndex = targetContainer->GetChildrenCount();
+	const int32 columnCount = FMath::Max(1, PlaceableItemsPerRow);
+	targetContainer->AddChildToUniformGrid(itemWidget, childIndex / columnCount, childIndex % columnCount);
 	return true;
 }
 

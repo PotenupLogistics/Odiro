@@ -634,6 +634,11 @@ void UScenarioEditorRootWidget::UnbindEditorModeButtons()
 
 void UScenarioEditorRootWidget::HandleSaveButtonClicked()
 {
+	SaveCurrentScenario();
+}
+
+void UScenarioEditorRootWidget::SaveCurrentScenario()
+{
 	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
 	UScenarioEditorToolbarViewModel* toolbarViewModel = uiSubsystem ? uiSubsystem->GetToolbarViewModel() : nullptr;
 	if (!toolbarViewModel)

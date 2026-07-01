@@ -34,6 +34,10 @@ public:
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& myGeometry, float inDeltaTime) override;
 
+	// Saves the active scenario draft through the editor toolbar ViewModel.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
+	void SaveCurrentScenario();
+
 	// Controls whether the asset palette stays visible as a persistent editor surface.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root")
 	bool bShowAssetPaletteOnEditorSessionStart = true;

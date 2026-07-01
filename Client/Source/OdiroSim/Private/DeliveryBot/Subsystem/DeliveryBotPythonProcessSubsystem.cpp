@@ -153,12 +153,13 @@ void UDeliveryBotPythonProcessSubsystem::Initialize(FSubsystemCollectionBase& co
 	}
 
 	const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
-	if (commandLineResult.bSuccess && commandLineResult.Options.PolicyPort > 0)
+	const bool bProjectRunRequested = commandLineResult.bSuccess && commandLineResult.Options.bProjectRun;
+	if (bProjectRunRequested && commandLineResult.Options.PolicyPort > 0)
 	{
 		Settings.Port = commandLineResult.Options.PolicyPort;
 	}
 
-	if (Settings.bAutoLaunchPythonServer)
+	if (bProjectRunRequested || Settings.bAutoLaunchPythonServer)
 	{
 		StartPythonServerLifecycle();
 	}

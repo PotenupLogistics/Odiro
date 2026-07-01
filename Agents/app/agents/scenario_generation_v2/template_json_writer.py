@@ -31,21 +31,21 @@ class TemplateJsonWriter:
                 )
             )
 
-        pedestrians = self._pedestrians(plan)
         robot = self._robot(corridor)
         if plan.robot_anchor_only and plan.robot_start_anchor is not None and plan.robot_goal_anchor is not None:
             robot = {"start": plan.robot_start_anchor, "goal": plan.robot_goal_anchor}
 
-        return {
+        scenario: dict[str, Any] = {
             "schema": "scenario",
             "version": 1,
             "scenario_id": self._scenario_id(plan, obstacle_count),
             "intent": self._intent(plan, obstacle_count),
             "corridor": corridor,
-            "obstacles": {"min_clear_width_m": 0.9, "placements": placements},
-            "pedestrians": pedestrians,
             "robot": robot,
         }
+        if placements:
+            scenario["obstacles"] = {"min_clear_width_m": 0.9, "placements": placements}
+        return scenario
 
     def _corridor(self, plan: TemplatePlan) -> dict[str, Any]:
         """Return fallback corridor geometry derived from the parsed intent."""
@@ -87,13 +87,13 @@ class TemplateJsonWriter:
             conflict_end = self._rounded(length_m * 0.62)
             segments = [
                 {"id": "approach", "type": "straight", "along_range_m": [0.0, approach_end]},
-                {"id": "conflict", "type": "narrowing", "along_range_m": [approach_end, conflict_end]},
+                {"id": "conflict", "type": "straight", "along_range_m": [approach_end, conflict_end]},
                 {"id": "exit", "type": "straight", "along_range_m": [conflict_end, self._rounded(length_m)]},
             ]
         return {
             "axis": {"type": "polyline", "points_m": [[0.0, 0.0], [self._rounded(length_m), 0.0]]},
             "walkway_width_m": {"min": 1.4, "max": 1.8},
-            "building_side": [{"surface": "wall", "width_m": 0.3}],
+            "building_side": [{"surface": "building", "width_m": 0.3}],
             "curb_side": [{"surface": "road", "width_m": 4.0}],
             "segments": segments,
         }
@@ -112,7 +112,7 @@ class TemplateJsonWriter:
                 ],
             },
             "walkway_width_m": {"min": 2.4, "max": 3.0},
-            "building_side": [{"surface": "wall", "width_m": 0.4}],
+            "building_side": [{"surface": "building", "width_m": 0.4}],
             "curb_side": [{"surface": "road", "width_m": 4.0}],
             "segments": [
                 {"id": "entry_straight", "type": "straight", "along_range_m": [0.0, self._rounded(length_m * 0.25)]},
@@ -140,7 +140,7 @@ class TemplateJsonWriter:
         return {
             "axis": {"type": "polyline", "points_m": points},
             "walkway_width_m": {"min": 2.8, "max": 3.2},
-            "building_side": [{"surface": "wall", "width_m": 0.4}],
+            "building_side": [{"surface": "building", "width_m": 0.4}],
             "curb_side": [{"surface": "road", "width_m": 4.0}],
             "segments": [
                 {"id": "entry", "type": "straight", "along_range_m": [0.0, self._rounded(length_m * 0.13)]},
@@ -151,12 +151,12 @@ class TemplateJsonWriter:
                 },
                 {
                     "id": "curve_right_1",
-                    "type": "narrowing",
+                    "type": "straight",
                     "along_range_m": [self._rounded(length_m * 0.33), self._rounded(length_m * 0.55)],
                 },
                 {
                     "id": "curve_left_2",
-                    "type": "narrowing",
+                    "type": "straight",
                     "along_range_m": [self._rounded(length_m * 0.55), self._rounded(length_m * 0.76)],
                 },
                 {
@@ -185,13 +185,13 @@ class TemplateJsonWriter:
                 ],
             },
             "walkway_width_m": {"min": 1.6, "max": 2.2},
-            "building_side": [{"surface": "wall", "width_m": 0.4}],
+            "building_side": [{"surface": "building", "width_m": 0.4}],
             "curb_side": [{"surface": "road", "width_m": 4.0}],
             "segments": [
                 {"id": "approach", "type": "straight", "along_range_m": [0.0, pre_corner_start_m]},
                 {
                     "id": "pre_corner_construction",
-                    "type": "narrowing",
+                    "type": "straight",
                     "along_range_m": [pre_corner_start_m, corner_along_m],
                 },
                 {
@@ -220,7 +220,7 @@ class TemplateJsonWriter:
         return {
             "axis": {"type": "polyline", "points_m": points},
             "walkway_width_m": {"min": 2.4, "max": 3.0},
-            "building_side": [{"surface": "wall", "width_m": 0.4}],
+            "building_side": [{"surface": "building", "width_m": 0.4}],
             "curb_side": [{"surface": "road", "width_m": 4.0}],
             "segments": [
                 {"id": "entry_straight", "type": "straight", "along_range_m": [0.0, self._rounded(length_m * 0.25)]},
@@ -231,7 +231,7 @@ class TemplateJsonWriter:
                 },
                 {
                     "id": "middle_construction",
-                    "type": "narrowing",
+                    "type": "straight",
                     "along_range_m": [self._rounded(length_m * 0.42), self._rounded(length_m * 0.58)],
                 },
                 {
@@ -241,7 +241,7 @@ class TemplateJsonWriter:
                 },
                 {
                     "id": "pre_corner_conflict",
-                    "type": "narrowing",
+                    "type": "straight",
                     "along_range_m": [self._rounded(length_m * 0.68), self._rounded(length_m * 0.84)],
                 },
                 {"id": "turn_and_exit", "type": "straight", "along_range_m": [self._rounded(length_m * 0.84), length_m]},
@@ -442,7 +442,9 @@ class TemplateJsonWriter:
             segments = [
                 (str(segment.get("id")), self._segment_range(segment))
                 for segment in corridor.get("segments", [])
-                if isinstance(segment, dict) and segment.get("type") == "narrowing" and isinstance(segment.get("id"), str)
+                if isinstance(segment, dict)
+                and segment.get("id") in {"middle_construction", "pre_corner_conflict"}
+                and isinstance(segment.get("id"), str)
             ]
             if segments:
                 return segments
@@ -498,10 +500,6 @@ class TemplateJsonWriter:
         if prop == "obstacle.road_cone_01":
             return f"cone_{index + 1:02d}"
         return "center_obstacle" if index == 0 else f"center_obstacle_{index + 1}"
-
-    def _pedestrians(self, plan: TemplatePlan) -> dict[str, Any]:
-        """Return alpha fallback pedestrian output from parsed pedestrian intent."""
-        return {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
 
     def _robot(self, corridor: dict[str, Any]) -> dict[str, Any]:
         """Return start and goal anchors that stay inside fallback corridor segments."""

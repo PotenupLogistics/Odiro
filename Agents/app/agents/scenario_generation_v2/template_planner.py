@@ -90,8 +90,8 @@ class TemplatePlanner:
         """Return a Korean user-facing summary for the selected pattern."""
         labels = {
             "corridor_pose_navigation": "명시된 corridor_pose 시작/목표 anchor를 가진 최소 scenario JSON을 생성했습니다.",
-            "narrow_sidewalk_cross_path": "좁은 보도에서 전방 장애물과 횡단 보행자가 함께 발생하는 scenario JSON을 생성했습니다.",
-            "pinch_oncoming_pass": "협폭 구간에서 대향 보행자와 마주치는 scenario JSON을 생성했습니다.",
+            "narrow_sidewalk_cross_path": "도심 보도에서 로봇이 고정 장애물을 고려해 이동하는 scenario JSON을 생성했습니다.",
+            "pinch_oncoming_pass": "협폭 구간에서 로봇이 제한된 통과 폭을 고려해 이동하는 scenario JSON을 생성했습니다.",
             "static_obstacle_ahead": "로봇 전방 경로 중앙의 정적 장애물을 회피하는 scenario JSON을 생성했습니다.",
         }
         return labels[scenario_type]
@@ -100,8 +100,8 @@ class TemplatePlanner:
         """Return the intent text stored in the scenario root."""
         labels = {
             "corridor_pose_navigation": "명시된 corridor_pose 시작점과 목표점을 사용해 로봇의 기본 보도 주행 anchor 표현을 검증한다.",
-            "narrow_sidewalk_cross_path": "좁은 보도에서 로봇 전방 장애물과 횡단 보행자가 동시에 발생할 때 로봇의 감속, 회피, 양보 판단을 검증한다.",
-            "pinch_oncoming_pass": "협폭 구간에서 마주 오는 보행자와 조우할 때 로봇이 안전하게 감속, 양보, 통과하는지 검증한다.",
+            "narrow_sidewalk_cross_path": "건물 측 보행로와 차도 측 영역이 있는 도심 보도에서 로봇이 고정 장애물을 고려해 목적지까지 이동하는지 검증한다.",
+            "pinch_oncoming_pass": "협폭 구간에서 로봇이 제한된 통과 폭과 고정 장애물을 고려해 안전하게 감속하고 통과하는지 검증한다.",
             "static_obstacle_ahead": "로봇 진행 경로 중앙의 정적 장애물 앞에서 로봇이 안전하게 감속하고 우회하는지 검증한다.",
         }
         return labels[scenario_type]

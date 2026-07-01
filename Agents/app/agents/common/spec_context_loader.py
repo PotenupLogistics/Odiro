@@ -3,13 +3,28 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-# Ordered markdown files approved for v2 Agent LLM prompt context.
-SPEC_CONTEXT_ALLOWLIST: tuple[str, ...] = (
+# Ordered markdown files shared by v2 Agent LLM prompt context.
+SPEC_CONTEXT_BASE_ALLOWLIST: tuple[str, ...] = (
     "docs/specs/simulation-interface.md",
     "contracts/specs/user-project-data.md",
     "Agents/docs/api/V2_AGENT_APIS.md",
     "Agents/docs/agents/V2_AGENT_ARCHITECTURE.md",
     "Agents/docs/agents/V2_LANGGRAPH_DESIGN.md",
+)
+
+# Ordered markdown files approved for common v2 Agent LLM prompt context.
+SPEC_CONTEXT_ALLOWLIST: tuple[str, ...] = (
+    *SPEC_CONTEXT_BASE_ALLOWLIST,
+    "Client/Json/environment-catalog.md",
+)
+
+# Ordered markdown files approved for scenario generation authoring prompts.
+SCENARIO_GENERATION_SPEC_CONTEXT_ALLOWLIST: tuple[str, ...] = (
+    "docs/specs/simulation-interface.md",
+    "Agents/docs/api/V2_AGENT_APIS.md",
+    "Agents/docs/agents/V2_AGENT_ARCHITECTURE.md",
+    "Agents/docs/agents/V2_LANGGRAPH_DESIGN.md",
+    "Client/Json/Schema/scenario.json.md",
     "Client/Json/environment-catalog.md",
 )
 

@@ -19,6 +19,35 @@
 
 namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
+namespace
+{
+	// Parses a repeated-field block path and rejects the collection placeholder ending in [].
+	bool IsScenarioEditorIndexedBlockPath(const FString& blockPath, const TCHAR* listPath)
+	{
+		const FString prefix = FString::Printf(TEXT("%s["), listPath);
+		if (!blockPath.StartsWith(prefix) || !blockPath.EndsWith(TEXT("]")))
+		{
+			return false;
+		}
+
+		const int32 indexStart = prefix.Len();
+		const int32 indexLength = blockPath.Len() - indexStart - 1;
+		if (indexLength <= 0)
+		{
+			return false;
+		}
+
+		for (int32 charIndex = 0; charIndex < indexLength; ++charIndex)
+		{
+			if (!FChar::IsDigit(blockPath[indexStart + charIndex]))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+}
+
 void UScenarioEditorSidebarCorridorPanel::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -810,7 +839,7 @@ void UScenarioEditorSidebarCorridorPanel::ApplySelectedBlockPath()
 	SidebarWidgetHelpers::ApplySelectedBlockPath(CurbSideBlockWidget.Get(), selectedBlockPath);
 	SidebarWidgetHelpers::ApplySelectedBlockPath(SegmentsBlockWidget.Get(), selectedBlockPath);
 
-	if (selectedBlockPath.StartsWith(TEXT("root.corridor.axis.points_m[")))
+	if (IsScenarioEditorIndexedBlockPath(selectedBlockPath, TEXT("root.corridor.axis.points_m")))
 	{
 		if (AxisBlockWidget)
 		{
@@ -821,7 +850,7 @@ void UScenarioEditorSidebarCorridorPanel::ApplySelectedBlockPath()
 			AxisPointsBlockWidget->SetExpanded(true);
 		}
 	}
-	else if (selectedBlockPath.StartsWith(TEXT("root.corridor.segments[")) && SegmentsBlockWidget)
+	else if (IsScenarioEditorIndexedBlockPath(selectedBlockPath, TEXT("root.corridor.segments")) && SegmentsBlockWidget)
 	{
 		SegmentsBlockWidget->SetExpanded(true);
 	}
@@ -860,10 +889,14 @@ void UScenarioEditorSidebarCorridorPanel::ApplySelectedBlockPath()
 void UScenarioEditorSidebarCorridorPanel::ApplyFocusedCorridorItemDetailLayout(
 	const FString& selectedBlockPath)
 {
-	const bool bFocusAxisPoint = selectedBlockPath.StartsWith(TEXT("root.corridor.axis.points_m["));
-	const bool bFocusSegment = selectedBlockPath.StartsWith(TEXT("root.corridor.segments["));
-	const bool bFocusBuildingLane = selectedBlockPath.StartsWith(TEXT("root.corridor.building_side["));
-	const bool bFocusCurbLane = selectedBlockPath.StartsWith(TEXT("root.corridor.curb_side["));
+	const bool bFocusAxisPoint =
+		IsScenarioEditorIndexedBlockPath(selectedBlockPath, TEXT("root.corridor.axis.points_m"));
+	const bool bFocusSegment =
+		IsScenarioEditorIndexedBlockPath(selectedBlockPath, TEXT("root.corridor.segments"));
+	const bool bFocusBuildingLane =
+		IsScenarioEditorIndexedBlockPath(selectedBlockPath, TEXT("root.corridor.building_side"));
+	const bool bFocusCurbLane =
+		IsScenarioEditorIndexedBlockPath(selectedBlockPath, TEXT("root.corridor.curb_side"));
 	const bool bFocusLane = bFocusBuildingLane || bFocusCurbLane;
 	const bool bFocusCorridorItem = bFocusAxisPoint || bFocusSegment || bFocusLane;
 

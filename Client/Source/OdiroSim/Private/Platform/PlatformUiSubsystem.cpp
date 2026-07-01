@@ -222,6 +222,18 @@ namespace
 		{
 			diagnostics.Add(TEXT("LiDAR Angle Step must be at least 1 degree."));
 		}
+		if (settings.VerticalMinDegree < -89.0f || settings.VerticalMinDegree > 89.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Vertical Min must be between -89 and 89 degrees."));
+		}
+		if (settings.VerticalMaxDegree < -89.0f || settings.VerticalMaxDegree > 89.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Vertical Max must be between -89 and 89 degrees."));
+		}
+		if (settings.VerticalMinDegree > settings.VerticalMaxDegree)
+		{
+			diagnostics.Add(TEXT("LiDAR Vertical Min must be less than or equal to Vertical Max."));
+		}
 		if (settings.VerticalStepDegree < 1.0f)
 		{
 			diagnostics.Add(TEXT("LiDAR Vertical Step must be at least 1 degree."));
@@ -1029,6 +1041,8 @@ bool UPlatformUiSubsystem::LoadRobotProfileForProject(
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("stop_distance_m"), outSettings.Lidar.StopDistanceM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("slow_down_distance_m"), outSettings.Lidar.SlowDownDistanceM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("angle_step_degree"), outSettings.Lidar.AngleStepDegree);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("vertical_min_degree"), outSettings.Lidar.VerticalMinDegree);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("vertical_max_degree"), outSettings.Lidar.VerticalMaxDegree);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("vertical_step_degree"), outSettings.Lidar.VerticalStepDegree);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("scan_rate_hz"), outSettings.Lidar.ScanRateHz);
 	}
@@ -1120,6 +1134,8 @@ bool UPlatformUiSubsystem::SaveRobotProfileForProject(
 	lidarObject->SetNumberField(TEXT("stop_distance_m"), settings.Lidar.StopDistanceM);
 	lidarObject->SetNumberField(TEXT("slow_down_distance_m"), settings.Lidar.SlowDownDistanceM);
 	lidarObject->SetNumberField(TEXT("angle_step_degree"), settings.Lidar.AngleStepDegree);
+	lidarObject->SetNumberField(TEXT("vertical_min_degree"), settings.Lidar.VerticalMinDegree);
+	lidarObject->SetNumberField(TEXT("vertical_max_degree"), settings.Lidar.VerticalMaxDegree);
 	lidarObject->SetNumberField(TEXT("vertical_step_degree"), settings.Lidar.VerticalStepDegree);
 	lidarObject->SetNumberField(TEXT("scan_rate_hz"), settings.Lidar.ScanRateHz);
 

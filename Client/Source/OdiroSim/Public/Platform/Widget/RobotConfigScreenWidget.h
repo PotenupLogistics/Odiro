@@ -25,6 +25,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|Robot")
 	bool SaveProfile();
 
+	// Enables or disables the viewport-backed robot preview owned by this screen.
+	void SetRobotPreviewActive(bool bActive);
+
 	// Returns the wrapped robot profile editor.
 	UFUNCTION(BlueprintPure, Category = "Platform|Robot")
 	URobotConfigEditorWidget* GetRobotConfigEditor() const { return RobotConfigEditor.Get(); }

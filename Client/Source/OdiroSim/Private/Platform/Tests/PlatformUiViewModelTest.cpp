@@ -231,6 +231,9 @@ bool FPlatformUiViewModelRobotProfileTest::RunTest(const FString& parameters)
 	viewModel->SetLidarStopDistanceM(2.50f);
 	viewModel->SetLidarSlowDownDistanceM(9.00f);
 	viewModel->SetLidarAngleStepDegree(4.00f);
+	viewModel->SetLidarVerticalMinDegree(-12.00f);
+	viewModel->SetLidarVerticalMaxDegree(18.00f);
+	viewModel->SetLidarVerticalStepDegree(6.00f);
 	viewModel->SetLidarScanRateHz(7.50f);
 	TestTrue(TEXT("save robot profile through viewmodel"), viewModel->SaveRobotProfile());
 
@@ -253,6 +256,9 @@ bool FPlatformUiViewModelRobotProfileTest::RunTest(const FString& parameters)
 	viewModel->SetLidarStopDistanceM(1.0f);
 	viewModel->SetLidarSlowDownDistanceM(1.0f);
 	viewModel->SetLidarAngleStepDegree(1.0f);
+	viewModel->SetLidarVerticalMinDegree(-1.0f);
+	viewModel->SetLidarVerticalMaxDegree(1.0f);
+	viewModel->SetLidarVerticalStepDegree(1.0f);
 	viewModel->SetLidarScanRateHz(1.0f);
 	TestTrue(TEXT("reload robot profile through viewmodel"), viewModel->LoadFromActiveProject());
 	TestTrue(TEXT("body length round trip"), FMath::IsNearlyEqual(viewModel->GetBodyLengthM(), 0.75f));
@@ -274,6 +280,9 @@ bool FPlatformUiViewModelRobotProfileTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("lidar stop distance round trip"), FMath::IsNearlyEqual(viewModel->GetLidarStopDistanceM(), 2.50f));
 	TestTrue(TEXT("lidar slowdown distance round trip"), FMath::IsNearlyEqual(viewModel->GetLidarSlowDownDistanceM(), 9.00f));
 	TestTrue(TEXT("lidar angle step round trip"), FMath::IsNearlyEqual(viewModel->GetLidarAngleStepDegree(), 4.00f));
+	TestTrue(TEXT("lidar vertical min round trip"), FMath::IsNearlyEqual(viewModel->GetLidarVerticalMinDegree(), -12.00f));
+	TestTrue(TEXT("lidar vertical max round trip"), FMath::IsNearlyEqual(viewModel->GetLidarVerticalMaxDegree(), 18.00f));
+	TestTrue(TEXT("lidar vertical step round trip"), FMath::IsNearlyEqual(viewModel->GetLidarVerticalStepDegree(), 6.00f));
 	TestTrue(TEXT("lidar scan rate round trip"), FMath::IsNearlyEqual(viewModel->GetLidarScanRateHz(), 7.50f));
 
 	IFileManager::Get().DeleteDirectory(*testRoot, false, true);

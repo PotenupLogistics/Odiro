@@ -2,6 +2,7 @@
 
 #include "Components/MeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "DeliveryBot/DeliveryBotLidarRayPattern.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -10,6 +11,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Platform/RobotProfileSettings.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -26,6 +28,22 @@ namespace
 		TEXT("/Script/Engine.Material'/Game/Materials/M_RobotPreview_LidarRay.M_RobotPreview_LidarRay'");
 	const TCHAR* PreviewLidarPreviewRangeMaterialPath =
 		TEXT("/Script/Engine.Material'/Game/Materials/M_RobotPreview_LidarRange.M_RobotPreview_LidarRange'");
+	const TCHAR* PreviewLidarPrimaryRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Primary.MI_RobotPreview_LidarRay_Primary'");
+	const TCHAR* PreviewLidarSecondaryRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Secondary.MI_RobotPreview_LidarRay_Secondary'");
+	const TCHAR* PreviewLidarThreeDRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_3D.MI_RobotPreview_LidarRay_3D'");
+	const TCHAR* PreviewLidarFrontBoundaryMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Front.MI_RobotPreview_LidarRay_Front'");
+	const TCHAR* PreviewLidarEndPointMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Point.MI_RobotPreview_LidarRay_Point'");
+	const TCHAR* PreviewLidarScanRangeMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRange_Max.MI_RobotPreview_LidarRange_Max'");
+	const TCHAR* PreviewLidarSlowRangeMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRange_Slow.MI_RobotPreview_LidarRange_Slow'");
+	const TCHAR* PreviewLidarStopRangeMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRange_Stop.MI_RobotPreview_LidarRange_Stop'");
 	const TCHAR* PreviewLidarRayHitMaterialPath =
 		TEXT("/Script/Engine.Material'/Game/Materials/M_LidarRayHit.M_LidarRayHit'");
 	const TCHAR* PreviewLidarRayMissMaterialPath =
@@ -47,8 +65,6 @@ namespace
 	const int32 PreviewLidarSparseVisible3DPitchLayers = 5;
 	const int32 PreviewLidarStandardVisible3DPitchLayers = 9;
 	const int32 PreviewLidarDenseVisible3DPitchLayers = 15;
-	const float PreviewLidarVerticalMinDegree = -10.0f;
-	const float PreviewLidarVerticalMaxDegree = 10.0f;
 	const FName PreviewMaterialColorParameterName(TEXT("PreviewColor"));
 	const FName PreviewOpacityParameterName(TEXT("PreviewOpacity"));
 	const FName PreviewColorParameterName(TEXT("Color"));
@@ -57,85 +73,92 @@ namespace
 	const FName PreviewTintColorParameterName(TEXT("TintColor"));
 	const FName PreviewEmissiveColorParameterName(TEXT("EmissiveColor"));
 	const FName RobotPreviewTag(TEXT("RobotPreviewOnly"));
+	const FLinearColor PreviewStageFloorColor(0.10f, 0.14f, 0.18f, 1.0f);
+	const FLinearColor PreviewFallbackBodyColor(0.08f, 0.55f, 0.58f, 1.0f);
+	const FLinearColor PreviewWheelColor(0.015f, 0.018f, 0.025f, 1.0f);
+	const FLinearColor PreviewLidarMarkerColor(1.20f, 0.78f, 0.14f, 1.0f);
+	const FLinearColor PreviewLidarPrimaryRayColor(0.05f, 4.20f, 5.80f, 1.0f);
+	const FLinearColor PreviewLidarSecondaryRayColor(0.08f, 1.45f, 1.85f, 0.72f);
+	const FLinearColor PreviewLidarThreeDRayColor(2.75f, 0.55f, 6.00f, 0.92f);
+	const FLinearColor PreviewLidarFrontBoundaryColor(0.20f, 0.70f, 8.00f, 1.0f);
+	const FLinearColor PreviewLidarScanRangeColor(0.10f, 4.70f, 1.25f, 0.90f);
+	const FLinearColor PreviewLidarSlowRangeColor(5.40f, 2.80f, 0.10f, 1.0f);
+	const FLinearColor PreviewLidarStopRangeColor(7.00f, 0.18f, 0.08f, 1.0f);
+	const FLinearColor PreviewLidarEndPointColor(0.65f, 5.50f, 6.50f, 1.0f);
 
-	enum class EPreviewLidarMode : uint8
+	// Loads optional artist-authored preview materials without warning while assets are being created.
+	UMaterialInterface* LoadOptionalPreviewMaterial(const TCHAR* MaterialPath)
 	{
-		OneD,
-		TwoD,
-		ThreeD,
-		OneDAndTwoD,
-		TwoDAndThreeD,
-		All
-	};
+		return Cast<UMaterialInterface>(
+			StaticLoadObject(
+				UMaterialInterface::StaticClass(),
+				nullptr,
+				MaterialPath,
+				nullptr,
+				LOAD_NoWarn));
+	}
 
-	EPreviewLidarMode ResolvePreviewLidarMode(const FString& RawMode)
+	void ApplyOptionalPreviewMaterial(
+		UInstancedStaticMeshComponent* Component,
+		UMaterialInterface* Material)
+	{
+		if (!Component || !Material)
+		{
+			return;
+		}
+
+		Material->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
+		const int32 MaterialSlotCount = FMath::Max(1, Component->GetNumMaterials());
+		for (int32 MaterialSlotIndex = 0; MaterialSlotIndex < MaterialSlotCount; ++MaterialSlotIndex)
+		{
+			Component->SetMaterial(MaterialSlotIndex, Material);
+		}
+	}
+
+	EDeliveryBotLidarModeType ResolvePreviewLidarModeType(const FString& RawMode)
 	{
 		const FString NormalizedMode = RawMode.ToLower().Replace(TEXT("_"), TEXT("")).TrimStartAndEnd();
 		if (NormalizedMode == TEXT("1d") || NormalizedMode == TEXT("oned"))
 		{
-			return EPreviewLidarMode::OneD;
+			return EDeliveryBotLidarModeType::OneD;
 		}
 		if (NormalizedMode == TEXT("3d") || NormalizedMode == TEXT("threed"))
 		{
-			return EPreviewLidarMode::ThreeD;
+			return EDeliveryBotLidarModeType::ThreeD;
 		}
 		if (NormalizedMode == TEXT("1dand2d") || NormalizedMode == TEXT("onedandtwod"))
 		{
-			return EPreviewLidarMode::OneDAndTwoD;
+			return EDeliveryBotLidarModeType::OneDAndTwoD;
 		}
 		if (NormalizedMode == TEXT("2dand3d") || NormalizedMode == TEXT("twodandthreed"))
 		{
-			return EPreviewLidarMode::TwoDAndThreeD;
+			return EDeliveryBotLidarModeType::TwoDAndThreeD;
 		}
 		if (NormalizedMode == TEXT("all"))
 		{
-			return EPreviewLidarMode::All;
+			return EDeliveryBotLidarModeType::All;
 		}
-		return EPreviewLidarMode::TwoD;
+		return EDeliveryBotLidarModeType::TwoD;
 	}
 
-	bool PreviewLidarModeIncludes1D(const EPreviewLidarMode Mode)
+	FDeliveryBotLidarSensorConfigInfo MakePreviewLidarConfig(const FRobotProfileLidarSettings& Settings)
 	{
-		return Mode == EPreviewLidarMode::OneD
-			|| Mode == EPreviewLidarMode::OneDAndTwoD
-			|| Mode == EPreviewLidarMode::All;
-	}
-
-	bool PreviewLidarModeIncludes2D(const EPreviewLidarMode Mode)
-	{
-		return Mode == EPreviewLidarMode::TwoD
-			|| Mode == EPreviewLidarMode::OneDAndTwoD
-			|| Mode == EPreviewLidarMode::TwoDAndThreeD
-			|| Mode == EPreviewLidarMode::All;
-	}
-
-	bool PreviewLidarModeIncludes3D(const EPreviewLidarMode Mode)
-	{
-		return Mode == EPreviewLidarMode::ThreeD
-			|| Mode == EPreviewLidarMode::TwoDAndThreeD
-			|| Mode == EPreviewLidarMode::All;
-	}
-
-	bool IsPreviewFrontYaw(const float YawDegree, const float FrontHalfAngleDegree)
-	{
-		const float SignedYawDegree = FMath::Abs(FMath::UnwindDegrees(YawDegree));
-		return SignedYawDegree <= FrontHalfAngleDegree;
-	}
-
-	int32 CalculatePreviewYawRayCount(const float AngleStepDegree)
-	{
-		const float SafeAngleStepDegree = FMath::Max(AngleStepDegree, 1.0f);
-		return FMath::Max(1, FMath::CeilToInt(360.0f / SafeAngleStepDegree));
-	}
-
-	int32 CalculatePreviewPitchRayCount(const float VerticalStepDegree)
-	{
-		const float SafeVerticalStepDegree = FMath::Max(VerticalStepDegree, 1.0f);
-		return FMath::Max(
-			1,
-			FMath::FloorToInt(
-				(PreviewLidarVerticalMaxDegree - PreviewLidarVerticalMinDegree) / SafeVerticalStepDegree)
-			+ 1);
+		FDeliveryBotLidarSensorConfigInfo Config;
+		Config.bDrawDebug = Settings.bDrawDebug;
+		Config.ScanRangeM = FMath::Max(Settings.ScanRangeM, 0.0f);
+		Config.AngleStepDegree = FMath::Max(Settings.AngleStepDegree, 1.0f);
+		Config.SensorHeightM = FMath::Max(Settings.SensorHeightM, 0.0f);
+		Config.SensorForwardOffsetM = FMath::Clamp(Settings.SensorForwardOffsetM, -10.0f, 10.0f);
+		Config.SensorRightOffsetM = FMath::Clamp(Settings.SensorRightOffsetM, -10.0f, 10.0f);
+		Config.FrontHalfAngleDegree = FMath::Clamp(Settings.FrontHalfAngleDegree, 0.0f, 180.0f);
+		Config.StopDistanceM = FMath::Max(Settings.StopDistanceM, 0.0f);
+		Config.SlowDownDistanceM = FMath::Max(Settings.SlowDownDistanceM, 0.0f);
+		Config.VerticalMinDegree = FMath::Clamp(Settings.VerticalMinDegree, -89.0f, 89.0f);
+		Config.VerticalMaxDegree = FMath::Clamp(Settings.VerticalMaxDegree, -89.0f, 89.0f);
+		Config.VerticalStepDegree = FMath::Max(Settings.VerticalStepDegree, 1.0f);
+		Config.ScanRateHz = FMath::Max(Settings.ScanRateHz, 0.1f);
+		Config.LidarModeType = ResolvePreviewLidarModeType(Settings.LidarMode);
+		return Config;
 	}
 
 	int32 ResolvePreviewLidarMaxVisible2DRays(const ERobotPreviewLidarDisplayDensity Density)
@@ -259,20 +282,16 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> LidarRayBeamMesh(PreviewLidarRayBeamMeshPath);
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> LidarRayHitMaterial(PreviewLidarRayHitMaterialPath);
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> LidarRayMissMaterial(PreviewLidarRayMissMaterialPath);
-	UMaterialInterface* LidarPreviewRayMaterial = Cast<UMaterialInterface>(
-		StaticLoadObject(
-			UMaterialInterface::StaticClass(),
-			nullptr,
-			PreviewLidarPreviewRayMaterialPath,
-			nullptr,
-			LOAD_NoWarn));
-	UMaterialInterface* LidarPreviewRangeMaterial = Cast<UMaterialInterface>(
-		StaticLoadObject(
-			UMaterialInterface::StaticClass(),
-			nullptr,
-			PreviewLidarPreviewRangeMaterialPath,
-			nullptr,
-			LOAD_NoWarn));
+	UMaterialInterface* LidarPreviewRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarPreviewRayMaterialPath);
+	UMaterialInterface* LidarPreviewRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarPreviewRangeMaterialPath);
+	UMaterialInterface* LidarPrimaryRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarPrimaryRayMaterialPath);
+	UMaterialInterface* LidarSecondaryRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarSecondaryRayMaterialPath);
+	UMaterialInterface* LidarThreeDRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarThreeDRayMaterialPath);
+	UMaterialInterface* LidarFrontBoundaryMaterial = LoadOptionalPreviewMaterial(PreviewLidarFrontBoundaryMaterialPath);
+	UMaterialInterface* LidarEndPointMaterial = LoadOptionalPreviewMaterial(PreviewLidarEndPointMaterialPath);
+	UMaterialInterface* LidarScanRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarScanRangeMaterialPath);
+	UMaterialInterface* LidarSlowRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarSlowRangeMaterialPath);
+	UMaterialInterface* LidarStopRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarStopRangeMaterialPath);
 
 	bUsingSkeletalBodyMesh = RobotSkeletalMesh.Succeeded();
 	bUsingFallbackBodyMesh = !bUsingSkeletalBodyMesh && !RobotBodyMesh.Succeeded();
@@ -327,54 +346,108 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 
 	UMaterialInterface* PreviewBaseMaterial =
 		PreviewMaterial.Succeeded() ? PreviewMaterial.Object.Get() : nullptr;
-	UMaterialInterface* PrimaryRayMaterial =
+	UMaterialInterface* FallbackPrimaryRayMaterial =
 		LidarPreviewRayMaterial
 			? LidarPreviewRayMaterial
 			: (LidarRayHitMaterial.Succeeded() ? LidarRayHitMaterial.Object.Get() : PreviewBaseMaterial);
-	UMaterialInterface* SecondaryRayMaterial =
+	UMaterialInterface* FallbackSecondaryRayMaterial =
 		LidarPreviewRayMaterial
 			? LidarPreviewRayMaterial
-			: (LidarRayMissMaterial.Succeeded() ? LidarRayMissMaterial.Object.Get() : PrimaryRayMaterial);
-	UMaterialInterface* RingRayMaterial =
-		LidarPreviewRangeMaterial ? LidarPreviewRangeMaterial : PrimaryRayMaterial;
+			: (LidarRayMissMaterial.Succeeded() ? LidarRayMissMaterial.Object.Get() : FallbackPrimaryRayMaterial);
+	UMaterialInterface* FallbackRangeMaterial =
+		LidarPreviewRangeMaterial ? LidarPreviewRangeMaterial : FallbackPrimaryRayMaterial;
+	UMaterialInterface* PrimaryRayMaterial = LidarPrimaryRayMaterial ? LidarPrimaryRayMaterial : FallbackPrimaryRayMaterial;
+	UMaterialInterface* SecondaryRayMaterial =
+		LidarSecondaryRayMaterial ? LidarSecondaryRayMaterial : FallbackSecondaryRayMaterial;
+	UMaterialInterface* ThreeDRayMaterial = LidarThreeDRayMaterial ? LidarThreeDRayMaterial : FallbackPrimaryRayMaterial;
+	UMaterialInterface* FrontBoundaryMaterial =
+		LidarFrontBoundaryMaterial ? LidarFrontBoundaryMaterial : FallbackPrimaryRayMaterial;
+	UMaterialInterface* EndPointMaterial = LidarEndPointMaterial ? LidarEndPointMaterial : FallbackPrimaryRayMaterial;
+	UMaterialInterface* ScanRangeMaterial = LidarScanRangeMaterial ? LidarScanRangeMaterial : FallbackRangeMaterial;
+	UMaterialInterface* SlowRangeMaterial = LidarSlowRangeMaterial ? LidarSlowRangeMaterial : FallbackRangeMaterial;
+	UMaterialInterface* StopRangeMaterial = LidarStopRangeMaterial ? LidarStopRangeMaterial : FallbackRangeMaterial;
 	if (PrimaryRayMaterial)
 	{
 		PrimaryRayMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
 		LidarPrimaryRayInstances->SetMaterial(0, PrimaryRayMaterial);
-		LidarThreeDRayInstances->SetMaterial(0, PrimaryRayMaterial);
-		LidarFrontBoundaryInstances->SetMaterial(0, PrimaryRayMaterial);
-		LidarEndPointInstances->SetMaterial(0, PrimaryRayMaterial);
 	}
 	if (SecondaryRayMaterial)
 	{
 		SecondaryRayMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
 		LidarSecondaryRayInstances->SetMaterial(0, SecondaryRayMaterial);
 	}
-	if (RingRayMaterial)
+	if (ThreeDRayMaterial)
 	{
-		RingRayMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
-		LidarRangeRingInstances->SetMaterial(0, RingRayMaterial);
-		LidarSlowRangeRingInstances->SetMaterial(0, RingRayMaterial);
-		LidarStopRangeRingInstances->SetMaterial(0, RingRayMaterial);
+		ThreeDRayMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
+		LidarThreeDRayInstances->SetMaterial(0, ThreeDRayMaterial);
+	}
+	if (FrontBoundaryMaterial)
+	{
+		FrontBoundaryMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
+		LidarFrontBoundaryInstances->SetMaterial(0, FrontBoundaryMaterial);
+	}
+	if (EndPointMaterial)
+	{
+		EndPointMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
+		LidarEndPointInstances->SetMaterial(0, EndPointMaterial);
+	}
+	if (ScanRangeMaterial)
+	{
+		ScanRangeMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
+		LidarRangeRingInstances->SetMaterial(0, ScanRangeMaterial);
+	}
+	if (SlowRangeMaterial)
+	{
+		SlowRangeMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
+		LidarSlowRangeRingInstances->SetMaterial(0, SlowRangeMaterial);
+	}
+	if (StopRangeMaterial)
+	{
+		StopRangeMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
+		LidarStopRangeRingInstances->SetMaterial(0, StopRangeMaterial);
 	}
 
-	ApplyPreviewColor(StageFloor, FLinearColor(0.10f, 0.14f, 0.18f, 1.0f));
+	ApplyPreviewColor(StageFloor, PreviewStageFloorColor);
 	if (bUsingFallbackBodyMesh)
 	{
-		ApplyPreviewColor(BodyVisual, FLinearColor(0.08f, 0.55f, 0.58f, 1.0f));
+		ApplyPreviewColor(BodyVisual, PreviewFallbackBodyColor);
 	}
-	ApplyPreviewColor(LidarMarker, FLinearColor(1.20f, 0.78f, 0.14f, 1.0f));
-	ApplyPreviewColor(LidarPrimaryRayInstances, FLinearColor(0.10f, 3.00f, 5.00f, 1.0f));
-	ApplyPreviewColor(LidarSecondaryRayInstances, FLinearColor(0.20f, 1.30f, 1.80f, 0.95f));
-	ApplyPreviewColor(LidarThreeDRayInstances, FLinearColor(2.20f, 1.15f, 5.50f, 1.0f));
-	ApplyPreviewColor(LidarRangeRingInstances, FLinearColor(0.12f, 2.10f, 3.20f, 0.90f));
-	ApplyPreviewColor(LidarSlowRangeRingInstances, FLinearColor(4.20f, 2.55f, 0.22f, 1.0f));
-	ApplyPreviewColor(LidarStopRangeRingInstances, FLinearColor(5.50f, 0.42f, 0.18f, 1.0f));
-	ApplyPreviewColor(LidarFrontBoundaryInstances, FLinearColor(0.35f, 3.40f, 5.50f, 1.0f));
-	ApplyPreviewColor(LidarEndPointInstances, FLinearColor(0.35f, 4.20f, 6.00f, 1.0f));
+	ApplyPreviewColor(LidarMarker, PreviewLidarMarkerColor);
+	if (!LidarPrimaryRayMaterial)
+	{
+		ApplyPreviewColor(LidarPrimaryRayInstances, PreviewLidarPrimaryRayColor);
+	}
+	if (!LidarSecondaryRayMaterial)
+	{
+		ApplyPreviewColor(LidarSecondaryRayInstances, PreviewLidarSecondaryRayColor);
+	}
+	if (!LidarThreeDRayMaterial)
+	{
+		ApplyPreviewColor(LidarThreeDRayInstances, PreviewLidarThreeDRayColor);
+	}
+	if (!LidarScanRangeMaterial)
+	{
+		ApplyPreviewColor(LidarRangeRingInstances, PreviewLidarScanRangeColor);
+	}
+	if (!LidarSlowRangeMaterial)
+	{
+		ApplyPreviewColor(LidarSlowRangeRingInstances, PreviewLidarSlowRangeColor);
+	}
+	if (!LidarStopRangeMaterial)
+	{
+		ApplyPreviewColor(LidarStopRangeRingInstances, PreviewLidarStopRangeColor);
+	}
+	if (!LidarFrontBoundaryMaterial)
+	{
+		ApplyPreviewColor(LidarFrontBoundaryInstances, PreviewLidarFrontBoundaryColor);
+	}
+	if (!LidarEndPointMaterial)
+	{
+		ApplyPreviewColor(LidarEndPointInstances, PreviewLidarEndPointColor);
+	}
 	for (UStaticMeshComponent* WheelVisual : WheelVisuals)
 	{
-		ApplyPreviewColor(WheelVisual, FLinearColor(0.015f, 0.018f, 0.025f, 1.0f));
+		ApplyPreviewColor(WheelVisual, PreviewWheelColor);
 	}
 }
 
@@ -517,19 +590,25 @@ void ARobotPreviewSceneActor::ApplyPreviewColor(
 	UMeshComponent* Component,
 	const FLinearColor& Color)
 {
-	if (Component)
+	if (!Component)
 	{
-		UMaterialInterface* BaseMaterial = Component->GetMaterial(0);
+		return;
+	}
+
+	const int32 MaterialSlotCount = FMath::Max(1, Component->GetNumMaterials());
+	for (int32 MaterialSlotIndex = 0; MaterialSlotIndex < MaterialSlotCount; ++MaterialSlotIndex)
+	{
+		UMaterialInterface* BaseMaterial = Component->GetMaterial(MaterialSlotIndex);
 		if (!BaseMaterial)
 		{
-			return;
+			continue;
 		}
 
 		UMaterialInstanceDynamic* DynamicMaterial =
-			Component->CreateDynamicMaterialInstance(0, BaseMaterial);
+			Component->CreateDynamicMaterialInstance(MaterialSlotIndex, BaseMaterial);
 		if (!DynamicMaterial)
 		{
-			return;
+			continue;
 		}
 
 		DynamicMaterial->SetVectorParameterValue(PreviewMaterialColorParameterName, Color);
@@ -553,6 +632,17 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 
 	ActualLidarPreviewRayCount = 0;
 
+	UMaterialInterface* LidarPreviewRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarPreviewRayMaterialPath);
+	UMaterialInterface* LidarPreviewRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarPreviewRangeMaterialPath);
+	UMaterialInterface* LidarPrimaryRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarPrimaryRayMaterialPath);
+	UMaterialInterface* LidarSecondaryRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarSecondaryRayMaterialPath);
+	UMaterialInterface* LidarThreeDRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarThreeDRayMaterialPath);
+	UMaterialInterface* LidarFrontBoundaryMaterial = LoadOptionalPreviewMaterial(PreviewLidarFrontBoundaryMaterialPath);
+	UMaterialInterface* LidarEndPointMaterial = LoadOptionalPreviewMaterial(PreviewLidarEndPointMaterialPath);
+	UMaterialInterface* LidarScanRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarScanRangeMaterialPath);
+	UMaterialInterface* LidarSlowRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarSlowRangeMaterialPath);
+	UMaterialInterface* LidarStopRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarStopRangeMaterialPath);
+
 	TArray<UInstancedStaticMeshComponent*> LidarOverlayComponents = {
 		LidarPrimaryRayInstances.Get(),
 		LidarSecondaryRayInstances.Get(),
@@ -572,20 +662,80 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 		}
 	}
 
-	const float SensorHeightCm = FMath::Max(CurrentSettings.Lidar.SensorHeightM, 0.0f) * 100.0f;
-	const float ScanRangeCm = FMath::Max(CurrentSettings.Lidar.ScanRangeM, 0.01f) * 100.0f;
+	ApplyOptionalPreviewMaterial(
+		LidarPrimaryRayInstances.Get(),
+		LidarPrimaryRayMaterial ? LidarPrimaryRayMaterial : LidarPreviewRayMaterial);
+	ApplyOptionalPreviewMaterial(
+		LidarSecondaryRayInstances.Get(),
+		LidarSecondaryRayMaterial ? LidarSecondaryRayMaterial : LidarPreviewRayMaterial);
+	ApplyOptionalPreviewMaterial(
+		LidarThreeDRayInstances.Get(),
+		LidarThreeDRayMaterial ? LidarThreeDRayMaterial : LidarPreviewRayMaterial);
+	ApplyOptionalPreviewMaterial(
+		LidarFrontBoundaryInstances.Get(),
+		LidarFrontBoundaryMaterial ? LidarFrontBoundaryMaterial : LidarPreviewRayMaterial);
+	ApplyOptionalPreviewMaterial(
+		LidarEndPointInstances.Get(),
+		LidarEndPointMaterial ? LidarEndPointMaterial : LidarPreviewRayMaterial);
+	ApplyOptionalPreviewMaterial(
+		LidarRangeRingInstances.Get(),
+		LidarScanRangeMaterial ? LidarScanRangeMaterial : LidarPreviewRangeMaterial);
+	ApplyOptionalPreviewMaterial(
+		LidarSlowRangeRingInstances.Get(),
+		LidarSlowRangeMaterial ? LidarSlowRangeMaterial : LidarPreviewRangeMaterial);
+	ApplyOptionalPreviewMaterial(
+		LidarStopRangeRingInstances.Get(),
+		LidarStopRangeMaterial ? LidarStopRangeMaterial : LidarPreviewRangeMaterial);
+
+	if (!LidarPrimaryRayMaterial)
+	{
+		ApplyPreviewColor(LidarPrimaryRayInstances, PreviewLidarPrimaryRayColor);
+	}
+	if (!LidarSecondaryRayMaterial)
+	{
+		ApplyPreviewColor(LidarSecondaryRayInstances, PreviewLidarSecondaryRayColor);
+	}
+	if (!LidarThreeDRayMaterial)
+	{
+		ApplyPreviewColor(LidarThreeDRayInstances, PreviewLidarThreeDRayColor);
+	}
+	if (!LidarFrontBoundaryMaterial)
+	{
+		ApplyPreviewColor(LidarFrontBoundaryInstances, PreviewLidarFrontBoundaryColor);
+	}
+	if (!LidarEndPointMaterial)
+	{
+		ApplyPreviewColor(LidarEndPointInstances, PreviewLidarEndPointColor);
+	}
+	if (!LidarScanRangeMaterial)
+	{
+		ApplyPreviewColor(LidarRangeRingInstances, PreviewLidarScanRangeColor);
+	}
+	if (!LidarSlowRangeMaterial)
+	{
+		ApplyPreviewColor(LidarSlowRangeRingInstances, PreviewLidarSlowRangeColor);
+	}
+	if (!LidarStopRangeMaterial)
+	{
+		ApplyPreviewColor(LidarStopRangeRingInstances, PreviewLidarStopRangeColor);
+	}
+
+	const FDeliveryBotLidarSensorConfigInfo LidarConfig = MakePreviewLidarConfig(CurrentSettings.Lidar);
+	const float SensorHeightCm = LidarConfig.SensorHeightM * 100.0f;
+	const float ScanRangeCm = FMath::Max(LidarConfig.ScanRangeM, 0.01f) * 100.0f;
 	const float StopDistanceCm =
-		FMath::Clamp(FMath::Max(CurrentSettings.Lidar.StopDistanceM, 0.0f) * 100.0f, 0.0f, ScanRangeCm);
+		FMath::Clamp(LidarConfig.StopDistanceM * 100.0f, 0.0f, ScanRangeCm);
 	const float SlowDistanceCm =
-		FMath::Clamp(FMath::Max(CurrentSettings.Lidar.SlowDownDistanceM, 0.0f) * 100.0f, 0.0f, ScanRangeCm);
-	const float AngleStepDegree = FMath::Max(CurrentSettings.Lidar.AngleStepDegree, 1.0f);
-	const float VerticalStepDegree = FMath::Max(CurrentSettings.Lidar.VerticalStepDegree, 1.0f);
-	const float FrontHalfAngleDegree = FMath::Clamp(CurrentSettings.Lidar.FrontHalfAngleDegree, 0.0f, 180.0f);
+		FMath::Clamp(LidarConfig.SlowDownDistanceM * 100.0f, 0.0f, ScanRangeCm);
+	const float FrontHalfAngleDegree = LidarConfig.FrontHalfAngleDegree;
 	const FVector SensorLocationCm(
-		CurrentSettings.Lidar.SensorForwardOffsetM * 100.0f,
-		CurrentSettings.Lidar.SensorRightOffsetM * 100.0f,
+		LidarConfig.SensorForwardOffsetM * 100.0f,
+		LidarConfig.SensorRightOffsetM * 100.0f,
 		SensorHeightCm);
-	const EPreviewLidarMode PreviewMode = ResolvePreviewLidarMode(CurrentSettings.Lidar.LidarMode);
+
+	TArray<FDeliveryBotLidarRaySample> RaySamples;
+	FDeliveryBotLidarRayPattern::BuildRaySamples(LidarConfig, RaySamples);
+	ActualLidarPreviewRayCount = RaySamples.Num();
 
 	if (LidarDisplayOptions.bShowRange)
 	{
@@ -623,56 +773,63 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 			PreviewLidarRayThicknessScale);
 	}
 
-	if (PreviewLidarModeIncludes1D(PreviewMode))
+	for (const FDeliveryBotLidarRaySample& RaySample : RaySamples)
 	{
-		++ActualLidarPreviewRayCount;
+		if (RaySample.DimensionType != EDeliveryBotLidarRayDimensionType::OneD)
+		{
+			continue;
+		}
+
 		AddLidarPreviewRay(
 			LidarPrimaryRayInstances,
 			SensorLocationCm,
-			0.0f,
-			0.0f,
+			RaySample.YawDegree,
+			RaySample.PitchDegree,
 			ScanRangeCm,
 			PreviewLidarRayThicknessScale * 1.5f);
 	}
 
-	if (PreviewLidarModeIncludes2D(PreviewMode))
+	if (FDeliveryBotLidarRayPattern::DoesModeIncludeDimension(
+		LidarConfig.LidarModeType,
+		EDeliveryBotLidarRayDimensionType::TwoD))
 	{
-		const int32 RequestedYawRayCount = CalculatePreviewYawRayCount(AngleStepDegree);
-		ActualLidarPreviewRayCount += RequestedYawRayCount;
+		const int32 RequestedYawRayCount = FDeliveryBotLidarRayPattern::CountYawSamples(LidarConfig);
 		const int32 YawRayStride =
 			FMath::Max(
 				1,
 				FMath::CeilToInt(
 					static_cast<float>(RequestedYawRayCount)
 					/ ResolvePreviewLidarMaxVisible2DRays(LidarDisplayOptions.Density)));
-		int32 YawRayIndex = 0;
-		for (float YawDegree = 0.0f; YawDegree < 360.0f; YawDegree += AngleStepDegree)
+		for (const FDeliveryBotLidarRaySample& RaySample : RaySamples)
 		{
-			if ((YawRayIndex % YawRayStride) == 0)
+			if (RaySample.DimensionType != EDeliveryBotLidarRayDimensionType::TwoD)
+			{
+				continue;
+			}
+
+			if ((RaySample.RayIndex % YawRayStride) == 0)
 			{
 				UInstancedStaticMeshComponent* TargetComponent =
-					IsPreviewFrontYaw(YawDegree, FrontHalfAngleDegree)
+					FDeliveryBotLidarRayPattern::IsFrontYaw(RaySample.YawDegree, FrontHalfAngleDegree)
 						? LidarPrimaryRayInstances.Get()
 						: LidarSecondaryRayInstances.Get();
 				AddLidarPreviewRay(
 					TargetComponent,
 					SensorLocationCm,
-					YawDegree,
-					0.0f,
+					RaySample.YawDegree,
+					RaySample.PitchDegree,
 					ScanRangeCm,
 					PreviewLidarRayThicknessScale);
 			}
-			++YawRayIndex;
 		}
 	}
 
-	if (PreviewLidarModeIncludes3D(PreviewMode))
+	if (FDeliveryBotLidarRayPattern::DoesModeIncludeDimension(
+		LidarConfig.LidarModeType,
+		EDeliveryBotLidarRayDimensionType::ThreeD))
 	{
-		const int32 RequestedYawRayCount = CalculatePreviewYawRayCount(AngleStepDegree);
-		const int32 RequestedPitchRayCount = CalculatePreviewPitchRayCount(VerticalStepDegree);
-		const int32 RequestedRayCount = RequestedYawRayCount * RequestedPitchRayCount;
-		ActualLidarPreviewRayCount += RequestedRayCount;
-
+		const int32 RequestedYawRayCount = FDeliveryBotLidarRayPattern::CountYawSamples(LidarConfig);
+		const int32 RequestedPitchRayCount = FDeliveryBotLidarRayPattern::CountPitchSamples(LidarConfig);
 		const int32 YawRayStride =
 			FMath::Max(
 				1,
@@ -685,29 +842,27 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 				FMath::CeilToInt(
 					static_cast<float>(RequestedPitchRayCount)
 					/ ResolvePreviewLidarMaxVisible3DPitchLayers(LidarDisplayOptions.Density)));
-		for (int32 PitchIndex = 0; PitchIndex < RequestedPitchRayCount; ++PitchIndex)
+		for (const FDeliveryBotLidarRaySample& RaySample : RaySamples)
 		{
-			if ((PitchIndex % PitchLayerStride) != 0)
+			if (RaySample.DimensionType != EDeliveryBotLidarRayDimensionType::ThreeD)
 			{
 				continue;
 			}
 
-			const float PitchDegree = PreviewLidarVerticalMinDegree + static_cast<float>(PitchIndex) * VerticalStepDegree;
-			int32 YawRayIndex = 0;
-			for (float YawDegree = 0.0f; YawDegree < 360.0f; YawDegree += AngleStepDegree)
+			const int32 PitchIndex = RaySample.RayIndex / RequestedYawRayCount;
+			const int32 YawRayIndex = RaySample.RayIndex % RequestedYawRayCount;
+			if ((PitchIndex % PitchLayerStride) != 0 || (YawRayIndex % YawRayStride) != 0)
 			{
-				if ((YawRayIndex % YawRayStride) == 0)
-				{
-					AddLidarPreviewRay(
-						LidarThreeDRayInstances,
-						SensorLocationCm,
-						YawDegree,
-						PitchDegree,
-						ScanRangeCm,
-						PreviewLidarRayThicknessScale * 0.85f);
-				}
-				++YawRayIndex;
+				continue;
 			}
+
+			AddLidarPreviewRay(
+				LidarThreeDRayInstances,
+				SensorLocationCm,
+				RaySample.YawDegree,
+				RaySample.PitchDegree,
+				ScanRangeCm,
+				PreviewLidarRayThicknessScale * 0.85f);
 		}
 	}
 

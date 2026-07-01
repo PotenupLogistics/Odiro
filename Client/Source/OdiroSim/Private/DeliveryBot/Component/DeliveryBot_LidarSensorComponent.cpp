@@ -1,5 +1,6 @@
 #include "DeliveryBot/Component/DeliveryBot_LidarSensorComponent.h"
 
+#include "DeliveryBot/DeliveryBotLidarRayPattern.h"
 #include "DrawDebugHelpers.h"
 #include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
 #include "Scenario/Actors/ScenarioGroundRegion.h"
@@ -558,27 +559,12 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugObstacleWarningRange(const FVec
 
 float UDeliveryBot_LidarSensorComponent::GetSignedYawDegree(float yawDegree) const
 {
-	float normalizedYawDegree = FMath::Fmod(yawDegree, 360.f);
-
-	if (normalizedYawDegree < 0.f)
-	{
-		normalizedYawDegree += 360.f;
-	}
-
-	if (normalizedYawDegree > 180.f)
-	{
-		normalizedYawDegree -= 360.f;
-	}
-
-	return normalizedYawDegree;
+	return FDeliveryBotLidarRayPattern::NormalizeSignedYawDegree(yawDegree);
 }
 
 bool UDeliveryBot_LidarSensorComponent::IsFrontYaw(float yawDegree) const
 {
-	const float signedYawDegree = GetSignedYawDegree(yawDegree);
-	const float frontHalfAngleDegree = FMath::Max(LidarSensorConfigInfo.FrontHalfAngleDegree, 0.f);
-
-	return FMath::Abs(signedYawDegree) <= frontHalfAngleDegree;
+	return FDeliveryBotLidarRayPattern::IsFrontYaw(yawDegree, LidarSensorConfigInfo.FrontHalfAngleDegree);
 }
 
 TArray<FDeliveryBotLidarDetectedObjectInfo> UDeliveryBot_LidarSensorComponent::BuildDetectedObjects(
@@ -713,25 +699,17 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar1D() const
 	scanInfo.SensorLocationCm = sensorLocationCm;
 
 	const float scanRangeCm = LidarSensorConfigInfo.ScanRangeM * 100.f;
-	const FVector endLocationCm = sensorLocationCm + owner->GetActorForwardVector() * scanRangeCm;
 
 	DrawDebugObstacleWarningRange(sensorLocationCm);
 
-	FHitResult hitResult;
-	TArray<FHitResult> rawHitResults;
-	const bool bHit = TraceLidarRay(sensorLocationCm, endLocationCm, hitResult, rawHitResults);
-
-	DrawDebugLidarRay(sensorLocationCm, endLocationCm, bHit ? &hitResult : nullptr, rawHitResults);
-
-	if (bHit || LidarSensorConfigInfo.bStoreMissedRays)
+	TArray<FDeliveryBotLidarRaySample> raySamples;
+	FDeliveryBotLidarRayPattern::AppendRaySamplesForDimension(
+		LidarSensorConfigInfo,
+		EDeliveryBotLidarRayDimensionType::OneD,
+		raySamples);
+	for (const FDeliveryBotLidarRaySample& raySample : raySamples)
 	{
-		scanInfo.RayInfos.Add(MakeRayInfo(
-			0,
-			0.f,
-			sensorLocationCm,
-			endLocationCm,
-			bHit ? &hitResult : nullptr,
-			EDeliveryBotLidarRayDimensionType::OneD));
+		AppendLidarRay(scanInfo, raySample, sensorLocationCm, owner->GetActorRotation(), scanRangeCm);
 	}
 
 	return scanInfo;
@@ -751,37 +729,18 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar2D() const
 
 	scanInfo.SensorLocationCm = sensorLocationCm;
 
-	const float angleStepDegree = FMath::Max(LidarSensorConfigInfo.AngleStepDegree, 1.f);
 	const float scanRangeCm = LidarSensorConfigInfo.ScanRangeM * 100.f;
 
 	DrawDebugObstacleWarningRange(sensorLocationCm);
 
-	int32 rayIndex = 0;
-
-	for (float yawDegree = 0.f; yawDegree < 360.f; yawDegree += angleStepDegree)
+	TArray<FDeliveryBotLidarRaySample> raySamples;
+	FDeliveryBotLidarRayPattern::AppendRaySamplesForDimension(
+		LidarSensorConfigInfo,
+		EDeliveryBotLidarRayDimensionType::TwoD,
+		raySamples);
+	for (const FDeliveryBotLidarRaySample& raySample : raySamples)
 	{
-		const FVector localDirection = FRotator(0.f, yawDegree, 0.f).Vector();
-		const FVector worldDirection = owner->GetActorRotation().RotateVector(localDirection);
-		const FVector endLocationCm = sensorLocationCm + worldDirection * scanRangeCm;
-
-		FHitResult hitResult;
-		TArray<FHitResult> rawHitResults;
-		const bool bHit = TraceLidarRay(sensorLocationCm, endLocationCm, hitResult, rawHitResults);
-
-		DrawDebugLidarRay(sensorLocationCm, endLocationCm, bHit ? &hitResult : nullptr, rawHitResults);
-		
-		if (bHit || LidarSensorConfigInfo.bStoreMissedRays)
-		{
-			scanInfo.RayInfos.Add(MakeRayInfo(
-				rayIndex,
-				yawDegree,
-				sensorLocationCm,
-				endLocationCm,
-				bHit ? &hitResult : nullptr,
-				EDeliveryBotLidarRayDimensionType::TwoD));
-		}
-
-		++rayIndex;
+		AppendLidarRay(scanInfo, raySample, sensorLocationCm, owner->GetActorRotation(), scanRangeCm);
 	}
 
 	return scanInfo;
@@ -800,32 +759,18 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar3D() const
 
 	scanInfo.SensorLocationCm = sensorLocationCm;
 
-	const float angleStepDegree = FMath::Max(LidarSensorConfigInfo.AngleStepDegree, 1.f);
-	const float verticalStepDegree = FMath::Max(LidarSensorConfigInfo.VerticalStepDegree, 1.f);
 	const float scanRangeCm = LidarSensorConfigInfo.ScanRangeM * 100.f;
 
 	DrawDebugObstacleWarningRange(sensorLocationCm);
 
-	int32 rayIndex = 0;
-
-	for (float pitchDegree = LidarSensorConfigInfo.VerticalMinDegree;
-		pitchDegree <= LidarSensorConfigInfo.VerticalMaxDegree;
-		pitchDegree += verticalStepDegree)
+	TArray<FDeliveryBotLidarRaySample> raySamples;
+	FDeliveryBotLidarRayPattern::AppendRaySamplesForDimension(
+		LidarSensorConfigInfo,
+		EDeliveryBotLidarRayDimensionType::ThreeD,
+		raySamples);
+	for (const FDeliveryBotLidarRaySample& raySample : raySamples)
 	{
-		for (float yawDegree = 0.f; yawDegree < 360.f; yawDegree += angleStepDegree)
-		{
-			AppendLidarRay(
-				scanInfo,
-				rayIndex,
-				yawDegree,
-				pitchDegree,
-				sensorLocationCm,
-				owner->GetActorRotation(),
-				scanRangeCm,
-				EDeliveryBotLidarRayDimensionType::ThreeD);
-
-			++rayIndex;
-		}
+		AppendLidarRay(scanInfo, raySample, sensorLocationCm, owner->GetActorRotation(), scanRangeCm);
 	}
 
 	LogLidarTraceSummary(scanInfo);
@@ -907,16 +852,12 @@ FDeliveryBotLidarRayInfo UDeliveryBot_LidarSensorComponent::MakeRayInfo(
 // yaw/pitch 각도 하나에 대한 LiDAR ray를 쏘고 scan 결과에 추가한다.
 void UDeliveryBot_LidarSensorComponent::AppendLidarRay(
 	FDeliveryBotLidarScanInfo& scanInfo,
-	int32 rayIndex,
-	float yawDegree,
-	float pitchDegree,
+	const FDeliveryBotLidarRaySample& raySample,
 	const FVector& sensorLocationCm,
 	const FRotator& ownerRotation,
-	float scanRangeCm,
-	EDeliveryBotLidarRayDimensionType rayDimensionType) const
+	float scanRangeCm) const
 {
-	const FVector localDirection = FRotator(pitchDegree, yawDegree, 0.f).Vector();
-	const FVector worldDirection = ownerRotation.RotateVector(localDirection);
+	const FVector worldDirection = ownerRotation.RotateVector(raySample.LocalDirection);
 	const FVector endLocationCm = sensorLocationCm + worldDirection * scanRangeCm;
 
 	FHitResult hitResult;
@@ -928,12 +869,12 @@ void UDeliveryBot_LidarSensorComponent::AppendLidarRay(
 	if (bHit || LidarSensorConfigInfo.bStoreMissedRays)
 	{
 		scanInfo.RayInfos.Add(MakeRayInfo(
-			rayIndex,
-			yawDegree,
-			pitchDegree,
+			raySample.RayIndex,
+			raySample.YawDegree,
+			raySample.PitchDegree,
 			sensorLocationCm,
 			endLocationCm,
 			bHit ? &hitResult : nullptr,
-			rayDimensionType));
+			raySample.DimensionType));
 	}
 }

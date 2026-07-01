@@ -10,6 +10,8 @@ paths:
   - Client/Source/OdiroSim/Private/Shared/**
   - Client/Source/OdiroSim/Public/DeliveryBot/Actor/DeliveryBotLidarRayReviewActor.h
   - Client/Source/OdiroSim/Private/DeliveryBot/Actor/DeliveryBotLidarRayReviewActor.cpp
+  - Client/Source/OdiroSim/Public/DeliveryBot/DeliveryBotLidarRayPattern.h
+  - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayPattern.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayCardWidget.h
   - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
@@ -77,11 +79,17 @@ entry:
       - Client/Source/OdiroSim/Public/Scenario
       - Client/Source/OdiroSim/Private/Scenario
   - id: robot-profile-preview
-    description: Robot configuration left preview stage, fixed SceneCapture camera, profile-driven visual and sensor updates.
+    description: Robot configuration left preview stage, PlayerViewport primary preview, SceneCapture fallback, profile-driven visual and sensor updates.
     read:
       - Client/Docs/RobotPreviewAgent.local.md
+      - Client/Source/OdiroSim/Public/DeliveryBot/DeliveryBotLidarRayPattern.h
+      - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayPattern.cpp
       - Client/Source/OdiroSim/Public/Platform/Preview
       - Client/Source/OdiroSim/Private/Platform/Preview
+      - Client/Source/OdiroSim/Public/Platform/Widget/PlatformRootWidget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/PlatformRootWidget.cpp
+      - Client/Source/OdiroSim/Public/Platform/Widget/RobotConfigScreenWidget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/RobotConfigScreenWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/Widget/RobotConfigEditorWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/RobotConfigEditorWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/ViewModel/RobotProfileViewModel.h
@@ -151,7 +159,9 @@ guardrails:
   - ScenarioEditorController requests the project preview only after scenario.json saves successfully; capture failure removes stale preview.png without changing the save result.
   - ScenarioRunnerSubsystem schedules project episode preview.png after evaluation starts; capture failure must not change episode outcome.
   - Robot profile preview is a configurator visualization only; it must not run policy, physics, replay playback, or write profile.json during live slider edits.
-  - Robot profile preview should isolate its stage through SceneCapture show-only rendering or an equivalent preview-only scene boundary.
+  - DeliveryBotLidarRayPattern owns shared LiDAR yaw/pitch sample generation for runtime tracing and Robot profile preview rendering.
+  - Robot profile preview should isolate its stage through the preview-only world offset boundary; SceneCapture show-only rendering remains a fallback backend, while PlayerViewport must restore the previous ViewTarget on cleanup.
+  - PlatformRootWidget owns Robot tab entry/exit activation for Robot profile preview; RobotConfigEditorWidget must not start the PlayerViewport preview merely from NativeConstruct.
   - Embedded Replay reads episode replay artifacts and must not call OpenLevel, launch a new window, or re-run policy/physics as replay.
   - Embedded Replay camera modes move only the replay SceneCapture; TopDown, Orbit, Free, and VehicleFront views must not alter replay frames, robot playback, or simulation physics.
   - Embedded Replay camera input and mode changes require loaded replay frames and capture actors; re-clicking Free refocuses the camera on the current replay robot.

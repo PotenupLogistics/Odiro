@@ -206,6 +206,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
 	float GetLidarAngleStepDegree() const { return LidarAngleStepDegree; }
 
+	// Updates the LiDAR minimum vertical pitch input in degrees.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarVerticalMinDegree(float value);
+
+	// Returns the LiDAR minimum vertical pitch input in degrees.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetLidarVerticalMinDegree() const { return LidarVerticalMinDegree; }
+
+	// Updates the LiDAR maximum vertical pitch input in degrees.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarVerticalMaxDegree(float value);
+
+	// Returns the LiDAR maximum vertical pitch input in degrees.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetLidarVerticalMaxDegree() const { return LidarVerticalMaxDegree; }
+
 	// Updates the LiDAR vertical angle step input in degrees.
 	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
 	void SetLidarVerticalStepDegree(float value);
@@ -333,6 +349,14 @@ private:
 	// robot.lidar.angle_step_degree input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
 	float LidarAngleStepDegree = 3.00f;
+
+	// robot.lidar.vertical_min_degree input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float LidarVerticalMinDegree = -10.00f;
+
+	// robot.lidar.vertical_max_degree input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float LidarVerticalMaxDegree = 10.00f;
 
 	// robot.lidar.vertical_step_degree input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))

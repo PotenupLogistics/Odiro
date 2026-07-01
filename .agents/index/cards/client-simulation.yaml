@@ -137,6 +137,7 @@ guardrails:
   - Scenario editor robot Start/Goal markers use authoring-subsystem proxy actors for selection and a ScenarioEditorController-owned viewport overlay below the active Platform root shell for visible markers.
   - Scenario editor Corridor vertex/segment handles use invisible proxy actors for selection and transform gizmo ownership, with ScenarioEditorRouteMarkerOverlayWidget painting and hit-testing the visible screen-space grips.
   - Scenario simulation robot Start/Goal markers are runtime overlay items owned by ScenarioSimulationSubsystem; simulation no longer spawns visible BP_StartPoint/BP_GoalPoint marker actors.
+  - ScenarioSimulationSubsystem owns the fixed initial runtime view by moving the local default pawn from the spawned DeliveryBot start pose; it is an initial placement, not a follow camera.
   - Scenario Object Palette commands must be backed by scenario.json authoring contracts; currently it creates only fixed static-obstacle rows in obstacles.placements.
   - ScenarioEditorShellViewModel owns editor UI selection commands for template panel/block and placeable selection; viewport and outliner placeable selection focus and scroll to the matching sidebar block, and sidebar placeable-backed blocks route reverse selection through Shell commands instead of composing selection state locally.
   - Scenario editor reusable WBP class references come from ScenarioEditorWidgetClassCatalog assets or exposed widget properties; do not add C++ WBP class-path fallbacks.

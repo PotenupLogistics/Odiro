@@ -107,6 +107,14 @@ struct ODIROSIM_API FRobotProfileLidarSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float AngleStepDegree = 3.00f;
 
+	// robot.lidar.vertical_min_degree minimum 3D LiDAR pitch in degrees.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float VerticalMinDegree = -10.00f;
+
+	// robot.lidar.vertical_max_degree maximum 3D LiDAR pitch in degrees.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float VerticalMaxDegree = 10.00f;
+
 	// robot.lidar.vertical_step_degree vertical ray spacing in degrees for 3D mode.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float VerticalStepDegree = 5.00f;

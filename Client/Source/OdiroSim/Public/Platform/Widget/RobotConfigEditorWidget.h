@@ -32,6 +32,15 @@ public:
 	// Releases profile editor button bindings.
 	virtual void NativeDestruct() override;
 
+	// Starts the transient robot preview for the active Robot tab.
+	void ActivateRobotPreview();
+
+	// Stops the transient robot preview when leaving the Robot tab.
+	void DeactivateRobotPreview();
+
+	// Returns whether this editor currently owns an active preview.
+	bool IsRobotPreviewActive() const { return bRobotPreviewActive; }
+
 protected:
 	// Starts preview camera orbit when right mouse is pressed over the preview image.
 	virtual FReply NativeOnMouseButtonDown(
@@ -69,6 +78,10 @@ private:
 	// Profile text input edit command.
 	UFUNCTION()
 	void HandleProfileInputTextChanged(const FText& text);
+
+	// Profile text input commit command.
+	UFUNCTION()
+	void HandleProfileInputTextCommitted(const FText& text, ETextCommit::Type commitMethod);
 
 	// LiDAR mode selection edit command.
 	UFUNCTION()
@@ -129,14 +142,16 @@ private:
 	void StopRobotPreview();
 	// Pushes current UI input values into the active robot preview.
 	void RefreshRobotPreviewFromFields();
+	// Applies valid text input values back to their paired sliders.
+	void SyncProfileSlidersFromValidInputFields() const;
 	// Pushes current LiDAR preview display options into the active robot preview.
 	void ApplyRobotPreviewDisplayOptions();
 	// Applies the subsystem render target to the preview image brush.
 	void ApplyRobotPreviewRenderTarget();
 	// Updates the preview overlay status text.
 	void SetRobotPreviewStatus(const FString& statusText) const;
-	// Returns true when a screen-space pointer location is inside RobotPreviewImage.
-	bool IsPointerOverRobotPreviewImage(const FVector2D& ScreenSpacePosition) const;
+	// Returns true when a screen-space pointer location is inside the preview input area.
+	bool IsPointerOverRobotPreviewInputArea(const FVector2D& ScreenSpacePosition) const;
 	// Clears right-mouse preview orbit state.
 	void ClearRobotPreviewOrbitInput();
 	void SetProfileStateSaved(const FString& detailText) const;
@@ -162,6 +177,8 @@ private:
 	static void SetInputText(UEditableText* input, float value);
 	// Applies one numeric value to a paired text field and optional custom slider.
 	static void SetLinkedSliderFieldValue(UEditableText* input, UBaseSliderWidget* slider, float value);
+	// Applies a valid numeric text input value to a paired custom slider.
+	static void SyncLinkedSliderFromInput(UEditableText* input, UBaseSliderWidget* slider);
 	// Selects an existing combo-box option using case-insensitive matching.
 	static void SetComboBoxSelection(UComboBoxString* comboBox, const FString& selectedOption);
 	static FString FormatProfileFloat(float value);
@@ -169,6 +186,9 @@ private:
 	// ViewModel supplied by PlatformUiSubsystem.
 	UPROPERTY(Transient)
 	TObjectPtr<URobotProfileViewModel> RobotProfileViewModel;
+
+	// True while the Robot tab owns the PlayerViewport-backed preview lifecycle.
+	bool bRobotPreviewActive = false;
 
 	// Current profile path display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -201,6 +221,10 @@ private:
 	// Render target image for the transient robot preview scene.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UImage> RobotPreviewImage;
+
+	// Transparent input hit area covering the PlayerViewport-backed preview.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> RobotPreviewViewportInputArea;
 
 	// Overlay status text for robot preview lifecycle and input state.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -422,6 +446,22 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseSliderWidget> LidarAngleStepSlider;
 
+	// robot.lidar.vertical_min_degree input.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableText> LidarVerticalMinInput;
+
+	// robot.lidar.vertical_min_degree slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> LidarVerticalMinSlider;
+
+	// robot.lidar.vertical_max_degree input.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableText> LidarVerticalMaxInput;
+
+	// robot.lidar.vertical_max_degree slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> LidarVerticalMaxSlider;
+
 	// robot.lidar.vertical_step_degree input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableText> LidarVerticalStepInput;
@@ -441,6 +481,6 @@ private:
 	// True while code is applying ViewModel values into widgets.
 	bool bApplyingProfileFields = false;
 
-	// True while right mouse is held over the robot preview image for orbit control.
+	// True while right mouse is held over the robot preview input area for orbit control.
 	bool bRobotPreviewOrbitHeld = false;
 };

@@ -9,6 +9,7 @@
 #include "Platform/ViewModel/StartupScreenViewModel.h"
 #include "Platform/Widget/ProjectCreateScreenWidget.h"
 #include "Platform/Widget/ProjectOverviewScreenWidget.h"
+#include "Platform/Widget/RobotConfigScreenWidget.h"
 #include "Platform/Widget/RunDetailScreenWidget.h"
 #include "Platform/Widget/RunListScreenWidget.h"
 #include "Platform/Widget/ScenarioEditorScreenWidget.h"
@@ -102,6 +103,7 @@ void UPlatformRootWidget::NativeConstruct()
 
 void UPlatformRootWidget::NativeDestruct()
 {
+	UpdateRobotPreviewActivation(ActiveScreen, EPlatformRootScreen::Startup);
 	UnbindControls();
 	OnActiveScreenChangedNative.Clear();
 	Super::NativeDestruct();
@@ -145,11 +147,17 @@ void UPlatformRootWidget::ShowRunDetailScreen(const FString& runId)
 
 void UPlatformRootWidget::SetActiveScreen(const EPlatformRootScreen screen)
 {
+	const EPlatformRootScreen PreviousScreen = ActiveScreen;
 	ActiveScreen = (!HasActiveProject()
 		&& screen != EPlatformRootScreen::Startup
 		&& screen != EPlatformRootScreen::ProjectCreate)
 		? EPlatformRootScreen::Startup
 		: screen;
+
+	if (PreviousScreen == EPlatformRootScreen::RobotConfig && ActiveScreen != EPlatformRootScreen::RobotConfig)
+	{
+		UpdateRobotPreviewActivation(PreviousScreen, ActiveScreen);
+	}
 
 	if (ScreenContentSwitcher)
 	{
@@ -235,8 +243,34 @@ void UPlatformRootWidget::SetActiveScreen(const EPlatformRootScreen screen)
 		}
 	}
 
+	if (ActiveScreen == EPlatformRootScreen::RobotConfig)
+	{
+		UpdateRobotPreviewActivation(PreviousScreen, ActiveScreen);
+	}
+
 	ConfigureStatusBarForActiveScreen();
 	OnActiveScreenChangedNative.Broadcast(ActiveScreen);
+}
+
+void UPlatformRootWidget::UpdateRobotPreviewActivation(
+	const EPlatformRootScreen previousScreen,
+	const EPlatformRootScreen nextScreen)
+{
+	URobotConfigScreenWidget* robotConfigScreen = Cast<URobotConfigScreenWidget>(RobotConfigScreen.Get());
+	if (!robotConfigScreen)
+	{
+		return;
+	}
+
+	if (previousScreen == EPlatformRootScreen::RobotConfig && nextScreen != EPlatformRootScreen::RobotConfig)
+	{
+		robotConfigScreen->SetRobotPreviewActive(false);
+	}
+
+	if (nextScreen == EPlatformRootScreen::RobotConfig)
+	{
+		robotConfigScreen->SetRobotPreviewActive(true);
+	}
 }
 
 UScenarioEditorRootWidget* UPlatformRootWidget::GetScenarioEditorRootWidget() const
@@ -246,8 +280,7 @@ UScenarioEditorRootWidget* UPlatformRootWidget::GetScenarioEditorRootWidget() co
 		return ScenarioEditorRootWidget.Get();
 	}
 
-	if (const UScenarioEditorScreenWidget* scenarioEditorScreen =
-		Cast<UScenarioEditorScreenWidget>(ScenarioEditorScreen.Get()))
+	if (const UScenarioEditorScreenWidget* scenarioEditorScreen = Cast<UScenarioEditorScreenWidget>(ScenarioEditorScreen.Get()))
 	{
 		return scenarioEditorScreen->GetScenarioEditorRootWidget();
 	}

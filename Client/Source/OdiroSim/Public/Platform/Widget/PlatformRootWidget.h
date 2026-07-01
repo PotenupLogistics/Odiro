@@ -101,6 +101,9 @@ private:
 	// 현재 screen에 맞춰 status bar tab/action 표시를 갱신한다.
 	void ConfigureStatusBarForActiveScreen();
 
+	// Starts or stops the Robot tab preview according to the active root screen.
+	void UpdateRobotPreviewActivation(EPlatformRootScreen previousScreen, EPlatformRootScreen nextScreen);
+
 	// 현재 world가 active project workspace를 표시해야 하는지 반환한다.
 	bool ShouldUseProjectWorkspaceDefault() const;
 

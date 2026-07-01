@@ -5,6 +5,8 @@
 #include "Shared/Struct/DeliveryBot/Perception/DeliveryBotLidarSensorInfo.h"
 #include "DeliveryBot_LidarSensorComponent.generated.h"
 
+struct FDeliveryBotLidarRaySample;
+
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class ODIROSIM_API UDeliveryBot_LidarSensorComponent : public UActorComponent
 {
@@ -72,13 +74,10 @@ private:
 	// yaw/pitch 각도 하나에 대한 LiDAR ray를 쏘고 scan 결과에 추가한다.
 	void AppendLidarRay(
 		FDeliveryBotLidarScanInfo& scanInfo,
-		int32 rayIndex,
-		float yawDegree,
-		float pitchDegree,
+		const FDeliveryBotLidarRaySample& raySample,
 		const FVector& sensorLocationCm,
 		const FRotator& ownerRotation,
-		float scanRangeCm,
-		EDeliveryBotLidarRayDimensionType rayDimensionType) const;
+		float scanRangeCm) const;
 	
 	// 두 LiDAR scan 결과를 하나로 합친다.
 	FDeliveryBotLidarScanInfo MergeLidarScans(const FDeliveryBotLidarScanInfo& firstScanInfo,

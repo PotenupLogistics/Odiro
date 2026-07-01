@@ -41,9 +41,12 @@ void UProjectEpisodeReplayCardWidget::InitializeFromEpisodeViewModel(
 	}
 	if (EpisodeStateText)
 	{
-		EpisodeStateText->SetText(episodeItem && episodeItem->IsSuccess()
-			? NSLOCTEXT("OdiroPlatform", "EpisodeCardSuccess", "성공")
-			: NSLOCTEXT("OdiroPlatform", "EpisodeCardFailed", "실패"));
+		const FString outcomeLabel = episodeItem ? episodeItem->GetOutcomeLabel() : FString();
+		EpisodeStateText->SetText(outcomeLabel.IsEmpty()
+			? (episodeItem && episodeItem->IsSuccess()
+				? NSLOCTEXT("OdiroPlatform", "EpisodeCardSuccess", "성공")
+				: NSLOCTEXT("OdiroPlatform", "EpisodeCardFailed", "실패"))
+			: FText::FromString(outcomeLabel));
 	}
 	if (EpisodeDurationText)
 	{

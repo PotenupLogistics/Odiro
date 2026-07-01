@@ -12,31 +12,30 @@ void UProjectAiSuggestionRowWidget::InitializeFromSuggestionViewModel(
 		return;
 	}
 
-	if (SeverityText)
+	const FString title = suggestionItem->GetTitle().TrimStartAndEnd();
+	const FString message = suggestionItem->GetSubtitle().TrimStartAndEnd();
+	FString reason = suggestionItem->GetReason();
+	if (!TitleText && !title.IsEmpty())
 	{
-		SeverityText->SetText(FText::FromString(suggestionItem->GetSeverityLabel()));
+		reason = reason.TrimStartAndEnd().IsEmpty()
+			? title
+			: FString::Printf(TEXT("%s\n%s"), *title, *reason.TrimStartAndEnd());
 	}
-	if (ReasonText)
+	if (!MessageText && !message.IsEmpty())
 	{
-		ReasonText->SetText(FText::FromString(suggestionItem->GetReason()));
-	}
-	if (RecommendationText)
-	{
-		RecommendationText->SetText(FText::FromString(suggestionItem->GetRecommendation()));
-	}
-	if (ParameterText)
-	{
-		ParameterText->SetText(FText::FromString(suggestionItem->GetParameterName()));
-	}
-	if (CurrentValueText)
-	{
-		CurrentValueText->SetText(FText::FromString(suggestionItem->GetCurrentValue()));
-	}
-	if (SuggestedValueText)
-	{
-		SuggestedValueText->SetText(FText::FromString(suggestionItem->GetSuggestedValue()));
+		reason = reason.TrimStartAndEnd().IsEmpty()
+			? message
+			: FString::Printf(TEXT("%s\n%s"), *reason.TrimStartAndEnd(), *message);
 	}
 
+	SetRuntimeText(SeverityText.Get(), suggestionItem->GetSeverityLabel());
+	SetRuntimeText(TitleText.Get(), title);
+	SetRuntimeText(MessageText.Get(), message);
+	SetRuntimeText(ReasonText.Get(), reason);
+	SetRuntimeText(RecommendationText.Get(), suggestionItem->GetRecommendation());
+	SetRuntimeText(ParameterText.Get(), suggestionItem->GetParameterName());
+	SetRuntimeText(CurrentValueText.Get(), suggestionItem->GetCurrentValue());
+	SetRuntimeText(SuggestedValueText.Get(), suggestionItem->GetSuggestedValue());
 	RefreshSeverityVisibility(suggestionItem->GetSeverity());
 }
 
@@ -46,6 +45,20 @@ void UProjectAiSuggestionRowWidget::RefreshSeverityVisibility(const EProjectRunA
 	SetIndicatorVisible(MediumSeverityIndicator.Get(), severity == EProjectRunAiSuggestionSeverity::Medium);
 	SetIndicatorVisible(LowSeverityIndicator.Get(), severity == EProjectRunAiSuggestionSeverity::Low);
 	SetIndicatorVisible(InfoSeverityIndicator.Get(), severity == EProjectRunAiSuggestionSeverity::Info);
+}
+
+void UProjectAiSuggestionRowWidget::SetRuntimeText(UBaseTextWidget* textWidget, const FString& text)
+{
+	if (!textWidget)
+	{
+		return;
+	}
+
+	const FString displayText = text.TrimStartAndEnd();
+	textWidget->SetText(FText::FromString(displayText));
+	textWidget->SetVisibility(displayText.IsEmpty()
+		? ESlateVisibility::Collapsed
+		: ESlateVisibility::SelfHitTestInvisible);
 }
 
 void UProjectAiSuggestionRowWidget::SetIndicatorVisible(UWidget* widget, const bool bVisible)

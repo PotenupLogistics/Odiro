@@ -6,7 +6,10 @@
 
 class UBaseTextWidget;
 class UBaseButtonWidget;
+class UExperimentResultInsightViewModel;
+class UExperimentResultSuggestionViewModel;
 class UExperimentResultViewModel;
+class UOdiroListItemViewModel;
 class UProjectAiSuggestionRowWidget;
 class UProjectEpisodeReplayCardWidget;
 class UProjectEpisodeReplayViewerWidget;
@@ -59,20 +62,34 @@ private:
 	// Rebuilds episode replay card widgets.
 	void RebuildEpisodeCards();
 
-	// Rebuilds AI suggestion row widgets.
-	void RebuildSuggestionRows();
+	// Rebuilds AI analysis row widgets.
+	void RebuildAnalysisRows();
 
 	// Clears episode card widgets and event subscriptions.
 	void ClearEpisodeCards();
 
-	// Clears suggestion row widgets.
-	void ClearSuggestionRows();
+	// Clears AI analysis row widgets.
+	void ClearAnalysisRows();
 
 	// Returns the configured episode card class.
 	TSubclassOf<UProjectEpisodeReplayCardWidget> ResolveEpisodeCardWidgetClass() const;
 
 	// Returns the configured suggestion row class.
 	TSubclassOf<UProjectAiSuggestionRowWidget> ResolveSuggestionRowWidgetClass() const;
+
+	// Adds an insight row to its dedicated container or the existing suggestion fallback.
+	void AddInsightRow(const UExperimentResultInsightViewModel* insightItem);
+
+	// Adds a suggestion row to the suggestion container.
+	void AddSuggestionRow(const UExperimentResultSuggestionViewModel* suggestionItem);
+
+	// Adds a warning row to its dedicated container or the existing suggestion fallback.
+	void AddWarningRow(const UOdiroListItemViewModel* warningItem);
+
+	// Creates one configured analysis row in a WBP-owned vertical container.
+	void AddSuggestionRowToContainer(
+		const UExperimentResultSuggestionViewModel* suggestionItem,
+		UVerticalBox* container);
 
 	// Opens replay when an episode card is clicked.
 	void HandleEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget);
@@ -96,9 +113,9 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProjectEpisodeReplayCardWidget>> EpisodeCards;
 
-	// Runtime suggestion rows owned by this screen.
+	// Runtime AI analysis rows owned by this screen.
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UProjectAiSuggestionRowWidget>> SuggestionRows;
+	TArray<TObjectPtr<UProjectAiSuggestionRowWidget>> AnalysisRows;
 
 	// Run id currently shown by this detail screen.
 	UPROPERTY(Transient)
@@ -155,6 +172,14 @@ private:
 	// Suggestion row container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UVerticalBox> AiSuggestionListBox;
+
+	// Optional insight row container; falls back to the suggestion container.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UVerticalBox> AiInsightListBox;
+
+	// Optional warning row container; falls back to the suggestion container.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UVerticalBox> AiWarningListBox;
 
 	// Embedded replay viewer owned by a replay host widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

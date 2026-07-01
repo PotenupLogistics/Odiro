@@ -7,6 +7,7 @@
 #include "Platform/PlatformUiSubsystem.h"
 #include "Platform/ViewModel/ExperimentResultItemViewModels.h"
 #include "Platform/ViewModel/ExperimentResultViewModel.h"
+#include "Platform/ViewModel/OdiroListItemViewModel.h"
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 #include "Platform/Widget/ProjectAiSuggestionRowWidget.h"
 #include "Platform/Widget/ProjectEpisodeReplayCardWidget.h"
@@ -52,7 +53,7 @@ void URunDetailScreenWidget::NativeDestruct()
 	}
 
 	ClearEpisodeCards();
-	ClearSuggestionRows();
+	ClearAnalysisRows();
 	Super::NativeDestruct();
 }
 
@@ -100,13 +101,13 @@ void URunDetailScreenWidget::RefreshFromViewModels()
 	}
 	if (TotalDurationText)
 	{
-		TotalDurationText->SetText(FText::FromString(resultViewModel->GetAverageDurationLabel()));
+		TotalDurationText->SetText(FText::FromString(resultViewModel->GetTotalDurationLabel()));
 	}
 	if (DurationMetricSub)
 	{
 		DurationMetricSub->SetText(FText::Format(
-			NSLOCTEXT("OdiroPlatform", "RunDetailTotalDurationSub", "총 실행 시간 {0}"),
-			FText::FromString(resultViewModel->GetTotalDurationLabel())));
+			NSLOCTEXT("OdiroPlatform", "RunDetailAverageDurationSub", "평균 실행 시간 {0}"),
+			FText::FromString(resultViewModel->GetAverageDurationLabel())));
 	}
 	if (SuccessRateText)
 	{
@@ -127,7 +128,7 @@ void URunDetailScreenWidget::RefreshFromViewModels()
 	}
 
 	RebuildEpisodeCards();
-	RebuildSuggestionRows();
+	RebuildAnalysisRows();
 }
 
 bool URunDetailScreenWidget::RequestAiAnalysis()
@@ -139,10 +140,18 @@ bool URunDetailScreenWidget::RequestAiAnalysis()
 		return false;
 	}
 
+	const FString requestedRunId = DisplayedRunId.IsEmpty()
+		? workspaceViewModel->GetSelectedRunId()
+		: DisplayedRunId;
+	if (!requestedRunId.IsEmpty()
+		&& !requestedRunId.Equals(workspaceViewModel->GetSelectedRunId(), ESearchCase::IgnoreCase))
+	{
+		workspaceViewModel->SelectRun(requestedRunId);
+	}
+
 	const bool bRequested = resultViewModel->RequestAiAnalysis(
 		workspaceViewModel->GetActiveProjectPath(),
-		workspaceViewModel->GetSelectedRunId());
-	RefreshFromViewModels();
+		requestedRunId);
 	if (StatusText)
 	{
 		StatusText->SetText(FText::FromString(resultViewModel->GetDiagnosticsText()));
@@ -210,29 +219,27 @@ void URunDetailScreenWidget::RebuildEpisodeCards()
 	}
 }
 
-void URunDetailScreenWidget::RebuildSuggestionRows()
+void URunDetailScreenWidget::RebuildAnalysisRows()
 {
-	ClearSuggestionRows();
+	ClearAnalysisRows();
 
 	UExperimentResultViewModel* resultViewModel = ResolveExperimentResultViewModel();
-	const TSubclassOf<UProjectAiSuggestionRowWidget> rowClass = ResolveSuggestionRowWidgetClass();
-	if (!AiSuggestionListBox || !resultViewModel || !rowClass)
+	if (!resultViewModel)
 	{
 		return;
 	}
 
+	for (const UExperimentResultInsightViewModel* insightItem : resultViewModel->GetInsightItems())
+	{
+		AddInsightRow(insightItem);
+	}
 	for (const UExperimentResultSuggestionViewModel* suggestionItem : resultViewModel->GetSuggestionItems())
 	{
-		UProjectAiSuggestionRowWidget* rowWidget =
-			CreateWidget<UProjectAiSuggestionRowWidget>(this, rowClass);
-		if (!rowWidget)
-		{
-			continue;
-		}
-
-		rowWidget->InitializeFromSuggestionViewModel(suggestionItem);
-		AiSuggestionListBox->AddChild(rowWidget);
-		SuggestionRows.Add(rowWidget);
+		AddSuggestionRow(suggestionItem);
+	}
+	for (const UOdiroListItemViewModel* warningItem : resultViewModel->GetWarningItems())
+	{
+		AddWarningRow(warningItem);
 	}
 }
 
@@ -253,19 +260,27 @@ void URunDetailScreenWidget::ClearEpisodeCards()
 	}
 }
 
-void URunDetailScreenWidget::ClearSuggestionRows()
+void URunDetailScreenWidget::ClearAnalysisRows()
 {
-	for (UProjectAiSuggestionRowWidget* rowWidget : SuggestionRows)
+	for (UProjectAiSuggestionRowWidget* rowWidget : AnalysisRows)
 	{
 		if (rowWidget)
 		{
 			rowWidget->RemoveFromParent();
 		}
 	}
-	SuggestionRows.Reset();
+	AnalysisRows.Reset();
+	if (AiInsightListBox)
+	{
+		AiInsightListBox->ClearChildren();
+	}
 	if (AiSuggestionListBox)
 	{
 		AiSuggestionListBox->ClearChildren();
+	}
+	if (AiWarningListBox)
+	{
+		AiWarningListBox->ClearChildren();
 	}
 }
 
@@ -277,6 +292,71 @@ TSubclassOf<UProjectEpisodeReplayCardWidget> URunDetailScreenWidget::ResolveEpis
 TSubclassOf<UProjectAiSuggestionRowWidget> URunDetailScreenWidget::ResolveSuggestionRowWidgetClass() const
 {
 	return SuggestionRowWidgetClass;
+}
+
+void URunDetailScreenWidget::AddInsightRow(const UExperimentResultInsightViewModel* insightItem)
+{
+	if (!insightItem)
+	{
+		return;
+	}
+
+	UExperimentResultSuggestionViewModel* rowItem = NewObject<UExperimentResultSuggestionViewModel>(this);
+	if (!rowItem)
+	{
+		return;
+	}
+
+	rowItem->SetSeverity(insightItem->GetSeverity());
+	rowItem->SetSeverityLabel(insightItem->GetSeverityLabel());
+	rowItem->SetReason(insightItem->GetDescription());
+	rowItem->SetTitle(insightItem->GetTitle());
+	AddSuggestionRowToContainer(rowItem, AiInsightListBox ? AiInsightListBox.Get() : AiSuggestionListBox.Get());
+}
+
+void URunDetailScreenWidget::AddSuggestionRow(const UExperimentResultSuggestionViewModel* suggestionItem)
+{
+	AddSuggestionRowToContainer(suggestionItem, AiSuggestionListBox.Get());
+}
+
+void URunDetailScreenWidget::AddWarningRow(const UOdiroListItemViewModel* warningItem)
+{
+	if (!warningItem)
+	{
+		return;
+	}
+
+	UExperimentResultSuggestionViewModel* rowItem = NewObject<UExperimentResultSuggestionViewModel>(this);
+	if (!rowItem)
+	{
+		return;
+	}
+
+	rowItem->SetReason(warningItem->GetTitle());
+	rowItem->SetTitle(warningItem->GetSubtitle());
+	AddSuggestionRowToContainer(rowItem, AiWarningListBox ? AiWarningListBox.Get() : AiSuggestionListBox.Get());
+}
+
+void URunDetailScreenWidget::AddSuggestionRowToContainer(
+	const UExperimentResultSuggestionViewModel* suggestionItem,
+	UVerticalBox* container)
+{
+	const TSubclassOf<UProjectAiSuggestionRowWidget> rowClass = ResolveSuggestionRowWidgetClass();
+	if (!container || !rowClass || !suggestionItem)
+	{
+		return;
+	}
+
+	UProjectAiSuggestionRowWidget* rowWidget =
+		CreateWidget<UProjectAiSuggestionRowWidget>(this, rowClass);
+	if (!rowWidget)
+	{
+		return;
+	}
+
+	rowWidget->InitializeFromSuggestionViewModel(suggestionItem);
+	container->AddChild(rowWidget);
+	AnalysisRows.Add(rowWidget);
 }
 
 void URunDetailScreenWidget::HandleEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget)
@@ -299,6 +379,22 @@ void URunDetailScreenWidget::HandleRequestAiAnalysisClicked(UBaseButtonWidget* b
 
 void URunDetailScreenWidget::HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response)
 {
-	(void)response;
+	const FString completedRunId = response.RunId.TrimStartAndEnd();
+	if (!completedRunId.IsEmpty())
+	{
+		UProjectWorkspaceViewModel* workspaceViewModel = ResolveWorkspaceViewModel();
+		const FString selectedRunId = workspaceViewModel ? workspaceViewModel->GetSelectedRunId() : FString();
+		const FString currentRunId = DisplayedRunId.IsEmpty() ? selectedRunId : DisplayedRunId;
+		if (!currentRunId.IsEmpty() && !completedRunId.Equals(currentRunId, ESearchCase::IgnoreCase))
+		{
+			return;
+		}
+
+		if (workspaceViewModel && selectedRunId.IsEmpty())
+		{
+			workspaceViewModel->SelectRun(completedRunId);
+		}
+	}
+
 	RefreshFromViewModels();
 }

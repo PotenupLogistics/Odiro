@@ -7,6 +7,7 @@
 #include "Components/Image.h"
 #include "Components/PanelSlot.h"
 #include "Components/PanelWidget.h"
+#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -289,6 +290,12 @@ void UScenarioEditorSidebarBlockWidget::SetRemoveActionVisible(const bool bInRem
 	RefreshBlock();
 }
 
+void UScenarioEditorSidebarBlockWidget::SetPathTextVisible(const bool bInPathTextVisible)
+{
+	bPathTextVisible = bInPathTextVisible;
+	RefreshBlock();
+}
+
 void UScenarioEditorSidebarBlockWidget::SetTextStyleCatalog(
 	TSoftObjectPtr<UWidgetTextStyleCatalog> catalog)
 {
@@ -474,6 +481,55 @@ void UScenarioEditorSidebarBlockWidget::EnsureActionButtons()
 	}
 }
 
+void UScenarioEditorSidebarBlockWidget::EnsureHeaderActionContainer()
+{
+	if (HeaderActionBox || !BlockHeaderRow)
+	{
+		return;
+	}
+
+	UPanelWidget* headerPanel = Cast<UPanelWidget>(BlockHeaderRow.Get());
+	if (!headerPanel)
+	{
+		return;
+	}
+
+	HeaderActionSpacer = NewObject<USpacer>(this);
+	HeaderActionBox = NewObject<UHorizontalBox>(this);
+	if (!HeaderActionSpacer || !HeaderActionBox)
+	{
+		HeaderActionSpacer = nullptr;
+		HeaderActionBox = nullptr;
+		return;
+	}
+
+	HeaderActionSpacer->SetSize(FVector2D(0.0f, 1.0f));
+	if (UPanelSlot* spacerSlot = headerPanel->AddChild(HeaderActionSpacer.Get()))
+	{
+		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(spacerSlot))
+		{
+			FSlateChildSize fillSize;
+			fillSize.SizeRule = ESlateSizeRule::Fill;
+			fillSize.Value = 1.0f;
+			horizontalSlot->SetSize(fillSize);
+			horizontalSlot->SetHorizontalAlignment(HAlign_Fill);
+			horizontalSlot->SetVerticalAlignment(VAlign_Fill);
+		}
+	}
+
+	if (UPanelSlot* actionSlot = headerPanel->AddChild(HeaderActionBox.Get()))
+	{
+		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(actionSlot))
+		{
+			horizontalSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+			horizontalSlot->SetHorizontalAlignment(HAlign_Right);
+			horizontalSlot->SetVerticalAlignment(VAlign_Center);
+		}
+	}
+
+	SetHeaderActionContainerVisible(false);
+}
+
 void UScenarioEditorSidebarBlockWidget::EnsureToggleIcon()
 {
 	if (ToggleIconImage)
@@ -581,8 +637,9 @@ void UScenarioEditorSidebarBlockWidget::CreateActionButton(
 		return;
 	}
 
-	UPanelWidget* headerPanel = Cast<UPanelWidget>(BlockHeaderRow.Get());
-	if (!headerPanel)
+	EnsureHeaderActionContainer();
+	UPanelWidget* actionPanel = Cast<UPanelWidget>(HeaderActionBox.Get());
+	if (!actionPanel)
 	{
 		return;
 	}
@@ -598,11 +655,11 @@ void UScenarioEditorSidebarBlockWidget::CreateActionButton(
 
 	outButton->SetContent(outTextBlock.Get());
 	outButton->SetStyle(MakeSidebarActionButtonStyle());
-	if (UPanelSlot* actionSlot = headerPanel->AddChild(outButton.Get()))
+	if (UPanelSlot* actionSlot = actionPanel->AddChild(outButton.Get()))
 	{
 		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(actionSlot))
 		{
-			horizontalSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+			horizontalSlot->SetPadding(FMargin(2.0f, 0.0f, 0.0f, 0.0f));
 			horizontalSlot->SetHorizontalAlignment(HAlign_Right);
 			horizontalSlot->SetVerticalAlignment(VAlign_Center);
 		}
@@ -628,6 +685,21 @@ void UScenarioEditorSidebarBlockWidget::SetActionButtonState(
 		textBlock->SetText(FText::FromString(label));
 		textBlock->SetJustification(ETextJustify::Center);
 		textBlock->SetColorAndOpacity(FSlateColor(MakeSidebarBlockColor(TEXT("F2F2F2"))));
+	}
+}
+
+void UScenarioEditorSidebarBlockWidget::SetHeaderActionContainerVisible(const bool bVisible) const
+{
+	const ESlateVisibility visibility = bVisible
+		? ESlateVisibility::SelfHitTestInvisible
+		: ESlateVisibility::Collapsed;
+	if (HeaderActionSpacer)
+	{
+		HeaderActionSpacer->SetVisibility(visibility);
+	}
+	if (HeaderActionBox)
+	{
+		HeaderActionBox->SetVisibility(visibility);
 	}
 }
 
@@ -667,9 +739,9 @@ void UScenarioEditorSidebarBlockWidget::ApplyAssetHeaderSummaryState()
 	}
 	if (PathTextBlock)
 	{
-		PathTextBlock->SetVisibility(bShowAssetHeader
-			? ESlateVisibility::Collapsed
-			: ESlateVisibility::SelfHitTestInvisible);
+		PathTextBlock->SetVisibility(!bShowAssetHeader && bPathTextVisible
+			? ESlateVisibility::SelfHitTestInvisible
+			: ESlateVisibility::Collapsed);
 	}
 	if (BadgeTextBlock)
 	{
@@ -840,6 +912,7 @@ void UScenarioEditorSidebarBlockWidget::RefreshBlock()
 	SetTextBlockText(BadgeTextBlock.Get(), BadgeText);
 	SetActionButtonState(AddActionButton.Get(), AddActionTextBlock.Get(), bAddActionVisible && !bDetailHostLayout, TEXT("+"));
 	SetActionButtonState(RemoveActionButton.Get(), RemoveActionTextBlock.Get(), bRemoveActionVisible && !bDetailHostLayout, TEXT("-"));
+	SetHeaderActionContainerVisible((bAddActionVisible || bRemoveActionVisible) && !bDetailHostLayout);
 	ApplyVisualStyle();
 	ApplyToggleButtonState();
 	ApplyAssetHeaderSummaryState();

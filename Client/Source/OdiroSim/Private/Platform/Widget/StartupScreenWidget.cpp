@@ -5,13 +5,13 @@
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/Spacer.h"
+#include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/Paths.h"
 #include "Platform/ViewModel/StartupScreenViewModel.h"
 #include "Platform/Widget/RecentProjectCardWidget.h"
 #include "UI/BaseButtonWidget.h"
-#include "UI/BaseTextWidget.h"
 
 #if WITH_EDITOR
 #include "DesktopPlatformModule.h"
@@ -181,12 +181,18 @@ void UStartupScreenWidget::RefreshFromViewModel()
 {
 	if (UStartupScreenViewModel* viewModel = EnsureStartupScreenViewModel())
 	{
+		const FString diagnosticsText = viewModel->GetDiagnosticsText();
+		const ESlateVisibility diagnosticsVisibility = diagnosticsText.TrimStartAndEnd().IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible;
+		if (DiagnosticsTextBox)
+		{
+			DiagnosticsTextBox->SetVisibility(diagnosticsVisibility);
+		}
 		if (DiagnosticsText)
 		{
-			DiagnosticsText->SetText(FText::FromString(viewModel->GetDiagnosticsText()));
-			DiagnosticsText->SetVisibility(viewModel->GetDiagnosticsText().TrimStartAndEnd().IsEmpty()
-				? ESlateVisibility::Collapsed
-				: ESlateVisibility::SelfHitTestInvisible);
+			DiagnosticsText->SetText(FText::FromString(diagnosticsText));
+			DiagnosticsText->SetVisibility(diagnosticsVisibility);
 		}
 		RefreshRecentProjectCards();
 	}

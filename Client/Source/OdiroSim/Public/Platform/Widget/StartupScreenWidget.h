@@ -6,13 +6,13 @@
 #include "StartupScreenWidget.generated.h"
 
 class UBaseButtonWidget;
-class UBaseTextWidget;
 class UPanelWidget;
 class URecentProjectCardWidget;
 class UScrollBox;
 class USpacer;
 class UStartupScreenWidget;
 class UStartupScreenViewModel;
+class UTextBlock;
 class UWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FStartupScreenCreateProjectRequested, UStartupScreenWidget*, StartupScreen);
@@ -138,7 +138,11 @@ private:
 
 	// ViewModel diagnostics를 표시할 WBP-owned text.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> DiagnosticsText;
+	TObjectPtr<UTextBlock> DiagnosticsText;
+
+	// Diagnostics icon/text를 함께 숨기기 위한 WBP-owned container.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> DiagnosticsTextBox;
 
 	// Startup panel 세로 scroll을 content 영역 오른쪽에 고정하는 WBP-owned scroll box.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

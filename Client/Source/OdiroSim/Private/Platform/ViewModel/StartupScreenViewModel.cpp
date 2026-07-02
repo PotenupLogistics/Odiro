@@ -1,20 +1,43 @@
 #include "Platform/ViewModel/StartupScreenViewModel.h"
 
+#include "Dom/JsonObject.h"
 #include "Engine/GameInstance.h"
+#include "Misc/FileHelper.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Paths.h"
 #include "Platform/ProjectSessionSubsystem.h"
 #include "Platform/ScenarioEditorLaunchSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 namespace
 {
 	const TCHAR* StartupScreenConfigSection = TEXT("OdiroSim.Platform.ProjectOpen");
 	const TCHAR* StartupScreenLegacyConfigSection = TEXT("OdiroSim.StartupMenu.ProjectOpen");
 	const TCHAR* StartupScreenRecentProjectPathsKey = TEXT("RecentProjectPaths");
+	const TCHAR* StartupScreenProjectSettingFileName = TEXT("setting.json");
+	const TCHAR* StartupScreenProjectIdFieldName = TEXT("project_id");
 	const int32 StartupScreenMaxRecentProjectCount = 8;
 	// StartupScreen에 동시에 표시할 최근 project card 수.
 	const int32 StartupScreenMaxVisibleRecentProjectCount = 3;
+
+	// SimulatorLaunchSubsystem validation diagnostics에서 missing file 이름을 추출하기 위한 표시 규칙.
+	struct FStartupScreenProjectFileDiagnosticRule
+	{
+		const TCHAR* ConfigName;
+		const TCHAR* MissingPrefix;
+		bool bCoreConfig;
+	};
+
+	const FStartupScreenProjectFileDiagnosticRule StartupScreenProjectFileDiagnosticRules[] = {
+		{ TEXT("setting.json"), TEXT("setting.json missing:"), true },
+		{ TEXT("profile.json"), TEXT("profile.json missing:"), true },
+		{ TEXT("scenario.json"), TEXT("scenario.json missing:"), true },
+		{ TEXT("policy"), TEXT("policy directory missing:"), false },
+		{ TEXT("policy/__init__.py"), TEXT("policy entrypoint missing:"), false },
+		{ TEXT("runs"), TEXT("runs directory missing:"), false },
+	};
 
 	// 사용자 입력 project path를 absolute normalized path로 맞춘다.
 	FString NormalizeStartupScreenPath(FString path)
@@ -32,12 +55,44 @@ namespace
 		return path;
 	}
 
-	// 최근 project 카드의 보조 표시 문자열을 만든다.
-	FString MakeStartupScreenProjectSubtitle(const FString& projectPath)
+	// 최근 project 카드의 fallback/보조 표시용 project folder 이름을 만든다.
+	FString ResolveStartupScreenProjectFolderName(const FString& projectPath)
 	{
-		const FString parentFolderPath = FPaths::GetPath(NormalizeStartupScreenPath(projectPath));
-		const FString parentFolderName = FPaths::GetCleanFilename(parentFolderPath);
-		return parentFolderName.IsEmpty() ? parentFolderPath : parentFolderName;
+		const FString normalizedProjectPath = NormalizeStartupScreenPath(projectPath);
+		const FString folderName = FPaths::GetCleanFilename(normalizedProjectPath);
+		return folderName.IsEmpty() ? normalizedProjectPath : folderName;
+	}
+
+	// 최근 project 카드의 주 표시 이름으로 쓸 setting.json project_id를 읽는다.
+	FString ResolveStartupScreenProjectId(const FString& projectPath)
+	{
+		const FString normalizedProjectPath = NormalizeStartupScreenPath(projectPath);
+		const FString fallbackProjectId = ResolveStartupScreenProjectFolderName(normalizedProjectPath);
+		if (normalizedProjectPath.IsEmpty())
+		{
+			return FString();
+		}
+
+		const FString settingPath = NormalizeStartupScreenPath(FPaths::Combine(
+			normalizedProjectPath,
+			StartupScreenProjectSettingFileName));
+		FString settingJson;
+		if (!FFileHelper::LoadFileToString(settingJson, *settingPath))
+		{
+			return fallbackProjectId;
+		}
+
+		TSharedPtr<FJsonObject> rootObject;
+		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(settingJson);
+		if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+		{
+			return fallbackProjectId;
+		}
+
+		FString projectId;
+		rootObject->TryGetStringField(StartupScreenProjectIdFieldName, projectId);
+		projectId.TrimStartAndEndInline();
+		return projectId.IsEmpty() ? fallbackProjectId : projectId;
 	}
 
 	// User project root 아래 preview.png가 있으면 절대 경로를 반환한다.
@@ -52,6 +107,131 @@ namespace
 		FString previewPath = FPaths::Combine(normalizedProjectPath, TEXT("preview.png"));
 		FPaths::NormalizeFilename(previewPath);
 		return FPaths::FileExists(previewPath) ? previewPath : FString();
+	}
+
+	// Footer diagnostics에 저장할 첫 번째 유효 단일 행 메시지를 고른다.
+	FString ExtractFirstStartupScreenDiagnosticLine(const FString& message)
+	{
+		FString normalizedMessage = message;
+		normalizedMessage.ReplaceInline(TEXT("\r\n"), TEXT("\n"), ESearchCase::CaseSensitive);
+		normalizedMessage.ReplaceInline(TEXT("\r"), TEXT("\n"), ESearchCase::CaseSensitive);
+
+		TArray<FString> lines;
+		normalizedMessage.ParseIntoArray(lines, TEXT("\n"), true);
+		for (FString& line : lines)
+		{
+			line.TrimStartAndEndInline();
+			if (!line.IsEmpty())
+			{
+				return line;
+			}
+		}
+
+		return FString();
+	}
+
+	FString ResolveStartupScreenDiagnosticMessage(
+		const TArray<FString>& diagnostics,
+		const FString& fallbackMessage);
+
+	// 진단 문구 template에 누락 project file placeholder를 반영한다.
+	FString ExpandStartupScreenConfigMissingMessage(
+		const FString& messageTemplate,
+		const FString& configName)
+	{
+		FString message = messageTemplate.TrimStartAndEnd();
+		message.ReplaceInline(TEXT("{ConfigName}"), *configName, ESearchCase::CaseSensitive);
+		message.ReplaceInline(TEXT("{0}"), *configName, ESearchCase::CaseSensitive);
+		return ExtractFirstStartupScreenDiagnosticLine(message);
+	}
+
+	// SimulatorLaunchSubsystem missing diagnostic의 대상 project file 이름을 찾는다.
+	const FStartupScreenProjectFileDiagnosticRule* FindStartupScreenMissingProjectFileRule(
+		const FString& diagnostic)
+	{
+		const FString diagnosticLine = ExtractFirstStartupScreenDiagnosticLine(diagnostic);
+		for (const FStartupScreenProjectFileDiagnosticRule& rule : StartupScreenProjectFileDiagnosticRules)
+		{
+			if (diagnosticLine.StartsWith(rule.MissingPrefix, ESearchCase::CaseSensitive))
+			{
+				return &rule;
+			}
+		}
+
+		return nullptr;
+	}
+
+	// Project validation diagnostics를 StartupScreen용 단일 행 사용자 문구로 바꾼다.
+	FString ResolveStartupScreenProjectValidationMessage(
+		const TArray<FString>& diagnostics,
+		const FStartupScreenDiagnosticMessages& diagnosticMessages)
+	{
+		TArray<FString> missingCoreConfigNames;
+		TArray<FString> missingProjectFileNames;
+		for (const FString& diagnostic : diagnostics)
+		{
+			const FStartupScreenProjectFileDiagnosticRule* rule = FindStartupScreenMissingProjectFileRule(diagnostic);
+			if (!rule)
+			{
+				continue;
+			}
+
+			const FString configName(rule->ConfigName);
+			missingProjectFileNames.AddUnique(configName);
+			if (rule->bCoreConfig)
+			{
+				missingCoreConfigNames.AddUnique(configName);
+			}
+		}
+
+		int32 requiredCoreConfigCount = 0;
+		for (const FStartupScreenProjectFileDiagnosticRule& rule : StartupScreenProjectFileDiagnosticRules)
+		{
+			if (rule.bCoreConfig)
+			{
+				++requiredCoreConfigCount;
+			}
+		}
+
+		if (requiredCoreConfigCount > 0 && missingCoreConfigNames.Num() == requiredCoreConfigCount)
+		{
+			const FString notProjectMessage =
+				ExtractFirstStartupScreenDiagnosticLine(diagnosticMessages.ProjectFolderNotProject);
+			if (!notProjectMessage.IsEmpty())
+			{
+				return notProjectMessage;
+			}
+		}
+
+		if (!missingProjectFileNames.IsEmpty())
+		{
+			const FString missingConfigMessage = ExpandStartupScreenConfigMissingMessage(
+				diagnosticMessages.ProjectConfigMissingFormat,
+				missingProjectFileNames[0]);
+			if (!missingConfigMessage.IsEmpty())
+			{
+				return missingConfigMessage;
+			}
+		}
+
+		return ResolveStartupScreenDiagnosticMessage(diagnostics, diagnosticMessages.ProjectValidationFailed);
+	}
+
+	// Subsystem diagnostics 중 첫 번째 단일 행을 우선하고 없으면 WBP fallback 문구를 사용한다.
+	FString ResolveStartupScreenDiagnosticMessage(
+		const TArray<FString>& diagnostics,
+		const FString& fallbackMessage)
+	{
+		for (const FString& diagnostic : diagnostics)
+		{
+			const FString diagnosticLine = ExtractFirstStartupScreenDiagnosticLine(diagnostic);
+			if (!diagnosticLine.IsEmpty())
+			{
+				return diagnosticLine;
+			}
+		}
+
+		return ExtractFirstStartupScreenDiagnosticLine(fallbackMessage);
 	}
 }
 
@@ -113,10 +293,9 @@ bool UStartupScreenViewModel::ValidateProject(const FString& projectPath, TArray
 
 	if (!simulatorLaunchSubsystem->ValidateUserProject(normalizedProjectPath, outDiagnostics))
 	{
-		const FString message = outDiagnostics.IsEmpty()
-			? DiagnosticMessages.ProjectValidationFailed
-			: FString::Join(outDiagnostics, TEXT("\n"));
-		SetDiagnosticsText(message);
+		SetDiagnosticsText(ResolveStartupScreenProjectValidationMessage(
+			outDiagnostics,
+			DiagnosticMessages));
 		return false;
 	}
 
@@ -202,7 +381,7 @@ TArray<FString> UStartupScreenViewModel::GetRecentProjectPaths() const
 
 void UStartupScreenViewModel::SetDiagnosticsText(const FString& message)
 {
-	UE_MVVM_SET_PROPERTY_VALUE(DiagnosticsText, message);
+	UE_MVVM_SET_PROPERTY_VALUE(DiagnosticsText, ExtractFirstStartupScreenDiagnosticLine(message));
 }
 
 void UStartupScreenViewModel::SetDiagnosticMessages(const FStartupScreenDiagnosticMessages& messages)
@@ -365,8 +544,8 @@ void UStartupScreenViewModel::RebuildRecentProjectItems()
 		const FString normalizedProjectPath = NormalizeStartupScreenPath(projectPath);
 		FStartupScreenRecentProjectItem item;
 		item.ProjectPath = normalizedProjectPath;
-		item.Title = FPaths::GetCleanFilename(normalizedProjectPath);
-		item.Subtitle = MakeStartupScreenProjectSubtitle(normalizedProjectPath);
+		item.Title = ResolveStartupScreenProjectId(normalizedProjectPath);
+		item.Subtitle = ResolveStartupScreenProjectFolderName(normalizedProjectPath);
 		item.PreviewImagePath = ResolveStartupScreenPreviewPath(normalizedProjectPath);
 		item.bSelected = normalizedProjectPath.Equals(SelectedProjectPath, ESearchCase::IgnoreCase);
 		item.bEnabled = FPaths::DirectoryExists(normalizedProjectPath);

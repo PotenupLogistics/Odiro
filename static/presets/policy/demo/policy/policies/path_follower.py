@@ -44,6 +44,13 @@ class PathFollower:
         goal_approach_look_ahead_distance_m: float = 0.7,
         soft_stop_brake: float = 0.18,
         use_exact_goal_as_final_point: bool = True,
+        path_index_advance_alpha: float = 0.95,
+        path_index_advance_distance_m: float = 0.65,
+        stuck_local_repath_enabled: bool = True,
+        stuck_speed_kmh: float = 0.2,
+        stuck_target_speed_kmh: float = 1.0,
+        stuck_duration_seconds: float = 1.5,
+        stuck_min_goal_distance_m: float = 1.5,
     ):
         self.followSpeedKmh = follow_speed_kmh
         self.waypointAcceptanceRatio = waypoint_acceptance_ratio
@@ -76,6 +83,13 @@ class PathFollower:
         self.goalApproachLookAheadDistanceM = goal_approach_look_ahead_distance_m
         self.softStopBrake = soft_stop_brake
         self.bUseExactGoalAsFinalPoint = use_exact_goal_as_final_point
+        self.pathIndexAdvanceAlpha = path_index_advance_alpha
+        self.pathIndexAdvanceDistanceM = path_index_advance_distance_m
+        self.bStuckLocalRepathEnabled = stuck_local_repath_enabled
+        self.stuckSpeedKmh = stuck_speed_kmh
+        self.stuckTargetSpeedKmh = stuck_target_speed_kmh
+        self.stuckDurationSeconds = stuck_duration_seconds
+        self.stuckMinGoalDistanceM = stuck_min_goal_distance_m
 
     # /scenario/start의 spec 값으로 주행 기준을 갱신한다.
     def configure_from_start(self, request) -> None:
@@ -140,6 +154,27 @@ class PathFollower:
             "useExactGoalAsFinalPoint",
             self.bUseExactGoalAsFinalPoint,
         )
+        self.pathIndexAdvanceAlpha = float(
+            control_spec.get("pathIndexAdvanceAlpha", self.pathIndexAdvanceAlpha)
+        )
+        self.pathIndexAdvanceDistanceM = float(
+            control_spec.get("pathIndexAdvanceDistanceM", self.pathIndexAdvanceDistanceM)
+        )
+        self.bStuckLocalRepathEnabled = self.get_bool_config(
+            control_spec,
+            "stuckLocalRepathEnabled",
+            self.bStuckLocalRepathEnabled,
+        )
+        self.stuckSpeedKmh = float(control_spec.get("stuckSpeedKmh", self.stuckSpeedKmh))
+        self.stuckTargetSpeedKmh = float(
+            control_spec.get("stuckTargetSpeedKmh", self.stuckTargetSpeedKmh)
+        )
+        self.stuckDurationSeconds = float(
+            control_spec.get("stuckDurationSeconds", self.stuckDurationSeconds)
+        )
+        self.stuckMinGoalDistanceM = float(
+            control_spec.get("stuckMinGoalDistanceM", self.stuckMinGoalDistanceM)
+        )
         self.stopDistanceM = float(lidar_spec.get("stopDistanceM", self.stopDistanceM))
         obstacle_warning_distance_m = float(
             lidar_spec.get(
@@ -200,6 +235,12 @@ class PathFollower:
         self.goalApproachSpeedKmh = max(0.0, self.goalApproachSpeedKmh)
         self.goalApproachLookAheadDistanceM = max(0.1, self.goalApproachLookAheadDistanceM)
         self.softStopBrake = clamp(self.softStopBrake, 0.0, 1.0)
+        self.pathIndexAdvanceAlpha = clamp(self.pathIndexAdvanceAlpha, 0.8, 1.0)
+        self.pathIndexAdvanceDistanceM = max(0.1, self.pathIndexAdvanceDistanceM)
+        self.stuckSpeedKmh = max(0.0, self.stuckSpeedKmh)
+        self.stuckTargetSpeedKmh = max(0.0, self.stuckTargetSpeedKmh)
+        self.stuckDurationSeconds = max(0.1, self.stuckDurationSeconds)
+        self.stuckMinGoalDistanceM = max(0.0, self.stuckMinGoalDistanceM)
         self.stopDistanceM = max(0.0, self.stopDistanceM)
         self.obstacleWarningDistanceM = max(self.stopDistanceM + 0.1, self.obstacleWarningDistanceM)
         self.slowDownDistanceM = max(self.obstacleWarningDistanceM + 0.1, self.slowDownDistanceM)
@@ -324,6 +365,16 @@ class PathFollower:
                 brake=self.softStopBrake,
                 steering=state.lastSteering * 0.5,
             ), reason
+
+        if state.bStuckRepathRequested:
+            state.lastSteering = 0.0
+            return stop_action(), "stuck_local_repath_waiting"
+
+        if self.should_request_stuck_local_repath(request, state, speed_kmh, reason):
+            state.bRepathRequested = True
+            state.bStuckRepathRequested = True
+            state.lastSteering = 0.0
+            return stop_action(), "stuck_local_repath_requested"
 
         return drive_action(
             steering=steering,
@@ -584,13 +635,23 @@ class PathFollower:
             return
 
         acceptance_cm = self.get_waypoint_acceptance_cm(state.grid)
-        closest_progress = self.get_closest_path_progress(robot_state, path_points, start_index=state.pathIndex)
+        closest_progress = self.get_closest_path_progress(
+            robot_state,
+            path_points,
+            start_index=self.get_path_tracking_start_index(state),
+        )
 
         if closest_progress is not None:
             closest_segment_index, closest_alpha, _ = closest_progress
             advance_index = closest_segment_index
 
-            if closest_alpha >= 0.8 and closest_segment_index < len(path_points) - 2:
+            if self.should_advance_path_index_by_progress(
+                robot_state,
+                path_points,
+                closest_segment_index,
+                closest_alpha,
+                acceptance_cm,
+            ):
                 advance_index = closest_segment_index + 1
 
             state.pathIndex = max(state.pathIndex, advance_index)
@@ -606,6 +667,25 @@ class PathFollower:
                 break
 
             state.pathIndex = next_index
+
+    # 긴 직선 끝에서 코너 세그먼트로 너무 일찍 넘어가지 않도록 전진 조건을 제한한다.
+    def should_advance_path_index_by_progress(
+        self,
+        robot_state: RobotState,
+        path_points: list[tuple[float, float]],
+        closest_segment_index: int,
+        closest_alpha: float,
+        acceptance_cm: float,
+    ) -> bool:
+        if closest_segment_index >= len(path_points) - 2:
+            return False
+
+        if closest_alpha >= self.pathIndexAdvanceAlpha:
+            return True
+
+        next_x, next_y = path_points[closest_segment_index + 1]
+        next_distance_cm = self.get_distance_cm(robot_state.x, robot_state.y, next_x, next_y)
+        return next_distance_cm <= max(acceptance_cm, self.pathIndexAdvanceDistanceM * 100.0)
 
     def get_goal_distance_cm(self, robot_state: RobotState, state: AgentState) -> float:
         if state.goal is None or not state.goal.hasGoal:
@@ -734,7 +814,11 @@ class PathFollower:
             target_x, target_y = path_points[0]
             return 0, target_x, target_y
 
-        closest_progress = self.get_closest_path_progress(robot_state, path_points, start_index=state.pathIndex)
+        closest_progress = self.get_closest_path_progress(
+            robot_state,
+            path_points,
+            start_index=self.get_path_tracking_start_index(state),
+        )
         if closest_progress is None:
             target_index = self.get_lookahead_target_index(
                 robot_state,
@@ -802,7 +886,7 @@ class PathFollower:
         state.closestPathDistanceCm = self.get_closest_path_distance_cm(
             robot_state,
             path_points,
-            start_index=state.pathIndex,
+            start_index=self.get_path_tracking_start_index(state),
         )
         state.maxPathErrorCm = self.maxPathErrorM * 100.0
         state.currentLookAheadDistanceM = lookahead_distance_m
@@ -825,6 +909,51 @@ class PathFollower:
 
         cell = self.world_to_cell(robot_state.x, robot_state.y, state.grid)
         return self.get_grid_cell(cell, state.grid)
+
+    # 조기 전진 직후에도 직전 segment를 거리 검사 후보에 남긴다.
+    def get_path_tracking_start_index(self, state: AgentState) -> int:
+        return max(0, state.pathIndex - 1)
+
+    # 전진 명령이 실제 이동으로 이어지지 않는 정체 상태인지 판단한다.
+    def should_request_stuck_local_repath(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+        target_speed_kmh: float,
+        reason: str,
+    ) -> bool:
+        if not self.bStuckLocalRepathEnabled:
+            self.clear_stuck_tracking(state)
+            return False
+
+        if (
+            reason != "follow_path"
+            or target_speed_kmh < self.stuckTargetSpeedKmh
+            or request.robotState.bColliding
+            or state.grid is None
+            or state.goal is None
+            or not state.has_path()
+        ):
+            self.clear_stuck_tracking(state)
+            return False
+
+        if self.get_goal_distance_cm(request.robotState, state) <= self.stuckMinGoalDistanceM * 100.0:
+            self.clear_stuck_tracking(state)
+            return False
+
+        if abs(request.robotState.speedKmh) > self.stuckSpeedKmh:
+            self.clear_stuck_tracking(state)
+            return False
+
+        if state.stuckStartSeconds is None:
+            state.stuckStartSeconds = request.runTimeSeconds
+            return False
+
+        return (request.runTimeSeconds - state.stuckStartSeconds) >= self.stuckDurationSeconds
+
+    # 정상 이동 또는 비전진 상태로 돌아왔을 때 정체 타이머를 초기화한다.
+    def clear_stuck_tracking(self, state: AgentState) -> None:
+        state.stuckStartSeconds = None
 
     def record_obstacle_warning_once(self, state: AgentState, grid_cell) -> None:
         source = f"GridCell:{grid_cell.x}:{grid_cell.y}:{grid_cell.sourceCollisionProfile}"

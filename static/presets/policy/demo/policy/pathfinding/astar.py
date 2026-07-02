@@ -23,12 +23,13 @@ class AStarResult:
 class AStarPathfinder:
     def __init__(
         self,
-        obstacle_soft_cost_radius_m: float = 0.4,
-        obstacle_soft_cost_max_penalty: float = 8.0,
+        obstacle_soft_cost_radius_m: float = 0.9,
+        obstacle_soft_cost_max_penalty: float = 12.0,
         obstacle_soft_cost_power: float = 5.0,
         path_turn_cost_penalty: float = 1.5,
         allow_diagonal_pathfinding: bool = True,
         smooth_path_with_line_of_sight: bool = True,
+        smooth_path_requires_clearance: bool = True,
     ):
         self.obstacleSoftCostRadiusM = obstacle_soft_cost_radius_m
         self.obstacleSoftCostMaxPenalty = obstacle_soft_cost_max_penalty
@@ -36,6 +37,7 @@ class AStarPathfinder:
         self.pathTurnCostPenalty = path_turn_cost_penalty
         self.bAllowDiagonalPathfinding = allow_diagonal_pathfinding
         self.bSmoothPathWithLineOfSight = smooth_path_with_line_of_sight
+        self.bSmoothPathRequiresClearance = smooth_path_requires_clearance
         # grid/control 설정별 obstacle soft cost offset을 재사용한다.
         self.obstacleSoftCostOffsetCache: dict[tuple[float, float, float, float], list[tuple[int, int, float]]] = {}
 
@@ -43,7 +45,12 @@ class AStarPathfinder:
         control_spec = control_spec or {}
         self.obstacleSoftCostRadiusM = max(
             0.0,
-            float(control_spec.get("obstacleSoftCostRadiusM", self.obstacleSoftCostRadiusM)),
+            float(
+                control_spec.get(
+                    "obstacleClearanceRadiusM",
+                    control_spec.get("obstacleSoftCostRadiusM", self.obstacleSoftCostRadiusM),
+                )
+            ),
         )
         self.obstacleSoftCostMaxPenalty = max(
             0.0,
@@ -66,6 +73,11 @@ class AStarPathfinder:
             control_spec,
             "smoothPathWithLineOfSight",
             self.bSmoothPathWithLineOfSight,
+        )
+        self.bSmoothPathRequiresClearance = self.get_bool_config(
+            control_spec,
+            "smoothPathRequiresClearance",
+            self.bSmoothPathRequiresClearance,
         )
 
     def find_path(
@@ -122,7 +134,7 @@ class AStarPathfinder:
                 path = self.reconstruct_path(came_from, current_state)
                 metrics["pathfindSearchMs"] = self.elapsed_ms(search_started_at)
                 smooth_started_at = time.perf_counter()
-                path = self.smooth_path(path, grid, cell_lookup)
+                path = self.smooth_path(path, grid, cell_lookup, obstacle_soft_costs)
                 metrics["pathfindSmoothMs"] = self.elapsed_ms(smooth_started_at)
                 return finish_result(True, path, "path_found")
 
@@ -456,6 +468,7 @@ class AStarPathfinder:
         path: list[tuple[int, int]],
         grid: GridMap,
         cell_lookup: dict[tuple[int, int], GridCell],
+        obstacle_soft_costs: dict[tuple[int, int], float] | None = None,
     ) -> list[tuple[int, int]]:
         if not self.bSmoothPathWithLineOfSight or len(path) < 3:
             return path
@@ -466,7 +479,13 @@ class AStarPathfinder:
         while anchor_index < len(path) - 1:
             next_index = len(path) - 1
             while next_index > anchor_index + 1:
-                if self.has_line_of_sight(path[anchor_index], path[next_index], grid, cell_lookup):
+                if self.has_line_of_sight(
+                    path[anchor_index],
+                    path[next_index],
+                    grid,
+                    cell_lookup,
+                    obstacle_soft_costs,
+                ):
                     break
                 next_index -= 1
 
@@ -481,13 +500,14 @@ class AStarPathfinder:
         to_cell: tuple[int, int],
         grid: GridMap,
         cell_lookup: dict[tuple[int, int], GridCell],
+        obstacle_soft_costs: dict[tuple[int, int], float] | None = None,
     ) -> bool:
         delta_x = to_cell[0] - from_cell[0]
         delta_y = to_cell[1] - from_cell[1]
         steps = max(abs(delta_x), abs(delta_y)) * 4
 
         if steps <= 0:
-            return self.is_walkable(from_cell, grid, cell_lookup)
+            return self.is_line_of_sight_cell_clear(from_cell, grid, cell_lookup, obstacle_soft_costs)
 
         previous_cell = from_cell
         for index in range(steps + 1):
@@ -499,7 +519,7 @@ class AStarPathfinder:
             if sample_cell == to_cell:
                 sample_cell = to_cell
 
-            if not self.is_walkable(sample_cell, grid, cell_lookup):
+            if not self.is_line_of_sight_cell_clear(sample_cell, grid, cell_lookup, obstacle_soft_costs):
                 return False
 
             if sample_cell != previous_cell and not self.can_move_between(
@@ -511,6 +531,26 @@ class AStarPathfinder:
                 return False
 
             previous_cell = sample_cell
+
+        return True
+
+    # smoothing이 clearance penalty 영역을 shortcut으로 건너뛰지 못하게 한다.
+    def is_line_of_sight_cell_clear(
+        self,
+        cell: tuple[int, int],
+        grid: GridMap,
+        cell_lookup: dict[tuple[int, int], GridCell],
+        obstacle_soft_costs: dict[tuple[int, int], float] | None = None,
+    ) -> bool:
+        if not self.is_walkable(cell, grid, cell_lookup):
+            return False
+
+        if (
+            self.bSmoothPathRequiresClearance
+            and obstacle_soft_costs is not None
+            and obstacle_soft_costs.get(cell, 0.0) > 0.0
+        ):
+            return False
 
         return True
 

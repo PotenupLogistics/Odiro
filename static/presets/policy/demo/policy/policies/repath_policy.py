@@ -1,7 +1,7 @@
 import math
 
 from ..action import BotAction, stop_action
-from ..contract import GridCell, GridMap, LidarRay, ScenarioDecideRequest
+from ..contract import GoalLocation, GridCell, GridMap, LidarRay, ScenarioDecideRequest
 from ..lidar_selector import (
     convert_lidar_ray_1d_to_policy_ray,
     convert_lidar_ray_2d_to_policy_ray,
@@ -26,6 +26,8 @@ class RePathPolicy:
         block_radius_cells: int = 1,
         repath_cooldown_seconds: float = 0.5,
         repath_debounce_seconds: float = 3.0,
+        stuck_rejoin_lookahead_cells: int = 2,
+        stuck_rejoin_max_distance_m: float = 5.0,
     ):
         self.pathfinder = AStarPathfinder()
         self.repathDistanceM = repath_distance_m
@@ -36,6 +38,8 @@ class RePathPolicy:
         self.blockRadiusCells = block_radius_cells
         self.repathCooldownSeconds = repath_cooldown_seconds
         self.repathDebounceSeconds = repath_debounce_seconds
+        self.stuckRejoinLookaheadCells = stuck_rejoin_lookahead_cells
+        self.stuckRejoinMaxDistanceM = stuck_rejoin_max_distance_m
 
     # /scenario/start의 lidarSpec 값으로 재탐색 기준을 갱신한다.
     def configure_from_start(self, request) -> None:
@@ -75,6 +79,14 @@ class RePathPolicy:
         self.repathDebounceSeconds = max(
             0.0,
             float(control_spec.get("repathDebounceSeconds", self.repathDebounceSeconds)),
+        )
+        self.stuckRejoinLookaheadCells = max(
+            1,
+            int(control_spec.get("stuckRejoinLookaheadCells", self.stuckRejoinLookaheadCells)),
+        )
+        self.stuckRejoinMaxDistanceM = max(
+            0.5,
+            float(control_spec.get("stuckRejoinMaxDistanceM", self.stuckRejoinMaxDistanceM)),
         )
         self.obstacleWarningDistanceM = obstacle_warning_distance_m
         self.nearObjectDistanceM = self.obstacleWarningDistanceM
@@ -124,11 +136,12 @@ class RePathPolicy:
         bFrontObstacleRepath = False
         bFrontRayInNearObject = self.should_repath(front_ray)
         bRepathDebounced = False
+        bStuckRepath = state.bStuckRepathRequested
 
         if bFrontRayInNearObject and front_ray is not None:
             bRepathDebounced = self.is_repath_debounced(request, state, front_ray)
             if bRepathDebounced:
-                if not bForcedRepath:
+                if not bForcedRepath and not bStuckRepath:
                     self.update_repath_debug(
                         state=state,
                         front_ray=front_ray,
@@ -141,7 +154,7 @@ class RePathPolicy:
 
             bFrontObstacleRepath = True
 
-        bNeedRepath = bForcedRepath or bFrontObstacleRepath
+        bNeedRepath = bForcedRepath or bFrontObstacleRepath or bStuckRepath
 
         if not bNeedRepath:
             if bColliding:
@@ -172,6 +185,21 @@ class RePathPolicy:
         bCanRepathNow = self.can_repath_now(request, state)
 
         if not bCanRepathNow:
+            if bStuckRepath:
+                self.update_repath_debug(
+                    state=state,
+                    front_ray=front_ray,
+                    decision="stuck_local_repath_cooldown_stop",
+                    bForcedRepath=bForcedRepath,
+                    bFrontObstacleRepath=bFrontObstacleRepath,
+                    bNeedRepath=bNeedRepath,
+                    bCanRepathNow=bCanRepathNow,
+                    bFrontRayInNearObject=bFrontRayInNearObject,
+                    bRepathDebounced=bRepathDebounced,
+                )
+                state.lastSteering = 0.0
+                return stop_action(), "stuck_local_repath_cooldown_stop"
+
             if bColliding:
                 self.update_repath_debug(
                     state=state,
@@ -217,6 +245,35 @@ class RePathPolicy:
         if front_ray is not None and bFrontObstacleRepath:
             self.mark_dynamic_obstacle_cells(request, state, front_ray)
 
+        if bStuckRepath:
+            local_result = self.try_build_stuck_rejoin_path(request, state)
+            if local_result is not None:
+                local_path, local_metrics = local_result
+                state.lastPathfindMetrics = local_metrics
+                state.lastRepathTimeSeconds = request.runTimeSeconds
+                state.path = local_path
+                state.pathIndex = 0
+                state.followPathWorldPoints = []
+                state.bRepathRequested = False
+                state.bStuckRepathRequested = False
+                state.stuckStartSeconds = None
+                state.repathCount += 1
+                state.recoveryUntilSeconds = 0.0
+                state.recoverySteering = 0.0
+                state.lastSteering = 0.0
+                self.update_repath_debug(
+                    state=state,
+                    front_ray=front_ray,
+                    decision="stuck_local_repath_ready",
+                    bForcedRepath=bForcedRepath,
+                    bFrontObstacleRepath=bFrontObstacleRepath,
+                    bNeedRepath=bNeedRepath,
+                    bCanRepathNow=bCanRepathNow,
+                    bFrontRayInNearObject=bFrontRayInNearObject,
+                    bRepathDebounced=bRepathDebounced,
+                )
+                return stop_action(), "stuck_local_repath_ready"
+
         result = self.pathfinder.find_path(
             start=request.robotState,
             goal=state.goal,
@@ -250,6 +307,8 @@ class RePathPolicy:
         state.pathIndex = 0
         state.followPathWorldPoints = []
         state.bRepathRequested = False
+        state.bStuckRepathRequested = False
+        state.stuckStartSeconds = None
         state.repathCount += 1
         state.recoveryUntilSeconds = 0.0
         state.recoverySteering = 0.0
@@ -280,6 +339,87 @@ class RePathPolicy:
             bRepathDebounced=bRepathDebounced,
         )
         return None, "dynamic_repath_ready"
+
+    # 정체 상태에서는 전체 goal 대신 가까운 기존 path cell로 짧게 재진입한다.
+    def try_build_stuck_rejoin_path(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+    ) -> tuple[list[tuple[int, int]], dict] | None:
+        if state.grid is None or not state.path:
+            return None
+
+        closest_index = self.get_closest_existing_path_index(request, state)
+        if closest_index is None:
+            return None
+
+        candidate_indices: list[int] = []
+        for offset in range(1, self.stuckRejoinLookaheadCells + 1):
+            candidate_index = min(closest_index + offset, len(state.path) - 1)
+            if candidate_index <= closest_index or candidate_index in candidate_indices:
+                continue
+            candidate_indices.append(candidate_index)
+
+        for candidate_index in candidate_indices:
+            candidate_cell = state.path[candidate_index]
+            if not self.pathfinder.is_walkable(candidate_cell, state.grid):
+                continue
+
+            candidate_x, candidate_y = self.cell_to_world_center(candidate_cell, state.grid)
+            distance_m = math.hypot(
+                request.robotState.x - candidate_x,
+                request.robotState.y - candidate_y,
+            ) / 100.0
+            if distance_m > self.stuckRejoinMaxDistanceM:
+                continue
+
+            local_goal = GoalLocation(
+                hasGoal=True,
+                x=candidate_x,
+                y=candidate_y,
+                z=state.goal.z if state.goal is not None else request.robotState.z,
+            )
+            result = self.pathfinder.find_path(
+                start=request.robotState,
+                goal=local_goal,
+                grid=state.grid,
+            )
+            if not result.success or len(result.path) < 2:
+                state.lastPathfindMetrics = result.metrics
+                continue
+
+            return result.path + state.path[candidate_index + 1:], result.metrics
+
+        return None
+
+    # 현재 로봇 위치에서 가장 가까운 기존 raw path index를 찾는다.
+    def get_closest_existing_path_index(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+    ) -> int | None:
+        if state.grid is None or not state.path:
+            return None
+
+        closest_index = None
+        closest_distance = float("inf")
+        for index, cell in enumerate(state.path):
+            cell_x, cell_y = self.cell_to_world_center(cell, state.grid)
+            distance = math.hypot(request.robotState.x - cell_x, request.robotState.y - cell_y)
+            if distance >= closest_distance:
+                continue
+
+            closest_index = index
+            closest_distance = distance
+
+        return closest_index
+
+    # grid cell 중심을 정책 world 좌표로 변환한다.
+    def cell_to_world_center(self, cell: tuple[int, int], grid: GridMap) -> tuple[float, float]:
+        cell_x, cell_y = cell
+        world_x = grid.originCm.x + (cell_x + 0.5) * grid.cellSizeCm
+        world_y = grid.originCm.y + (cell_y + 0.5) * grid.cellSizeCm
+        return world_x, world_y
 
     # 이번 decide에서 RePath가 본 ray와 조건 플래그를 로그용 state에 저장한다.
     def update_repath_debug(

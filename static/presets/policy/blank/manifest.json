@@ -3,8 +3,8 @@
   "version": 1,
   "id": "blank",
   "kind": "policy",
-  "title": "빈 정책",
-  "subtitle": "시작용 패키지",
-  "description": "정책 구현을 직접 시작하기 위한 최소 Python 패키지입니다.",
+  "title": "기초 구성",
+  "subtitle": "기본 인터페이스만 제공",
+  "description": "최소한의 틀만 제공합니다. 처음부터 정책을 구현하고 싶다면 이 프리셋을 사용하세요.",
   "sort_order": 10
 }

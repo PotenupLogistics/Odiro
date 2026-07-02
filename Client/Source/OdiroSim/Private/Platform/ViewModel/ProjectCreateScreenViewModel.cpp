@@ -100,51 +100,56 @@ namespace
 		return item;
 	}
 
-	// Project Create surface shows the reference-sized starter set while preserving a stored custom selection.
-	TArray<FProjectCreatePresetItem> BuildVisibleProjectCreatePresetItems(
+	// Catalog에 로드된 preset 전체를 Project Create card item으로 변환한다.
+	TArray<FProjectCreatePresetItem> BuildProjectCreatePresetItems(
 		const TArray<FProjectPresetInfo>& presetInfos,
-		const FString& selectedPresetId,
-		const TArray<FString>& preferredPresetIds)
+		const FString& selectedPresetId)
 	{
 		TArray<FProjectCreatePresetItem> items;
-		TSet<FString> addedPresetIds;
-		auto addPresetById = [&items, &addedPresetIds, &presetInfos, &selectedPresetId](const FString& presetId)
+		items.Reserve(presetInfos.Num());
+		for (const FProjectPresetInfo& presetInfo : presetInfos)
 		{
-			if (presetId.TrimStartAndEnd().IsEmpty() || addedPresetIds.Contains(presetId))
-			{
-				return;
-			}
-
-			const FProjectPresetInfo* presetInfo = presetInfos.FindByPredicate(
-				[&presetId](const FProjectPresetInfo& candidate)
-				{
-					return candidate.Id.Equals(presetId, ESearchCase::IgnoreCase);
-				});
-			if (!presetInfo)
-			{
-				return;
-			}
-
-			items.Add(MakeProjectCreatePresetItem(*presetInfo, selectedPresetId));
-			addedPresetIds.Add(presetInfo->Id);
-		};
-
-		for (const FString& presetId : preferredPresetIds)
-		{
-			addPresetById(presetId);
+			items.Add(MakeProjectCreatePresetItem(presetInfo, selectedPresetId));
 		}
-		addPresetById(selectedPresetId);
 		return items;
 	}
 
-	// WBP가 제공한 진단 문구가 있을 때만 outDiagnostics와 UI text에 반영한다.
+	// Footer diagnostics에 저장할 첫 번째 유효 단일 행 메시지를 고른다.
+	FString ExtractFirstProjectCreateDiagnosticLine(const FString& message)
+	{
+		FString normalizedMessage = message;
+		normalizedMessage.ReplaceInline(TEXT("\r\n"), TEXT("\n"), ESearchCase::CaseSensitive);
+		normalizedMessage.ReplaceInline(TEXT("\r"), TEXT("\n"), ESearchCase::CaseSensitive);
+
+		TArray<FString> lines;
+		normalizedMessage.ParseIntoArray(lines, TEXT("\n"), true);
+		for (FString& line : lines)
+		{
+			line.TrimStartAndEndInline();
+			if (!line.IsEmpty())
+			{
+				return line;
+			}
+		}
+
+		return FString();
+	}
+
+	// Subsystem diagnostics 중 첫 번째 단일 행을 우선하고 없으면 WBP fallback 문구를 사용한다.
 	FString ResolveProjectCreateDiagnosticMessage(
 		const TArray<FString>& diagnostics,
 		const FString& fallbackMessage)
 	{
-		return diagnostics.IsEmpty()
-			? fallbackMessage.TrimStartAndEnd()
-			: FString::Join(diagnostics, TEXT("\n"));
+		for (const FString& diagnostic : diagnostics)
+		{
+			const FString diagnosticLine = ExtractFirstProjectCreateDiagnosticLine(diagnostic);
+			if (!diagnosticLine.IsEmpty())
+			{
+				return diagnosticLine;
+			}
+		}
+
+		return ExtractFirstProjectCreateDiagnosticLine(fallbackMessage);
 	}
 
 	// 성공 문구 template에 project path placeholder를 반영한다.
@@ -365,7 +370,7 @@ FString UProjectCreateScreenViewModel::GetSelectedPolicySummary() const
 
 void UProjectCreateScreenViewModel::SetDiagnosticsText(const FString& message)
 {
-	UE_MVVM_SET_PROPERTY_VALUE(DiagnosticsText, message);
+	UE_MVVM_SET_PROPERTY_VALUE(DiagnosticsText, ExtractFirstProjectCreateDiagnosticLine(message));
 }
 
 void UProjectCreateScreenViewModel::SetDiagnosticMessages(const FProjectCreateScreenDiagnosticMessages& messages)
@@ -537,20 +542,17 @@ void UProjectCreateScreenViewModel::RefreshProjectPresets()
 
 void UProjectCreateScreenViewModel::RebuildPresetItems()
 {
-	TArray<FProjectCreatePresetItem> scenarioPresetItems = BuildVisibleProjectCreatePresetItems(
+	TArray<FProjectCreatePresetItem> scenarioPresetItems = BuildProjectCreatePresetItems(
 		PresetCatalog.ScenarioPresets,
-		SelectedScenarioPresetId,
-		{ TEXT("blank"), TEXT("demo"), TEXT("s-curve") });
+		SelectedScenarioPresetId);
 
-	TArray<FProjectCreatePresetItem> profilePresetItems = BuildVisibleProjectCreatePresetItems(
+	TArray<FProjectCreatePresetItem> profilePresetItems = BuildProjectCreatePresetItems(
 		PresetCatalog.ProfilePresets,
-		SelectedProfilePresetId,
-		{ TEXT("basic"), TEXT("full") });
+		SelectedProfilePresetId);
 
-	TArray<FProjectCreatePresetItem> policyPresetItems = BuildVisibleProjectCreatePresetItems(
+	TArray<FProjectCreatePresetItem> policyPresetItems = BuildProjectCreatePresetItems(
 		PresetCatalog.PolicyPresets,
-		SelectedPolicyPresetId,
-		{ TEXT("blank"), TEXT("demo") });
+		SelectedPolicyPresetId);
 
 	ScenarioPresetItems = MoveTemp(scenarioPresetItems);
 	ProfilePresetItems = MoveTemp(profilePresetItems);

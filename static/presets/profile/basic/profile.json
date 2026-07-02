@@ -37,7 +37,7 @@
       "rev_down_rate": 600.0
     },
     "lidar": {
-      "lidar_mode": "3d",
+      "lidar_mode": "2d",
       "draw_debug": false,
       "angle_step_degree": 3.0,
       "vertical_min_degree": -25.0,

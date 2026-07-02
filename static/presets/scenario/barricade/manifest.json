@@ -3,8 +3,8 @@
   "version": 1,
   "id": "barricade",
   "kind": "scenario",
-  "title": "바리케이드 회피",
-  "subtitle": "보도 장애물 · 경로 재계획",
+  "title": "장애물",
+  "subtitle": "장애물이 배치된 직선 보도",
   "description": "장애물 배치가 포함된 보도 시나리오입니다.",
   "sort_order": 30
 }

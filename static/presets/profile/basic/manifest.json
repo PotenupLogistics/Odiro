@@ -3,8 +3,8 @@
   "version": 1,
   "id": "basic",
   "kind": "profile",
-  "title": "기본 DeliveryBot",
-  "subtitle": "1.0m x 0.44m · LiDAR 15m",
-  "description": "새 프로젝트용 기본 DeliveryBot 프로필입니다.",
+  "title": "기초 구성",
+  "subtitle": "2D LiDAR",
+  "description": "기초적인 구성으로 이루어진 프로필입니다.",
   "sort_order": 10
 }

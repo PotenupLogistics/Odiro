@@ -49,7 +49,7 @@ bool UScenarioLlmAuthoringSubsystem::GenerateProjectScenarioFromPrompt(
 	if (PendingHttpRequest.IsValid())
 	{
 		FScenarioLlmGenerationResult result;
-		result.Message = TEXT("LLM generation request is already pending.");
+		result.Message = TEXT("이미 시나리오 생성 요청을 처리하고 있습니다.");
 		result.Diagnostics.Add(result.Message);
 		CompleteRequest(result);
 		return false;
@@ -94,7 +94,7 @@ bool UScenarioLlmAuthoringSubsystem::GenerateProjectScenarioFromPrompt(
 		PendingEpisodeCount = 0;
 		PendingProjectScenarioJsonPath.Reset();
 		FScenarioLlmGenerationResult result;
-		result.Message = TEXT("Failed to start LLM generation HTTP request.");
+		result.Message = TEXT("시나리오 생성 HTTP 요청을 시작하지 못했습니다.");
 		result.Diagnostics.Add(result.Message);
 		CompleteRequest(result);
 		return false;
@@ -130,13 +130,13 @@ void UScenarioLlmAuthoringSubsystem::HandleGenerateResponse(
 		FScenarioLlmGenerationResult result;
 		result.HttpStatusCode = responseCode;
 		result.Message = FString::Printf(
-			TEXT("LLM generation request failed. HTTP %d"),
+			TEXT("시나리오 생성 요청이 실패했습니다. HTTP %d"),
 			responseCode);
 		result.Diagnostics.Add(result.Message);
 		if (!responseBody.IsEmpty())
 		{
 			result.Diagnostics.Add(FString::Printf(
-				TEXT("Response: %s"),
+				TEXT("응답: %s"),
 				*TruncateForDiagnostic(responseBody)));
 		}
 		CompleteRequest(result);
@@ -149,12 +149,12 @@ void UScenarioLlmAuthoringSubsystem::HandleGenerateResponse(
 	{
 		FScenarioLlmGenerationResult result;
 		result.HttpStatusCode = responseCode;
-		result.Message = TEXT("LLM generation response did not produce a valid project scenario.json.");
+		result.Message = TEXT("시나리오 생성 응답에서 유효한 project scenario.json을 만들지 못했습니다.");
 		result.Diagnostics.Add(result.Message);
 		result.Diagnostics.Append(diagnostics);
 		if (!responseBody.IsEmpty())
 		{
-			result.Diagnostics.Add(FString::Printf(TEXT("Response: %s"), *TruncateForDiagnostic(responseBody)));
+			result.Diagnostics.Add(FString::Printf(TEXT("응답: %s"), *TruncateForDiagnostic(responseBody)));
 		}
 		CompleteRequest(result);
 		return;
@@ -163,7 +163,7 @@ void UScenarioLlmAuthoringSubsystem::HandleGenerateResponse(
 	FScenarioLlmGenerationResult result;
 	result.bSuccess = true;
 	result.HttpStatusCode = responseCode;
-	result.Message = TEXT("LLM generation completed and saved to project scenario.json.");
+	result.Message = TEXT("시나리오 생성이 완료되어 project scenario.json에 저장되었습니다.");
 	result.ProjectScenarioJsonPath = scenarioJsonPath;
 	result.EpisodeCount = PendingEpisodeCount;
 	CompleteRequest(result);
@@ -210,7 +210,7 @@ bool UScenarioLlmAuthoringSubsystem::TryBuildRequestBody(
 	const FString trimmedPrompt = prompt.TrimStartAndEnd();
 	if (trimmedPrompt.IsEmpty())
 	{
-		outFailure.Message = TEXT("Prompt must not be empty.");
+		outFailure.Message = TEXT("프롬프트를 입력해야 합니다.");
 		outFailure.Diagnostics.Add(outFailure.Message);
 		return false;
 	}
@@ -218,7 +218,7 @@ bool UScenarioLlmAuthoringSubsystem::TryBuildRequestBody(
 	const FString resolvedScenarioJsonPath = ResolveProjectScenarioJsonPath(projectScenarioJsonPath);
 	if (!IsProjectScenarioJsonPath(resolvedScenarioJsonPath))
 	{
-		outFailure.Message = TEXT("LLM generation requires a <UserProject>/scenario.json path.");
+		outFailure.Message = TEXT("시나리오 생성에는 <UserProject>/scenario.json 경로가 필요합니다.");
 		outFailure.Diagnostics.Add(outFailure.Message);
 		return false;
 	}
@@ -229,7 +229,7 @@ bool UScenarioLlmAuthoringSubsystem::TryBuildRequestBody(
 	if (!BuildScenarioGenerateV2RequestJson(trimmedPrompt, outBody, diagnostics))
 	{
 		outFailure.Message = diagnostics.IsEmpty()
-			? TEXT("Failed to serialize LLM generation request JSON.")
+			? TEXT("시나리오 생성 요청 JSON을 직렬화하지 못했습니다.")
 			: diagnostics[0];
 		outFailure.Diagnostics.Add(outFailure.Message);
 		for (int32 index = 1; index < diagnostics.Num(); ++index)
@@ -253,7 +253,7 @@ bool UScenarioLlmAuthoringSubsystem::BuildScenarioGenerateV2RequestJson(
 	const FString trimmedPrompt = prompt.TrimStartAndEnd();
 	if (trimmedPrompt.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("Prompt must not be empty."));
+		outDiagnostics.Add(TEXT("프롬프트를 입력해야 합니다."));
 		return false;
 	}
 
@@ -263,7 +263,7 @@ bool UScenarioLlmAuthoringSubsystem::BuildScenarioGenerateV2RequestJson(
 	const TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&outRequestJson);
 	if (!FJsonSerializer::Serialize(rootObject, writer))
 	{
-		outDiagnostics.Add(TEXT("Failed to serialize LLM generation request JSON."));
+		outDiagnostics.Add(TEXT("시나리오 생성 요청 JSON을 직렬화하지 못했습니다."));
 		return false;
 	}
 
@@ -297,7 +297,7 @@ bool UScenarioLlmAuthoringSubsystem::TryWriteScenarioResponseToProjectFile(
 	const FString resolvedScenarioJsonPath = ResolveProjectScenarioJsonPath(projectScenarioJsonPath);
 	if (!IsProjectScenarioJsonPath(resolvedScenarioJsonPath))
 	{
-		outDiagnostics.Add(TEXT("LLM generation requires a <UserProject>/scenario.json target path."));
+		outDiagnostics.Add(TEXT("시나리오 생성에는 <UserProject>/scenario.json 대상 경로가 필요합니다."));
 		return false;
 	}
 
@@ -306,14 +306,14 @@ bool UScenarioLlmAuthoringSubsystem::TryWriteScenarioResponseToProjectFile(
 	AppendScenarioSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
 	if (!parseResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("Project scenario JSON import failed validation."));
+		outDiagnostics.Add(TEXT("project scenario.json 검증에 실패했습니다."));
 		return false;
 	}
 
 	const FString directory = FPaths::GetPath(resolvedScenarioJsonPath);
 	if (!directory.IsEmpty() && !IFileManager::Get().MakeDirectory(*directory, true))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("Failed to create project scenario directory: %s"), *directory));
+		outDiagnostics.Add(FString::Printf(TEXT("project scenario.json 디렉터리를 만들지 못했습니다: %s"), *directory));
 		return false;
 	}
 
@@ -322,7 +322,7 @@ bool UScenarioLlmAuthoringSubsystem::TryWriteScenarioResponseToProjectFile(
 		*resolvedScenarioJsonPath,
 		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("Failed to save generated project scenario JSON to '%s'."), *resolvedScenarioJsonPath));
+		outDiagnostics.Add(FString::Printf(TEXT("생성된 project scenario.json을 저장하지 못했습니다: '%s'"), *resolvedScenarioJsonPath));
 		return false;
 	}
 

@@ -78,6 +78,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|Workspace")
 	FString GetActiveProjectPath() const { return ActiveProjectPath; }
 
+	// active project setting.json의 project_id를 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|Workspace")
+	FString GetActiveProjectId() const { return ActiveProjectId; }
+
 	// active project scenario.json 절대 경로를 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|Workspace")
 	FString GetActiveScenarioPath() const { return ActiveScenarioPath; }
@@ -110,6 +114,7 @@ private:
 	UPlatformAnalysisAiSubsystem* ResolvePlatformAnalysisAiSubsystem() const;
 	void HandleRunInfoChanged(const FSimulatorRunInfo& runInfo);
 	void SetActiveProjectPath(const FString& projectPath);
+	void SetActiveProjectId(const FString& projectId);
 	void SetActiveScenarioPath(const FString& scenarioPath);
 	void SetSelectedRunState(const FString& runId, const FString& runDirectory);
 	void SetStatusText(const FString& statusText);
@@ -139,6 +144,10 @@ private:
 	// active user project root 절대 경로.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|Workspace", meta = (AllowPrivateAccess = "true"))
 	FString ActiveProjectPath;
+
+	// active project 표시/로그 식별자.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|Workspace", meta = (AllowPrivateAccess = "true"))
+	FString ActiveProjectId;
 
 	// active user project scenario.json 절대 경로.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|Workspace", meta = (AllowPrivateAccess = "true"))

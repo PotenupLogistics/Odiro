@@ -13,8 +13,12 @@ import (
 
 const (
 	schemaProjectSetting    = "project_setting"
+	schemaProjectPreset     = "project_preset_manifest"
 	schemaSimulationProfile = "simulation_profile"
 	schemaScenario          = "scenario"
+	presetKindScenario      = "scenario"
+	presetKindProfile       = "profile"
+	presetKindPolicy        = "policy"
 	maxRunID                = 999999
 )
 
@@ -39,6 +43,30 @@ type ProjectPresetCatalog struct {
 	ScenarioPresetIDs []string `json:"scenarioPresetIds"`
 	ProfilePresetIDs  []string `json:"profilePresetIds"`
 	PolicyPresetIDs   []string `json:"policyPresetIds"`
+	// ScenarioPresets contains validated scenario preset card metadata.
+	ScenarioPresets []ProjectPresetInfo `json:"scenarioPresets"`
+	// ProfilePresets contains validated profile preset card metadata.
+	ProfilePresets []ProjectPresetInfo `json:"profilePresets"`
+	// PolicyPresets contains validated policy preset card metadata.
+	PolicyPresets []ProjectPresetInfo `json:"policyPresets"`
+}
+
+// ProjectPresetInfo is the IPC metadata for one selectable project preset.
+type ProjectPresetInfo struct {
+	// ID is the preset folder name and selection value.
+	ID string `json:"id"`
+	// Kind is the preset category.
+	Kind string `json:"kind"`
+	// Title is the primary UI label.
+	Title string `json:"title"`
+	// Subtitle is the secondary UI label.
+	Subtitle string `json:"subtitle"`
+	// Description is optional long-form UI text.
+	Description string `json:"description"`
+	// ThumbnailPath is the optional thumbnail.png path.
+	ThumbnailPath string `json:"thumbnailPath"`
+	// SortOrder is the manifest display order.
+	SortOrder int `json:"sortOrder"`
 }
 
 // ProjectInfo describes validated project paths.
@@ -110,45 +138,48 @@ func NewDefaultService() (*Service, error) {
 	switch mode {
 	case "static":
 		return NewService(
-			filepath.Join(root, "static", "templates"),
+			filepath.Join(root, "static", "presets"),
 			filepath.Join(root, "static", "run-defaults"),
 		), nil
 	default:
 		return NewService(
-			filepath.Join(root, "resources", "templates"),
+			filepath.Join(root, "resources", "presets"),
 			filepath.Join(root, "resources", "run-defaults"),
 		), nil
 	}
 }
 
-// ListProjectPresets returns safe preset IDs from the resource template folders.
+// ListProjectPresets returns safe preset IDs and manifest metadata.
 func (service *Service) ListProjectPresets() (ProjectPresetCatalog, error) {
-	scenarioPresetIDs, err := listPresetJSONIDs(filepath.Join(service.ProjectPresetsDir, "scenario"))
+	scenarioPresets, err := listPresetInfos(filepath.Join(service.ProjectPresetsDir, presetKindScenario), presetKindScenario)
 	if err != nil {
 		return ProjectPresetCatalog{}, err
 	}
-	profilePresetIDs, err := listPresetJSONIDs(filepath.Join(service.ProjectPresetsDir, "profile"))
+	profilePresets, err := listPresetInfos(filepath.Join(service.ProjectPresetsDir, presetKindProfile), presetKindProfile)
 	if err != nil {
 		return ProjectPresetCatalog{}, err
 	}
-	policyPresetIDs, err := listPresetIDs(filepath.Join(service.ProjectPresetsDir, "policy"))
+	policyPresets, err := listPresetInfos(filepath.Join(service.ProjectPresetsDir, presetKindPolicy), presetKindPolicy)
 	if err != nil {
 		return ProjectPresetCatalog{}, err
 	}
 	return ProjectPresetCatalog{
-		ScenarioPresetIDs: scenarioPresetIDs,
-		ProfilePresetIDs:  profilePresetIDs,
-		PolicyPresetIDs:   policyPresetIDs,
+		ScenarioPresetIDs: extractPresetIDs(scenarioPresets),
+		ProfilePresetIDs:  extractPresetIDs(profilePresets),
+		PolicyPresetIDs:   extractPresetIDs(policyPresets),
+		ScenarioPresets:   scenarioPresets,
+		ProfilePresets:    profilePresets,
+		PolicyPresets:     policyPresets,
 	}, nil
 }
 
-// listPresetIDs returns safe direct child directory names.
-func listPresetIDs(categoryDir string) ([]string, error) {
+// listPresetInfos returns validated manifest metadata from safe direct child folders.
+func listPresetInfos(categoryDir string, expectedKind string) ([]ProjectPresetInfo, error) {
 	entries, err := os.ReadDir(categoryDir)
 	if err != nil {
 		return nil, NewError("PROJECT_PRESET_INVALID", err.Error())
 	}
-	presetIDs := []string{}
+	presetInfos := []ProjectPresetInfo{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -157,31 +188,23 @@ func listPresetIDs(categoryDir string) ([]string, error) {
 		if !isSafeSegment(presetID) {
 			continue
 		}
-		presetIDs = append(presetIDs, presetID)
+		presetInfo, err := readProjectPresetManifest(filepath.Join(categoryDir, presetID), expectedKind)
+		if err != nil {
+			return nil, err
+		}
+		presetInfos = append(presetInfos, presetInfo)
 	}
-	sort.Strings(presetIDs)
-	return presetIDs, nil
+	sortProjectPresetInfos(presetInfos)
+	return presetInfos, nil
 }
 
-// listPresetJSONIDs returns safe direct child JSON file base names.
-func listPresetJSONIDs(categoryDir string) ([]string, error) {
-	entries, err := os.ReadDir(categoryDir)
-	if err != nil {
-		return nil, NewError("PROJECT_PRESET_INVALID", err.Error())
+// extractPresetIDs returns IDs in the same order as the manifest metadata.
+func extractPresetIDs(presetInfos []ProjectPresetInfo) []string {
+	presetIDs := make([]string, 0, len(presetInfos))
+	for _, presetInfo := range presetInfos {
+		presetIDs = append(presetIDs, presetInfo.ID)
 	}
-	presetIDs := []string{}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".json") {
-			continue
-		}
-		presetID := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		if !isSafeSegment(presetID) {
-			continue
-		}
-		presetIDs = append(presetIDs, presetID)
-	}
-	sort.Strings(presetIDs)
-	return presetIDs, nil
+	return presetIDs
 }
 
 // ValidateProject validates a user project root without mutating it.
@@ -215,9 +238,12 @@ func (service *Service) CreateProject(projectPath string, selection ProjectPrese
 
 	sources := projectPresetSourcePaths{
 		SettingPath:  filepath.Join(service.ProjectPresetsDir, "setting.json"),
-		ScenarioPath: filepath.Join(service.ProjectPresetsDir, "scenario", selection.ScenarioPresetID+".json"),
-		ProfilePath:  filepath.Join(service.ProjectPresetsDir, "profile", selection.ProfilePresetID+".json"),
-		PolicyPath:   filepath.Join(service.ProjectPresetsDir, "policy", selection.PolicyPresetID),
+		ScenarioRoot: filepath.Join(service.ProjectPresetsDir, presetKindScenario, selection.ScenarioPresetID),
+		ScenarioPath: filepath.Join(service.ProjectPresetsDir, presetKindScenario, selection.ScenarioPresetID, "scenario.json"),
+		ProfileRoot:  filepath.Join(service.ProjectPresetsDir, presetKindProfile, selection.ProfilePresetID),
+		ProfilePath:  filepath.Join(service.ProjectPresetsDir, presetKindProfile, selection.ProfilePresetID, "profile.json"),
+		PolicyRoot:   filepath.Join(service.ProjectPresetsDir, presetKindPolicy, selection.PolicyPresetID),
+		PolicyPath:   filepath.Join(service.ProjectPresetsDir, presetKindPolicy, selection.PolicyPresetID, "policy"),
 	}
 	if err := service.validateProjectPresets(sources); err != nil {
 		return CreateProjectResult{}, err
@@ -384,8 +410,11 @@ func ValidateRunSnapshot(projectPath string, runID string) (RunSnapshotInfo, err
 // projectPresetSourcePaths contains resolved source paths for project creation.
 type projectPresetSourcePaths struct {
 	SettingPath  string
+	ScenarioRoot string
 	ProfilePath  string
+	ProfileRoot  string
 	ScenarioPath string
+	PolicyRoot   string
 	PolicyPath   string
 }
 
@@ -452,6 +481,18 @@ func (service *Service) validateProjectInfo(projectPath string) (ProjectInfo, er
 // validateProjectPresets checks selected preset content before it is copied.
 func (service *Service) validateProjectPresets(sources projectPresetSourcePaths) error {
 	for _, item := range []struct {
+		Root string
+		Kind string
+	}{
+		{Root: sources.ScenarioRoot, Kind: presetKindScenario},
+		{Root: sources.ProfileRoot, Kind: presetKindProfile},
+		{Root: sources.PolicyRoot, Kind: presetKindPolicy},
+	} {
+		if _, err := readProjectPresetManifest(item.Root, item.Kind); err != nil {
+			return err
+		}
+	}
+	for _, item := range []struct {
 		Path   string
 		Schema string
 	}{
@@ -466,7 +507,7 @@ func (service *Service) validateProjectPresets(sources projectPresetSourcePaths)
 	if err := validatePolicyPackage(sources.PolicyPath, "PROJECT_PRESET_INVALID"); err != nil {
 		return err
 	}
-	return filepath.WalkDir(sources.PolicyPath, func(path string, entry fs.DirEntry, walkErr error) error {
+	return filepath.WalkDir(sources.PolicyRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return NewError("PROJECT_PRESET_INVALID", walkErr.Error())
 		}
@@ -509,10 +550,10 @@ func findResourceRoot() (string, string, error) {
 func searchResourceRoot(start string) (string, string, bool) {
 	current := filepath.Clean(start)
 	for {
-		if dirExists(filepath.Join(current, "static", "templates")) {
+		if hasResourceDirs(current, "static") {
 			return current, "static", true
 		}
-		if dirExists(filepath.Join(current, "resources", "templates")) {
+		if hasResourceDirs(current, "resources") {
 			return current, "resources", true
 		}
 		parent := filepath.Dir(current)
@@ -521,6 +562,107 @@ func searchResourceRoot(start string) (string, string, bool) {
 		}
 		current = parent
 	}
+}
+
+// hasResourceDirs reports whether one root contains matching presets and run defaults.
+func hasResourceDirs(root string, mode string) bool {
+	return dirExists(filepath.Join(root, mode, "presets")) &&
+		dirExists(filepath.Join(root, mode, "run-defaults"))
+}
+
+// projectPresetManifest is the on-disk preset UI metadata contract.
+type projectPresetManifest struct {
+	Schema      string   `json:"schema"`
+	Version     float64  `json:"version"`
+	ID          string   `json:"id"`
+	Kind        string   `json:"kind"`
+	Title       string   `json:"title"`
+	Subtitle    string   `json:"subtitle"`
+	Description string   `json:"description"`
+	SortOrder   *float64 `json:"sort_order"`
+}
+
+// readProjectPresetManifest validates and converts one preset manifest.
+func readProjectPresetManifest(presetRoot string, expectedKind string) (ProjectPresetInfo, error) {
+	presetID := filepath.Base(filepath.Clean(presetRoot))
+	if !isSafeSegment(presetID) {
+		return ProjectPresetInfo{}, NewError("PROJECT_PRESET_INVALID", fmt.Sprintf("preset folder id is invalid: %s", presetID))
+	}
+	if err := requireDir(presetRoot, "PROJECT_PRESET_INVALID"); err != nil {
+		return ProjectPresetInfo{}, err
+	}
+
+	manifestPath := filepath.Join(presetRoot, "manifest.json")
+	if err := rejectSymlink(manifestPath); err != nil {
+		return ProjectPresetInfo{}, NewError("PROJECT_PRESET_INVALID", err.Error())
+	}
+	payload, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return ProjectPresetInfo{}, NewError("PROJECT_PRESET_INVALID", err.Error())
+	}
+
+	var manifest projectPresetManifest
+	if err := json.Unmarshal(payload, &manifest); err != nil {
+		return ProjectPresetInfo{}, NewError("PROJECT_PRESET_INVALID", err.Error())
+	}
+	if manifest.Schema != schemaProjectPreset {
+		return ProjectPresetInfo{}, NewError("PROJECT_PRESET_INVALID", fmt.Sprintf("%s schema must be %q", manifestPath, schemaProjectPreset))
+	}
+	if manifest.Version != float64(1) {
+		return ProjectPresetInfo{}, NewError("PROJECT_PRESET_INVALID", fmt.Sprintf("%s version must be 1", manifestPath))
+	}
+	if manifest.ID != presetID || !isSafeSegment(manifest.ID) {
+		return ProjectPresetInfo{}, NewError("PROJECT_PRESET_INVALID", fmt.Sprintf("%s id must match folder", manifestPath))
+	}
+	if manifest.Kind != expectedKind {
+		return ProjectPresetInfo{}, NewError("PROJECT_PRESET_INVALID", fmt.Sprintf("%s kind must be %q", manifestPath, expectedKind))
+	}
+
+	title := strings.TrimSpace(manifest.Title)
+	if title == "" {
+		title = manifest.ID
+	}
+	sortOrder := 1000
+	if manifest.SortOrder != nil {
+		sortOrder = int(*manifest.SortOrder)
+	}
+	thumbnailPath := filepath.Join(presetRoot, "thumbnail.png")
+	if regularFileExists(thumbnailPath) {
+		if thumbnailAbs, err := filepath.Abs(thumbnailPath); err == nil {
+			thumbnailPath = thumbnailAbs
+		} else {
+			thumbnailPath = filepath.Clean(thumbnailPath)
+		}
+	} else {
+		thumbnailPath = ""
+	}
+
+	return ProjectPresetInfo{
+		ID:            manifest.ID,
+		Kind:          manifest.Kind,
+		Title:         title,
+		Subtitle:      manifest.Subtitle,
+		Description:   manifest.Description,
+		ThumbnailPath: thumbnailPath,
+		SortOrder:     sortOrder,
+	}, nil
+}
+
+// sortProjectPresetInfos applies the catalog display order.
+func sortProjectPresetInfos(presetInfos []ProjectPresetInfo) {
+	sort.Slice(presetInfos, func(leftIndex int, rightIndex int) bool {
+		left := presetInfos[leftIndex]
+		right := presetInfos[rightIndex]
+		if left.SortOrder != right.SortOrder {
+			return left.SortOrder < right.SortOrder
+		}
+		leftTitle := strings.ToLower(left.Title)
+		rightTitle := strings.ToLower(right.Title)
+		if leftTitle != rightTitle {
+			return leftTitle < rightTitle
+		}
+		return left.ID < right.ID
+	})
 }
 
 // validateJSONSchema checks root object schema and version fields.
@@ -741,6 +883,12 @@ func requireDir(path string, code string) error {
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+// regularFileExists reports whether a non-directory path exists.
+func regularFileExists(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode().IsRegular()
 }
 
 // isSafeSegment validates a single path segment used as an ID.

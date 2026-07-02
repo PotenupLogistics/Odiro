@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,7 +15,7 @@ import (
 // TestRouterCreatesProjectRunAndReportsSimulatorConfigError covers T04 API flow.
 func TestRouterCreatesProjectRunAndReportsSimulatorConfigError(t *testing.T) {
 	root := t.TempDir()
-	presetsDir := filepath.Join(root, "templates")
+	presetsDir := filepath.Join(root, "presets")
 	runDefaultsDir := filepath.Join(root, "run-defaults")
 	writeAPIPresets(t, presetsDir)
 	writeAPIRunDefaults(t, runDefaultsDir)
@@ -31,6 +32,10 @@ func TestRouterCreatesProjectRunAndReportsSimulatorConfigError(t *testing.T) {
 	})
 	if !listResponse.OK {
 		t.Fatalf("list response error = %#v", listResponse.Error)
+	}
+	catalog, ok := listResponse.Result.(workspace.ProjectPresetCatalog)
+	if !ok || len(catalog.ProfilePresets) != 1 || catalog.ProfilePresets[0].Title != "Basic Profile" {
+		t.Fatalf("list response result = %#v, want profile manifest metadata", listResponse.Result)
 	}
 
 	projectPath := filepath.Join(root, "project")
@@ -94,13 +99,30 @@ func mustJSON(t *testing.T, value any) json.RawMessage {
 // writeAPIPresets creates minimal valid project presets.
 func writeAPIPresets(t *testing.T, presetsDir string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(presetsDir, "policy", "blank"), 0755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
 	writeAPIFile(t, filepath.Join(presetsDir, "setting.json"), `{"schema":"project_setting","version":1}`)
-	writeAPIFile(t, filepath.Join(presetsDir, "profile", "basic.json"), `{"schema":"simulation_profile","version":1}`)
-	writeAPIFile(t, filepath.Join(presetsDir, "scenario", "blank.json"), `{"schema":"scenario","version":1}`)
-	writeAPIFile(t, filepath.Join(presetsDir, "policy", "blank", "__init__.py"), "def create_policy():\n    return None\n")
+	writeAPIManifest(t, filepath.Join(presetsDir, "scenario", "blank"), "scenario", "blank", "Blank Scenario", 20)
+	writeAPIManifest(t, filepath.Join(presetsDir, "profile", "basic"), "profile", "basic", "Basic Profile", 10)
+	writeAPIManifest(t, filepath.Join(presetsDir, "policy", "blank"), "policy", "blank", "Blank Policy", 30)
+	writeAPIFile(t, filepath.Join(presetsDir, "scenario", "blank", "scenario.json"), `{"schema":"scenario","version":1}`)
+	writeAPIFile(t, filepath.Join(presetsDir, "profile", "basic", "profile.json"), `{"schema":"simulation_profile","version":1}`)
+	writeAPIFile(t, filepath.Join(presetsDir, "policy", "blank", "policy", "__init__.py"), "def create_policy():\n    return None\n")
+}
+
+// writeAPIManifest creates one valid preset manifest and thumbnail.
+func writeAPIManifest(t *testing.T, presetRoot string, kind string, id string, title string, sortOrder int) {
+	t.Helper()
+	writeAPIFile(
+		t,
+		filepath.Join(presetRoot, "manifest.json"),
+		fmt.Sprintf(
+			`{"schema":"project_preset_manifest","version":1,"id":%q,"kind":%q,"title":%q,"sort_order":%d}`,
+			id,
+			kind,
+			title,
+			sortOrder,
+		),
+	)
+	writeAPIFile(t, filepath.Join(presetRoot, "thumbnail.png"), "png")
 }
 
 // writeAPIRunDefaults creates the static run default folder shape.

@@ -2,6 +2,7 @@ package process
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,7 +102,7 @@ func TestStartSimulatorTracksProcessAndWritesExitStatus(t *testing.T) {
 func createProcessTestRun(t *testing.T) (string, string, string) {
 	t.Helper()
 	root := t.TempDir()
-	presetsDir := filepath.Join(root, "templates")
+	presetsDir := filepath.Join(root, "presets")
 	runDefaultsDir := filepath.Join(root, "run-defaults")
 	writeProcessPresets(t, presetsDir)
 	writeProcessRunDefaults(t, runDefaultsDir)
@@ -123,13 +124,30 @@ func createProcessTestRun(t *testing.T) (string, string, string) {
 // writeProcessPresets creates minimal valid project presets.
 func writeProcessPresets(t *testing.T, presetsDir string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(presetsDir, "policy", "blank"), 0755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
 	writeProcessFile(t, filepath.Join(presetsDir, "setting.json"), `{"schema":"project_setting","version":1}`)
-	writeProcessFile(t, filepath.Join(presetsDir, "profile", "basic.json"), `{"schema":"simulation_profile","version":1}`)
-	writeProcessFile(t, filepath.Join(presetsDir, "scenario", "blank.json"), `{"schema":"scenario","version":1}`)
-	writeProcessFile(t, filepath.Join(presetsDir, "policy", "blank", "__init__.py"), "def create_policy():\n    return None\n")
+	writeProcessManifest(t, filepath.Join(presetsDir, "scenario", "blank"), "scenario", "blank", "Blank Scenario", 20)
+	writeProcessManifest(t, filepath.Join(presetsDir, "profile", "basic"), "profile", "basic", "Basic Profile", 10)
+	writeProcessManifest(t, filepath.Join(presetsDir, "policy", "blank"), "policy", "blank", "Blank Policy", 30)
+	writeProcessFile(t, filepath.Join(presetsDir, "scenario", "blank", "scenario.json"), `{"schema":"scenario","version":1}`)
+	writeProcessFile(t, filepath.Join(presetsDir, "profile", "basic", "profile.json"), `{"schema":"simulation_profile","version":1}`)
+	writeProcessFile(t, filepath.Join(presetsDir, "policy", "blank", "policy", "__init__.py"), "def create_policy():\n    return None\n")
+}
+
+// writeProcessManifest creates one valid preset manifest and thumbnail.
+func writeProcessManifest(t *testing.T, presetRoot string, kind string, id string, title string, sortOrder int) {
+	t.Helper()
+	writeProcessFile(
+		t,
+		filepath.Join(presetRoot, "manifest.json"),
+		fmt.Sprintf(
+			`{"schema":"project_preset_manifest","version":1,"id":%q,"kind":%q,"title":%q,"sort_order":%d}`,
+			id,
+			kind,
+			title,
+			sortOrder,
+		),
+	)
+	writeProcessFile(t, filepath.Join(presetRoot, "thumbnail.png"), "png")
 }
 
 // writeProcessRunDefaults creates the static run default folder shape.

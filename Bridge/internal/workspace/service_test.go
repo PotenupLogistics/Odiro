@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,7 +13,7 @@ import (
 // TestServiceCreatesProjectAndRun covers preset copy and run snapshot creation.
 func TestServiceCreatesProjectAndRun(t *testing.T) {
 	root := t.TempDir()
-	presetsDir := filepath.Join(root, "templates")
+	presetsDir := filepath.Join(root, "presets")
 	runDefaultsDir := filepath.Join(root, "run-defaults")
 	writeWorkspacePresets(t, presetsDir)
 	writeRunDefaults(t, runDefaultsDir)
@@ -26,6 +27,10 @@ func TestServiceCreatesProjectAndRun(t *testing.T) {
 		!reflect.DeepEqual(list.ProfilePresetIDs, []string{"basic"}) ||
 		!reflect.DeepEqual(list.PolicyPresetIDs, []string{"blank"}) {
 		t.Fatalf("Preset catalog = %#v, want blank/basic/blank", list)
+	}
+	if len(list.ProfilePresets) != 1 || list.ProfilePresets[0].Title != "Basic Profile" ||
+		list.ProfilePresets[0].Kind != presetKindProfile || list.ProfilePresets[0].ThumbnailPath == "" {
+		t.Fatalf("ProfilePresets = %#v, want manifest metadata", list.ProfilePresets)
 	}
 
 	projectPath := filepath.Join(root, "created")
@@ -94,7 +99,7 @@ func TestServiceCreatesProjectAndRun(t *testing.T) {
 // TestCreateProjectRejectsNonEmptyTarget covers PROJECT_EXISTS.
 func TestCreateProjectRejectsNonEmptyTarget(t *testing.T) {
 	root := t.TempDir()
-	presetsDir := filepath.Join(root, "templates")
+	presetsDir := filepath.Join(root, "presets")
 	runDefaultsDir := filepath.Join(root, "run-defaults")
 	writeWorkspacePresets(t, presetsDir)
 	writeRunDefaults(t, runDefaultsDir)
@@ -118,11 +123,11 @@ func TestCreateProjectRejectsNonEmptyTarget(t *testing.T) {
 // TestCreateProjectRejectsGeneratedPythonCache covers preset source hygiene.
 func TestCreateProjectRejectsGeneratedPythonCache(t *testing.T) {
 	root := t.TempDir()
-	presetsDir := filepath.Join(root, "templates")
+	presetsDir := filepath.Join(root, "presets")
 	runDefaultsDir := filepath.Join(root, "run-defaults")
 	writeWorkspacePresets(t, presetsDir)
 	writeRunDefaults(t, runDefaultsDir)
-	writeFile(t, filepath.Join(presetsDir, "policy", "blank", "__pycache__", "__init__.cpython-314.pyc"), "cache")
+	writeFile(t, filepath.Join(presetsDir, "policy", "blank", "policy", "__pycache__", "__init__.cpython-314.pyc"), "cache")
 
 	service := NewService(presetsDir, runDefaultsDir)
 	_, err := service.CreateProject(
@@ -148,50 +153,78 @@ func TestDefaultStaticResourcesCreateProjectsAndRuns(t *testing.T) {
 	if len(presets.ScenarioPresetIDs) == 0 || len(presets.ProfilePresetIDs) == 0 || len(presets.PolicyPresetIDs) == 0 {
 		t.Fatal("ListProjectPresets() returned an empty category")
 	}
+	if len(presets.ScenarioPresets) != len(presets.ScenarioPresetIDs) ||
+		len(presets.ProfilePresets) != len(presets.ProfilePresetIDs) ||
+		len(presets.PolicyPresets) != len(presets.PolicyPresetIDs) {
+		t.Fatalf("Preset metadata lengths = %#v, want matching ID lengths", presets)
+	}
 
 	root := t.TempDir()
 	for _, scenarioPresetID := range presets.ScenarioPresetIDs {
 		scenarioPresetID := scenarioPresetID
-		t.Run(scenarioPresetID, func(t *testing.T) {
-			selection := ProjectPresetSelection{
-				ScenarioPresetID: scenarioPresetID,
-				ProfilePresetID:  presets.ProfilePresetIDs[0],
-				PolicyPresetID:   presets.PolicyPresetIDs[0],
-			}
-			projectPath := filepath.Join(root, scenarioPresetID)
-			if _, err := service.CreateProject(projectPath, selection); err != nil {
-				t.Fatalf("CreateProject(%q) error = %v", scenarioPresetID, err)
-			}
+		for _, profilePresetID := range presets.ProfilePresetIDs {
+			profilePresetID := profilePresetID
+			for _, policyPresetID := range presets.PolicyPresetIDs {
+				policyPresetID := policyPresetID
+				t.Run(scenarioPresetID+"/"+profilePresetID+"/"+policyPresetID, func(t *testing.T) {
+					selection := ProjectPresetSelection{
+						ScenarioPresetID: scenarioPresetID,
+						ProfilePresetID:  profilePresetID,
+						PolicyPresetID:   policyPresetID,
+					}
+					projectPath := filepath.Join(root, scenarioPresetID+"-"+profilePresetID+"-"+policyPresetID)
+					if _, err := service.CreateProject(projectPath, selection); err != nil {
+						t.Fatalf("CreateProject(%#v) error = %v", selection, err)
+					}
 
-			run, err := service.CreateRun(projectPath)
-			if err != nil {
-				t.Fatalf("CreateRun(%q) error = %v", scenarioPresetID, err)
+					run, err := service.CreateRun(projectPath)
+					if err != nil {
+						t.Fatalf("CreateRun(%#v) error = %v", selection, err)
+					}
+					if _, err := ValidateRunSnapshot(projectPath, run.RunID); err != nil {
+						t.Fatalf("ValidateRunSnapshot(%#v) error = %v", selection, err)
+					}
+					for _, snapshotPath := range run.SnapshotPaths {
+						if strings.Contains(snapshotPath, "__pycache__") ||
+							strings.HasSuffix(snapshotPath, ".pyc") ||
+							strings.HasSuffix(snapshotPath, ".pyo") ||
+							strings.HasSuffix(snapshotPath, ".gitkeep") {
+							t.Fatalf("snapshot copied source-only/generated path: %s", snapshotPath)
+						}
+					}
+				})
 			}
-			if _, err := ValidateRunSnapshot(projectPath, run.RunID); err != nil {
-				t.Fatalf("ValidateRunSnapshot(%q) error = %v", scenarioPresetID, err)
-			}
-			for _, snapshotPath := range run.SnapshotPaths {
-				if strings.Contains(snapshotPath, "__pycache__") ||
-					strings.HasSuffix(snapshotPath, ".pyc") ||
-					strings.HasSuffix(snapshotPath, ".pyo") ||
-					strings.HasSuffix(snapshotPath, ".gitkeep") {
-					t.Fatalf("snapshot copied source-only/generated path: %s", snapshotPath)
-				}
-			}
-		})
+		}
 	}
 }
 
 // writeWorkspacePresets creates minimal valid project presets.
 func writeWorkspacePresets(t *testing.T, presetsDir string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(presetsDir, "policy", "blank"), 0755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
 	writeFile(t, filepath.Join(presetsDir, "setting.json"), `{"schema":"project_setting","version":1}`)
-	writeFile(t, filepath.Join(presetsDir, "profile", "basic.json"), `{"schema":"simulation_profile","version":1}`)
-	writeFile(t, filepath.Join(presetsDir, "scenario", "blank.json"), `{"schema":"scenario","version":1}`)
-	writeFile(t, filepath.Join(presetsDir, "policy", "blank", "__init__.py"), "def create_policy():\n    return None\n")
+	writeWorkspaceManifest(t, filepath.Join(presetsDir, "scenario", "blank"), presetKindScenario, "blank", "Blank Scenario", 20)
+	writeWorkspaceManifest(t, filepath.Join(presetsDir, "profile", "basic"), presetKindProfile, "basic", "Basic Profile", 10)
+	writeWorkspaceManifest(t, filepath.Join(presetsDir, "policy", "blank"), presetKindPolicy, "blank", "Blank Policy", 30)
+	writeFile(t, filepath.Join(presetsDir, "scenario", "blank", "scenario.json"), `{"schema":"scenario","version":1}`)
+	writeFile(t, filepath.Join(presetsDir, "profile", "basic", "profile.json"), `{"schema":"simulation_profile","version":1}`)
+	writeFile(t, filepath.Join(presetsDir, "policy", "blank", "policy", "__init__.py"), "def create_policy():\n    return None\n")
+}
+
+// writeWorkspaceManifest creates one valid preset manifest and thumbnail.
+func writeWorkspaceManifest(t *testing.T, presetRoot string, kind string, id string, title string, sortOrder int) {
+	t.Helper()
+	writeFile(
+		t,
+		filepath.Join(presetRoot, "manifest.json"),
+		fmt.Sprintf(
+			`{"schema":"project_preset_manifest","version":1,"id":%q,"kind":%q,"title":%q,"sort_order":%d}`,
+			id,
+			kind,
+			title,
+			sortOrder,
+		),
+	)
+	writeFile(t, filepath.Join(presetRoot, "thumbnail.png"), "png")
 }
 
 // writeRunDefaults creates the static run default folder shape.

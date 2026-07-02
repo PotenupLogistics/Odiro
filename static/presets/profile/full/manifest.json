@@ -3,8 +3,8 @@
   "version": 1,
   "id": "full",
   "kind": "profile",
-  "title": "데모 DeliveryBot",
-  "subtitle": "디버그 LiDAR · 포인트 클라우드",
-  "description": "디버그 센서 설정을 포함한 데모 프로필입니다.",
+  "title": "심화 구성",
+  "subtitle": "LiDAR + Point Cloud",
+  "description": "디버그 센서 설정을 포함한 최대 성능의 프로필입니다.",
   "sort_order": 20
 }

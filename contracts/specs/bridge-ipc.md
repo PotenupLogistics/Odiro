@@ -144,18 +144,18 @@ Client, Agents, Simulator 간 JSON-lines IPC 송수신 규약.
 
 ```json
 {
-  "scenarioPresetIds": ["blank", "curved-road", "demo"],
+  "scenarioPresetIds": ["blank", "barricade", "curved", "s-curve"],
   "profilePresetIds": ["basic", "full"],
   "policyPresetIds": ["blank", "demo"],
   "scenarioPresets": [
     {
       "id": "blank",
       "kind": "scenario",
-      "title": "Blank",
-      "subtitle": "",
-      "description": "",
+      "title": "기초 구성",
+      "subtitle": "짧은 직선 보도",
+      "description": "새 프로젝트를 시작하기 위한 최소 시나리오입니다.",
       "thumbnailPath": "X:/Odiro/static/presets/scenario/blank/thumbnail.png",
-      "sortOrder": 0
+      "sortOrder": 10
     }
   ],
   "profilePresets": [],

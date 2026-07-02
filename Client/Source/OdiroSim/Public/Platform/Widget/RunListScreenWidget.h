@@ -6,9 +6,7 @@
 #include "RunListScreenWidget.generated.h"
 
 class UBaseButtonWidget;
-class UBaseSliderComboWidget;
 class UBaseTextInputWidget;
-class UBaseTextWidget;
 class UExperimentConfigViewModel;
 class UProjectExperimentRunRowWidget;
 class UProjectWorkspaceViewModel;
@@ -49,10 +47,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|RunList")
 	bool RequestAnalysisForSelectedRun();
 
-	// Asks root to show the currently selected run detail.
-	UFUNCTION(BlueprintCallable, Category = "Platform|RunList")
-	bool OpenSelectedRunDetail();
-
 	// Run detail navigation event.
 	UPROPERTY(BlueprintAssignable, Category = "Platform|RunList|Events")
 	FRunListScreenRunDetailRequested OnRunDetailRequested;
@@ -79,21 +73,9 @@ private:
 	// Removes row widgets and native event subscriptions.
 	void ClearRunRows();
 
-	// Refresh button click handler.
-	UFUNCTION()
-	void HandleRefreshClicked(UBaseButtonWidget* button);
-
 	// Run button click handler.
 	UFUNCTION()
 	void HandleRunClicked(UBaseButtonWidget* button);
-
-	// Analysis button click handler.
-	UFUNCTION()
-	void HandleAnalyzeClicked(UBaseButtonWidget* button);
-
-	// Detail button click handler.
-	UFUNCTION()
-	void HandleOpenDetailClicked(UBaseButtonWidget* button);
 
 	// Row analysis click handler.
 	void HandleRunRowAnalyzeRequested(UProjectExperimentRunRowWidget* rowWidget);
@@ -114,25 +96,17 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UProjectExperimentRunRowWidget> RunRowWidgetClass;
 
-	// Active project path display.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> ProjectPathText;
-
-	// Selected run id display.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> SelectedRunText;
-
-	// Status and diagnostics display.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> StatusText;
-
 	// Fixed FPS input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextInputWidget> FixedFpsInput;
 
-	// Fixed FPS slider combo.
+	// Runtime time scale input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderComboWidget> FixedFpsSliderCombo;
+	TObjectPtr<UBaseTextInputWidget> TimeScaleInput;
+
+	// Runtime max duration seconds input.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseTextInputWidget> MaxDurationInput;
 
 	// Episode count input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -142,23 +116,23 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextInputWidget> BaseSeedInput;
 
+	// Tip-over angle degrees input.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseTextInputWidget> TipOverAngleInput;
+
+	// Near-miss distance input.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseTextInputWidget> NearMissDistanceInput;
+
+	// Goal acceptance radius input.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseTextInputWidget> GoalAcceptanceRadiusInput;
+
 	// Container for project run rows.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UVerticalBox> RunRowListBox;
 
-	// Refresh command button.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseButtonWidget> RefreshButton;
-
 	// Start run command button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseButtonWidget> StartRunButton;
-
-	// Analyze selected run command button.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseButtonWidget> AnalyzeRunButton;
-
-	// Open selected run detail command button.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseButtonWidget> OpenRunDetailButton;
 };

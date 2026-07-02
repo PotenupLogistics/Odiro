@@ -86,6 +86,7 @@ WorkspaceScanner
 -> ExperimentAggregator
 -> FailurePatternDetector
 -> RagQueryBuilderV2
+-> FileBasedRagRetrieverAdapterV2
 -> AnalysisContextBuilder
 -> LlmFailureAnalyzer
 -> RecommendationGenerator
@@ -127,7 +128,11 @@ run summary를 project 단위로 묶습니다. 전체 success rate와 main failu
 
 ### `RagQueryBuilderV2`
 
-반복 실패 패턴을 RAG 검색 query 후보로 변환합니다. 예를 들어 `blocked_region_violation_repeated`는 `policy_safety`, `near_miss_repeated`는 `pedestrian_safety` query로 매핑합니다. 현재 retriever adapter는 vector DB 없이 실패하지 않는 skeleton이며, query와 빈 context만 내부 analysis context에 제공합니다.
+반복 실패 패턴을 RAG 검색 query 후보로 변환합니다. 예를 들어 `blocked_region_violation_repeated`는 `policy_safety`, `near_miss_repeated`는 `pedestrian_safety` query로 매핑합니다.
+
+### `FileBasedRagRetrieverAdapterV2`
+
+현재 repo의 `policy_rag_chunks.jsonl` 기반 검색을 감싸 result analysis 내부 context로만 제공합니다. Chroma, embedding DB, vector DB는 사용하지 않습니다. 검색 결과와 `rag_diagnostic`은 LangGraph state 또는 runner 내부 state에만 남기며 public API response, `report.json`, `recommendations.json`, `manifest.json`, review directory 신규 파일에는 저장하지 않습니다.
 
 ### `AnalysisContextBuilder`
 
@@ -181,8 +186,8 @@ fallback은 정상적인 degradation path입니다. API는 success response를 �
 
 ## LangGraph runner
 
-`ScenarioGenerationGraphRunnerV2`는 실제 LangGraph `StateGraph`를 compile/invoke하는 scenario generation v2 기본 실행 경로입니다. `ResultAnalysisGraphRunnerV2`는 graph-compatible node pipeline으로 확장되어 scan, classify, parse, metric extraction, timeline/RAG context, recommendation validation, response build를 node 메서드 단위로 실행합니다.
+`ScenarioGenerationGraphRunnerV2`는 실제 LangGraph `StateGraph`를 compile/invoke하는 scenario generation v2 기본 실행 경로입니다. `ResultAnalysisGraphRunnerV2`도 `StateGraph.compile().invoke()` 기반으로 scan, classify, parse, metric extraction, timeline, file-based RAG context, recommendation validation, response build를 실행합니다.
 
-`langgraph` import가 실패해도 module import와 테스트가 깨지지 않도록 `StateGraph = None` fallback을 사용합니다. ResultAnalysisV2 graph runner는 실제 `langgraph` dependency 없이도 순차 node pipeline으로 동작합니다. `/api/v2/analysis/run`은 항상 이 runner를 호출합니다.
+`langgraph` import가 실패해도 module import와 테스트가 깨지지 않도록 `StateGraph = None` fallback을 사용합니다. ResultAnalysisV2 graph runner는 실제 `langgraph` dependency 없이도 순차 node pipeline으로 동작하지만, LangGraph와 sequential fallback은 동일한 route decision 함수를 공유합니다. `/api/v2/analysis/run`은 항상 이 runner를 호출합니다.
 
-Final response는 기존 `analysis_run_response_v2` schema를 유지합니다. episode timeline, representative failed episode, RAG query/context는 내부 `analysis_context`와 runner state에만 존재하며 API response field로 추가하지 않습니다.
+Final response는 기존 `analysis_run_response_v2` schema를 유지합니다. `review_dir`, `report_path`, `manifest_path`, `recommendations_path` 같은 path field를 다시 추가하지 않습니다. episode timeline, representative failed episode, RAG query/context, `rag_diagnostic`은 내부 `analysis_context`와 runner state에만 존재하며 API response field나 review artifact 구조로 추가하지 않습니다.

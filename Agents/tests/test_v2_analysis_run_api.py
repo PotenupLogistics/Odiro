@@ -717,6 +717,37 @@ def test_v2_analysis_run_exposes_repath_and_tip_over_metrics(tmp_path) -> None:
     assert any(finding["type"] == "robot_tip_over" for finding in report["findings"])
 
 
+def test_v2_analysis_run_fills_repath_from_result_event_summary_when_summary_rows_omit_it(tmp_path) -> None:
+    """Result event summaries supply public Repath counts when dashboard rows omit that metric."""
+    project = tmp_path / "Project1"
+    _write_episode(
+        project,
+        "000001",
+        {
+            "summary": {"success": False, "goal_reached": False, "terminal_reason": "Timeout"},
+            "metrics": {"goal_reached": 0, "duration_s": 60.0},
+            "event_summary": {"by_type": {"Repath": 5}},
+        },
+    )
+    _write_episode(
+        project,
+        "000002",
+        {
+            "summary": {"success": False, "goal_reached": False, "terminal_reason": "Timeout"},
+            "metrics": {"goal_reached": 0, "duration_s": 60.0},
+            "event_summary": {"by_type": {"Repath": 4}},
+        },
+    )
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    report = json.loads((project / "runs" / "000001" / "review" / "0001" / "report.json").read_text(encoding="utf-8"))
+    assert payload["metrics"]["repath_count"] == 9
+    assert report["metrics"]["repath_count"] == 9
+
+
 def test_v2_analysis_run_successful_episodes_do_not_generate_recommendations(tmp_path) -> None:
     project = tmp_path / "Project1"
     for episode_id in ("000001", "000002"):

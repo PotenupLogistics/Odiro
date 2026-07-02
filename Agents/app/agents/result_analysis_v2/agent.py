@@ -87,6 +87,11 @@ class ResultAnalysisV2Agent:
 
             episodes = self._extract_episodes(parsed)
             public_data = self.summary_row_public_builder.build(self._summary_rows(parsed))
+            public_metrics = (
+                self._merge_episode_detail_counts(public_data.metrics, episodes)
+                if public_data.has_rows
+                else public_data.metrics
+            )
             experiments_count, runs_count, episodes_count = self._scope_counts(parsed, episodes)
             run_summaries = self.run_aggregator.aggregate(episodes)
             experiment_summaries = self.experiment_aggregator.aggregate(run_summaries)
@@ -135,7 +140,7 @@ class ResultAnalysisV2Agent:
                 experiments_count=experiments_count,
                 runs_count=runs_count,
                 episodes_count=public_episodes_count,
-                metrics=public_data.metrics,
+                metrics=public_metrics,
                 run_overview=public_data.run_overview,
                 episodes=public_data.episodes if public_data.has_rows else None,
                 patterns=public_patterns,
@@ -304,6 +309,28 @@ class ResultAnalysisV2Agent:
             blocked_region_violation_count=sum(episode.blocked_region_violation_count for episode in episodes),
             penalty_region_violation_count=sum(episode.penalty_region_violation_count for episode in episodes),
         )
+
+    def _merge_episode_detail_counts(
+        self,
+        public_metrics: AnalysisMetricsV2,
+        episodes: list[EpisodeMetrics],
+    ) -> AnalysisMetricsV2:
+        """Fill public detail counts from episode results while preserving dashboard summary counts."""
+        if not episodes:
+            return public_metrics
+        episode_totals = self._totals(episodes)
+        values = public_metrics.model_dump()
+        for key in (
+            "static_obstacle_collision_count",
+            "pedestrian_collision_count",
+            "near_miss_count",
+            "repath_count",
+            "robot_tip_over_count",
+            "blocked_region_violation_count",
+            "penalty_region_violation_count",
+        ):
+            values[key] = max(0, int(values.get(key) or 0), int(getattr(episode_totals, key, 0) or 0))
+        return AnalysisMetricsV2(**values)
 
     def _summary_metrics(self, artifacts: list[ParsedArtifact]) -> AnalysisMetricsV2 | None:
         """Extract conservative run-level metrics from summary.json when no episodes parse."""

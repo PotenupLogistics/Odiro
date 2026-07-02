@@ -59,11 +59,14 @@ guardrails:
   - Result analysis keeps the common context and must not include the scenario authoring document.
   - V2 LLM prompt context reads the Client environment catalog at Client/Json/environment-catalog.md for scenario vocabulary and fixed obstacle prop ids.
   - `/api/v2/analysis/run` always executes `ResultAnalysisGraphRunnerV2`; do not add runtime settings that switch it to another analysis path.
+  - Result analysis v2 uses LangGraph `StateGraph.compile().invoke()` when `langgraph` is installed; sequential fallback must share the same route decision functions and route labels.
   - Result analysis reads `prompts/system_prompt.md` only on the LLM-enabled path; `V2_AGENT_LLM_ENABLED=true` from `Agents/.env` or process env can enable that path during local runs.
   - `Settings(_env_file=None)` is for checking code fallback defaults without reading `.env`; do not treat it as the local runtime value when `Agents/.env` is present.
   - Review artifacts are stored under `<UserProject>/runs/<RunId>/review/<ReviewId>/`.
   - Result analysis public responses expose display fields only; keep detailed recommendation ids, proposed changes, and modified candidate payloads in `recommendations.json`.
   - Result analysis LLM recommendations must pass public text guardrails; internal RAG/source markers never belong in public summary, insight, reason, or recommendation text.
+  - Result analysis file-based RAG is internal recommendation context only; do not create `rag_evidence.json`, `review_dir/internal`, public path fields, or `manifest.json.rag_diagnostic`.
+  - Result analysis must preserve the existing `report.json`, `recommendations.json`, `manifest.json`, and review directory structure expected by the Client.
   - Recommendation output uses the public `recommendation` field; normalize legacy internal names before API/artifact output.
   - UI-facing finding/evidence text may be Korean; stable metric/type codes remain English.
 verify:
@@ -83,6 +86,10 @@ verify:
     run:
       - cd Agents; uv run pytest tests/test_v2_analysis_run_api.py tests/test_v2_result_analysis_graph_runner.py tests/test_v2_analysis_recommendation_artifacts.py -q
       - pytest covering review lifecycle, parsing, text, and recommendation artifacts when those surfaces change
+  - when: v2 analysis LangGraph routing or file-based RAG context changes
+    run:
+      - cd Agents; uv run pytest tests/test_v2_result_analysis_graph_runner.py -q
+      - cd Agents; uv run pytest tests/test_policy_rag_retriever.py tests/test_rag_chunks.py -q
   - when: LLM prompt context changes
     run:
       - focused v2 spec-context prompt tests

@@ -87,20 +87,21 @@ Scenario generation contract tests cover raw `scenario` response shape, abstract
 
 ## 9. Runner 운영 확인
 
-Scenario generation v2는 항상 LangGraph runner를 사용합니다. ResultAnalysisV2도 항상 `ResultAnalysisGraphRunnerV2`를 사용하며, `langgraph`가 설치되지 않은 환경에서도 graph-compatible node pipeline으로 동작해야 합니다. response schema는 기존 `analysis_run_response_v2`를 유지해야 합니다.
+Scenario generation v2는 항상 LangGraph runner를 사용합니다. ResultAnalysisV2도 항상 `ResultAnalysisGraphRunnerV2`를 사용하며, LangGraph 설치 환경에서는 실제 `StateGraph.compile().invoke()` 경로를 사용해야 합니다. `langgraph`가 설치되지 않은 환경에서는 sequential fallback으로 동작할 수 있지만, LangGraph와 같은 route decision 함수를 공유해야 합니다. response schema는 기존 `analysis_run_response_v2`를 유지해야 합니다.
 
 ```powershell
 uv run pytest tests/test_v2_result_analysis_graph_runner.py -q
 ```
 
-이 테스트는 import 가능성, insufficient data response, 반복 blocked region violation recommendation, API response schema, timeline/RAG 내부 state 유지와 response schema 비노출을 검증합니다.
+이 테스트는 import 가능성, LangGraph compile/invoke 사용 여부, insufficient data/no-change route 기본값, 반복 blocked region violation recommendation, API response schema, file-based RAG 내부 state, RAG fallback, public path field 비노출, `rag_evidence.json`/`review_dir/internal` 미생성, LangGraph/sequential fallback route 일관성을 검증합니다.
 
 ## 10. timeline/RAG builder 테스트
 
-timeline builder는 event field 정규화, key event filtering, representative failed episode selection을 검증합니다. RAG query builder는 반복 실패 pattern과 query type mapping을 검증합니다.
+timeline builder는 event field 정규화, key event filtering, representative failed episode selection을 검증합니다. RAG query builder는 반복 실패 pattern과 query type mapping을 검증합니다. File-based RAG store 자체는 policy RAG retriever/chunk 테스트로 확인하고, result analysis에서는 검색 결과가 public response나 review artifact가 아니라 internal state context로만 사용되는지 확인합니다.
 
 ```powershell
 uv run pytest tests/test_v2_result_analysis_timeline_builder.py tests/test_v2_rag_query_builder.py -q
+uv run pytest tests/test_policy_rag_retriever.py tests/test_rag_chunks.py -q
 ```
 
 ## 11. 운영 확인 체크리스트

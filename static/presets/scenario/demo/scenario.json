@@ -38,8 +38,8 @@
         "prop": "obstacle.road_cone_01",
         "at": {
           "segment": "main",
-          "along_m": 5.0,
-          "offset_m": 0.0,
+          "along_m": 4.0,
+          "offset_m": -1.0,
           "lane": "curb_edge"
         },
         "yaw_deg": 0.0

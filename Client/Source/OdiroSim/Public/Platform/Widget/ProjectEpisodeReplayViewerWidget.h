@@ -9,6 +9,7 @@ class UButton;
 class UBorder;
 class UCanvasPanel;
 class UImage;
+class UProjectEpisodeReplayInterestRegionStripWidget;
 class USlider;
 class UTextBlock;
 class UTexture2D;
@@ -162,6 +163,11 @@ private:
 	UFUNCTION()
 	void HandleFullscreenRayToggleClicked();
 
+	// Seeks replay playback to the selected interest event.
+	void HandleReplayInterestEventSelected(
+		UProjectEpisodeReplayInterestRegionStripWidget* InterestStrip,
+		double TimeSeconds);
+
 	// Returns the world replay subsystem for this viewer.
 	UScenarioReplaySubsystem* GetReplaySubsystem() const;
 
@@ -180,6 +186,24 @@ private:
 	// Finds fullscreen layer toggle buttons by name when they are not exposed as WBP variables.
 	void ResolveFullscreenLayerToggleWidgets();
 
+	// Finds compact replay controls by name when they are not exposed as WBP variables.
+	void ResolveCompactReplayWidgets();
+
+	// Finds the optional replay interest-region strip by supported WBP names.
+	void ResolveReplayInterestRegionWidgets();
+
+	// Binds the optional interest-region strip selection event.
+	void BindReplayInterestRegionStrip();
+
+	// Unbinds the optional interest-region strip selection event.
+	void UnbindReplayInterestRegionStrip();
+
+	// Binds one optional replay timeline slider to seek and snap handling.
+	void BindReplayTimelineSlider(USlider* TimelineSlider);
+
+	// Unbinds one optional replay timeline slider from seek and snap handling.
+	void UnbindReplayTimelineSlider(USlider* TimelineSlider);
+
 	// Applies one replay camera mode and refreshes camera UI text.
 	void ApplyReplayCameraMode(EScenarioReplayCameraMode NewMode);
 
@@ -191,13 +215,24 @@ private:
 	FText GetReplayCameraModeLabel(
 		EScenarioReplayCameraMode CameraMode) const;
 
-	// Updates the optional camera mode label from the active replay subsystem.
+	// Returns the compact icon texture for one replay camera mode.
+	UTexture2D* GetReplayCameraModeIcon(
+		EScenarioReplayCameraMode CameraMode) const;
+
+	// Updates the compact camera mode icon from the active replay subsystem.
+	void UpdateReplayCameraModeIcon(
+		EScenarioReplayCameraMode CameraMode);
+
+	// Updates the optional camera mode label and icon from the active replay subsystem.
 	void UpdateCameraModeText();
 
 	// Updates optional timeline, frame, and speed display widgets.
 	void UpdateReplayTimelineUi();
 
-	// Updates the fullscreen play/pause button icon from the actual replay state.
+	// Updates every authored timeline slider from the normalized replay progress.
+	void SetReplayTimelineSliderValues(float NormalizedValue);
+
+	// Updates the compact and fullscreen play/pause button icons from the actual replay state.
 	void UpdateReplayPlaybackIcon(
 		bool bReplayPlaying,
 		bool bHasReplayFrames);
@@ -205,8 +240,26 @@ private:
 	// Rebuilds optional event dots over the replay timeline.
 	void RebuildReplayEventMarkers();
 
+	// Adds replay event dots to one authored marker canvas.
+	void AddReplayEventMarkersToCanvas(
+		UCanvasPanel* MarkerCanvas,
+		const UScenarioReplaySubsystem& ReplaySubsystem);
+
 	// Clears optional event dots and timeline snap state.
 	void ClearReplayEventMarkers();
+
+	// Rebuilds optional replay interest cards from loaded event markers.
+	void RebuildReplayInterestRegions();
+
+	// Clears optional replay interest cards.
+	void ClearReplayInterestRegions();
+
+	// Updates optional replay interest card selection from current replay time.
+	void UpdateReplayInterestRegionSelection(
+		bool bScrollSelectedIntoView = false);
+
+	// Scrolls optional replay interest cards to one event index.
+	void FocusReplayInterestEvent(int32 EventIndex);
 
 	// Returns true when the requested time should snap to a nearby event marker.
 	bool TryFindTimelineSnapEvent(
@@ -246,6 +299,14 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> PlayPauseButton;
 
+	// Icon image inside PlayPauseButton that mirrors playing or paused state.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> PlayPauseImage;
+
+	// Embedded replay control bar shown only while the viewer is not fullscreen.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBorder> ReplayControlBar;
+
 	// Button that pauses playback at the current frame.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> StopButton;
@@ -258,6 +319,10 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> CameraModeButton;
 
+	// Compact camera mode icon shown inside CameraModeButton.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> CameraModeImage;
+
 	// Button that shows the fullscreen replay overlay.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> FullscreenButton;
@@ -269,6 +334,18 @@ private:
 	// Optional canvas layered above ReplayTimelineSlider for colored event dots.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UCanvasPanel> ReplayTimelineMarkerCanvas;
+
+	// Compact timeline slider shown in the embedded replay control bar.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<USlider> ReplayCompactTimelineSlider;
+
+	// Compact marker canvas layered above ReplayCompactTimelineSlider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UCanvasPanel> ReplayCompactTimelineMarkerCanvas;
+
+	// Optional WBP strip that displays replay event interest cards.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UProjectEpisodeReplayInterestRegionStripWidget> ReplayInterestRegionStrip;
 
 	// Fullscreen overlay root that covers the normal replay layout.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -432,4 +509,16 @@ private:
 	// Cached pause icon used by the fullscreen play/pause button.
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> ReplayPauseIconTexture;
+
+	// Cached top-down camera icon used by the compact camera cycle button.
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> ReplayTopDownCameraIconTexture;
+
+	// Cached third-person camera icon used by orbit and free camera modes.
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> ReplayThirdPersonCameraIconTexture;
+
+	// Cached first-person camera icon used by the vehicle-front camera mode.
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> ReplayFirstPersonCameraIconTexture;
 };

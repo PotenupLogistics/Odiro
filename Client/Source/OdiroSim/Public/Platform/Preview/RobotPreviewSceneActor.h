@@ -6,6 +6,7 @@
 #include "RobotPreviewSceneActor.generated.h"
 
 class UPointLightComponent;
+class UChildActorComponent;
 class UInstancedStaticMeshComponent;
 class UMeshComponent;
 class USkeletalMeshComponent;
@@ -47,6 +48,9 @@ public:
 	// Creates preview-only stage, robot body, wheel, and sensor marker components.
 	ARobotPreviewSceneActor();
 
+	// Disables gameplay behavior on the spawned preview visual child after components register.
+	virtual void PostInitializeComponents() override;
+
 	// Applies the editable robot profile values to preview-only components.
 	void ApplySettings(const FRobotProfileSettings& Settings);
 
@@ -84,6 +88,12 @@ public:
 	void AddShowOnlyActors(TArray<AActor*>& OutActors);
 
 private:
+	// Returns the spawned visual-only child actor used for the robot body and wheels.
+	AActor* GetPreviewVisualActor() const;
+
+	// Disables collision, physics, and ticking on the preview visual child actor.
+	static void ConfigurePreviewVisualActor(AActor* VisualActor);
+
 	// Assigns a mesh to one preview component and disables gameplay collision.
 	static void ConfigurePreviewMeshComponent(UStaticMeshComponent* Component, UStaticMesh* Mesh);
 
@@ -98,6 +108,9 @@ private:
 
 	// Updates the body visual scale from profile dimensions while preserving the configured mesh.
 	void RefreshBodyTransform(const FRobotProfileSettings& Settings);
+
+	// Applies the Preview visual actor transform without mutating the Blueprint asset.
+	void RefreshPreviewVisualTransform();
 
 	// Applies profile dimensions to one mesh component using its imported bounds.
 	void ApplyMeshComponentBoundsTransform(UMeshComponent* Component, const FRobotProfileSettings& Settings);
@@ -168,6 +181,10 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
 	TObjectPtr<USkeletalMeshComponent> SkeletalBodyVisual;
 
+	// Preview-specific visual actor that owns the displayed DeliveryBot body and wheels.
+	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
+	TObjectPtr<UChildActorComponent> PreviewVisualActorComponent;
+
 	// Sphere marker placed at the runtime LiDAR sensor origin height.
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
 	TObjectPtr<UStaticMeshComponent> LidarMarker;
@@ -233,6 +250,13 @@ private:
 
 	// Preview-only LiDAR display layer and density settings.
 	FRobotPreviewLidarDisplayOptions LidarDisplayOptions;
+
+	// Visual-only Blueprint class used for the Preview robot body and wheels.
+	UPROPERTY(Transient)
+	TSubclassOf<AActor> PreviewVisualActorClass;
+
+	// True when the Preview visual Blueprint child is active.
+	bool bUsingPreviewVisualActor = false;
 
 	// True when the actual skeletal DeliveryBot mesh is active.
 	bool bUsingSkeletalBodyMesh = false;

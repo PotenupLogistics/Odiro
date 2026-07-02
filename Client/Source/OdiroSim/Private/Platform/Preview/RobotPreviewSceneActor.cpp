@@ -1,10 +1,12 @@
 #include "Platform/Preview/RobotPreviewSceneActor.h"
 
+#include "Components/ChildActorComponent.h"
 #include "Components/MeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DeliveryBot/DeliveryBotLidarRayBeamRendering.h"
 #include "DeliveryBot/DeliveryBotLidarRayPattern.h"
 #include "Components/PointLightComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SpotLightComponent.h"
@@ -21,6 +23,8 @@ namespace
 	const TCHAR* PreviewSphereMeshPath = TEXT("/Engine/BasicShapes/Sphere.Sphere");
 	const TCHAR* PreviewCylinderMeshPath = TEXT("/Engine/BasicShapes/Cylinder.Cylinder");
 	const TCHAR* PreviewMaterialPath = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
+	const TCHAR* PreviewRobotVisualBlueprintPath = TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBotPreviewVisual");
+	const TCHAR* PreviewRobotVisualFallbackBlueprintPath = TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBotReplayVisual");
 	const TCHAR* PreviewRobotBodyMeshPath = TEXT("/Game/Models/DeliveryBot/SM_DeliveryBot.SM_DeliveryBot");
 	const TCHAR* PreviewRobotSkeletalMeshPath = TEXT("/Game/Models/DeliveryBot/SKM_DeliveryBot.SKM_DeliveryBot");
 	const TCHAR* PreviewLidarRayBeamMeshPath =
@@ -55,6 +59,8 @@ namespace
 		TEXT("/Script/Engine.Material'/Game/Materials/M_LidarRayMiss.M_LidarRayMiss'");
 
 	const float DeliveryBotVisualYawCorrectionDegrees = -90.0f;
+	const float PreviewRobotVisualScale = 0.2f;
+	const float PreviewRobotVisualZOffsetCm = 8.0f;
 	const float PreviewFallbackBeamMeshLengthCm = 100.0f;
 	const float PreviewLidarBeamMeshLengthCm = 10.0f;
 	const float PreviewLidarRayThicknessScale = 0.64f;
@@ -227,6 +233,10 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	SkeletalBodyVisual = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SkeletalBodyVisual"));
 	SkeletalBodyVisual->SetupAttachment(RobotRoot);
 
+	PreviewVisualActorComponent = CreateDefaultSubobject<UChildActorComponent>(TEXT("PreviewVisualActor"));
+	PreviewVisualActorComponent->SetupAttachment(RobotRoot);
+	PreviewVisualActorComponent->SetRelativeScale3D(FVector(PreviewRobotVisualScale));
+
 	LidarMarker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LidarMarker"));
 	LidarMarker->SetupAttachment(RobotRoot);
 	LidarMarker->SetRelativeScale3D(FVector(0.10, 0.10, 0.10));
@@ -282,6 +292,9 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(PreviewSphereMeshPath);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(PreviewCylinderMeshPath);
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> PreviewMaterial(PreviewMaterialPath);
+	static ConstructorHelpers::FClassFinder<AActor> PreviewVisualActorFinder(PreviewRobotVisualBlueprintPath);
+	static ConstructorHelpers::FClassFinder<AActor> PreviewVisualFallbackActorFinder(
+		PreviewRobotVisualFallbackBlueprintPath);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> RobotBodyMesh(PreviewRobotBodyMeshPath);
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> RobotSkeletalMesh(PreviewRobotSkeletalMeshPath);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> LidarRayBeamMesh(PreviewLidarRayBeamMeshPath);
@@ -300,22 +313,39 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	UMaterialInterface* LidarSlowRangeRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarSlowRangeRayMaterialPath);
 	UMaterialInterface* LidarStopRangeRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarStopRangeRayMaterialPath);
 
-	bUsingSkeletalBodyMesh = RobotSkeletalMesh.Succeeded();
-	bUsingFallbackBodyMesh = !bUsingSkeletalBodyMesh && !RobotBodyMesh.Succeeded();
+	if (PreviewVisualActorFinder.Succeeded())
+	{
+		PreviewVisualActorClass = PreviewVisualActorFinder.Class;
+	}
+	else if (PreviewVisualFallbackActorFinder.Succeeded())
+	{
+		PreviewVisualActorClass = PreviewVisualFallbackActorFinder.Class;
+	}
+
+	bUsingPreviewVisualActor = PreviewVisualActorClass != nullptr;
+	if (bUsingPreviewVisualActor)
+	{
+		PreviewVisualActorComponent->SetChildActorClass(PreviewVisualActorClass);
+	}
+	PreviewVisualActorComponent->SetVisibility(bUsingPreviewVisualActor, true);
+	PreviewVisualActorComponent->SetHiddenInGame(!bUsingPreviewVisualActor, true);
+
+	bUsingSkeletalBodyMesh = !bUsingPreviewVisualActor && RobotSkeletalMesh.Succeeded();
+	bUsingFallbackBodyMesh = !bUsingPreviewVisualActor && !bUsingSkeletalBodyMesh && !RobotBodyMesh.Succeeded();
 	ConfigurePreviewSkeletalMeshComponent(SkeletalBodyVisual);
 	if (bUsingSkeletalBodyMesh)
 	{
 		SkeletalBodyVisual->SetSkeletalMesh(RobotSkeletalMesh.Object);
 	}
-	SkeletalBodyVisual->SetVisibility(bUsingSkeletalBodyMesh, true);
-	SkeletalBodyVisual->SetHiddenInGame(!bUsingSkeletalBodyMesh);
+	SkeletalBodyVisual->SetVisibility(!bUsingPreviewVisualActor && bUsingSkeletalBodyMesh, true);
+	SkeletalBodyVisual->SetHiddenInGame(bUsingPreviewVisualActor || !bUsingSkeletalBodyMesh);
 
 	ConfigurePreviewMeshComponent(StageFloor, CubeMesh.Object);
 	ConfigurePreviewMeshComponent(
 		BodyVisual,
 		bUsingFallbackBodyMesh ? CubeMesh.Object : RobotBodyMesh.Object);
-	BodyVisual->SetVisibility(!bUsingSkeletalBodyMesh, true);
-	BodyVisual->SetHiddenInGame(bUsingSkeletalBodyMesh);
+	BodyVisual->SetVisibility(!bUsingPreviewVisualActor && !bUsingSkeletalBodyMesh, true);
+	BodyVisual->SetHiddenInGame(bUsingPreviewVisualActor || bUsingSkeletalBodyMesh);
 	ConfigurePreviewMeshComponent(LidarMarker, SphereMesh.Object);
 
 	UStaticMesh* LidarBeamMesh = LidarRayBeamMesh.Succeeded() ? LidarRayBeamMesh.Object : CubeMesh.Object;
@@ -335,8 +365,8 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	for (UStaticMeshComponent* WheelVisual : WheelVisuals)
 	{
 		ConfigurePreviewMeshComponent(WheelVisual, CylinderMesh.Object);
-		WheelVisual->SetVisibility(bUsingFallbackBodyMesh, true);
-		WheelVisual->SetHiddenInGame(!bUsingFallbackBodyMesh);
+		WheelVisual->SetVisibility(!bUsingPreviewVisualActor && bUsingFallbackBodyMesh, true);
+		WheelVisual->SetHiddenInGame(bUsingPreviewVisualActor || !bUsingFallbackBodyMesh);
 	}
 
 	if (PreviewMaterial.Succeeded())
@@ -470,6 +500,53 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	}
 }
 
+void ARobotPreviewSceneActor::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	if (bUsingPreviewVisualActor)
+	{
+		ConfigurePreviewVisualActor(GetPreviewVisualActor());
+	}
+}
+
+AActor* ARobotPreviewSceneActor::GetPreviewVisualActor() const
+{
+	return IsValid(PreviewVisualActorComponent)
+		? PreviewVisualActorComponent->GetChildActor()
+		: nullptr;
+}
+
+void ARobotPreviewSceneActor::ConfigurePreviewVisualActor(AActor* VisualActor)
+{
+	if (!IsValid(VisualActor))
+	{
+		return;
+	}
+
+	VisualActor->Tags.AddUnique(RobotPreviewTag);
+	VisualActor->SetActorEnableCollision(false);
+	VisualActor->SetActorHiddenInGame(false);
+	VisualActor->SetActorTickEnabled(false);
+
+	TArray<UPrimitiveComponent*> PrimitiveComponents;
+	VisualActor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	{
+		if (!IsValid(PrimitiveComponent))
+		{
+			continue;
+		}
+
+		PrimitiveComponent->ComponentTags.AddUnique(RobotPreviewTag);
+		PrimitiveComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PrimitiveComponent->SetGenerateOverlapEvents(false);
+		PrimitiveComponent->SetSimulatePhysics(false);
+		PrimitiveComponent->SetComponentTickEnabled(false);
+		PrimitiveComponent->PrimaryComponentTick.SetTickFunctionEnable(false);
+	}
+}
+
 void ARobotPreviewSceneActor::ApplySettings(const FRobotProfileSettings& Settings)
 {
 	CurrentSettings = Settings;
@@ -531,6 +608,14 @@ float ARobotPreviewSceneActor::GetPreviewRadiusCm() const
 void ARobotPreviewSceneActor::AddShowOnlyActors(TArray<AActor*>& OutActors)
 {
 	OutActors.Add(this);
+	if (bUsingPreviewVisualActor)
+	{
+		if (AActor* PreviewVisualActor = GetPreviewVisualActor())
+		{
+			ConfigurePreviewVisualActor(PreviewVisualActor);
+			OutActors.Add(PreviewVisualActor);
+		}
+	}
 }
 
 void ARobotPreviewSceneActor::DrawLidarPreviewRays()
@@ -1086,11 +1171,30 @@ void ARobotPreviewSceneActor::RefreshWheelTransforms(const FRobotProfileSettings
 	WheelVisuals[3]->SetRelativeLocation(FVector(-WheelX, WheelY, WheelZ));
 }
 
+void ARobotPreviewSceneActor::RefreshPreviewVisualTransform()
+{
+	if (!IsValid(PreviewVisualActorComponent))
+	{
+		return;
+	}
+
+	PreviewVisualActorComponent->SetRelativeLocation(FVector(0.0f, 0.0f, PreviewRobotVisualZOffsetCm));
+	PreviewVisualActorComponent->SetRelativeRotation(FRotator::ZeroRotator);
+	PreviewVisualActorComponent->SetRelativeScale3D(FVector(PreviewRobotVisualScale));
+	ConfigurePreviewVisualActor(GetPreviewVisualActor());
+}
+
 void ARobotPreviewSceneActor::RefreshBodyTransform(const FRobotProfileSettings& Settings)
 {
 	const float LengthM = FMath::Max(Settings.Body.LengthM, 0.05f);
 	const float WidthM = FMath::Max(Settings.Body.WidthM, 0.05f);
 	const float HeightM = FMath::Max(Settings.Body.HeightM, 0.05f);
+
+	if (bUsingPreviewVisualActor)
+	{
+		RefreshPreviewVisualTransform();
+		return;
+	}
 
 	if (bUsingSkeletalBodyMesh)
 	{

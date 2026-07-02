@@ -7,10 +7,11 @@
 #include "BaseTextInputWidget.generated.h"
 
 class UBorder;
-class UButton;
+class UBaseButtonWidget;
 class UEditableTextBox;
 class UMultiLineEditableTextBox;
 class UTextBlock;
+class UVerticalBox;
 
 // Base-token styled text, number, number-range, and multiline input component.
 UCLASS(BlueprintType, Blueprintable)
@@ -194,11 +195,11 @@ protected:
 
 	// Handles the positive stepper action.
 	UFUNCTION()
-	void HandleStepUpClicked();
+	void HandleStepUpClicked(UBaseButtonWidget* button);
 
 	// Handles the negative stepper action.
 	UFUNCTION()
-	void HandleStepDownClicked();
+	void HandleStepDownClicked(UBaseButtonWidget* button);
 
 	// Returns true when text mode should render through the multiline field.
 	bool UsesWrappedTextMode() const;
@@ -303,13 +304,17 @@ protected:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> RangeSeparatorTextBlock;
 
+	// Optional number stepper column containing increment and decrement buttons.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UVerticalBox> StepperColumn;
+
 	// Optional number increment button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> StepUpButton;
+	TObjectPtr<UBaseButtonWidget> StepUpButton;
 
 	// Optional number decrement button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> StepDownButton;
+	TObjectPtr<UBaseButtonWidget> StepDownButton;
 
 	// Optional error text block under the input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

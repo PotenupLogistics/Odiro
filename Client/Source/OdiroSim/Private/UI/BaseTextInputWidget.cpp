@@ -1,10 +1,11 @@
 #include "UI/BaseTextInputWidget.h"
 #include "UI/BaseFormElementPrivate.h"
 #include "Components/Border.h"
-#include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "UI/BaseButtonWidget.h"
 #include "UI/BaseWidgetPrivate.h"
 
 using namespace BaseFormElementPrivate;
@@ -98,14 +99,18 @@ void UBaseTextInputWidget::SynchronizeBaseProperties()
 	{
 		SetOptionalWidgetVisible(RangeSeparatorTextBlock.Get(), Mode == EBaseTextInputMode::NumberRange);
 	}
+	if (StepperColumn)
+	{
+		SetOptionalWidgetVisible(StepperColumn.Get(), Mode == EBaseTextInputMode::Number);
+	}
 	if (StepUpButton)
 	{
-		StepUpButton->SetIsEnabled(bEnabled);
+		StepUpButton->SetDisabled(!bEnabled);
 		SetOptionalWidgetVisible(StepUpButton.Get(), Mode == EBaseTextInputMode::Number, ESlateVisibility::Visible);
 	}
 	if (StepDownButton)
 	{
-		StepDownButton->SetIsEnabled(bEnabled);
+		StepDownButton->SetDisabled(!bEnabled);
 		SetOptionalWidgetVisible(StepDownButton.Get(), Mode == EBaseTextInputMode::Number, ESlateVisibility::Visible);
 	}
 	if (ErrorTextBlock)
@@ -225,13 +230,13 @@ void UBaseTextInputWidget::NativeConstruct()
 	}
 	if (StepUpButton)
 	{
-		StepUpButton->OnClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepUpClicked);
-		StepUpButton->OnClicked.AddDynamic(this, &UBaseTextInputWidget::HandleStepUpClicked);
+		StepUpButton->OnBaseClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepUpClicked);
+		StepUpButton->OnBaseClicked.AddDynamic(this, &UBaseTextInputWidget::HandleStepUpClicked);
 	}
 	if (StepDownButton)
 	{
-		StepDownButton->OnClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepDownClicked);
-		StepDownButton->OnClicked.AddDynamic(this, &UBaseTextInputWidget::HandleStepDownClicked);
+		StepDownButton->OnBaseClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepDownClicked);
+		StepDownButton->OnBaseClicked.AddDynamic(this, &UBaseTextInputWidget::HandleStepDownClicked);
 	}
 }
 
@@ -257,11 +262,11 @@ void UBaseTextInputWidget::NativeDestruct()
 	}
 	if (StepUpButton)
 	{
-		StepUpButton->OnClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepUpClicked);
+		StepUpButton->OnBaseClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepUpClicked);
 	}
 	if (StepDownButton)
 	{
-		StepDownButton->OnClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepDownClicked);
+		StepDownButton->OnBaseClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepDownClicked);
 	}
 
 	Super::NativeDestruct();
@@ -514,8 +519,9 @@ void UBaseTextInputWidget::HandleUpperTextCommitted(const FText& committedText, 
 	OnRangeValueCommitted.Broadcast(this, LowerValue, UpperValue);
 }
 
-void UBaseTextInputWidget::HandleStepUpClicked()
+void UBaseTextInputWidget::HandleStepUpClicked(UBaseButtonWidget* button)
 {
+	(void)button;
 	if (bDisabled || State == EBaseWidgetState::Disabled)
 	{
 		return;
@@ -525,8 +531,9 @@ void UBaseTextInputWidget::HandleStepUpClicked()
 	OnNumericValueCommitted.Broadcast(this, NumericValue);
 }
 
-void UBaseTextInputWidget::HandleStepDownClicked()
+void UBaseTextInputWidget::HandleStepDownClicked(UBaseButtonWidget* button)
 {
+	(void)button;
 	if (bDisabled || State == EBaseWidgetState::Disabled)
 	{
 		return;

@@ -30,7 +30,7 @@
   실제 clipping/overlap은 확인되지 않았지만, 시각 테스트 페이지 가독성 개선 여지가 있다.
 - 기존 read-only asset은 compile은 성공했지만 save가 skip됐다:
   `WBP_BaseCard`, `WBP_BaseEmptyState`, `WBP_BaseListItem`, `WBP_BaseMetricCard`,
-  `WBP_BaseNotificationRow`, `WBP_BaseProgressRow`, `WBP_BaseToolbar`.
+  `WBP_BaseNotificationRow`, `WBP_BaseProgressCard`, `WBP_BaseToolbar`.
 - Base 범위 밖 Platform WBP에서 동일 계열 BindWidget 충돌 로그 존재:
   `WBP_ProjectCreateScreen.ProjectNameInput/ProjectParentFolderInput`,
   `WBP_RunListScreen.BaseSeedInput/EpisodeCountInput/FixedFpsInput/MapIdInput`.

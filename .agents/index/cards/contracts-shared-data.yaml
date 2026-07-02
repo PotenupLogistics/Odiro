@@ -1,10 +1,10 @@
 id: contracts-shared-data
 owner: Root
-description: Shared specs, schemas, examples, static templates, and product structure docs.
+description: Shared specs, schemas, examples, static presets, and product structure docs.
 paths:
   - contracts/**
   - docs/specs/**
-  - static/templates/**
+  - static/presets/**
   - static/run-defaults/**
   - Client/Docs/JSON_Guide/**
   - Client/Docs/specs/**
@@ -18,7 +18,7 @@ entry:
     description: Repository/product structure and shared runtime resource layout.
     read:
       - docs/specs
-      - static/templates
+      - static/presets
       - static/run-defaults
   - id: legacy-client-docs
     description: Legacy Client JSON/interface references that must not become new shared contracts.
@@ -30,13 +30,13 @@ guardrails:
   - "`contracts/schemas` contains machine-readable validation for shared contracts."
   - User project files, run artifacts, presets, and run defaults belong in `contracts/specs/user-project-data.md`.
   - Bridge IPC method compatibility belongs in `contracts/specs/bridge-ipc.md`.
-  - Bridge IPC `scenarioPresetIds` must have matching JSON files under `static/templates/scenario/`.
+  - Bridge IPC `scenarioPresetIds` must have matching JSON files under `static/presets/scenario/<id>/scenario.json`.
   - "`docs/specs` is for repository/product structure, rules, and requirements, not wire contracts."
   - Client/Docs JSON guides are legacy Client references; do not define new shared file contracts there.
   - RunQueue and DeliveryBotSetup specs are legacy guides unless an explicit migration restores them.
-  - static/templates and static/run-defaults must stay aligned with the shared user-project contract.
+  - static/presets and static/run-defaults must stay aligned with the shared user-project contract.
 verify:
-  - when: shared contracts or templates change
+  - when: shared contracts or presets change
     run:
       - consuming project schema or fixture validation
       - contract specs versus generated examples/templates review

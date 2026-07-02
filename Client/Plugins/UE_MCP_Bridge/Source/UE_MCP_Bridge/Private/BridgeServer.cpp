@@ -13,6 +13,8 @@
 #include "Misc/DateTime.h"
 #include "Misc/Timespan.h"
 #include "Async/Async.h"
+#include "Editor.h"
+#include "Engine/World.h"
 #include "Handlers/EditorHandlers.h"
 #include "Handlers/AssetHandlers.h"
 #include "Handlers/BlueprintHandlers.h"
@@ -143,6 +145,146 @@ namespace
 			Params->TryGetStringField(TEXT("action"), Action) &&
 			(Action.Equals(TEXT("status"), ESearchCase::IgnoreCase) ||
 				Action.Equals(TEXT("stop"), ESearchCase::IgnoreCase));
+	}
+
+	/** Return the exclusive byte offset after the HTTP header terminator. */
+	int32 FindHttpHeaderEnd(const TArray<uint8>& Bytes)
+	{
+		for (int32 Index = 3; Index < Bytes.Num(); ++Index)
+		{
+			if (Bytes[Index - 3] == '\r' &&
+				Bytes[Index - 2] == '\n' &&
+				Bytes[Index - 1] == '\r' &&
+				Bytes[Index] == '\n')
+			{
+				return Index + 1;
+			}
+		}
+		return INDEX_NONE;
+	}
+
+	/** Return whether an asset path appears to target a Widget Blueprint or widget asset. */
+	bool IsLikelyWidgetAssetPath(const FString& AssetPath)
+	{
+		const FString AssetName = FPaths::GetBaseFilename(AssetPath);
+		return AssetPath.Contains(TEXT("/Widgets/"), ESearchCase::IgnoreCase) ||
+			AssetPath.Contains(TEXT("/Widget/"), ESearchCase::IgnoreCase) ||
+			AssetName.StartsWith(TEXT("WBP_"), ESearchCase::IgnoreCase);
+	}
+
+	/** Return whether params identify a Widget Blueprint or widget asset path. */
+	bool ParamsReferenceWidgetAsset(const TSharedPtr<FJsonObject>& Params)
+	{
+		if (!Params.IsValid())
+		{
+			return false;
+		}
+
+		static const TCHAR* PathFields[] = {
+			TEXT("assetPath"),
+			TEXT("path"),
+			TEXT("widgetBlueprintPath"),
+			TEXT("widget_blueprint_path"),
+			TEXT("blueprintPath"),
+			TEXT("blueprint_path")
+		};
+
+		for (const TCHAR* Field : PathFields)
+		{
+			FString AssetPath;
+			if (Params->TryGetStringField(Field, AssetPath) && IsLikelyWidgetAssetPath(AssetPath))
+			{
+				return true;
+			}
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* AssetPaths = nullptr;
+		if (Params->TryGetArrayField(TEXT("assetPaths"), AssetPaths) && AssetPaths)
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *AssetPaths)
+			{
+				if (Value.IsValid() && Value->Type == EJson::String && IsLikelyWidgetAssetPath(Value->AsString()))
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/** Return whether the MCP method may mutate UMG/WBP editor state. */
+	bool IsWidgetEditorMutationMethod(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)
+	{
+		static const TCHAR* Methods[] = {
+			TEXT("create_widget_blueprint"),
+			TEXT("apply_widget_tree_spec"),
+			TEXT("create_editor_utility_widget"),
+			TEXT("create_editor_utility_blueprint"),
+			TEXT("clear_widget_binding"),
+			TEXT("set_widget_property"),
+			TEXT("ensure_widget_render_opacity_animations"),
+			TEXT("run_editor_utility_widget"),
+			TEXT("run_editor_utility_blueprint"),
+			TEXT("add_widget"),
+			TEXT("replace_widget_classes"),
+			TEXT("set_named_slot_content"),
+			TEXT("remove_widget"),
+			TEXT("rename_widget"),
+			TEXT("move_widget"),
+			TEXT("wrap_widget"),
+			TEXT("unwrap_widget"),
+			TEXT("repair_widget_blueprint"),
+			TEXT("set_root_widget"),
+			TEXT("wrap_root_widget"),
+			TEXT("create_widget"),
+			TEXT("set_widget_properties"),
+			TEXT("delete_widget"),
+			TEXT("reparent_widget"),
+			TEXT("apply_layout"),
+			TEXT("apply_json_to_umg"),
+			TEXT("apply_html_to_umg"),
+			TEXT("create_animation"),
+			TEXT("delete_animation"),
+			TEXT("set_property_keys"),
+			TEXT("remove_property_track"),
+			TEXT("remove_keys"),
+			TEXT("animation_append_widget_tracks"),
+			TEXT("animation_append_time_slice"),
+			TEXT("animation_delete_widget_keys")
+		};
+
+		for (const TCHAR* Method : Methods)
+		{
+			if (MethodName == Method)
+			{
+				return true;
+			}
+		}
+
+		if (MethodName == TEXT("open_asset") ||
+			MethodName == TEXT("save_asset") ||
+			MethodName == TEXT("compile_blueprint") ||
+			MethodName == TEXT("compile_blueprints"))
+		{
+			return ParamsReferenceWidgetAsset(Params);
+		}
+
+		return false;
+	}
+
+	/** Block UMG/WBP mutations while PIE owns a world so transient widget previews are not captured by editor transactions. */
+	TSharedPtr<FJsonValue> MakeWidgetMutationBlockedDuringPieResult(const FString& MethodName)
+	{
+		const FString PlayWorld = (GEditor && GEditor->PlayWorld)
+			? GEditor->PlayWorld->GetPathName()
+			: TEXT("<unknown PIE world>");
+		UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] Refusing %s while PIE is active: %s"), *MethodName, *PlayWorld);
+		return FMCPBridgeOperationCoordinator::MakeBlockedResult(
+			TEXT("active_pie_blocks_widget_editor_mutation"),
+			FString::Printf(TEXT("Refusing to run %s while PIE is active: %s. Stop PIE and wait for world teardown before mutating Widget Blueprint/editor state."), *MethodName, *PlayWorld),
+			TEXT("pie_control.stop"),
+			1000.0);
 	}
 }
 
@@ -582,13 +724,26 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		{
 			OperationLease->MarkStarted();
 		}
+
+		auto ReleaseLeases = [&ActiveLease, &OperationLease]()
+		{
+			if (OperationLease.IsValid())
+			{
+				OperationLease->Release();
+			}
+			ActiveLease->Release();
+		};
+
+		if (GEditor && GEditor->PlayWorld && IsWidgetEditorMutationMethod(Method, HandlerParams))
+		{
+			TSharedPtr<FJsonValue> BlockedResult = MakeWidgetMutationBlockedDuringPieResult(Method);
+			ReleaseLeases();
+			return BlockedResult;
+		}
+
 		FMCPBridgeOperationAdmittedScope AdmittedScope;
 		TSharedPtr<FJsonValue> HandlerResult = HandlerRegistry.ExecuteHandler(Method, HandlerParams);
-		if (OperationLease.IsValid())
-		{
-			OperationLease->Release();
-		}
-		ActiveLease->Release();
+		ReleaseLeases();
 		return HandlerResult;
 	};
 
@@ -626,7 +781,8 @@ void FMCPBridgeServer::HandleWebSocketConnection(int32 ClientSocketFD)
 	setsockopt(ClientSocketFD, IPPROTO_TCP, TCP_NODELAY, (char*)&NoDelay, sizeof(NoDelay));
 
 	// Perform WebSocket handshake
-	FString Response = PerformWebSocketHandshake(ClientSocketFD);
+	TArray<uint8> InitialFrameBytes;
+	FString Response = PerformWebSocketHandshake(ClientSocketFD, InitialFrameBytes);
 	if (Response.IsEmpty())
 	{
 #if PLATFORM_WINDOWS
@@ -672,7 +828,7 @@ void FMCPBridgeServer::HandleWebSocketConnection(int32 ClientSocketFD)
 
 	// Process WebSocket messages
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Starting WebSocket message processing"));
-	ProcessWebSocketMessages(ClientSocketFD);
+	ProcessWebSocketMessages(ClientSocketFD, MoveTemp(InitialFrameBytes));
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] WebSocket message processing ended"));
 
 #if PLATFORM_WINDOWS
@@ -683,12 +839,12 @@ void FMCPBridgeServer::HandleWebSocketConnection(int32 ClientSocketFD)
 }
 
 #if PLATFORM_WINDOWS
-FString FMCPBridgeServer::PerformWebSocketHandshake(SOCKET ClientSocketFD)
+FString FMCPBridgeServer::PerformWebSocketHandshake(SOCKET ClientSocketFD, TArray<uint8>& OutInitialFrameBytes)
 #else
-FString FMCPBridgeServer::PerformWebSocketHandshake(int32 ClientSocketFD)
+FString FMCPBridgeServer::PerformWebSocketHandshake(int32 ClientSocketFD, TArray<uint8>& OutInitialFrameBytes)
 #endif
 {
-	FString Request = ReadHttpRequest(ClientSocketFD);
+	FString Request = ReadHttpRequest(ClientSocketFD, OutInitialFrameBytes);
 	if (Request.IsEmpty())
 	{
 		return TEXT("");
@@ -776,46 +932,64 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(int32 ClientSocketFD)
 }
 
 #if PLATFORM_WINDOWS
-FString FMCPBridgeServer::ReadHttpRequest(SOCKET SocketFD)
+FString FMCPBridgeServer::ReadHttpRequest(SOCKET SocketFD, TArray<uint8>& OutInitialFrameBytes)
 #else
-FString FMCPBridgeServer::ReadHttpRequest(int32 SocketFD)
+FString FMCPBridgeServer::ReadHttpRequest(int32 SocketFD, TArray<uint8>& OutInitialFrameBytes)
 #endif
 {
 	// Read HTTP request headers (until \r\n\r\n)
-	FString Request;
+	OutInitialFrameBytes.Reset();
+	TArray<uint8> RequestBytes;
+	RequestBytes.Reserve(4096);
 	TArray<uint8> Buffer;
 	Buffer.SetNum(4096);
 
-	// Use select to wait for data with timeout
-	fd_set ReadSet;
-	FD_ZERO(&ReadSet);
-	FD_SET(SocketFD, &ReadSet);
-
-	timeval Timeout;
-	Timeout.tv_sec = 5; // 5 second timeout
-	Timeout.tv_usec = 0;
-
-	int32 SelectResult = select(SocketFD + 1, &ReadSet, nullptr, nullptr, &Timeout);
-	if (SelectResult <= 0 || !FD_ISSET(SocketFD, &ReadSet))
+	constexpr int32 MaxHeaderBytes = 65536;
+	while (RequestBytes.Num() < MaxHeaderBytes)
 	{
-		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Timeout waiting for HTTP request"));
-		return TEXT("");
+		// Use select to wait for data with timeout
+		fd_set ReadSet;
+		FD_ZERO(&ReadSet);
+		FD_SET(SocketFD, &ReadSet);
+
+		timeval Timeout;
+		Timeout.tv_sec = 5; // 5 second timeout
+		Timeout.tv_usec = 0;
+
+		int32 SelectResult = select(SocketFD + 1, &ReadSet, nullptr, nullptr, &Timeout);
+		if (SelectResult <= 0 || !FD_ISSET(SocketFD, &ReadSet))
+		{
+			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Timeout waiting for HTTP request"));
+			return TEXT("");
+		}
+
+		int32 BytesReceived = recv(SocketFD, (char*)Buffer.GetData(), Buffer.Num(), 0);
+		if (BytesReceived <= 0)
+		{
+			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to read HTTP request"));
+			return TEXT("");
+		}
+
+		RequestBytes.Append(Buffer.GetData(), BytesReceived);
+		const int32 HeaderEnd = FindHttpHeaderEnd(RequestBytes);
+		if (HeaderEnd == INDEX_NONE)
+		{
+			continue;
+		}
+
+		if (RequestBytes.Num() > HeaderEnd)
+		{
+			OutInitialFrameBytes.Append(RequestBytes.GetData() + HeaderEnd, RequestBytes.Num() - HeaderEnd);
+		}
+
+		FUTF8ToTCHAR RequestText(reinterpret_cast<const ANSICHAR*>(RequestBytes.GetData()), HeaderEnd);
+		FString Request(RequestText.Length(), RequestText.Get());
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Read HTTP request (%d header bytes, %d initial frame bytes):\n%s"), HeaderEnd, OutInitialFrameBytes.Num(), *Request.Left(200));
+		return Request;
 	}
 
-	// Read data
-	int32 BytesReceived = recv(SocketFD, (char*)Buffer.GetData(), Buffer.Num(), 0);
-	if (BytesReceived <= 0)
-	{
-		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to read HTTP request"));
-		return TEXT("");
-	}
-
-	Buffer.SetNum(BytesReceived);
-	Request = FString(ANSI_TO_TCHAR((char*)Buffer.GetData()));
-
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Read HTTP request (%d bytes):\n%s"), BytesReceived, *Request.Left(200));
-
-	return Request;
+	UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] HTTP request header exceeded %d bytes"), MaxHeaderBytes);
+	return TEXT("");
 }
 
 FString FMCPBridgeServer::CreateWebSocketAcceptKey(const FString& ClientKey)
@@ -856,15 +1030,56 @@ FString FMCPBridgeServer::CreateWebSocketAcceptKey(const FString& ClientKey)
 }
 
 #if PLATFORM_WINDOWS
-void FMCPBridgeServer::ProcessWebSocketMessages(SOCKET ClientSocketFD)
+void FMCPBridgeServer::ProcessWebSocketMessages(SOCKET ClientSocketFD, TArray<uint8> InitialFrameBytes)
 #else
-void FMCPBridgeServer::ProcessWebSocketMessages(int32 ClientSocketFD)
+void FMCPBridgeServer::ProcessWebSocketMessages(int32 ClientSocketFD, TArray<uint8> InitialFrameBytes)
 #endif
 {
 	constexpr int32 RecvBufferSize = 65536;
 	TArray<uint8> Buffer;
 	Buffer.SetNumUninitialized(RecvBufferSize);
-	TArray<uint8> FrameBuffer;
+	TArray<uint8> FrameBuffer = MoveTemp(InitialFrameBytes);
+
+	auto ConsumeFrameBuffer = [this, ClientSocketFD, &FrameBuffer]() -> bool
+	{
+		while (FrameBuffer.Num() > 0)
+		{
+			FString Message;
+			bool bCloseFrame = false;
+			if (!TryParseWebSocketFrame(FrameBuffer, Message, bCloseFrame))
+			{
+				return true;
+			}
+
+			if (bCloseFrame)
+			{
+				return false;
+			}
+
+			if (Message.IsEmpty())
+			{
+				continue;
+			}
+
+			FString Response = ProcessMessage(Message);
+			TArray<uint8> ResponseFrame = CreateWebSocketFrame(Response);
+			int32 TotalToSend = ResponseFrame.Num();
+			int32 Sent = 0;
+			while (Sent < TotalToSend)
+			{
+				int32 BytesSent = send(ClientSocketFD, (char*)ResponseFrame.GetData() + Sent, TotalToSend - Sent, 0);
+				if (BytesSent <= 0) break;
+				Sent += BytesSent;
+			}
+		}
+
+		return true;
+	};
+
+	if (!ConsumeFrameBuffer())
+	{
+		return;
+	}
 
 	while (!bShouldStop)
 	{
@@ -887,35 +1102,9 @@ void FMCPBridgeServer::ProcessWebSocketMessages(int32 ClientSocketFD)
 			}
 
 			FrameBuffer.Append(Buffer.GetData(), BytesReceived);
-			while (FrameBuffer.Num() > 0)
+			if (!ConsumeFrameBuffer())
 			{
-				FString Message;
-				bool bCloseFrame = false;
-				if (!TryParseWebSocketFrame(FrameBuffer, Message, bCloseFrame))
-				{
-					break;
-				}
-
-				if (bCloseFrame)
-				{
-					return;
-				}
-
-				if (Message.IsEmpty())
-				{
-					continue;
-				}
-
-				FString Response = ProcessMessage(Message);
-				TArray<uint8> ResponseFrame = CreateWebSocketFrame(Response);
-				int32 TotalToSend = ResponseFrame.Num();
-				int32 Sent = 0;
-				while (Sent < TotalToSend)
-				{
-					int32 BytesSent = send(ClientSocketFD, (char*)ResponseFrame.GetData() + Sent, TotalToSend - Sent, 0);
-					if (BytesSent <= 0) break;
-					Sent += BytesSent;
-				}
+				return;
 			}
 		}
 		else if (SelectResult < 0)

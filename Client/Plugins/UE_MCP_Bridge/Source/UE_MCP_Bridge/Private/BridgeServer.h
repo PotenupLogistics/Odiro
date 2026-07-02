@@ -71,14 +71,14 @@ private:
 	// WebSocket connection handling
 #if PLATFORM_WINDOWS
 	void HandleWebSocketConnection(SOCKET ClientSocketFD);
-	FString PerformWebSocketHandshake(SOCKET ClientSocketFD);
-	void ProcessWebSocketMessages(SOCKET ClientSocketFD);
-	FString ReadHttpRequest(SOCKET SocketFD);
+	FString PerformWebSocketHandshake(SOCKET ClientSocketFD, TArray<uint8>& OutInitialFrameBytes);
+	void ProcessWebSocketMessages(SOCKET ClientSocketFD, TArray<uint8> InitialFrameBytes);
+	FString ReadHttpRequest(SOCKET SocketFD, TArray<uint8>& OutInitialFrameBytes);
 #else
 	void HandleWebSocketConnection(int32 ClientSocketFD);
-	FString PerformWebSocketHandshake(int32 ClientSocketFD);
-	void ProcessWebSocketMessages(int32 ClientSocketFD);
-	FString ReadHttpRequest(int32 SocketFD);
+	FString PerformWebSocketHandshake(int32 ClientSocketFD, TArray<uint8>& OutInitialFrameBytes);
+	void ProcessWebSocketMessages(int32 ClientSocketFD, TArray<uint8> InitialFrameBytes);
+	FString ReadHttpRequest(int32 SocketFD, TArray<uint8>& OutInitialFrameBytes);
 #endif
 	FString CreateWebSocketAcceptKey(const FString& ClientKey);
 	TArray<uint8> CreateWebSocketFrame(const FString& Message);

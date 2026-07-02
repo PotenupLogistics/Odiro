@@ -23,4 +23,4 @@ Run the bundled script on demand after Platform/UI widget C++ changes or during 
 ```
 
 The script reports suspicious static copy, visual defaults, Tick usage, fallback widget tree construction, and C++ sizing/viewport breakpoint logic. Findings are review prompts and may be false positives; the default exit code remains success.
-By default it scans Platform widget C++; pass `-ScanPath` when reviewing base UI widget paths too.
+By default it scans Platform widget C++; pass `-ScanPath` when reviewing base UI widget paths too. Use `-ChangedOnly -FailOnRules high-risk -BaselineFile <json>` for opt-in gates that fail only new or increased high-risk findings.

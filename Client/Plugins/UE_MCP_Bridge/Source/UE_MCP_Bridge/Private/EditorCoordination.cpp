@@ -1,9 +1,11 @@
 #include "EditorCoordination.h"
 
+#include "MCPBridgeOperationCoordinator.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/DateTime.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "Serialization/JsonReader.h"
@@ -47,7 +49,20 @@ namespace
 		{
 			return false;
 		}
-		return FFileHelper::SaveStringToFile(Serialized, *FilePath);
+
+		const FString TempPath = FilePath + TEXT(".tmp.") + FGuid::NewGuid().ToString(EGuidFormats::Digits);
+		if (!FFileHelper::SaveStringToFile(Serialized, *TempPath))
+		{
+			return false;
+		}
+
+	IFileManager& FileManager = IFileManager::Get();
+	if (!FileManager.Move(*FilePath, *TempPath, true, true, true, true))
+	{
+		FileManager.Delete(*TempPath, false, true, true);
+			return false;
+		}
+		return true;
 	}
 
 	/** Return whether a persisted maintenance phase represents a terminal reload state. */
@@ -167,6 +182,7 @@ TSharedPtr<FJsonValue> FMCPBridgeCoordination::BuildStatusResult()
 	Result->SetStringField(TEXT("maintenancePath"), GetMaintenanceFilePath());
 	Result->SetBoolField(TEXT("maintenance"), IsMaintenanceActive());
 	Result->SetNumberField(TEXT("activeRequests"), GetActiveRequestCount());
+	Result->SetObjectField(TEXT("operations"), FMCPBridgeOperationCoordinator::BuildSnapshotObject());
 	Result->SetNumberField(TEXT("editorPid"), static_cast<double>(FPlatformProcess::GetCurrentProcessId()));
 	Result->SetStringField(TEXT("timestamp"), FDateTime::UtcNow().ToIso8601());
 	Result->SetObjectField(TEXT("liveCoding"), BuildLiveCodingStatusObject());

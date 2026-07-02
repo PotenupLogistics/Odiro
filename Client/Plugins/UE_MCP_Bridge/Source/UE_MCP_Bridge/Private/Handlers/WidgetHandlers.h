@@ -33,6 +33,10 @@ private:
 	static TSharedPtr<FJsonValue> RemoveWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RenameWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> MoveWidget(const TSharedPtr<FJsonObject>& Params);
+	// Wraps an existing widget with one or more containers while preserving its parent slot.
+	static TSharedPtr<FJsonValue> WrapWidget(const TSharedPtr<FJsonObject>& Params);
+	// Removes a single-child wrapper while preserving the wrapper's parent slot on its child.
+	static TSharedPtr<FJsonValue> UnwrapWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RepairWidgetBlueprint(const TSharedPtr<FJsonObject>& Params);
 	// #365: root-widget swap + "Wrap With" container insertion. Required to
 	// reshape an existing WBP root without rebuilding the whole tree.
@@ -52,6 +56,8 @@ private:
 	static TSharedPtr<FJsonValue> SpawnRuntimeWidgetPreview(const TSharedPtr<FJsonObject>& Params);
 	// Sends a simple pointer event to a PIE widget or named child.
 	static TSharedPtr<FJsonValue> DispatchRuntimeWidgetPointerEvent(const TSharedPtr<FJsonObject>& Params);
+	// Checks concise runtime widget geometry and scroll/layout properties.
+	static TSharedPtr<FJsonValue> AssertRuntimeWidgetLayout(const TSharedPtr<FJsonObject>& Params);
 	// #161: Runtime delegate inspection
 	static TSharedPtr<FJsonValue> GetRuntimeDelegates(const TSharedPtr<FJsonObject>& Params);
 

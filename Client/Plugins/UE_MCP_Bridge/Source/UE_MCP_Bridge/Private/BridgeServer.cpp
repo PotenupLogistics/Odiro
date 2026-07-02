@@ -1,5 +1,6 @@
 #include "BridgeServer.h"
 #include "EditorCoordination.h"
+#include "MCPBridgeOperationCoordinator.h"
 #include "UE_MCP_BridgeModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -128,6 +129,21 @@ namespace
 		bool bStarted = false;
 		bool bReleased = false;
 	};
+
+	/** Return true for legacy handlers that are safe during reload maintenance. */
+	bool IsMaintenanceAllowedLegacyMethod(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)
+	{
+		if (MethodName != TEXT("pie_control"))
+		{
+			return false;
+		}
+
+		FString Action;
+		return Params.IsValid() &&
+			Params->TryGetStringField(TEXT("action"), Action) &&
+			(Action.Equals(TEXT("status"), ESearchCase::IgnoreCase) ||
+				Action.Equals(TEXT("stop"), ESearchCase::IgnoreCase));
+	}
 }
 
 FMCPBridgeServer::FMCPBridgeServer(int32 Port)
@@ -496,12 +512,6 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	}
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Processing method: %s"), *Method);
-	const bool bCoordinationMethod = FMCPBridgeCoordination::IsCoordinationMethod(Method);
-	if (!bCoordinationMethod && FMCPBridgeCoordination::IsMaintenanceActive())
-	{
-		return CreateJsonRpcResponse(Request, FMCPBridgeCoordination::MakeMaintenancePendingResult(Method));
-	}
-
 	TSharedPtr<FJsonObject> Params;
 	if (Request->HasField(TEXT("params")))
 	{
@@ -520,42 +530,14 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		Params = MakeShared<FJsonObject>();
 	}
 
-	TSharedRef<FBridgeActiveRequestLease> ActiveLease = MakeShared<FBridgeActiveRequestLease>();
-	if (!bCoordinationMethod)
+	const bool bCoordinationMethod = FMCPBridgeCoordination::IsCoordinationMethod(Method);
+	if (!bCoordinationMethod && !IsMaintenanceAllowedLegacyMethod(Method, Params) && FMCPBridgeCoordination::IsMaintenanceActive())
 	{
-		ActiveLease->Begin();
+		return CreateJsonRpcResponse(Request, FMCPBridgeCoordination::MakeMaintenancePendingResult(Method));
 	}
 
-	// Execute handler on game thread
-	FMCPHandlerRegistry::FHandlerFunction Handler = [this, Method, ActiveLease](const TSharedPtr<FJsonObject>& HandlerParams) -> TSharedPtr<FJsonValue>
+	if (!HandlerRegistry.HasHandler(Method))
 	{
-		FDialogHandlers::FScopedAutomationDialogPolicy DialogPolicyScope;
-		ActiveLease->MarkStarted();
-		TSharedPtr<FJsonValue> HandlerResult = HandlerRegistry.ExecuteHandler(Method, HandlerParams);
-		ActiveLease->Release();
-		return HandlerResult;
-	};
-
-	// Some handlers (create_cpp_class regenerates IDE project files;
-	// long-running compiles) legitimately need minutes. Honor per-handler
-	// timeouts registered via FMCPHandlerRegistry::RegisterHandlerWithTimeout.
-	const float PerHandlerTimeout = HandlerRegistry.GetHandlerTimeout(Method);
-	TSharedPtr<FJsonValue> Result = (PerHandlerTimeout > 0.0f)
-		? GameThreadExecutor.ExecuteOnGameThread(Handler, Params, PerHandlerTimeout)
-		: GameThreadExecutor.ExecuteOnGameThread(Handler, Params);
-	ActiveLease->ReleaseIfNeverStarted();
-
-	if (Result.IsValid())
-	{
-		return CreateJsonRpcResponse(Request, Result);
-	}
-	else
-	{
-		// #233: a stale plugin build can dispatch a method that the TS schema
-		// advertises but the C++ side hasn't registered yet. The bare
-		// "Unknown method" error gave callers no way to tell that apart from
-		// a typo. List a few near-matches so it's obvious when the deployed
-		// plugin is behind the schema.
 		FString Detail = FString::Printf(TEXT("Unknown method: %s"), *Method);
 		const TArray<FString> All = HandlerRegistry.GetHandlerNames();
 		TArray<FString> Hints;
@@ -576,6 +558,60 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 			Detail += FString::Printf(TEXT(" (did you mean: %s)"), *FString::Join(Hints, TEXT(", ")));
 		}
 		return CreateJsonRpcError(Request, -32601, Detail);
+	}
+
+	FMCPBridgeOperationAdmission Admission = FMCPBridgeOperationCoordinator::TryBeginOrReserve(Method, Params);
+	if (!Admission.bCanExecute)
+	{
+		return CreateJsonRpcResponse(Request, Admission.Response);
+	}
+
+	TSharedPtr<FMCPBridgeOperationLease> OperationLease = Admission.Lease;
+	TSharedRef<FBridgeActiveRequestLease> ActiveLease = MakeShared<FBridgeActiveRequestLease>();
+	if (!bCoordinationMethod)
+	{
+		ActiveLease->Begin();
+	}
+
+	// Execute handler on game thread
+	FMCPHandlerRegistry::FHandlerFunction Handler = [this, Method, ActiveLease, OperationLease](const TSharedPtr<FJsonObject>& HandlerParams) -> TSharedPtr<FJsonValue>
+	{
+		FDialogHandlers::FScopedAutomationDialogPolicy DialogPolicyScope;
+		ActiveLease->MarkStarted();
+		if (OperationLease.IsValid())
+		{
+			OperationLease->MarkStarted();
+		}
+		FMCPBridgeOperationAdmittedScope AdmittedScope;
+		TSharedPtr<FJsonValue> HandlerResult = HandlerRegistry.ExecuteHandler(Method, HandlerParams);
+		if (OperationLease.IsValid())
+		{
+			OperationLease->Release();
+		}
+		ActiveLease->Release();
+		return HandlerResult;
+	};
+
+	// Some handlers (create_cpp_class regenerates IDE project files;
+	// long-running compiles) legitimately need minutes. Honor per-handler
+	// timeouts registered via FMCPHandlerRegistry::RegisterHandlerWithTimeout.
+	const float PerHandlerTimeout = HandlerRegistry.GetHandlerTimeout(Method);
+	TSharedPtr<FJsonValue> Result = (PerHandlerTimeout > 0.0f)
+		? GameThreadExecutor.ExecuteOnGameThread(Handler, Params, PerHandlerTimeout)
+		: GameThreadExecutor.ExecuteOnGameThread(Handler, Params);
+	ActiveLease->ReleaseIfNeverStarted();
+	if (OperationLease.IsValid())
+	{
+		OperationLease->ReleaseIfNeverStarted();
+	}
+
+	if (Result.IsValid())
+	{
+		return CreateJsonRpcResponse(Request, Result);
+	}
+	else
+	{
+		return CreateJsonRpcError(Request, -32603, FString::Printf(TEXT("Handler returned no result: %s"), *Method));
 	}
 }
 
@@ -828,6 +864,7 @@ void FMCPBridgeServer::ProcessWebSocketMessages(int32 ClientSocketFD)
 	constexpr int32 RecvBufferSize = 65536;
 	TArray<uint8> Buffer;
 	Buffer.SetNumUninitialized(RecvBufferSize);
+	TArray<uint8> FrameBuffer;
 
 	while (!bShouldStop)
 	{
@@ -849,11 +886,26 @@ void FMCPBridgeServer::ProcessWebSocketMessages(int32 ClientSocketFD)
 				break;
 			}
 
-			TArray<uint8> FrameData(Buffer.GetData(), BytesReceived);
-			FString Message = ParseWebSocketFrame(FrameData);
-
-			if (!Message.IsEmpty())
+			FrameBuffer.Append(Buffer.GetData(), BytesReceived);
+			while (FrameBuffer.Num() > 0)
 			{
+				FString Message;
+				bool bCloseFrame = false;
+				if (!TryParseWebSocketFrame(FrameBuffer, Message, bCloseFrame))
+				{
+					break;
+				}
+
+				if (bCloseFrame)
+				{
+					return;
+				}
+
+				if (Message.IsEmpty())
+				{
+					continue;
+				}
+
 				FString Response = ProcessMessage(Message);
 				TArray<uint8> ResponseFrame = CreateWebSocketFrame(Response);
 				int32 TotalToSend = ResponseFrame.Num();
@@ -911,34 +963,37 @@ TArray<uint8> FMCPBridgeServer::CreateWebSocketFrame(const FString& Message)
 	return Frame;
 }
 
-FString FMCPBridgeServer::ParseWebSocketFrame(const TArray<uint8>& Data)
+bool FMCPBridgeServer::TryParseWebSocketFrame(TArray<uint8>& Data, FString& OutMessage, bool& bOutCloseFrame)
 {
+	OutMessage.Reset();
+	bOutCloseFrame = false;
+
 	if (Data.Num() < 2)
 	{
-		return TEXT("");
+		return false;
 	}
 
-	uint8 FirstByte = Data[0];
-	uint8 SecondByte = Data[1];
-
-	bool bMasked = (SecondByte & 0x80) != 0;
-	int32 PayloadLen = SecondByte & 0x7F;
+	const uint8 FirstByte = Data[0];
+	const uint8 SecondByte = Data[1];
+	const uint8 OpCode = FirstByte & 0x0F;
+	const bool bMasked = (SecondByte & 0x80) != 0;
+	uint64 PayloadLen = SecondByte & 0x7F;
 
 	int32 HeaderLen = 2;
 	if (PayloadLen == 126)
 	{
 		if (Data.Num() < 4)
 		{
-			return TEXT("");
+			return false;
 		}
-		PayloadLen = (Data[2] << 8) | Data[3];
+		PayloadLen = (static_cast<uint64>(Data[2]) << 8) | Data[3];
 		HeaderLen = 4;
 	}
 	else if (PayloadLen == 127)
 	{
 		if (Data.Num() < 10)
 		{
-			return TEXT("");
+			return false;
 		}
 		PayloadLen = 0;
 		for (int32 i = 0; i < 8; ++i)
@@ -948,27 +1003,50 @@ FString FMCPBridgeServer::ParseWebSocketFrame(const TArray<uint8>& Data)
 		HeaderLen = 10;
 	}
 
-	if (bMasked)
+	if (PayloadLen > static_cast<uint64>(MAX_int32))
 	{
-		HeaderLen += 4; // Masking key
+		UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] WebSocket frame is too large: %llu bytes"), PayloadLen);
+		Data.Reset();
+		bOutCloseFrame = true;
+		return true;
 	}
 
-	if (Data.Num() < HeaderLen + PayloadLen)
+	if (bMasked)
 	{
-		return TEXT("");
+		HeaderLen += 4;
+	}
+
+	const int32 TotalFrameLen = HeaderLen + static_cast<int32>(PayloadLen);
+	if (Data.Num() < TotalFrameLen)
+	{
+		return false;
+	}
+
+	if (OpCode == 0x8)
+	{
+		Data.RemoveAt(0, TotalFrameLen, EAllowShrinking::No);
+		bOutCloseFrame = true;
+		return true;
+	}
+
+	if (OpCode != 0x1)
+	{
+		Data.RemoveAt(0, TotalFrameLen, EAllowShrinking::No);
+		return true;
 	}
 
 	TArray<uint8> Payload;
-	Payload.Append(Data.GetData() + HeaderLen, PayloadLen);
+	Payload.Append(Data.GetData() + HeaderLen, static_cast<int32>(PayloadLen));
 
 	if (bMasked)
 	{
-		// Unmask payload
-		uint8 MaskKey[4];
-		MaskKey[0] = Data[HeaderLen - 4];
-		MaskKey[1] = Data[HeaderLen - 3];
-		MaskKey[2] = Data[HeaderLen - 2];
-		MaskKey[3] = Data[HeaderLen - 1];
+		const uint8 MaskKey[4] =
+		{
+			Data[HeaderLen - 4],
+			Data[HeaderLen - 3],
+			Data[HeaderLen - 2],
+			Data[HeaderLen - 1]
+		};
 
 		for (int32 i = 0; i < Payload.Num(); ++i)
 		{
@@ -976,6 +1054,8 @@ FString FMCPBridgeServer::ParseWebSocketFrame(const TArray<uint8>& Data)
 		}
 	}
 
-	FUTF8ToTCHAR UTF8ToTCHAR((char*)Payload.GetData(), Payload.Num());
-	return FString(UTF8ToTCHAR.Length(), UTF8ToTCHAR.Get());
+	FUTF8ToTCHAR UTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(Payload.GetData()), Payload.Num());
+	OutMessage = FString(UTF8ToTCHAR.Length(), UTF8ToTCHAR.Get());
+	Data.RemoveAt(0, TotalFrameLen, EAllowShrinking::No);
+	return true;
 }

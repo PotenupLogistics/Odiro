@@ -47,6 +47,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Components/OverlaySlot.h"
 #include "Components/ScrollBoxSlot.h"
+#include "Components/WrapBoxSlot.h"
 #include "Animation/WidgetAnimation.h"
 #include "MovieScene.h"
 #include "MovieScenePossessable.h"
@@ -152,7 +153,21 @@ namespace
 
 	// Keeps MCP-authored widget tree edits aligned with the UMG compiler's
 	// serialized widget list and generated variable GUID bookkeeping.
-	void McpSynchronizeWidgetBlueprintCompilerState(UWidgetBlueprint* WidgetBP)
+	bool McpIsWidgetDescendantOf(UWidget* Widget, UWidget* PotentialAncestor)
+	{
+		if (!Widget || !PotentialAncestor || Widget == PotentialAncestor)
+		{
+			return false;
+		}
+
+		TArray<UWidget*> Descendants;
+		UWidgetTree::GetChildWidgets(PotentialAncestor, Descendants);
+		return Descendants.Contains(Widget);
+	}
+
+	void McpSynchronizeWidgetBlueprintCompilerState(
+		UWidgetBlueprint* WidgetBP,
+		const bool bDeleteUnreachableWidgets = true)
 	{
 		if (!WidgetBP || !WidgetBP->WidgetTree)
 		{
@@ -191,7 +206,7 @@ namespace
 				UnreachableRoots.Add(Widget);
 			}
 		}
-		if (!UnreachableRoots.IsEmpty())
+		if (bDeleteUnreachableWidgets && !UnreachableRoots.IsEmpty())
 		{
 			FWidgetBlueprintEditorUtils::DeleteWidgets(
 				WidgetBP,
@@ -265,6 +280,345 @@ namespace
 			}
 
 			CurrentGuids.Add(It.Value());
+		}
+	}
+
+	struct FMcpSlotSnapshot
+	{
+		FMargin Padding;
+		EHorizontalAlignment HorizontalAlignment = HAlign_Fill;
+		EVerticalAlignment VerticalAlignment = VAlign_Fill;
+		FSlateChildSize ChildSize;
+		FAnchors Anchors;
+		FMargin Offsets;
+		FVector2D Alignment = FVector2D::ZeroVector;
+		bool bAutoSize = false;
+		int32 ZOrder = 0;
+		bool bFillEmptySpace = false;
+		float FillSpanWhenLessThan = 0.0f;
+		bool bHasPadding = false;
+		bool bHasAlignment = false;
+		bool bHasChildSize = false;
+		bool bHasCanvas = false;
+		bool bHasWrapBox = false;
+	};
+
+	FMcpSlotSnapshot McpCaptureSlot(UPanelSlot* Slot)
+	{
+		FMcpSlotSnapshot Snapshot;
+		if (!Slot)
+		{
+			return Snapshot;
+		}
+
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+		{
+			Snapshot.Anchors = CanvasSlot->GetAnchors();
+			Snapshot.Offsets = CanvasSlot->GetOffsets();
+			Snapshot.Alignment = CanvasSlot->GetAlignment();
+			Snapshot.bAutoSize = CanvasSlot->GetAutoSize();
+			Snapshot.ZOrder = CanvasSlot->GetZOrder();
+			Snapshot.bHasCanvas = true;
+			return Snapshot;
+		}
+
+		if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+		{
+			Snapshot.Padding = HorizontalSlot->GetPadding();
+			Snapshot.HorizontalAlignment = HorizontalSlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = HorizontalSlot->GetVerticalAlignment();
+			Snapshot.ChildSize = HorizontalSlot->GetSize();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+			Snapshot.bHasChildSize = true;
+			return Snapshot;
+		}
+
+		if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+		{
+			Snapshot.Padding = VerticalSlot->GetPadding();
+			Snapshot.HorizontalAlignment = VerticalSlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = VerticalSlot->GetVerticalAlignment();
+			Snapshot.ChildSize = VerticalSlot->GetSize();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+			Snapshot.bHasChildSize = true;
+			return Snapshot;
+		}
+
+		if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(Slot))
+		{
+			Snapshot.Padding = OverlaySlot->GetPadding();
+			Snapshot.HorizontalAlignment = OverlaySlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = OverlaySlot->GetVerticalAlignment();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+			return Snapshot;
+		}
+
+		if (UButtonSlot* ButtonSlot = Cast<UButtonSlot>(Slot))
+		{
+			Snapshot.Padding = ButtonSlot->GetPadding();
+			Snapshot.HorizontalAlignment = ButtonSlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = ButtonSlot->GetVerticalAlignment();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+			return Snapshot;
+		}
+
+		if (UScrollBoxSlot* ScrollBoxSlot = Cast<UScrollBoxSlot>(Slot))
+		{
+			Snapshot.Padding = ScrollBoxSlot->GetPadding();
+			Snapshot.HorizontalAlignment = ScrollBoxSlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = ScrollBoxSlot->GetVerticalAlignment();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+			return Snapshot;
+		}
+
+		if (UWrapBoxSlot* WrapBoxSlot = Cast<UWrapBoxSlot>(Slot))
+		{
+			Snapshot.Padding = WrapBoxSlot->GetPadding();
+			Snapshot.HorizontalAlignment = WrapBoxSlot->GetHorizontalAlignment();
+			Snapshot.VerticalAlignment = WrapBoxSlot->GetVerticalAlignment();
+			Snapshot.bFillEmptySpace = WrapBoxSlot->DoesFillEmptySpace();
+			Snapshot.FillSpanWhenLessThan = WrapBoxSlot->GetFillSpanWhenLessThan();
+			Snapshot.bHasPadding = true;
+			Snapshot.bHasAlignment = true;
+			Snapshot.bHasWrapBox = true;
+			return Snapshot;
+		}
+
+		return Snapshot;
+	}
+
+	void McpApplySlot(UPanelSlot* Slot, const FMcpSlotSnapshot& Snapshot)
+	{
+		if (!Slot)
+		{
+			return;
+		}
+
+		if (Snapshot.bHasCanvas)
+		{
+			if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+			{
+				CanvasSlot->SetAnchors(Snapshot.Anchors);
+				CanvasSlot->SetOffsets(Snapshot.Offsets);
+				CanvasSlot->SetAlignment(Snapshot.Alignment);
+				CanvasSlot->SetAutoSize(Snapshot.bAutoSize);
+				CanvasSlot->SetZOrder(Snapshot.ZOrder);
+			}
+			return;
+		}
+
+		if (Snapshot.bHasPadding)
+		{
+			if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+			{
+				HorizontalSlot->SetPadding(Snapshot.Padding);
+			}
+			else if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+			{
+				VerticalSlot->SetPadding(Snapshot.Padding);
+			}
+			else if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(Slot))
+			{
+				OverlaySlot->SetPadding(Snapshot.Padding);
+			}
+			else if (UButtonSlot* ButtonSlot = Cast<UButtonSlot>(Slot))
+			{
+				ButtonSlot->SetPadding(Snapshot.Padding);
+			}
+			else if (UScrollBoxSlot* ScrollBoxSlot = Cast<UScrollBoxSlot>(Slot))
+			{
+				ScrollBoxSlot->SetPadding(Snapshot.Padding);
+			}
+			else if (UWrapBoxSlot* WrapBoxSlot = Cast<UWrapBoxSlot>(Slot))
+			{
+				WrapBoxSlot->SetPadding(Snapshot.Padding);
+			}
+		}
+
+		if (Snapshot.bHasAlignment)
+		{
+			if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+			{
+				HorizontalSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				HorizontalSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+			else if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+			{
+				VerticalSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				VerticalSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+			else if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(Slot))
+			{
+				OverlaySlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				OverlaySlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+			else if (UButtonSlot* ButtonSlot = Cast<UButtonSlot>(Slot))
+			{
+				ButtonSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				ButtonSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+			else if (UScrollBoxSlot* ScrollBoxSlot = Cast<UScrollBoxSlot>(Slot))
+			{
+				ScrollBoxSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				ScrollBoxSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+			else if (UWrapBoxSlot* WrapBoxSlot = Cast<UWrapBoxSlot>(Slot))
+			{
+				WrapBoxSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+				WrapBoxSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+			}
+		}
+
+		if (Snapshot.bHasChildSize)
+		{
+			if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+			{
+				HorizontalSlot->SetSize(Snapshot.ChildSize);
+			}
+			else if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+			{
+				VerticalSlot->SetSize(Snapshot.ChildSize);
+			}
+		}
+
+		if (Snapshot.bHasWrapBox)
+		{
+			if (UWrapBoxSlot* WrapBoxSlot = Cast<UWrapBoxSlot>(Slot))
+			{
+				WrapBoxSlot->SetFillEmptySpace(Snapshot.bFillEmptySpace);
+				WrapBoxSlot->SetFillSpanWhenLessThan(Snapshot.FillSpanWhenLessThan);
+			}
+		}
+	}
+
+	UWidget* McpFindWidgetByName(UWidgetBlueprint* WidgetBP, const FString& WidgetName)
+	{
+		UWidget* Found = nullptr;
+		if (!WidgetBP || !WidgetBP->WidgetTree)
+		{
+			return nullptr;
+		}
+
+		WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
+		{
+			if (!Found && Widget && Widget->GetName() == WidgetName)
+			{
+				Found = Widget;
+			}
+		});
+		return Found;
+	}
+
+	UWidget* McpFindWidgetParent(UWidgetBlueprint* WidgetBP, UWidget* Child, int32& ChildIndex)
+	{
+		ChildIndex = INDEX_NONE;
+		if (!Child)
+		{
+			return nullptr;
+		}
+
+		if (UPanelWidget* ParentPanel = Child->GetParent())
+		{
+			ChildIndex = ParentPanel->GetChildIndex(Child);
+			return ParentPanel;
+		}
+
+		UWidget* Parent = nullptr;
+		if (WidgetBP && WidgetBP->WidgetTree)
+		{
+			WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Candidate)
+			{
+				if (Parent || !Candidate)
+				{
+					return;
+				}
+				if (UContentWidget* ContentWidget = Cast<UContentWidget>(Candidate))
+				{
+					if (ContentWidget->GetContent() == Child)
+					{
+						Parent = Candidate;
+					}
+				}
+			});
+		}
+		return Parent;
+	}
+
+	UPanelSlot* McpAddChildToHost(UWidget* Parent, UWidget* Child, const int32 ChildIndex = INDEX_NONE)
+	{
+		if (!Parent || !Child)
+		{
+			return nullptr;
+		}
+
+		if (UPanelWidget* ParentPanel = Cast<UPanelWidget>(Parent))
+		{
+			if (ChildIndex != INDEX_NONE && ChildIndex <= ParentPanel->GetChildrenCount())
+			{
+				return ParentPanel->InsertChildAt(ChildIndex, Child);
+			}
+			return ParentPanel->AddChild(Child);
+		}
+
+		if (UContentWidget* ParentContent = Cast<UContentWidget>(Parent))
+		{
+			if (ParentContent->GetContent() && ParentContent->GetContent() != Child)
+			{
+				return nullptr;
+			}
+			return ParentContent->AddChild(Child);
+		}
+
+		return nullptr;
+	}
+
+	bool McpRemoveChildFromHost(UWidget* Parent, UWidget* Child)
+	{
+		if (!Parent || !Child)
+		{
+			return false;
+		}
+
+		if (UPanelWidget* ParentPanel = Cast<UPanelWidget>(Parent))
+		{
+			return ParentPanel->RemoveChild(Child);
+		}
+
+		if (UContentWidget* ParentContent = Cast<UContentWidget>(Parent))
+		{
+			return ParentContent->RemoveChild(Child);
+		}
+
+		return false;
+	}
+
+	void McpGetDirectChildren(UWidget* Widget, TArray<UWidget*>& OutChildren)
+	{
+		if (!Widget)
+		{
+			return;
+		}
+
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
+		{
+			for (int32 Index = 0; Index < Panel->GetChildrenCount(); ++Index)
+			{
+				OutChildren.Add(Panel->GetChildAt(Index));
+			}
+			return;
+		}
+
+		if (UContentWidget* ContentWidget = Cast<UContentWidget>(Widget))
+		{
+			if (UWidget* Content = ContentWidget->GetContent())
+			{
+				OutChildren.Add(Content);
+			}
 		}
 	}
 
@@ -1057,6 +1411,8 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_widget"), &RemoveWidget);
 	Registry.RegisterHandler(TEXT("rename_widget"), &RenameWidget);
 	Registry.RegisterHandler(TEXT("move_widget"), &MoveWidget);
+	Registry.RegisterHandler(TEXT("wrap_widget"), &WrapWidget);
+	Registry.RegisterHandler(TEXT("unwrap_widget"), &UnwrapWidget);
 	Registry.RegisterHandler(TEXT("repair_widget_blueprint"), &RepairWidgetBlueprint);
 	Registry.RegisterHandler(TEXT("set_root_widget"), &SetRoot);
 	Registry.RegisterHandler(TEXT("wrap_root_widget"), &WrapRoot);
@@ -1066,6 +1422,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("dump_runtime_widget_geometry"), &DumpRuntimeWidgetGeometry);
 	Registry.RegisterHandler(TEXT("spawn_runtime_widget_preview"), &SpawnRuntimeWidgetPreview);
 	Registry.RegisterHandler(TEXT("dispatch_runtime_widget_pointer_event"), &DispatchRuntimeWidgetPointerEvent);
+	Registry.RegisterHandler(TEXT("assert_runtime_widget_layout"), &AssertRuntimeWidgetLayout);
 	// #161: Runtime delegate inspection
 	Registry.RegisterHandler(TEXT("get_runtime_delegates"), &GetRuntimeDelegates);
 }
@@ -3635,6 +3992,316 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	return MCPResult(Result);
 }
 
+TSharedPtr<FJsonValue> FWidgetHandlers::WrapWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	FString WidgetName;
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
+
+	struct FWrapperSpec
+	{
+		FString WidgetClassName;
+		FString WidgetName;
+	};
+
+	TArray<FWrapperSpec> WrapperSpecs;
+	const TArray<TSharedPtr<FJsonValue>>* WrapperValues = nullptr;
+	if (Params->TryGetArrayField(TEXT("wrappers"), WrapperValues) && WrapperValues)
+	{
+		for (const TSharedPtr<FJsonValue>& WrapperValue : *WrapperValues)
+		{
+			const TSharedPtr<FJsonObject>* WrapperObject = nullptr;
+			if (!WrapperValue.IsValid() || !WrapperValue->TryGetObject(WrapperObject) || !WrapperObject || !(*WrapperObject).IsValid())
+			{
+				return MCPError(TEXT("Each wrappers entry must be an object."));
+			}
+
+			FWrapperSpec Spec;
+			if (!(*WrapperObject)->TryGetStringField(TEXT("widgetClass"), Spec.WidgetClassName))
+			{
+				(*WrapperObject)->TryGetStringField(TEXT("class"), Spec.WidgetClassName);
+			}
+			if (!(*WrapperObject)->TryGetStringField(TEXT("widgetName"), Spec.WidgetName))
+			{
+				(*WrapperObject)->TryGetStringField(TEXT("name"), Spec.WidgetName);
+			}
+			if (Spec.WidgetClassName.IsEmpty() || Spec.WidgetName.IsEmpty())
+			{
+				return MCPError(TEXT("Wrapper entries require widgetClass/class and widgetName/name."));
+			}
+			WrapperSpecs.Add(Spec);
+		}
+	}
+	else
+	{
+		FWrapperSpec Spec;
+		if (auto Err = RequireStringAlt(Params, TEXT("wrapperClass"), TEXT("widgetClass"), Spec.WidgetClassName)) return Err;
+		if (auto Err = RequireStringAlt(Params, TEXT("wrapperName"), TEXT("name"), Spec.WidgetName)) return Err;
+		WrapperSpecs.Add(Spec);
+	}
+
+	if (WrapperSpecs.IsEmpty())
+	{
+		return MCPError(TEXT("At least one wrapper is required."));
+	}
+
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
+	if (!WidgetBP || !WidgetBP->WidgetTree)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+	}
+
+	UWidget* TargetWidget = McpFindWidgetByName(WidgetBP, WidgetName);
+	if (!TargetWidget)
+	{
+		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
+	}
+
+	int32 OriginalChildIndex = INDEX_NONE;
+	UWidget* OriginalParent = McpFindWidgetParent(WidgetBP, TargetWidget, OriginalChildIndex);
+	const bool bWasRoot = WidgetBP->WidgetTree->RootWidget == TargetWidget;
+	if (!OriginalParent && !bWasRoot)
+	{
+		return MCPError(FString::Printf(TEXT("Widget '%s' has no parent and is not root."), *WidgetName));
+	}
+
+	TArray<UWidget*> WrapperWidgets;
+	WrapperWidgets.Reserve(WrapperSpecs.Num());
+	for (const FWrapperSpec& Spec : WrapperSpecs)
+	{
+		if (McpFindWidgetByName(WidgetBP, Spec.WidgetName))
+		{
+			return MCPError(FString::Printf(TEXT("Wrapper widget name already exists: '%s'"), *Spec.WidgetName));
+		}
+
+		UClass* WrapperClass = ResolveWidgetClass(Spec.WidgetClassName);
+		if (!WrapperClass)
+		{
+			return MCPError(FString::Printf(TEXT("Unknown widget class '%s'."), *Spec.WidgetClassName));
+		}
+
+		UWidget* WrapperWidget = WidgetBP->WidgetTree->ConstructWidget<UWidget>(
+			WrapperClass,
+			FName(*Spec.WidgetName));
+		if (!WrapperWidget)
+		{
+			return MCPError(FString::Printf(TEXT("Failed to construct wrapper '%s'."), *Spec.WidgetName));
+		}
+		if (!Cast<UPanelWidget>(WrapperWidget) && !Cast<UContentWidget>(WrapperWidget))
+		{
+			return MCPError(FString::Printf(
+				TEXT("Wrapper '%s' (%s) cannot host children."),
+				*Spec.WidgetName,
+				*WrapperWidget->GetClass()->GetName()));
+		}
+
+		WrapperWidget->bIsVariable = true;
+		WrapperWidgets.Add(WrapperWidget);
+	}
+
+	WidgetBP->Modify();
+	WidgetBP->WidgetTree->Modify();
+	TargetWidget->Modify();
+
+	const FMcpSlotSnapshot OriginalSlot = McpCaptureSlot(TargetWidget->Slot);
+	if (OriginalParent)
+	{
+		if (!McpRemoveChildFromHost(OriginalParent, TargetWidget))
+		{
+			return MCPError(FString::Printf(
+				TEXT("Failed to detach '%s' from '%s'."),
+				*WidgetName,
+				*OriginalParent->GetName()));
+		}
+	}
+	else
+	{
+		WidgetBP->WidgetTree->RootWidget = nullptr;
+	}
+
+	UWidget* OuterWrapper = WrapperWidgets[0];
+	UPanelSlot* OuterSlot = nullptr;
+	if (OriginalParent)
+	{
+		OuterSlot = McpAddChildToHost(OriginalParent, OuterWrapper, OriginalChildIndex);
+		if (!OuterSlot)
+		{
+			return MCPError(FString::Printf(
+				TEXT("Failed to insert wrapper '%s' into '%s'."),
+				*OuterWrapper->GetName(),
+				*OriginalParent->GetName()));
+		}
+		McpApplySlot(OuterSlot, OriginalSlot);
+	}
+	else if (bWasRoot)
+	{
+		WidgetBP->WidgetTree->RootWidget = OuterWrapper;
+	}
+
+	for (int32 WrapperIndex = 1; WrapperIndex < WrapperWidgets.Num(); ++WrapperIndex)
+	{
+		UWidget* ParentWrapper = WrapperWidgets[WrapperIndex - 1];
+		UWidget* ChildWrapper = WrapperWidgets[WrapperIndex];
+		if (!McpAddChildToHost(ParentWrapper, ChildWrapper))
+		{
+			return MCPError(FString::Printf(
+				TEXT("Failed to add wrapper '%s' under '%s'."),
+				*ChildWrapper->GetName(),
+				*ParentWrapper->GetName()));
+		}
+	}
+
+	UWidget* InnerWrapper = WrapperWidgets.Last();
+	if (!McpAddChildToHost(InnerWrapper, TargetWidget))
+	{
+		return MCPError(FString::Printf(
+			TEXT("Failed to add '%s' under wrapper '%s'."),
+			*WidgetName,
+			*InnerWrapper->GetName()));
+	}
+
+	for (UWidget* WrapperWidget : WrapperWidgets)
+	{
+		if (!WidgetBP->WidgetVariableNameToGuidMap.Contains(WrapperWidget->GetFName()))
+		{
+			WidgetBP->WidgetVariableNameToGuidMap.Add(WrapperWidget->GetFName(), FGuid::NewGuid());
+		}
+	}
+
+	WidgetBP->MarkPackageDirty();
+	McpSynchronizeWidgetBlueprintCompilerState(WidgetBP);
+	FCompilerResultsLog CompileLog;
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::None, &CompileLog);
+
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	if (bSave)
+	{
+		UEditorAssetLibrary::SaveAsset(AssetPath);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> WrapperNames;
+	for (UWidget* WrapperWidget : WrapperWidgets)
+	{
+		WrapperNames.Add(MakeShared<FJsonValueString>(WrapperWidget->GetName()));
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("widgetName"), WidgetName);
+	Result->SetArrayField(TEXT("wrappers"), WrapperNames);
+	Result->SetBoolField(TEXT("wrappedRoot"), bWasRoot);
+	Result->SetNumberField(TEXT("compileErrors"), CompileLog.NumErrors);
+	Result->SetNumberField(TEXT("compileWarnings"), CompileLog.NumWarnings);
+	Result->SetBoolField(TEXT("saved"), bSave);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::UnwrapWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	FString WidgetName;
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
+
+	UWidgetBlueprint* WidgetBP = LoadAssetByPath<UWidgetBlueprint>(AssetPath);
+	if (!WidgetBP || !WidgetBP->WidgetTree)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+	}
+
+	UWidget* WrapperWidget = McpFindWidgetByName(WidgetBP, WidgetName);
+	if (!WrapperWidget)
+	{
+		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
+	}
+
+	TArray<UWidget*> Children;
+	McpGetDirectChildren(WrapperWidget, Children);
+	if (Children.Num() != 1)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Widget '%s' must have exactly one child to unwrap; found %d."),
+			*WidgetName,
+			Children.Num()));
+	}
+
+	UWidget* ChildWidget = Children[0];
+	int32 WrapperChildIndex = INDEX_NONE;
+	UWidget* ParentWidget = McpFindWidgetParent(WidgetBP, WrapperWidget, WrapperChildIndex);
+	const bool bWasRoot = WidgetBP->WidgetTree->RootWidget == WrapperWidget;
+	if (!ParentWidget && !bWasRoot)
+	{
+		return MCPError(FString::Printf(TEXT("Wrapper '%s' has no parent and is not root."), *WidgetName));
+	}
+
+	WidgetBP->Modify();
+	WidgetBP->WidgetTree->Modify();
+	WrapperWidget->Modify();
+	ChildWidget->Modify();
+
+	const FMcpSlotSnapshot WrapperSlot = McpCaptureSlot(WrapperWidget->Slot);
+	if (!McpRemoveChildFromHost(WrapperWidget, ChildWidget))
+	{
+		return MCPError(FString::Printf(
+			TEXT("Failed to detach child '%s' from wrapper '%s'."),
+			*ChildWidget->GetName(),
+			*WidgetName));
+	}
+
+	if (ParentWidget)
+	{
+		if (!McpRemoveChildFromHost(ParentWidget, WrapperWidget))
+		{
+			return MCPError(FString::Printf(
+				TEXT("Failed to detach wrapper '%s' from '%s'."),
+				*WidgetName,
+				*ParentWidget->GetName()));
+		}
+		UPanelSlot* NewSlot = McpAddChildToHost(ParentWidget, ChildWidget, WrapperChildIndex);
+		if (!NewSlot)
+		{
+			return MCPError(FString::Printf(
+				TEXT("Failed to insert child '%s' into '%s'."),
+				*ChildWidget->GetName(),
+				*ParentWidget->GetName()));
+		}
+		McpApplySlot(NewSlot, WrapperSlot);
+	}
+	else if (bWasRoot)
+	{
+		WidgetBP->WidgetTree->RootWidget = ChildWidget;
+	}
+
+	WidgetBP->WidgetVariableNameToGuidMap.Remove(WrapperWidget->GetFName());
+	WidgetBP->WidgetTree->RemoveWidget(WrapperWidget);
+
+	WidgetBP->MarkPackageDirty();
+	McpSynchronizeWidgetBlueprintCompilerState(WidgetBP);
+	FCompilerResultsLog CompileLog;
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::None, &CompileLog);
+
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	if (bSave)
+	{
+		UEditorAssetLibrary::SaveAsset(AssetPath);
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("unwrappedWidget"), WidgetName);
+	Result->SetStringField(TEXT("promotedChild"), ChildWidget->GetName());
+	Result->SetBoolField(TEXT("unwrappedRoot"), bWasRoot);
+	Result->SetNumberField(TEXT("compileErrors"), CompileLog.NumErrors);
+	Result->SetNumberField(TEXT("compileWarnings"), CompileLog.NumWarnings);
+	Result->SetBoolField(TEXT("saved"), bSave);
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FWidgetHandlers::RepairWidgetBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -3670,10 +4337,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RepairWidgetBlueprint(const TSharedPtr<F
 	return MCPResult(Result);
 }
 
-// #365: replace the WBP's RootWidget with an existing widget by name. The
-// previous root is removed from the tree along with its descendants. Used
-// when an authoring step needs to swap a placeholder root (e.g. the
-// auto-created CanvasPanel) for a different layout.
+// #365: replace the WBP's RootWidget with an existing widget by name. When
+// promoting an existing descendant, preserve its subtree and avoid the
+// destructive old-root delete path that can rename children to TRASH_*.
 TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -3717,6 +4383,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 	WidgetBP->Modify();
 	WidgetBP->WidgetTree->Modify();
 
+	const bool bPromotingExistingDescendant = OldRoot
+		&& OldRoot != NewRoot
+		&& McpIsWidgetDescendantOf(NewRoot, OldRoot);
+
 	// Detach NewRoot from its current parent so the engine doesn't keep it as
 	// a descendant of whatever was hosting it (avoids leaving the new root
 	// double-parented when AddChild later reassigns it elsewhere).
@@ -3741,7 +4411,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 		}
 	}
 
-	if (OldRoot)
+	if (OldRoot && !bPromotingExistingDescendant)
 	{
 		TSet<UWidget*> WidgetsToDelete;
 		WidgetsToDelete.Add(OldRoot);
@@ -3754,7 +4424,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 	McpMoveWidgetTemplateIntoTree(WidgetBP, NewRoot, FName(*WidgetName));
 	WidgetBP->WidgetTree->RootWidget = NewRoot;
 
-	McpSynchronizeWidgetBlueprintCompilerState(WidgetBP);
+	McpSynchronizeWidgetBlueprintCompilerState(WidgetBP, !bPromotingExistingDescendant);
 	WidgetBP->MarkPackageDirty();
 	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
 	UEditorAssetLibrary::SaveAsset(AssetPath);
@@ -3763,6 +4433,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("rootWidget"), WidgetName);
 	Result->SetStringField(TEXT("previousRoot"), OldRoot ? OldRoot->GetName() : TEXT("(none)"));
+	Result->SetBoolField(TEXT("promotedExistingDescendant"), bPromotingExistingDescendant);
+	Result->SetBoolField(TEXT("preservedPreviousRoot"), bPromotingExistingDescendant);
 	return MCPResult(Result);
 }
 
@@ -4010,16 +4682,578 @@ namespace WidgetRuntime_Internal
 		return Obj;
 	}
 
+	static TArray<TSharedPtr<FJsonValue>> MakeClassChainJson(const UClass* Class)
+	{
+		TArray<TSharedPtr<FJsonValue>> Chain;
+		for (const UClass* CurrentClass = Class; CurrentClass; CurrentClass = CurrentClass->GetSuperClass())
+		{
+			Chain.Add(MakeShared<FJsonValueString>(CurrentClass->GetPathName()));
+		}
+		return Chain;
+	}
+
+	static void AddSelectedPropertyString(
+		TSharedPtr<FJsonObject> Target,
+		UObject* Source,
+		const TCHAR* PropertyName)
+	{
+		if (!Target || !Source)
+		{
+			return;
+		}
+
+		if (FProperty* Property = Source->GetClass()->FindPropertyByName(PropertyName))
+		{
+			FString Value;
+			const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Source);
+			Property->ExportText_Direct(Value, ValuePtr, ValuePtr, Source, PPF_None);
+			Target->SetStringField(PropertyName, Value);
+		}
+	}
+
+	static TSharedPtr<FJsonObject> MakeRuntimePropertiesJson(UWidget* Widget)
+	{
+		TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
+		static const TCHAR* WidgetPropertyNames[] = {
+			TEXT("WidthOverride"),
+			TEXT("HeightOverride"),
+			TEXT("MinDesiredWidth"),
+			TEXT("MinDesiredHeight"),
+			TEXT("MaxDesiredWidth"),
+			TEXT("MaxDesiredHeight"),
+			TEXT("bOverride_WidthOverride"),
+			TEXT("bOverride_HeightOverride"),
+			TEXT("bOverride_MinDesiredWidth"),
+			TEXT("bOverride_MinDesiredHeight"),
+			TEXT("bOverride_MaxDesiredWidth"),
+			TEXT("bOverride_MaxDesiredHeight"),
+			TEXT("ConsumeMouseWheel"),
+			TEXT("ScrollBarVisibility"),
+			TEXT("bAllowRightClickDragScrolling"),
+			TEXT("TickFrequency")
+		};
+		for (const TCHAR* PropertyName : WidgetPropertyNames)
+		{
+			AddSelectedPropertyString(Props, Widget, PropertyName);
+		}
+
+		if (UPanelSlot* Slot = Widget ? Widget->Slot : nullptr)
+		{
+			TSharedPtr<FJsonObject> SlotProps = MakeShared<FJsonObject>();
+			SlotProps->SetStringField(TEXT("class"), Slot->GetClass()->GetName());
+			static const TCHAR* SlotPropertyNames[] = {
+				TEXT("FillSpanWhenLessThan"),
+				TEXT("bFillEmptySpace"),
+				TEXT("bForceNewLine"),
+				TEXT("HorizontalAlignment"),
+				TEXT("VerticalAlignment"),
+				TEXT("Padding")
+			};
+			for (const TCHAR* PropertyName : SlotPropertyNames)
+			{
+				AddSelectedPropertyString(SlotProps, Slot, PropertyName);
+			}
+			Props->SetObjectField(TEXT("slot"), SlotProps);
+		}
+		return Props;
+	}
+
+	struct FRuntimeWidgetSelection
+	{
+		UUserWidget* Owner = nullptr;
+		UWidget* Widget = nullptr;
+		TSharedPtr<SWidget> SlateWidget;
+		FGeometry Geometry;
+		FVector2D Size = FVector2D::ZeroVector;
+		int32 CandidateCount = 0;
+		int32 SelectedCandidateIndex = INDEX_NONE;
+		bool bAnyTargetMatched = false;
+		bool bAnySlateMatched = false;
+		bool bAnyNonZeroGeometry = false;
+	};
+
+	static bool HasUsableRuntimeGeometry(const FVector2D& Size)
+	{
+		return Size.X > 0.0f && Size.Y > 0.0f;
+	}
+
+	static void TickRuntimeWidgetLayout(UUserWidget* Widget)
+	{
+		if (!Widget)
+		{
+			return;
+		}
+
+		Widget->ForceLayoutPrepass();
+		if (FSlateApplication::IsInitialized())
+		{
+			FSlateApplication::Get().Tick();
+		}
+	}
+
+	static void FindWidgetsByNameDeep(
+		UWidget* Root,
+		const FString& WidgetName,
+		TSet<UWidget*>& Visited,
+		TArray<UWidget*>& OutWidgets)
+	{
+		if (!Root || Visited.Contains(Root))
+		{
+			return;
+		}
+
+		Visited.Add(Root);
+		if (Root->GetName() == WidgetName)
+		{
+			OutWidgets.Add(Root);
+		}
+
+		if (UUserWidget* UserWidget = Cast<UUserWidget>(Root))
+		{
+			if (UserWidget->WidgetTree && UserWidget->WidgetTree->RootWidget)
+			{
+				FindWidgetsByNameDeep(UserWidget->WidgetTree->RootWidget, WidgetName, Visited, OutWidgets);
+			}
+		}
+
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(Root))
+		{
+			for (int32 Index = 0; Index < Panel->GetChildrenCount(); ++Index)
+			{
+				FindWidgetsByNameDeep(Panel->GetChildAt(Index), WidgetName, Visited, OutWidgets);
+			}
+		}
+		else if (UContentWidget* ContentWidget = Cast<UContentWidget>(Root))
+		{
+			FindWidgetsByNameDeep(ContentWidget->GetContent(), WidgetName, Visited, OutWidgets);
+		}
+	}
+
+	static UWidget* FindWidgetByNameDeep(UUserWidget* Owner, const FString& WidgetName)
+	{
+		if (!Owner || WidgetName.IsEmpty())
+		{
+			return nullptr;
+		}
+		if (Owner->GetName() == WidgetName)
+		{
+			return Owner;
+		}
+
+		TArray<UWidget*> Matches;
+		TSet<UWidget*> Visited;
+		if (Owner->WidgetTree && Owner->WidgetTree->RootWidget)
+		{
+			FindWidgetsByNameDeep(Owner->WidgetTree->RootWidget, WidgetName, Visited, Matches);
+		}
+		return Matches.Num() > 0 ? Matches[0] : nullptr;
+	}
+
+	static UWidget* FindWidgetByPath(UUserWidget* Owner, const FString& WidgetPath)
+	{
+		if (!Owner)
+		{
+			return nullptr;
+		}
+		if (WidgetPath.IsEmpty())
+		{
+			return Owner;
+		}
+
+		TArray<FString> Segments;
+		WidgetPath.ParseIntoArray(Segments, TEXT("/"), true);
+		if (Segments.Num() == 0)
+		{
+			WidgetPath.ParseIntoArray(Segments, TEXT("."), true);
+		}
+		if (Segments.Num() == 0)
+		{
+			return FindWidgetByNameDeep(Owner, WidgetPath);
+		}
+
+		UWidget* Current = Owner;
+		for (const FString& RawSegment : Segments)
+		{
+			const FString Segment = RawSegment.TrimStartAndEnd();
+			if (Segment.IsEmpty())
+			{
+				continue;
+			}
+			if (Current && Current->GetName() == Segment)
+			{
+				continue;
+			}
+
+			UUserWidget* CurrentUserWidget = Cast<UUserWidget>(Current);
+			if (!CurrentUserWidget)
+			{
+				TArray<UWidget*> Matches;
+				TSet<UWidget*> Visited;
+				FindWidgetsByNameDeep(Current, Segment, Visited, Matches);
+				Current = Matches.Num() > 0 ? Matches[0] : nullptr;
+			}
+			else
+			{
+				Current = FindWidgetByNameDeep(CurrentUserWidget, Segment);
+			}
+
+			if (!Current)
+			{
+				return nullptr;
+			}
+		}
+
+		return Current;
+	}
+
+	static TSharedPtr<SWidget> ResolveRuntimeSlateWidget(UWidget* Widget)
+	{
+		if (UUserWidget* UserWidget = Cast<UUserWidget>(Widget))
+		{
+			return UserWidget->TakeWidget();
+		}
+		return Widget ? Widget->GetCachedWidget() : TSharedPtr<SWidget>();
+	}
+
+	static bool TryGetRuntimeGeometry(UWidget* Widget, FGeometry& OutGeometry, FVector2D& OutSize)
+	{
+		const TSharedPtr<SWidget> SlateWidget = ResolveRuntimeSlateWidget(Widget);
+		if (!SlateWidget.IsValid())
+		{
+			OutSize = FVector2D::ZeroVector;
+			return false;
+		}
+
+		OutGeometry = SlateWidget->GetTickSpaceGeometry();
+		OutSize = OutGeometry.GetLocalSize();
+		return HasUsableRuntimeGeometry(OutSize);
+	}
+
+	static UUserWidget* FindOuterRuntimeUserWidget(UWidget* Widget)
+	{
+		for (UObject* Outer = Widget ? Widget->GetOuter() : nullptr; Outer; Outer = Outer->GetOuter())
+		{
+			if (UUserWidget* UserWidget = Cast<UUserWidget>(Outer))
+			{
+				return UserWidget;
+			}
+		}
+		return nullptr;
+	}
+
+	static bool TryGetRuntimeGeometryFallback(
+		UWidget* Widget,
+		UUserWidget* CandidateOwner,
+		FGeometry& OutGeometry,
+		FVector2D& OutSize)
+	{
+		if (TryGetRuntimeGeometry(Widget, OutGeometry, OutSize))
+		{
+			return true;
+		}
+
+		// Nested UserWidget descendants can render correctly while their individual
+		// UWidget cached geometry remains zero. Use the owning UserWidget geometry
+		// for pointer smoke tests so verification can still hit the live Slate tree.
+		if (UUserWidget* OuterUserWidget = FindOuterRuntimeUserWidget(Widget))
+		{
+			if (OuterUserWidget != Widget && TryGetRuntimeGeometry(OuterUserWidget, OutGeometry, OutSize))
+			{
+				return true;
+			}
+		}
+
+		if (CandidateOwner && CandidateOwner != Widget)
+		{
+			return TryGetRuntimeGeometry(CandidateOwner, OutGeometry, OutSize);
+		}
+
+		OutSize = FVector2D::ZeroVector;
+		return false;
+	}
+
+	static TArray<UUserWidget*> FindRuntimeWidgetCandidates(
+		UWorld* World,
+		const FString& WidgetName,
+		const FString& ClassFilter,
+		const FString& NamePrefix,
+		const bool bInViewportOnly)
+	{
+		TArray<UUserWidget*> CandidateWidgets;
+		for (TObjectIterator<UUserWidget> It; It; ++It)
+		{
+			UUserWidget* Candidate = *It;
+			if (!IsValid(Candidate) || Candidate->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject)) continue;
+			if (Candidate->GetWorld() != World) continue;
+
+			const FString CandidateName = Candidate->GetName();
+			const FString CandidateClassName = Candidate->GetClass()->GetName();
+			if (!WidgetName.IsEmpty() && CandidateName != WidgetName) continue;
+			if (!ClassFilter.IsEmpty() && !CandidateClassName.Contains(ClassFilter)) continue;
+			if (!NamePrefix.IsEmpty() && !CandidateName.StartsWith(NamePrefix)) continue;
+			if (bInViewportOnly && !Candidate->IsInViewport()) continue;
+			CandidateWidgets.Add(Candidate);
+		}
+		return CandidateWidgets;
+	}
+
+	static FRuntimeWidgetSelection SelectRuntimeWidgetTarget(
+		UWorld* World,
+		const FString& WidgetName,
+		const FString& ClassFilter,
+		const FString& NamePrefix,
+		const bool bInViewportOnly,
+		const FString& TargetPath,
+		const bool bRequireNonZeroGeometry)
+	{
+		FRuntimeWidgetSelection Selection;
+		const TArray<UUserWidget*> CandidateWidgets = FindRuntimeWidgetCandidates(
+			World,
+			WidgetName,
+			ClassFilter,
+			NamePrefix,
+			bInViewportOnly);
+		Selection.CandidateCount = CandidateWidgets.Num();
+
+		int32 BestScore = MIN_int32;
+		for (int32 CandidateIndex = 0; CandidateIndex < CandidateWidgets.Num(); ++CandidateIndex)
+		{
+			UUserWidget* Candidate = CandidateWidgets[CandidateIndex];
+			if (!IsValid(Candidate))
+			{
+				continue;
+			}
+
+			TickRuntimeWidgetLayout(Candidate);
+			UWidget* CandidateTarget = FindWidgetByPath(Candidate, TargetPath);
+			if (!CandidateTarget)
+			{
+				continue;
+			}
+			Selection.bAnyTargetMatched = true;
+
+			TSharedPtr<SWidget> CandidateSlate = ResolveRuntimeSlateWidget(CandidateTarget);
+			FGeometry CandidateGeometry;
+			FVector2D CandidateSize = FVector2D::ZeroVector;
+			const bool bHasSlate = CandidateSlate.IsValid();
+			if (bHasSlate)
+			{
+				Selection.bAnySlateMatched = true;
+				TryGetRuntimeGeometryFallback(CandidateTarget, Candidate, CandidateGeometry, CandidateSize);
+			}
+
+			const bool bHasNonZeroGeometry = bHasSlate && HasUsableRuntimeGeometry(CandidateSize);
+			Selection.bAnyNonZeroGeometry |= bHasNonZeroGeometry;
+			if (bRequireNonZeroGeometry && !bHasNonZeroGeometry)
+			{
+				continue;
+			}
+
+			const bool bVisible = Candidate->IsVisible() && CandidateTarget->IsVisible();
+			const int32 Score =
+				(bVisible ? 4 : 0)
+				+ (bHasNonZeroGeometry ? 2 : 0)
+				+ (Candidate->IsInViewport() ? 1 : 0);
+			if (Score > BestScore)
+			{
+				BestScore = Score;
+				Selection.Owner = Candidate;
+				Selection.Widget = CandidateTarget;
+				Selection.SlateWidget = CandidateSlate;
+				Selection.Geometry = CandidateGeometry;
+				Selection.Size = CandidateSize;
+				Selection.SelectedCandidateIndex = CandidateIndex;
+				if (Score == 7)
+				{
+					break;
+				}
+			}
+		}
+
+		return Selection;
+	}
+
+	static FString MakeRuntimeSelectionError(
+		const FRuntimeWidgetSelection& Selection,
+		const FString& TargetPath,
+		const bool bRequireNonZeroGeometry)
+	{
+		const FString TargetLabel = TargetPath.IsEmpty() ? TEXT("<self>") : TargetPath;
+		if (Selection.CandidateCount == 0)
+		{
+			return TEXT("Runtime widget not found. Try list_runtime_widgets to see available instances.");
+		}
+		if (!Selection.bAnyTargetMatched)
+		{
+			return FString::Printf(
+				TEXT("Target widget '%s' not found inside %d matching runtime widget(s)."),
+				*TargetLabel,
+				Selection.CandidateCount);
+		}
+		if (!Selection.bAnySlateMatched)
+		{
+			return FString::Printf(
+				TEXT("Target widget '%s' has no cached Slate widget in %d matching runtime widget(s)."),
+				*TargetLabel,
+				Selection.CandidateCount);
+		}
+		if (bRequireNonZeroGeometry && !Selection.bAnyNonZeroGeometry)
+		{
+			return FString::Printf(
+				TEXT("Target widget '%s' has zero geometry in %d matching runtime widget(s)."),
+				*TargetLabel,
+				Selection.CandidateCount);
+		}
+		return FString::Printf(
+			TEXT("Target widget '%s' could not be selected from %d matching runtime widget(s)."),
+			*TargetLabel,
+			Selection.CandidateCount);
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> MakeRuntimeDirectChildrenJson(UWidget* Widget)
+	{
+		TArray<TSharedPtr<FJsonValue>> Children;
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
+		{
+			for (int32 Index = 0; Index < Panel->GetChildrenCount(); ++Index)
+			{
+				if (UWidget* Child = Panel->GetChildAt(Index))
+				{
+					TSharedPtr<FJsonObject> ChildObj = MakeShared<FJsonObject>();
+					ChildObj->SetStringField(TEXT("name"), Child->GetName());
+					ChildObj->SetStringField(TEXT("class"), Child->GetClass()->GetName());
+					ChildObj->SetStringField(TEXT("visibility"), VisibilityToString(Child->GetVisibility()));
+					ChildObj->SetBoolField(TEXT("isVisible"), Child->IsVisible());
+					ChildObj->SetObjectField(TEXT("geometry"), MakeGeometryJson(Child));
+					Children.Add(MakeShared<FJsonValueObject>(ChildObj));
+				}
+			}
+		}
+		else if (UUserWidget* UserWidget = Cast<UUserWidget>(Widget))
+		{
+			if (UserWidget->WidgetTree && UserWidget->WidgetTree->RootWidget)
+			{
+				UWidget* RootWidget = UserWidget->WidgetTree->RootWidget;
+				TSharedPtr<FJsonObject> ChildObj = MakeShared<FJsonObject>();
+				ChildObj->SetStringField(TEXT("name"), RootWidget->GetName());
+				ChildObj->SetStringField(TEXT("class"), RootWidget->GetClass()->GetName());
+				ChildObj->SetStringField(TEXT("visibility"), VisibilityToString(RootWidget->GetVisibility()));
+				ChildObj->SetBoolField(TEXT("isVisible"), RootWidget->IsVisible());
+				ChildObj->SetObjectField(TEXT("geometry"), MakeGeometryJson(RootWidget));
+				Children.Add(MakeShared<FJsonValueObject>(ChildObj));
+			}
+		}
+		return Children;
+	}
+
+	static TSharedPtr<FJsonObject> BuildRuntimeScopedNode(UWidget* Widget)
+	{
+		if (!Widget)
+		{
+			return nullptr;
+		}
+
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Widget->GetName());
+		Obj->SetStringField(TEXT("class"), Widget->GetClass()->GetName());
+		Obj->SetArrayField(TEXT("classChain"), MakeClassChainJson(Widget->GetClass()));
+		Obj->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
+		Obj->SetBoolField(TEXT("isVisible"), Widget->IsVisible());
+		Obj->SetNumberField(TEXT("renderOpacity"), Widget->GetRenderOpacity());
+		Obj->SetObjectField(TEXT("geometry"), MakeGeometryJson(Widget));
+		Obj->SetObjectField(TEXT("runtimeProperties"), MakeRuntimePropertiesJson(Widget));
+		Obj->SetArrayField(TEXT("children"), MakeRuntimeDirectChildrenJson(Widget));
+
+		const FString Text = SafeGetText(Widget);
+		if (!Text.IsEmpty())
+		{
+			Obj->SetStringField(TEXT("text"), Text);
+		}
+		return Obj;
+	}
+
+	static bool TryExportPropertyText(UObject* Source, const FName PropertyName, FString& OutValue)
+	{
+		if (!Source)
+		{
+			return false;
+		}
+		FProperty* Property = Source->GetClass()->FindPropertyByName(PropertyName);
+		if (!Property)
+		{
+			return false;
+		}
+
+		const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Source);
+		Property->ExportText_Direct(OutValue, ValuePtr, ValuePtr, Source, PPF_None);
+		return true;
+	}
+
+	static bool TryReadBoolProperty(UObject* Source, const FName PropertyName, bool& OutValue)
+	{
+		if (!Source)
+		{
+			return false;
+		}
+		FBoolProperty* BoolProperty = FindFProperty<FBoolProperty>(Source->GetClass(), PropertyName);
+		if (!BoolProperty)
+		{
+			return false;
+		}
+
+		OutValue = BoolProperty->GetPropertyValue_InContainer(Source);
+		return true;
+	}
+
+	static FString NormalizeRuntimePropertyText(FString Value)
+	{
+		Value.TrimStartAndEndInline();
+		Value.RemoveFromStart(TEXT("\""));
+		Value.RemoveFromEnd(TEXT("\""));
+
+		int32 NamespaceIndex = INDEX_NONE;
+		if (Value.FindLastChar(TCHAR(':'), NamespaceIndex) && NamespaceIndex + 1 < Value.Len())
+		{
+			Value = Value.RightChop(NamespaceIndex + 1);
+		}
+		return Value;
+	}
+
+	static bool RuntimePropertyTextMatches(const FString& Actual, const FString& Expected)
+	{
+		const FString NormalizedActual = NormalizeRuntimePropertyText(Actual);
+		const FString NormalizedExpected = NormalizeRuntimePropertyText(Expected);
+		return NormalizedActual.Equals(NormalizedExpected, ESearchCase::IgnoreCase)
+			|| Actual.Equals(Expected, ESearchCase::IgnoreCase)
+			|| Actual.EndsWith(Expected, ESearchCase::IgnoreCase);
+	}
+
+	static TSharedPtr<FJsonValue> MakeLayoutAssertionFailure(
+		const FString& Type,
+		const FString& Path,
+		const FString& Expected,
+		const FString& Actual)
+	{
+		TSharedPtr<FJsonObject> Failure = MakeShared<FJsonObject>();
+		Failure->SetStringField(TEXT("type"), Type);
+		Failure->SetStringField(TEXT("path"), Path);
+		Failure->SetStringField(TEXT("expected"), Expected);
+		Failure->SetStringField(TEXT("actual"), Actual);
+		return MakeShared<FJsonValueObject>(Failure);
+	}
+
 	static TSharedPtr<FJsonObject> BuildRuntimeNode(UWidget* Widget, int32 Depth, int32 MaxDepth)
 	{
 		if (!Widget) return nullptr;
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetStringField(TEXT("name"), Widget->GetName());
 		Obj->SetStringField(TEXT("class"), Widget->GetClass()->GetName());
+		Obj->SetArrayField(TEXT("classChain"), MakeClassChainJson(Widget->GetClass()));
 		Obj->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
 		Obj->SetBoolField(TEXT("isVisible"), Widget->IsVisible());
 		Obj->SetNumberField(TEXT("renderOpacity"), Widget->GetRenderOpacity());
 		Obj->SetObjectField(TEXT("geometry"), MakeGeometryJson(Widget));
+		Obj->SetObjectField(TEXT("runtimeProperties"), MakeRuntimePropertiesJson(Widget));
 
 		FString Text = SafeGetText(Widget);
 		if (!Text.IsEmpty())
@@ -4151,6 +5385,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonO
 	Params->TryGetStringField(TEXT("widgetName"), WidgetName);
 	FString ClassFilter;
 	Params->TryGetStringField(TEXT("className"), ClassFilter);
+	if (ClassFilter.IsEmpty())
+	{
+		Params->TryGetStringField(TEXT("classFilter"), ClassFilter);
+	}
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
 	{
 		return MCPError(TEXT("Provide widgetName (exact instance name) or className (first match)."));
@@ -4158,58 +5396,57 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonO
 
 	const int32 MaxDepth = OptionalInt(Params, TEXT("maxDepth"), DefaultRuntimeTreeMaxDepth);
 	const FString ChildName = OptionalString(Params, TEXT("childName"), TEXT(""));
+	const FString Path = OptionalString(Params, TEXT("path"), ChildName);
+	const FString NamePrefix = OptionalString(Params, TEXT("namePrefix"), TEXT(""));
+	const bool bInViewportOnly = OptionalBool(Params, TEXT("viewportOnly"), false);
+	const FString Mode = OptionalString(Params, TEXT("mode"), TEXT("tree")).ToLower();
+	const bool bScoped = OptionalBool(Params, TEXT("scoped"), false)
+		|| Mode == TEXT("scoped")
+		|| Mode == TEXT("children")
+		|| Mode == TEXT("properties");
 
-	UUserWidget* Found = nullptr;
-	for (TObjectIterator<UUserWidget> It; It; ++It)
+	const FRuntimeWidgetSelection Selection = SelectRuntimeWidgetTarget(
+		World,
+		WidgetName,
+		ClassFilter,
+		NamePrefix,
+		bInViewportOnly,
+		Path,
+		false);
+	if (!Selection.Widget || !Selection.Owner)
 	{
-		UUserWidget* Widget = *It;
-		if (!IsValid(Widget) || Widget->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject)) continue;
-		if (Widget->GetWorld() != World) continue;
-
-		if (!WidgetName.IsEmpty() && Widget->GetName() != WidgetName) continue;
-		if (!ClassFilter.IsEmpty() && !Widget->GetClass()->GetName().Contains(ClassFilter)) continue;
-
-		Found = Widget;
-		break;
+		return MCPError(MakeRuntimeSelectionError(Selection, Path, false));
 	}
 
-	if (!Found)
-	{
-		return MCPError(TEXT("Runtime widget not found. Try list_runtime_widgets to see available instances."));
-	}
-
+	UUserWidget* Found = Selection.Owner;
+	UWidget* TargetWidget = Selection.Widget;
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), Found->GetName());
 	Result->SetStringField(TEXT("class"), Found->GetClass()->GetName());
+	Result->SetArrayField(TEXT("classChain"), MakeClassChainJson(Found->GetClass()));
 	Result->SetStringField(TEXT("visibility"), VisibilityToString(Found->GetVisibility()));
+	Result->SetStringField(
+		TEXT("tickFrequency"),
+		StaticEnum<EWidgetTickFrequency>()->GetNameStringByValue(
+			static_cast<int64>(Found->GetDesiredTickFrequency())));
 	Result->SetBoolField(TEXT("inViewport"), Found->IsInViewport());
+	Result->SetNumberField(TEXT("candidateCount"), Selection.CandidateCount);
+	Result->SetNumberField(TEXT("selectedCandidateIndex"), Selection.SelectedCandidateIndex);
+	Result->SetStringField(TEXT("selectedPath"), Path.IsEmpty() ? TEXT("<self>") : Path);
 
-	if (Found->WidgetTree && Found->WidgetTree->RootWidget)
+	if (bScoped)
 	{
-		UWidget* ScanRoot = Found->WidgetTree->RootWidget;
-		if (!ChildName.IsEmpty())
+		if (TSharedPtr<FJsonObject> ScopedNode = BuildRuntimeScopedNode(TargetWidget))
 		{
-			// Search the widget tree for the named child.
-			UWidget* Target = nullptr;
-			Found->WidgetTree->ForEachWidget([&](UWidget* W)
-			{
-				if (W && W->GetName() == ChildName && !Target)
-				{
-					Target = W;
-				}
-			});
-			if (!Target)
-			{
-				return MCPError(FString::Printf(TEXT("Child widget '%s' not found inside '%s'"), *ChildName, *Found->GetName()));
-			}
-			ScanRoot = Target;
+			Result->SetObjectField(TEXT("target"), ScopedNode);
 		}
+		return MCPResult(Result);
+	}
 
-		TSharedPtr<FJsonObject> Tree = BuildRuntimeNode(ScanRoot, 0, MaxDepth);
-		if (Tree.IsValid())
-		{
-			Result->SetObjectField(TEXT("tree"), Tree);
-		}
+	TSharedPtr<FJsonObject> Tree = BuildRuntimeNode(TargetWidget, 0, MaxDepth);
+	if (Tree.IsValid())
+	{
+		Result->SetObjectField(TEXT("tree"), Tree);
 	}
 	else
 	{
@@ -4313,6 +5550,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SpawnRuntimeWidgetPreview(const TSharedP
 					auto Result = MCPSuccess();
 					MCPSetExisted(Result);
 					Result->SetStringField(TEXT("name"), Existing->GetName());
+					Result->SetStringField(TEXT("widgetName"), Existing->GetName());
+					Result->SetStringField(TEXT("instanceName"), InstanceName);
+					Result->SetStringField(TEXT("handle"), InstanceName);
 					Result->SetStringField(TEXT("class"), Existing->GetClass()->GetName());
 					Result->SetBoolField(TEXT("inViewport"), Existing->IsInViewport());
 					return MCPResult(Result);
@@ -4334,6 +5574,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SpawnRuntimeWidgetPreview(const TSharedP
 				auto Result = MCPSuccess();
 				MCPSetExisted(Result);
 				Result->SetStringField(TEXT("name"), Existing->GetName());
+				Result->SetStringField(TEXT("widgetName"), Existing->GetName());
+				Result->SetStringField(TEXT("instanceName"), InstanceName);
+				Result->SetStringField(TEXT("handle"), InstanceName);
 				Result->SetStringField(TEXT("class"), Existing->GetClass()->GetName());
 				Result->SetBoolField(TEXT("inViewport"), Existing->IsInViewport());
 				return MCPResult(Result);
@@ -4379,6 +5622,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SpawnRuntimeWidgetPreview(const TSharedP
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("name"), Widget->GetName());
+	Result->SetStringField(TEXT("widgetName"), Widget->GetName());
+	Result->SetStringField(TEXT("instanceName"), PreviewKey);
+	Result->SetStringField(TEXT("handle"), PreviewKey);
 	Result->SetStringField(TEXT("class"), Widget->GetClass()->GetName());
 	Result->SetBoolField(TEXT("inViewport"), Widget->IsInViewport());
 	Result->SetNumberField(TEXT("zOrder"), ZOrder);
@@ -4399,74 +5645,37 @@ TSharedPtr<FJsonValue> FWidgetHandlers::DispatchRuntimeWidgetPointerEvent(const 
 	Params->TryGetStringField(TEXT("widgetName"), WidgetName);
 	FString ClassFilter;
 	Params->TryGetStringField(TEXT("className"), ClassFilter);
+	if (ClassFilter.IsEmpty())
+	{
+		Params->TryGetStringField(TEXT("classFilter"), ClassFilter);
+	}
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
 	{
 		return MCPError(TEXT("Provide widgetName or className."));
 	}
 
-	UUserWidget* Found = nullptr;
-	for (TObjectIterator<UUserWidget> It; It; ++It)
-	{
-		UUserWidget* Candidate = *It;
-		if (!IsValid(Candidate) || Candidate->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject)) continue;
-		if (Candidate->GetWorld() != World) continue;
-		if (!WidgetName.IsEmpty() && Candidate->GetName() != WidgetName) continue;
-		if (!ClassFilter.IsEmpty() && !Candidate->GetClass()->GetName().Contains(ClassFilter)) continue;
-		Found = Candidate;
-		break;
-	}
-	if (!Found)
-	{
-		return MCPError(TEXT("Runtime widget not found. Use list_runtime_widgets first."));
-	}
-
 	const FString ChildName = OptionalString(Params, TEXT("childName"), TEXT(""));
-	UWidget* TargetWidget = Found;
-	if (!ChildName.IsEmpty())
+	const FString Path = OptionalString(Params, TEXT("path"), ChildName);
+	const FString NamePrefix = OptionalString(Params, TEXT("namePrefix"), TEXT(""));
+	const bool bInViewportOnly = OptionalBool(Params, TEXT("viewportOnly"), false);
+	const FRuntimeWidgetSelection Selection = SelectRuntimeWidgetTarget(
+		World,
+		WidgetName,
+		ClassFilter,
+		NamePrefix,
+		bInViewportOnly,
+		Path,
+		true);
+	if (!Selection.Owner || !Selection.Widget || !Selection.SlateWidget.IsValid())
 	{
-		TargetWidget = nullptr;
-		if (Found->WidgetTree)
-		{
-			Found->WidgetTree->ForEachWidget([&](UWidget* Widget)
-			{
-				if (!TargetWidget && Widget && Widget->GetName() == ChildName)
-				{
-					TargetWidget = Widget;
-				}
-			});
-		}
-		if (!TargetWidget)
-		{
-			return MCPError(FString::Printf(TEXT("Child widget '%s' not found inside '%s'."), *ChildName, *Found->GetName()));
-		}
+		return MCPError(MakeRuntimeSelectionError(Selection, Path, true));
 	}
 
-	Found->ForceLayoutPrepass();
-	if (FSlateApplication::IsInitialized())
-	{
-		FSlateApplication::Get().Tick();
-	}
-
-	TSharedPtr<SWidget> TargetSlate;
-	if (UUserWidget* TargetUserWidget = Cast<UUserWidget>(TargetWidget))
-	{
-		TargetSlate = TargetUserWidget->TakeWidget();
-	}
-	else
-	{
-		TargetSlate = TargetWidget->GetCachedWidget();
-	}
-	if (!TargetSlate.IsValid())
-	{
-		return MCPError(FString::Printf(TEXT("Target widget '%s' has no cached Slate widget."), *TargetWidget->GetName()));
-	}
-
-	const FGeometry Geometry = TargetSlate->GetTickSpaceGeometry();
-	const FVector2D Size = Geometry.GetLocalSize();
-	if (Size.X <= 0.0f || Size.Y <= 0.0f)
-	{
-		return MCPError(FString::Printf(TEXT("Target widget '%s' has zero geometry."), *TargetWidget->GetName()));
-	}
+	UUserWidget* Found = Selection.Owner;
+	UWidget* TargetWidget = Selection.Widget;
+	const TSharedPtr<SWidget> TargetSlate = Selection.SlateWidget;
+	const FGeometry Geometry = Selection.Geometry;
+	const FVector2D Size = Selection.Size;
 
 	const float LocalX = static_cast<float>(OptionalNumber(Params, TEXT("localX"), Size.X * 0.5));
 	const float LocalY = static_cast<float>(OptionalNumber(Params, TEXT("localY"), Size.Y * 0.5));
@@ -4474,47 +5683,176 @@ TSharedPtr<FJsonValue> FWidgetHandlers::DispatchRuntimeWidgetPointerEvent(const 
 	const FString EventType = OptionalString(Params, TEXT("event"), TEXT("hover")).ToLower();
 	const FString ButtonName = OptionalString(Params, TEXT("button"), TEXT("left")).ToLower();
 	const FKey EffectingButton = ButtonName == TEXT("right") ? EKeys::RightMouseButton : EKeys::LeftMouseButton;
-	TSet<FKey> PressedButtons;
-	if (EventType.Contains(TEXT("down")) || EventType.Contains(TEXT("click")))
-	{
-		PressedButtons.Add(EffectingButton);
-	}
-
-	FPointerEvent PointerEvent(
-		0,
-		ScreenPosition,
-		ScreenPosition,
-		PressedButtons,
-		EffectingButton,
-		0.0f,
-		FModifierKeysState());
-
+	FKey DispatchedButton = EffectingButton;
 	if (FSlateApplication::IsInitialized())
 	{
 		FSlateApplication::Get().SetCursorPos(ScreenPosition);
 	}
 
+	auto MakePointerEvent = [](
+		const FVector2D& CurrentPosition,
+		const FVector2D& LastPosition,
+		const TSet<FKey>& PressedButtons,
+		const FKey& Button,
+		const float WheelDelta)
+	{
+		return FPointerEvent(
+			0,
+			CurrentPosition,
+			LastPosition,
+			PressedButtons,
+			Button,
+			WheelDelta,
+			FModifierKeysState());
+	};
+
 	const FString TargetName = TargetWidget->GetName();
 	const bool bTargetIsUserWidget = TargetWidget->IsA<UUserWidget>();
 	FReply Reply = FReply::Unhandled();
+	bool bDownHandled = false;
+	bool bMoveHandled = false;
+	bool bUpHandled = false;
+	bool bButtonDelegateBroadcast = false;
 	if (EventType == TEXT("hover") || EventType == TEXT("enter") || EventType == TEXT("mouseenter"))
 	{
+		TSet<FKey> PressedButtons;
+		const FPointerEvent PointerEvent = MakePointerEvent(
+			ScreenPosition,
+			ScreenPosition,
+			PressedButtons,
+			EffectingButton,
+			0.0f);
 		TargetSlate->OnMouseEnter(Geometry, PointerEvent);
 		TargetSlate->OnMouseMove(Geometry, PointerEvent);
 		Reply = FReply::Handled();
 	}
 	else if (EventType == TEXT("leave") || EventType == TEXT("mouseleave"))
 	{
+		TSet<FKey> PressedButtons;
+		const FPointerEvent PointerEvent = MakePointerEvent(
+			ScreenPosition,
+			ScreenPosition,
+			PressedButtons,
+			EffectingButton,
+			0.0f);
 		TargetSlate->OnMouseLeave(PointerEvent);
 		Reply = FReply::Handled();
 	}
-	else if (EventType == TEXT("down") || EventType == TEXT("mousedown") || EventType == TEXT("click"))
+	else if (EventType == TEXT("down") || EventType == TEXT("mousedown"))
 	{
+		TSet<FKey> PressedButtons;
+		PressedButtons.Add(EffectingButton);
+		const FPointerEvent PointerEvent = MakePointerEvent(
+			ScreenPosition,
+			ScreenPosition,
+			PressedButtons,
+			EffectingButton,
+			0.0f);
 		Reply = TargetSlate->OnMouseButtonDown(Geometry, PointerEvent);
+		bDownHandled = Reply.IsEventHandled();
+	}
+	else if (EventType == TEXT("click"))
+	{
+		if (UButton* ButtonWidget = Cast<UButton>(TargetWidget))
+		{
+			ButtonWidget->OnClicked.Broadcast();
+			bButtonDelegateBroadcast = true;
+			bDownHandled = true;
+			bUpHandled = true;
+			Reply = FReply::Handled();
+		}
+		else
+		{
+			TSet<FKey> PressedButtons;
+			PressedButtons.Add(EffectingButton);
+			const FPointerEvent DownEvent = MakePointerEvent(
+				ScreenPosition,
+				ScreenPosition,
+				PressedButtons,
+				EffectingButton,
+				0.0f);
+			const FReply DownReply = TargetSlate->OnMouseButtonDown(Geometry, DownEvent);
+			bDownHandled = DownReply.IsEventHandled();
+
+			TSet<FKey> UpButtons;
+			const FPointerEvent UpEvent = MakePointerEvent(
+				ScreenPosition,
+				ScreenPosition,
+				UpButtons,
+				EffectingButton,
+				0.0f);
+			const FReply UpReply = TargetSlate->OnMouseButtonUp(Geometry, UpEvent);
+			bUpHandled = UpReply.IsEventHandled();
+			Reply = (bDownHandled || bUpHandled) ? FReply::Handled() : FReply::Unhandled();
+		}
 	}
 	else if (EventType == TEXT("up") || EventType == TEXT("mouseup"))
 	{
+		TSet<FKey> PressedButtons;
+		const FPointerEvent PointerEvent = MakePointerEvent(
+			ScreenPosition,
+			ScreenPosition,
+			PressedButtons,
+			EffectingButton,
+			0.0f);
 		Reply = TargetSlate->OnMouseButtonUp(Geometry, PointerEvent);
+		bUpHandled = Reply.IsEventHandled();
+	}
+	else if (EventType == TEXT("wheel") || EventType == TEXT("mousewheel"))
+	{
+		TSet<FKey> PressedButtons;
+		const float WheelDelta = static_cast<float>(OptionalNumber(Params, TEXT("wheelDelta"), 1.0));
+		const FPointerEvent WheelEvent = MakePointerEvent(
+			ScreenPosition,
+			ScreenPosition,
+			PressedButtons,
+			EffectingButton,
+			WheelDelta);
+		Reply = TargetSlate->OnMouseWheel(Geometry, WheelEvent);
+	}
+	else if (EventType == TEXT("right-drag") || EventType == TEXT("rightdrag") || EventType == TEXT("right-drag-smoke"))
+	{
+		const FKey RightButton = EKeys::RightMouseButton;
+		DispatchedButton = RightButton;
+		const FVector2D DragDelta(
+			static_cast<float>(OptionalNumber(Params, TEXT("dragDeltaX"), 24.0)),
+			static_cast<float>(OptionalNumber(Params, TEXT("dragDeltaY"), 0.0)));
+		const FVector2D DragPosition = ScreenPosition + DragDelta;
+
+		TSet<FKey> DownButtons;
+		DownButtons.Add(RightButton);
+		const FPointerEvent DownEvent = MakePointerEvent(
+			ScreenPosition,
+			ScreenPosition,
+			DownButtons,
+			RightButton,
+			0.0f);
+		const FReply DownReply = TargetSlate->OnMouseButtonDown(Geometry, DownEvent);
+		bDownHandled = DownReply.IsEventHandled();
+
+		if (FSlateApplication::IsInitialized())
+		{
+			FSlateApplication::Get().SetCursorPos(DragPosition);
+		}
+		const FPointerEvent MoveEvent = MakePointerEvent(
+			DragPosition,
+			ScreenPosition,
+			DownButtons,
+			RightButton,
+			0.0f);
+		const FReply MoveReply = TargetSlate->OnMouseMove(Geometry, MoveEvent);
+		bMoveHandled = MoveReply.IsEventHandled();
+
+		TSet<FKey> UpButtons;
+		const FPointerEvent UpEvent = MakePointerEvent(
+			DragPosition,
+			ScreenPosition,
+			UpButtons,
+			RightButton,
+			0.0f);
+		const FReply UpReply = TargetSlate->OnMouseButtonUp(Geometry, UpEvent);
+		bUpHandled = UpReply.IsEventHandled();
+		Reply = (bDownHandled || bMoveHandled || bUpHandled) ? FReply::Handled() : FReply::Unhandled();
 	}
 	else
 	{
@@ -4535,11 +5873,311 @@ TSharedPtr<FJsonValue> FWidgetHandlers::DispatchRuntimeWidgetPointerEvent(const 
 	Result->SetStringField(TEXT("widgetName"), Found->GetName());
 	Result->SetStringField(TEXT("targetName"), TargetName);
 	Result->SetBoolField(TEXT("targetIsUserWidget"), bTargetIsUserWidget);
+	Result->SetNumberField(TEXT("candidateCount"), Selection.CandidateCount);
+	Result->SetNumberField(TEXT("selectedCandidateIndex"), Selection.SelectedCandidateIndex);
 	Result->SetStringField(TEXT("event"), EventType);
-	Result->SetStringField(TEXT("button"), EffectingButton.GetFName().ToString());
+	Result->SetStringField(TEXT("button"), DispatchedButton.GetFName().ToString());
 	Result->SetBoolField(TEXT("handled"), Reply.IsEventHandled());
+	Result->SetBoolField(TEXT("downHandled"), bDownHandled);
+	Result->SetBoolField(TEXT("moveHandled"), bMoveHandled);
+	Result->SetBoolField(TEXT("upHandled"), bUpHandled);
+	Result->SetBoolField(TEXT("buttonDelegateBroadcast"), bButtonDelegateBroadcast);
 	Result->SetNumberField(TEXT("screenX"), ScreenPosition.X);
 	Result->SetNumberField(TEXT("screenY"), ScreenPosition.Y);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::AssertRuntimeWidgetLayout(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace WidgetRuntime_Internal;
+
+	UWorld* World = ResolveRuntimeWorld();
+	if (!World)
+	{
+		return MCPError(TEXT("No PIE world available. Start PIE before asserting widget layout."));
+	}
+
+	FString WidgetName;
+	Params->TryGetStringField(TEXT("widgetName"), WidgetName);
+	FString ClassFilter;
+	Params->TryGetStringField(TEXT("className"), ClassFilter);
+	if (ClassFilter.IsEmpty())
+	{
+		Params->TryGetStringField(TEXT("classFilter"), ClassFilter);
+	}
+	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
+	{
+		return MCPError(TEXT("Provide widgetName or className."));
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* AssertionValues = nullptr;
+	if (!Params->TryGetArrayField(TEXT("assertions"), AssertionValues) || !AssertionValues)
+	{
+		return MCPError(TEXT("Missing required array: assertions."));
+	}
+
+	const FString RootPath = OptionalString(Params, TEXT("path"), OptionalString(Params, TEXT("childName"), TEXT("")));
+	const FString NamePrefix = OptionalString(Params, TEXT("namePrefix"), TEXT(""));
+	const bool bInViewportOnly = OptionalBool(Params, TEXT("viewportOnly"), false);
+	const FRuntimeWidgetSelection Selection = SelectRuntimeWidgetTarget(
+		World,
+		WidgetName,
+		ClassFilter,
+		NamePrefix,
+		bInViewportOnly,
+		RootPath,
+		false);
+	if (!Selection.Owner || !Selection.Widget)
+	{
+		return MCPError(MakeRuntimeSelectionError(Selection, RootPath, false));
+	}
+
+	TickRuntimeWidgetLayout(Selection.Owner);
+
+	TArray<TSharedPtr<FJsonValue>> Failures;
+	auto AddFailure = [&Failures](
+		const FString& Type,
+		const FString& Path,
+		const FString& Expected,
+		const FString& Actual)
+	{
+		Failures.Add(MakeLayoutAssertionFailure(Type, Path, Expected, Actual));
+	};
+
+	auto ResolveAssertionWidget = [&Selection](const FString& WidgetPath) -> UWidget*
+	{
+		if (WidgetPath.IsEmpty() || WidgetPath == TEXT("<self>"))
+		{
+			return Selection.Widget;
+		}
+		return FindWidgetByPath(Selection.Owner, WidgetPath);
+	};
+
+	auto ReadAssertionPath = [](const TSharedPtr<FJsonObject>& Assertion, const FString& DefaultPath) -> FString
+	{
+		FString Path = OptionalString(Assertion, TEXT("path"), TEXT(""));
+		if (Path.IsEmpty())
+		{
+			Path = OptionalString(Assertion, TEXT("widget"), TEXT(""));
+		}
+		if (Path.IsEmpty())
+		{
+			Path = OptionalString(Assertion, TEXT("name"), TEXT(""));
+		}
+		return Path.IsEmpty() ? DefaultPath : Path;
+	};
+
+	auto CheckNumberRange = [&AddFailure](
+		const TSharedPtr<FJsonObject>& Assertion,
+		const FString& Type,
+		const FString& Path,
+		const double Actual)
+	{
+		double Expected = 0.0;
+		const bool bHasExpected = Assertion->TryGetNumberField(TEXT("expected"), Expected);
+		const double Tolerance = OptionalNumber(Assertion, TEXT("tolerance"), 0.5);
+		double Min = 0.0;
+		double Max = 0.0;
+		const bool bHasMin = Assertion->TryGetNumberField(TEXT("min"), Min);
+		const bool bHasMax = Assertion->TryGetNumberField(TEXT("max"), Max);
+		const double EffectiveMin = bHasMin
+			? Min
+			: (bHasExpected ? Expected - Tolerance : -TNumericLimits<double>::Max());
+		const double EffectiveMax = bHasMax
+			? Max
+			: (bHasExpected ? Expected + Tolerance : TNumericLimits<double>::Max());
+
+		if (Actual < EffectiveMin || Actual > EffectiveMax)
+		{
+			AddFailure(
+				Type,
+				Path,
+				FString::Printf(TEXT("%.2f..%.2f"), EffectiveMin, EffectiveMax),
+				FString::Printf(TEXT("%.2f"), Actual));
+		}
+	};
+
+	for (const TSharedPtr<FJsonValue>& AssertionValue : *AssertionValues)
+	{
+		const TSharedPtr<FJsonObject>* AssertionPtr = nullptr;
+		if (!AssertionValue.IsValid() || !AssertionValue->TryGetObject(AssertionPtr) || !AssertionPtr || !AssertionPtr->IsValid())
+		{
+			AddFailure(TEXT("assertion"), TEXT("<assertions>"), TEXT("object"), TEXT("non-object"));
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject>& Assertion = *AssertionPtr;
+		const FString Type = OptionalString(Assertion, TEXT("type"), TEXT("")).ToLower();
+		if (Type.IsEmpty())
+		{
+			AddFailure(TEXT("assertion"), TEXT("<assertions>"), TEXT("type"), TEXT("missing"));
+			continue;
+		}
+
+		if (Type == TEXT("same-row") || Type == TEXT("different-row"))
+		{
+			const FString APath = OptionalString(Assertion, TEXT("a"), TEXT(""));
+			const FString BPath = OptionalString(Assertion, TEXT("b"), TEXT(""));
+			UWidget* AWidget = ResolveAssertionWidget(APath);
+			UWidget* BWidget = ResolveAssertionWidget(BPath);
+			const FString PairPath = FString::Printf(TEXT("%s,%s"), *APath, *BPath);
+			if (!AWidget || !BWidget)
+			{
+				AddFailure(Type, PairPath, TEXT("both widgets found"), TEXT("missing widget"));
+				continue;
+			}
+
+			FGeometry AGeometry;
+			FGeometry BGeometry;
+			FVector2D ASize;
+			FVector2D BSize;
+			if (!TryGetRuntimeGeometry(AWidget, AGeometry, ASize) || !TryGetRuntimeGeometry(BWidget, BGeometry, BSize))
+			{
+				AddFailure(Type, PairPath, TEXT("non-zero geometry"), TEXT("zero geometry"));
+				continue;
+			}
+
+			const double Tolerance = OptionalNumber(Assertion, TEXT("tolerance"), 4.0);
+			const double ACenterY = AGeometry.GetAbsolutePosition().Y + ASize.Y * 0.5;
+			const double BCenterY = BGeometry.GetAbsolutePosition().Y + BSize.Y * 0.5;
+			const double DeltaY = FMath::Abs(ACenterY - BCenterY);
+			const bool bSameRow = DeltaY <= Tolerance;
+			if ((Type == TEXT("same-row") && !bSameRow) || (Type == TEXT("different-row") && bSameRow))
+			{
+				AddFailure(
+					Type,
+					PairPath,
+					Type == TEXT("same-row")
+						? FString::Printf(TEXT("deltaY <= %.2f"), Tolerance)
+						: FString::Printf(TEXT("deltaY > %.2f"), Tolerance),
+					FString::Printf(TEXT("deltaY %.2f"), DeltaY));
+			}
+			continue;
+		}
+
+		const FString Path = ReadAssertionPath(Assertion, RootPath);
+		UWidget* TargetWidget = ResolveAssertionWidget(Path);
+		if (!TargetWidget)
+		{
+			AddFailure(Type, Path, TEXT("widget found"), TEXT("missing"));
+			continue;
+		}
+
+		if (Type == TEXT("width") || Type == TEXT("width-range") || Type == TEXT("height") || Type == TEXT("height-range"))
+		{
+			FGeometry Geometry;
+			FVector2D Size;
+			if (!TryGetRuntimeGeometry(TargetWidget, Geometry, Size))
+			{
+				AddFailure(Type, Path, TEXT("non-zero geometry"), TEXT("zero geometry"));
+				continue;
+			}
+			CheckNumberRange(
+				Assertion,
+				Type,
+				Path,
+				(Type == TEXT("width") || Type == TEXT("width-range")) ? Size.X : Size.Y);
+			continue;
+		}
+
+		if (Type == TEXT("scroll-policy"))
+		{
+			const FString Expected = OptionalString(Assertion, TEXT("expected"), TEXT(""));
+			FString Actual;
+			if (!TryExportPropertyText(TargetWidget, FName(TEXT("ConsumeMouseWheel")), Actual))
+			{
+				AddFailure(Type, Path, Expected, TEXT("property missing"));
+			}
+			else if (!RuntimePropertyTextMatches(Actual, Expected))
+			{
+				AddFailure(Type, Path, Expected, Actual);
+			}
+			continue;
+		}
+
+		if (Type == TEXT("scrollbar-visibility"))
+		{
+			const FString Expected = OptionalString(Assertion, TEXT("expected"), TEXT(""));
+			FString Actual;
+			if (!TryExportPropertyText(TargetWidget, FName(TEXT("ScrollBarVisibility")), Actual))
+			{
+				AddFailure(Type, Path, Expected, TEXT("property missing"));
+			}
+			else if (!RuntimePropertyTextMatches(Actual, Expected))
+			{
+				AddFailure(Type, Path, Expected, Actual);
+			}
+			continue;
+		}
+
+		if (Type == TEXT("right-click-drag") || Type == TEXT("right-click-drag-scrolling"))
+		{
+			const bool bExpected = OptionalBool(Assertion, TEXT("expected"), false);
+			bool bActual = false;
+			if (!TryReadBoolProperty(TargetWidget, FName(TEXT("bAllowRightClickDragScrolling")), bActual))
+			{
+				AddFailure(Type, Path, bExpected ? TEXT("true") : TEXT("false"), TEXT("property missing"));
+			}
+			else if (bActual != bExpected)
+			{
+				AddFailure(Type, Path, bExpected ? TEXT("true") : TEXT("false"), bActual ? TEXT("true") : TEXT("false"));
+			}
+			continue;
+		}
+
+		if (Type == TEXT("visibility"))
+		{
+			const FString Expected = OptionalString(Assertion, TEXT("expected"), TEXT(""));
+			const FString Actual = VisibilityToString(TargetWidget->GetVisibility());
+			if (!RuntimePropertyTextMatches(Actual, Expected))
+			{
+				AddFailure(Type, Path, Expected, Actual);
+			}
+			continue;
+		}
+
+		if (Type == TEXT("visible"))
+		{
+			const bool bExpected = OptionalBool(Assertion, TEXT("expected"), true);
+			const bool bActual = TargetWidget->IsVisible();
+			if (bActual != bExpected)
+			{
+				AddFailure(Type, Path, bExpected ? TEXT("true") : TEXT("false"), bActual ? TEXT("true") : TEXT("false"));
+			}
+			continue;
+		}
+
+		if (Type == TEXT("zero-geometry") || Type == TEXT("non-zero-geometry"))
+		{
+			FGeometry Geometry;
+			FVector2D Size;
+			const bool bActualNonZero = TryGetRuntimeGeometry(TargetWidget, Geometry, Size);
+			const bool bExpectedNonZero = Type == TEXT("non-zero-geometry")
+				? OptionalBool(Assertion, TEXT("expected"), true)
+				: !OptionalBool(Assertion, TEXT("expected"), true);
+			if (bActualNonZero != bExpectedNonZero)
+			{
+				AddFailure(
+					Type,
+					Path,
+					bExpectedNonZero ? TEXT("non-zero") : TEXT("zero"),
+					FString::Printf(TEXT("%.2fx%.2f"), Size.X, Size.Y));
+			}
+			continue;
+		}
+
+		AddFailure(TEXT("assertion"), Path, TEXT("supported assertion type"), Type);
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("success"), Failures.Num() == 0);
+	Result->SetStringField(TEXT("widgetName"), Selection.Owner->GetName());
+	Result->SetStringField(TEXT("targetName"), Selection.Widget->GetName());
+	Result->SetNumberField(TEXT("candidateCount"), Selection.CandidateCount);
+	Result->SetNumberField(TEXT("selectedCandidateIndex"), Selection.SelectedCandidateIndex);
+	Result->SetNumberField(TEXT("assertionCount"), AssertionValues->Num());
+	Result->SetNumberField(TEXT("failureCount"), Failures.Num());
+	Result->SetArrayField(TEXT("failures"), Failures);
 	return MCPResult(Result);
 }
 

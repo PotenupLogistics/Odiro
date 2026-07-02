@@ -82,7 +82,7 @@ private:
 #endif
 	FString CreateWebSocketAcceptKey(const FString& ClientKey);
 	TArray<uint8> CreateWebSocketFrame(const FString& Message);
-	FString ParseWebSocketFrame(const TArray<uint8>& Data);
+	bool TryParseWebSocketFrame(TArray<uint8>& Data, FString& OutMessage, bool& bOutCloseFrame);
 
 	// Server socket (will use platform-specific implementation)
 	void* ServerSocket;

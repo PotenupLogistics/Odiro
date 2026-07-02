@@ -184,10 +184,6 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> ScenarioEditorScreen;
 
-	// WBP layout이 직접 노출하는 scenario editor root.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UScenarioEditorRootWidget> ScenarioEditorRootWidget;
-
 	// WBP layout이 소유하는 robot config screen content.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> RobotConfigScreen;

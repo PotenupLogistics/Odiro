@@ -145,6 +145,10 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 		CameraModeButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleCameraModeClicked);
 	}
 
+	if (!FullscreenButton)
+	{
+		FullscreenButton = Cast<UButton>(GetWidgetFromName(TEXT("FullscreenButton")));
+	}
 	if (FullscreenButton)
 	{
 		FullscreenButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenClicked);
@@ -228,6 +232,117 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 	UpdateReplayFullscreenVisibility();
 	UpdateCameraModeText();
 	UpdateReplayTimelineUi();
+}
+
+void UProjectEpisodeReplayViewerWidget::RefreshReplayControlBindings()
+{
+	if (PlayPauseButton)
+	{
+		PlayPauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
+		PlayPauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
+	}
+
+	if (StopButton)
+	{
+		StopButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
+		StopButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
+	}
+
+	if (ResetButton)
+	{
+		ResetButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleResetClicked);
+		ResetButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleResetClicked);
+	}
+
+	if (CameraModeButton)
+	{
+		CameraModeButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleCameraModeClicked);
+		CameraModeButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleCameraModeClicked);
+	}
+
+	if (!FullscreenButton)
+	{
+		FullscreenButton = Cast<UButton>(GetWidgetFromName(TEXT("FullscreenButton")));
+	}
+	if (FullscreenButton)
+	{
+		FullscreenButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenClicked);
+		FullscreenButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenClicked);
+	}
+
+	if (ReplayTimelineSlider)
+	{
+		ReplayTimelineSlider->OnValueChanged.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineValueChanged);
+		ReplayTimelineSlider->OnValueChanged.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineValueChanged);
+	}
+
+	if (FullscreenPlayPauseButton)
+	{
+		FullscreenPlayPauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
+		FullscreenPlayPauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
+	}
+
+	if (FullscreenStopButton)
+	{
+		FullscreenStopButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
+		FullscreenStopButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
+	}
+
+	if (FullscreenResetButton)
+	{
+		FullscreenResetButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleResetClicked);
+		FullscreenResetButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleResetClicked);
+	}
+
+	if (FullscreenTopDownCameraButton)
+	{
+		FullscreenTopDownCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked);
+		FullscreenTopDownCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked);
+	}
+
+	if (FullscreenOrbitCameraButton)
+	{
+		FullscreenOrbitCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleOrbitCameraClicked);
+		FullscreenOrbitCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleOrbitCameraClicked);
+	}
+
+	if (FullscreenFreeCameraButton)
+	{
+		FullscreenFreeCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked);
+		FullscreenFreeCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked);
+	}
+
+	if (FullscreenVehicleFrontCameraButton)
+	{
+		FullscreenVehicleFrontCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked);
+		FullscreenVehicleFrontCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked);
+	}
+
+	ResolveFullscreenLayerToggleWidgets();
+
+	if (FullscreenMapToggleButton)
+	{
+		FullscreenMapToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenMapToggleClicked);
+		FullscreenMapToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenMapToggleClicked);
+	}
+
+	if (FullscreenPointCloudToggleButton)
+	{
+		FullscreenPointCloudToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
+		FullscreenPointCloudToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
+	}
+
+	if (FullscreenRayToggleButton)
+	{
+		FullscreenRayToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked);
+		FullscreenRayToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked);
+	}
+
+	if (ExitFullscreenButton)
+	{
+		ExitFullscreenButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleExitFullscreenClicked);
+		ExitFullscreenButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleExitFullscreenClicked);
+	}
 }
 
 void UProjectEpisodeReplayViewerWidget::NativeDestruct()
@@ -814,6 +929,7 @@ void UProjectEpisodeReplayViewerWidget::SetReplayFullscreen(
 	if (bReplayFullscreen == bNewFullscreen)
 	{
 		UpdateReplayFullscreenVisibility();
+		OnReplayFullscreenChanged.Broadcast(this, bReplayFullscreen);
 		RequestReplayInputFocus();
 		return;
 	}
@@ -870,6 +986,11 @@ void UProjectEpisodeReplayViewerWidget::ResolveFullscreenLayerToggleWidgets()
 	{
 		FullscreenRayToggleButton =
 			Cast<UButton>(GetWidgetFromName(TEXT("FullscreenRayToggleButton")));
+	}
+
+	if (!ExitFullscreenButton)
+	{
+		ExitFullscreenButton = Cast<UButton>(GetWidgetFromName(TEXT("ExitFullscreenButton")));
 	}
 }
 

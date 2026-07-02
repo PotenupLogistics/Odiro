@@ -54,7 +54,28 @@ function Write-JsonFile {
     if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
-    [System.IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 50), $script:Utf8NoBom)
+    $tmp = "$Path.tmp.$([guid]::NewGuid().ToString('N'))"
+    $backup = "$Path.bak.$([guid]::NewGuid().ToString('N'))"
+    [System.IO.File]::WriteAllText($tmp, ($Value | ConvertTo-Json -Depth 50), $script:Utf8NoBom)
+    try {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            [System.IO.File]::Replace($tmp, $Path, $backup, $true)
+        }
+        else {
+            [System.IO.File]::Move($tmp, $Path)
+        }
+    }
+    catch {
+        if (Test-Path -LiteralPath $tmp -PathType Leaf) {
+            Remove-Item -LiteralPath $tmp -Force
+        }
+        throw
+    }
+    finally {
+        if (Test-Path -LiteralPath $backup -PathType Leaf) {
+            Remove-Item -LiteralPath $backup -Force
+        }
+    }
 }
 
 # Returns a property value without tripping StrictMode on missing JSON fields.
@@ -327,6 +348,23 @@ function Get-BridgeResult {
     return $result
 }
 
+# Throws when a bridge result reports success=false.
+function Assert-BridgeSuccess {
+    param(
+        [object] $Result,
+        [string] $Context
+    )
+    if ($false -eq (Get-ObjectProperty -Object $Result -Name "success" -DefaultValue $true)) {
+        $code = Get-ObjectProperty -Object $Result -Name "code" -DefaultValue "bridge_operation_failed"
+        $errorText = Get-ObjectProperty -Object $Result -Name "error" -DefaultValue "Bridge operation failed."
+        $requiredAction = Get-ObjectProperty -Object $Result -Name "requiredAction" -DefaultValue ""
+        if ($requiredAction) {
+            throw "${Context}: ${code}: ${errorText} RequiredAction=${requiredAction}"
+        }
+        throw "${Context}: ${code}: ${errorText}"
+    }
+}
+
 # Waits until the bridge reports no active non-coordination requests.
 function Wait-BridgeDrain {
     param([int] $TimeoutSeconds = 300)
@@ -482,9 +520,18 @@ function Invoke-ClientEditorBuild {
     Write-NewProcessLogLines -Path $stderrPath -Position $stderrPosition -ForegroundColor "Yellow" | Out-Null
 
     $exitCode = [int] (Get-ObjectProperty -Object $process -Name "ExitCode" -DefaultValue 0)
-    if ($exitCode -ne 0) {
+    $stdoutText = ""
+    $stderrText = ""
+    if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) {
+        $stdoutText = Get-Content -LiteralPath $stdoutPath -Raw
+    }
+    if (Test-Path -LiteralPath $stderrPath -PathType Leaf) {
+        $stderrText = Get-Content -LiteralPath $stderrPath -Raw
+    }
+    $ubtReportedFailure = $stdoutText -match "(?m)^Result:\s*Failed\b" -or $stderrText -match "(?m)^Result:\s*Failed\b"
+    if ($exitCode -ne 0 -or $ubtReportedFailure) {
         Write-ReloadConsoleStatus "UBT build failed with exit code $exitCode."
-        throw "Build failed with exit code $exitCode. Logs: $stdoutPath, $stderrPath"
+        throw "Build failed. ExitCode=$exitCode UBTReportedFailure=$ubtReportedFailure Logs: $stdoutPath, $stderrPath"
     }
     Write-ReloadConsoleStatus "UBT build completed successfully."
     return [pscustomobject]@{
@@ -574,12 +621,35 @@ try {
 
         Update-ReloadJob -Phase "saving"
         Update-MaintenancePhase -Phase "saving"
-        $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_save_dirty" -Params @{ includeMaps = $true; includeContent = $true } -TimeoutMs 120000)
+        $pieStatus = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "pie_control" -Params @{ action = "status" } -TimeoutMs 10000)
+        if ($true -eq (Get-ObjectProperty -Object $pieStatus -Name "isPlaying" -DefaultValue $false)) {
+            Update-ReloadJob -Phase "stopping_pie"
+            Update-MaintenancePhase -Phase "stopping_pie"
+            $pieStop = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "pie_control" -Params @{ action = "stop"; wait = $true; timeoutSeconds = 30 } -TimeoutMs 45000)
+            Assert-BridgeSuccess -Result $pieStop -Context "Failed to stop PIE before rebuild/restart"
+            $pieStopDeadline = [DateTime]::UtcNow.AddSeconds(30)
+            do {
+                Start-Sleep -Milliseconds ([int] (Get-ObjectProperty -Object $pieStop -Name "retryAfterMs" -DefaultValue 250))
+                $pieStatus = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "pie_control" -Params @{ action = "status" } -TimeoutMs 10000)
+                if ($false -eq (Get-ObjectProperty -Object $pieStatus -Name "isPlaying" -DefaultValue $false)) {
+                    break
+                }
+                if ([DateTime]::UtcNow -ge $pieStopDeadline) {
+                    $playWorld = Get-ObjectProperty -Object $pieStatus -Name "playWorld" -DefaultValue ""
+                    throw "Timed out waiting for PIE to stop before rebuild/restart. ActivePlayWorld=${playWorld}"
+                }
+            } while ($true)
+            Update-ReloadJob -Phase "saving"
+            Update-MaintenancePhase -Phase "saving"
+        }
+        $saveDirty = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_save_dirty" -Params @{ includeMaps = $true; includeContent = $true } -TimeoutMs 120000)
+        Assert-BridgeSuccess -Result $saveDirty -Context "Failed to save dirty packages before rebuild/restart"
 
         Update-ReloadJob -Phase "closing"
         Update-MaintenancePhase -Phase "closing"
         $editorPid = [int] (Get-ObjectProperty -Object $status -Name "editorPid" -DefaultValue 0)
-        $null = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_request_exit" -Params @{ delaySeconds = 0.5; force = $false } -TimeoutMs 10000)
+        $requestExit = Get-BridgeResult -Response (Invoke-BridgeMethod -Method "coordination_request_exit" -Params @{ delaySeconds = 0.5; force = $false } -TimeoutMs 10000)
+        Assert-BridgeSuccess -Result $requestExit -Context "Failed to request editor exit before rebuild/restart"
         Wait-EditorExit -EditorPid $editorPid
     }
 

@@ -297,6 +297,41 @@ bool FindWidgetParentRecursive(UWidget* CurrentWidget, const UWidget* TargetWidg
     return false;
 }
 
+// Returns true when Candidate is CurrentWidget or a descendant in the widget tree.
+bool ContainsWidgetInSubtree(UWidget* CurrentWidget, const UWidget* Candidate)
+{
+    if (!CurrentWidget || !Candidate)
+    {
+        return false;
+    }
+
+    if (CurrentWidget == Candidate)
+    {
+        return true;
+    }
+
+    if (UContentWidget* ContentWidget = Cast<UContentWidget>(CurrentWidget))
+    {
+        if (ContainsWidgetInSubtree(ContentWidget->GetContent(), Candidate))
+        {
+            return true;
+        }
+    }
+
+    if (UPanelWidget* PanelWidget = Cast<UPanelWidget>(CurrentWidget))
+    {
+        for (int32 ChildIndex = 0; ChildIndex < PanelWidget->GetChildrenCount(); ++ChildIndex)
+        {
+            if (ContainsWidgetInSubtree(PanelWidget->GetChildAt(ChildIndex), Candidate))
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 }
 
 void UUmgSetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -768,6 +803,12 @@ bool UUmgSetSubsystem::DeleteWidget(UWidgetBlueprint* WidgetBlueprint, const FSt
         return false;
     }
 
+    if (WidgetBlueprint->WidgetTree->RootWidget == FoundWidget)
+    {
+        UE_LOG(LogUmgSet, Error, TEXT("DeleteWidget: Refusing to delete root widget '%s' in asset '%s'."), *WidgetName, *WidgetBlueprint->GetPathName());
+        return false;
+    }
+
     WidgetBlueprint->Modify();
     WidgetBlueprint->WidgetTree->Modify();
 
@@ -809,6 +850,12 @@ bool UUmgSetSubsystem::MoveWidget(UWidgetBlueprint* WidgetBlueprint, const FStri
         return false;
     }
 
+    if (WidgetBlueprint->WidgetTree->RootWidget == WidgetToMove)
+    {
+        UE_LOG(LogUmgSet, Error, TEXT("MoveWidget: Refusing to move root widget '%s' in asset '%s'."), *WidgetName, *WidgetBlueprint->GetPathName());
+        return false;
+    }
+
     UPanelWidget* NewParentWidget = Cast<UPanelWidget>(WidgetBlueprint->WidgetTree->FindWidget(FName(*TargetParentName)));
     if (!NewParentWidget)
     {
@@ -816,10 +863,25 @@ bool UUmgSetSubsystem::MoveWidget(UWidgetBlueprint* WidgetBlueprint, const FStri
         return false;
     }
 
+    if (NewParentWidget == WidgetToMove)
+    {
+        UE_LOG(LogUmgSet, Error, TEXT("MoveWidget: Refusing to parent widget '%s' to itself."), *WidgetName);
+        return false;
+    }
+
+    if (ContainsWidgetInSubtree(WidgetToMove, NewParentWidget))
+    {
+        UE_LOG(LogUmgSet, Error, TEXT("MoveWidget: Refusing to move widget '%s' under descendant '%s' because it would create a cycle."), *WidgetName, *TargetParentName);
+        return false;
+    }
+
     WidgetBlueprint->Modify();
+    WidgetBlueprint->WidgetTree->Modify();
+    NewParentWidget->Modify();
 
     if (WidgetToMove->GetParent())
     {
+        WidgetToMove->GetParent()->Modify();
         WidgetToMove->GetParent()->RemoveChild(WidgetToMove);
     }
 

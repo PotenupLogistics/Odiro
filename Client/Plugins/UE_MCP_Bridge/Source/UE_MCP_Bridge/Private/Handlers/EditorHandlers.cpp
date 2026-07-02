@@ -1,5 +1,6 @@
 #include "EditorHandlers.h"
 #include "EditorCoordination.h"
+#include "MCPBridgeOperationCoordinator.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "Engine/World.h"
@@ -89,6 +90,39 @@ namespace
 
 		FPaths::NormalizeFilename(Filename);
 		return Filename;
+	}
+
+	/** Return whether the editor currently owns an active PIE world. */
+	bool IsPieWorldActive()
+	{
+		return GEditor && GEditor->PlayWorld != nullptr;
+	}
+
+	/** Return a compact description of the active PIE world for error payloads. */
+	FString GetActivePieWorldName()
+	{
+		if (!IsPieWorldActive())
+		{
+			return TEXT("");
+		}
+		return GEditor->PlayWorld->GetPathName();
+	}
+
+	/** Return whether a dirty package belongs to PIE duplicated runtime state. */
+	bool IsPiePackageName(const FString& PackageName)
+	{
+		return PackageName.Contains(TEXT("/UEDPIE_"), ESearchCase::IgnoreCase)
+			|| PackageName.Contains(TEXT("UEDPIE_"), ESearchCase::IgnoreCase);
+	}
+
+	/** Build a failed save entry for a blocked package. */
+	TSharedPtr<FJsonValue> MakeFailedPackageEntry(const FString& PackageName, const FString& ErrorCode, const FString& Error)
+	{
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("package"), PackageName);
+		Entry->SetStringField(TEXT("code"), ErrorCode);
+		Entry->SetStringField(TEXT("error"), Error);
+		return MakeShared<FJsonValueObject>(Entry);
 	}
 
 	TSharedPtr<SWindow> FindSlateWindowByTitle(const FString& TitleFilter)
@@ -234,6 +268,9 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("save_asset"), &SaveAsset);
 	Registry.RegisterHandler(TEXT("save_dirty"), &SaveDirty);
 	Registry.RegisterHandler(TEXT("coordination_get_status"), &CoordinationGetStatus);
+	Registry.RegisterHandler(TEXT("coordination_operation_status"), &CoordinationOperationStatus);
+	Registry.RegisterHandler(TEXT("coordination_operation_wait"), &CoordinationOperationWait);
+	Registry.RegisterHandler(TEXT("coordination_operation_cancel"), &CoordinationOperationCancel);
 	Registry.RegisterHandler(TEXT("coordination_prepare_maintenance"), &CoordinationPrepareMaintenance);
 	Registry.RegisterHandler(TEXT("coordination_save_dirty"), &CoordinationSaveDirty);
 	Registry.RegisterHandlerWithTimeout(TEXT("coordination_live_coding_compile"), &CoordinationLiveCodingCompile, 300.0f);
@@ -1252,7 +1289,17 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveDirty(const TSharedPtr<FJsonObject>&
 	const bool bIncludeMaps = OptionalBool(Params, TEXT("includeMaps"), true);
 	const bool bIncludeContent = OptionalBool(Params, TEXT("includeContent"), true);
 
+	if (bIncludeMaps && IsPieWorldActive())
+	{
+		return FMCPBridgeOperationCoordinator::MakeBlockedResult(
+			TEXT("active_pie_blocks_save_dirty"),
+			FString::Printf(TEXT("Refusing to save dirty maps while PIE is active: %s"), *GetActivePieWorldName()),
+			TEXT("pie_control.stop"),
+			1000.0);
+	}
+
 	TArray<UPackage*> Dirty;
+	TArray<TSharedPtr<FJsonValue>> Failed;
 	for (TObjectIterator<UPackage> It; It; ++It)
 	{
 		UPackage* Pkg = *It;
@@ -1268,11 +1315,18 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveDirty(const TSharedPtr<FJsonObject>&
 		if (Name.StartsWith(TEXT("/Script/"))) continue;
 		if (Name.StartsWith(TEXT("/Temp/"))) continue;
 		if (!FPackageName::IsValidLongPackageName(Name)) continue;
+		if (IsPiePackageName(Name))
+		{
+			Failed.Add(MakeFailedPackageEntry(
+				Name,
+				TEXT("pie_package_save_blocked"),
+				TEXT("Refusing to save PIE duplicated package. Stop PIE and save the source package instead.")));
+			continue;
+		}
 		Dirty.Add(Pkg);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Saved;
-	TArray<TSharedPtr<FJsonValue>> Failed;
 
 	for (UPackage* Pkg : Dirty)
 	{
@@ -1334,6 +1388,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveDirty(const TSharedPtr<FJsonObject>&
 TSharedPtr<FJsonValue> FEditorHandlers::CoordinationGetStatus(const TSharedPtr<FJsonObject>& /*Params*/)
 {
 	return FMCPBridgeCoordination::BuildStatusResult();
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::CoordinationOperationStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	return FMCPBridgeOperationCoordinator::BuildOperationStatusResult(Params);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::CoordinationOperationWait(const TSharedPtr<FJsonObject>& Params)
+{
+	return FMCPBridgeOperationCoordinator::BuildOperationWaitResult(Params);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::CoordinationOperationCancel(const TSharedPtr<FJsonObject>& Params)
+{
+	return FMCPBridgeOperationCoordinator::BuildOperationCancelResult(Params);
 }
 
 TSharedPtr<FJsonValue> FEditorHandlers::CoordinationPrepareMaintenance(const TSharedPtr<FJsonObject>& Params)
@@ -1423,6 +1492,15 @@ TSharedPtr<FJsonValue> FEditorHandlers::CoordinationRequestExit(const TSharedPtr
 	if (!FMCPBridgeCoordination::IsMaintenanceActive())
 	{
 		return MCPError(TEXT("maintenance sentinel is required before requesting editor exit"));
+	}
+
+	if (IsPieWorldActive())
+	{
+		return FMCPBridgeOperationCoordinator::MakeBlockedResult(
+			TEXT("active_pie_blocks_exit"),
+			FString::Printf(TEXT("Refusing to request editor exit while PIE is active: %s"), *GetActivePieWorldName()),
+			TEXT("pie_control.stop"),
+			1000.0);
 	}
 
 	const double DelaySeconds = OptionalNumber(Params, TEXT("delaySeconds"), 0.5);

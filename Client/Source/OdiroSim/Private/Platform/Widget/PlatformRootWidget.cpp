@@ -68,12 +68,13 @@ namespace
 			screenName);
 	}
 
-	void LogMissingScenarioEditorRoot()
+	void LogScenarioEditorActionBlocked(const TCHAR* actionName)
 	{
 		UE_LOG(
 			LogPlatformRootWidget,
-			Warning,
-			TEXT("WBP_Root does not expose ScenarioEditorRootWidget; scenario save action was skipped."));
+			Error,
+			TEXT("Scenario editor %s action was blocked because WBP_Root could not resolve WBP_ScenarioEditorScreen -> ScenarioEditorRootWidget."),
+			actionName);
 	}
 }
 
@@ -275,17 +276,44 @@ void UPlatformRootWidget::UpdateRobotPreviewActivation(
 
 UScenarioEditorRootWidget* UPlatformRootWidget::GetScenarioEditorRootWidget() const
 {
-	if (ScenarioEditorRootWidget)
+	UWidget* scenarioEditorScreenWidget = ScenarioEditorScreen.Get();
+	if (!IsValid(scenarioEditorScreenWidget))
 	{
-		return ScenarioEditorRootWidget.Get();
+		UE_LOG(
+			LogPlatformRootWidget,
+			Error,
+			TEXT("WBP_Root is missing required ScenarioEditorScreen child; expected WBP_Root -> WBP_ScenarioEditorScreen -> ScenarioEditorRootWidget."));
+		return nullptr;
 	}
 
-	if (const UScenarioEditorScreenWidget* scenarioEditorScreen = Cast<UScenarioEditorScreenWidget>(ScenarioEditorScreen.Get()))
+	const UScenarioEditorScreenWidget* scenarioEditorScreen = Cast<UScenarioEditorScreenWidget>(scenarioEditorScreenWidget);
+	if (scenarioEditorScreen)
 	{
-		return scenarioEditorScreen->GetScenarioEditorRootWidget();
+		UScenarioEditorRootWidget* scenarioEditorRootWidget = scenarioEditorScreen->GetScenarioEditorRootWidget();
+		if (!IsValid(scenarioEditorRootWidget))
+		{
+			UE_LOG(
+				LogPlatformRootWidget,
+				Error,
+				TEXT("WBP_ScenarioEditorScreen is missing required ScenarioEditorRootWidget child; expected WBP_Root -> WBP_ScenarioEditorScreen -> ScenarioEditorRootWidget."));
+			return nullptr;
+		}
+
+		return scenarioEditorRootWidget;
 	}
 
-	return Cast<UScenarioEditorRootWidget>(ScenarioEditorScreen.Get());
+	if (UScenarioEditorRootWidget* scenarioEditorRootWidget = Cast<UScenarioEditorRootWidget>(scenarioEditorScreenWidget))
+	{
+		return scenarioEditorRootWidget;
+	}
+
+	UE_LOG(
+		LogPlatformRootWidget,
+		Error,
+		TEXT("WBP_Root ScenarioEditorScreen has invalid class '%s' on widget '%s'; expected UScenarioEditorScreenWidget or UScenarioEditorRootWidget."),
+		*GetNameSafe(scenarioEditorScreenWidget->GetClass()),
+		*GetNameSafe(scenarioEditorScreenWidget));
+	return nullptr;
 }
 
 void UPlatformRootWidget::BindControls()
@@ -640,7 +668,7 @@ void UPlatformRootWidget::HandleStatusBarActionRequested(const FName actionId)
 			}
 			else
 			{
-				LogMissingScenarioEditorRoot();
+				LogScenarioEditorActionBlocked(TEXT("Save"));
 			}
 		}
 		return;
@@ -656,7 +684,8 @@ void UPlatformRootWidget::HandleStatusBarActionRequested(const FName actionId)
 			}
 			else
 			{
-				LogMissingScenarioEditorRoot();
+				LogScenarioEditorActionBlocked(TEXT("Run"));
+				return;
 			}
 			ShowRunListScreen();
 			if (RunListScreen)

@@ -1908,6 +1908,11 @@ ASceneCapture2D* UScenarioReplaySubsystem::SpawnReplayCaptureActor()
 	CaptureComponent->ShowFlags.SetFog(false);
 	CaptureComponent->ShowFlags.SetCloud(false);
 	CaptureComponent->ShowFlags.SetSkyLighting(false);
+	// Replay capture favors readable map/point-cloud layers over scene shadow fidelity.
+	CaptureComponent->ShowFlags.SetDynamicShadows(false);
+	CaptureComponent->ShowFlags.SetContactShadows(false);
+	CaptureComponent->ShowFlags.SetCapsuleShadows(false);
+	CaptureComponent->ShowFlags.SetRayTracedDistanceFieldShadows(false);
 	PopulateReplayCaptureShowOnlyActors(*CaptureComponent);
 	CaptureComponent->CaptureSource = SCS_FinalColorLDR;
 	CaptureComponent->TextureTarget = ReplayRenderTarget;

@@ -160,6 +160,11 @@ void URobotPreviewSubsystem::ClearLidarPreviewRays()
 	RefreshStatusText();
 }
 
+bool URobotPreviewSubsystem::AreLidarPreviewRaysVisible() const
+{
+	return IsValid(PreviewSceneActor) && PreviewSceneActor->AreLidarPreviewRaysVisible();
+}
+
 void URobotPreviewSubsystem::AddCameraZoom(const float WheelDelta)
 {
 	if (!IsValid(PreviewSceneActor))

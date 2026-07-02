@@ -20,6 +20,20 @@ class AStarResult:
         self.metrics = dict(metrics or {})
 
 
+class AStarGridContext:
+    def __init__(
+        self,
+        grid: GridMap,
+        cell_lookup: dict[tuple[int, int], GridCell],
+        blocked_cells: set[tuple[int, int]],
+        obstacle_soft_costs: dict[tuple[int, int], float],
+    ):
+        self.grid = grid
+        self.cellLookup = cell_lookup
+        self.blockedCells = set(blocked_cells)
+        self.obstacleSoftCosts = dict(obstacle_soft_costs)
+
+
 class AStarPathfinder:
     def __init__(
         self,
@@ -85,9 +99,11 @@ class AStarPathfinder:
         start: StartLocation | RobotState,
         goal: GoalLocation,
         grid: GridMap,
+        grid_context: AStarGridContext | None = None,
+        search_bounds: tuple[int, int, int, int] | None = None,
     ) -> AStarResult:
         started_at = time.perf_counter()
-        metrics = self.make_pathfind_metrics(grid)
+        metrics = self.make_pathfind_metrics(grid, grid_context, search_bounds)
 
         def finish_result(success: bool, path: list[tuple[int, int]], reason: str) -> AStarResult:
             metrics["pathfindTotalMs"] = self.elapsed_ms(started_at)
@@ -98,16 +114,29 @@ class AStarPathfinder:
         if not goal.hasGoal:
             return finish_result(False, [], "goal_not_available")
 
-        cell_lookup_started_at = time.perf_counter()
-        cell_lookup = self.build_cell_lookup(grid)
-        metrics["pathfindCellLookupMs"] = self.elapsed_ms(cell_lookup_started_at)
+        if grid_context is not None and grid_context.grid is grid:
+            cell_lookup = grid_context.cellLookup
+            obstacle_soft_costs = grid_context.obstacleSoftCosts
+            metrics["pathfindGridCacheHit"] = True
+            metrics["pathfindBlockedCellCount"] = len(grid_context.blockedCells)
+            metrics["pathfindSoftCostCellCount"] = len(obstacle_soft_costs)
+        else:
+            cell_lookup_started_at = time.perf_counter()
+            cell_lookup = self.build_cell_lookup(grid)
+            metrics["pathfindCellLookupMs"] = self.elapsed_ms(cell_lookup_started_at)
 
-        soft_cost_started_at = time.perf_counter()
-        obstacle_soft_costs = self.build_obstacle_soft_costs(grid, cell_lookup, metrics)
-        metrics["pathfindSoftCostMs"] = self.elapsed_ms(soft_cost_started_at)
+            soft_cost_started_at = time.perf_counter()
+            obstacle_soft_costs = self.build_obstacle_soft_costs(grid, cell_lookup, metrics)
+            metrics["pathfindSoftCostMs"] = self.elapsed_ms(soft_cost_started_at)
 
         start_cell = self.world_to_cell(start.x, start.y, grid)
         goal_cell = self.world_to_cell(goal.x, goal.y, grid)
+
+        if search_bounds is not None:
+            if not self.is_cell_in_search_bounds(start_cell, search_bounds):
+                return finish_result(False, [], "start_outside_search_bounds")
+            if not self.is_cell_in_search_bounds(goal_cell, search_bounds):
+                return finish_result(False, [], "goal_outside_search_bounds")
 
         if not self.is_walkable(start_cell, grid, cell_lookup):
             return finish_result(False, [], "start_cell_blocked")
@@ -134,11 +163,11 @@ class AStarPathfinder:
                 path = self.reconstruct_path(came_from, current_state)
                 metrics["pathfindSearchMs"] = self.elapsed_ms(search_started_at)
                 smooth_started_at = time.perf_counter()
-                path = self.smooth_path(path, grid, cell_lookup, obstacle_soft_costs)
+                path = self.smooth_path(path, grid, cell_lookup, obstacle_soft_costs, search_bounds)
                 metrics["pathfindSmoothMs"] = self.elapsed_ms(smooth_started_at)
                 return finish_result(True, path, "path_found")
 
-            neighbors = self.get_neighbors(current, grid, cell_lookup)
+            neighbors = self.get_neighbors(current, grid, cell_lookup, search_bounds)
             metrics["pathfindNeighborCheckCount"] += len(neighbors)
             for neighbor in neighbors:
                 next_direction = self.get_move_direction(current, neighbor)
@@ -160,7 +189,17 @@ class AStarPathfinder:
         return finish_result(False, [], "path_not_found")
 
     # A* 계측값의 기본 필드를 만든다.
-    def make_pathfind_metrics(self, grid: GridMap) -> dict:
+    def make_pathfind_metrics(
+        self,
+        grid: GridMap,
+        grid_context: AStarGridContext | None = None,
+        search_bounds: tuple[int, int, int, int] | None = None,
+    ) -> dict:
+        search_cell_count = 0
+        if search_bounds is not None:
+            min_x, max_x, min_y, max_y = search_bounds
+            search_cell_count = max(0, max_x - min_x + 1) * max(0, max_y - min_y + 1)
+
         return {
             "pathfindTotalMs": 0.0,
             "pathfindCellLookupMs": 0.0,
@@ -175,6 +214,12 @@ class AStarPathfinder:
             "pathfindOpenPushCount": 0,
             "pathfindPathCellCount": 0,
             "pathfindReason": "",
+            "pathfindGridCacheHit": grid_context is not None and grid_context.grid is grid,
+            "pathfindSearchCellCount": search_cell_count,
+            "pathfindSearchBoundsMinX": search_bounds[0] if search_bounds is not None else None,
+            "pathfindSearchBoundsMaxX": search_bounds[1] if search_bounds is not None else None,
+            "pathfindSearchBoundsMinY": search_bounds[2] if search_bounds is not None else None,
+            "pathfindSearchBoundsMaxY": search_bounds[3] if search_bounds is not None else None,
         }
 
     # perf_counter 기준 경과 시간을 ms로 변환한다.
@@ -191,6 +236,7 @@ class AStarPathfinder:
         cell: tuple[int, int],
         grid: GridMap,
         cell_lookup: dict[tuple[int, int], GridCell] | None = None,
+        search_bounds: tuple[int, int, int, int] | None = None,
     ) -> list[tuple[int, int]]:
         x, y = cell
         candidates = [
@@ -200,7 +246,7 @@ class AStarPathfinder:
         return [
             candidate
             for candidate in candidates
-            if self.can_move_between(cell, candidate, grid, cell_lookup)
+            if self.can_move_between(cell, candidate, grid, cell_lookup, search_bounds)
         ]
 
     def get_neighbor_directions(self) -> list[tuple[int, int]]:
@@ -227,7 +273,11 @@ class AStarPathfinder:
         to_cell: tuple[int, int],
         grid: GridMap,
         cell_lookup: dict[tuple[int, int], GridCell] | None = None,
+        search_bounds: tuple[int, int, int, int] | None = None,
     ) -> bool:
+        if search_bounds is not None and not self.is_cell_in_search_bounds(to_cell, search_bounds):
+            return False
+
         if not self.is_walkable(to_cell, grid, cell_lookup):
             return False
 
@@ -241,10 +291,24 @@ class AStarPathfinder:
         # Prevent cutting through a blocked obstacle corner.
         side_a = (from_cell[0] + direction[0], from_cell[1])
         side_b = (from_cell[0], from_cell[1] + direction[1])
+        if search_bounds is not None and (
+            not self.is_cell_in_search_bounds(side_a, search_bounds)
+            or not self.is_cell_in_search_bounds(side_b, search_bounds)
+        ):
+            return False
+
         return (
             self.is_walkable(side_a, grid, cell_lookup)
             and self.is_walkable(side_b, grid, cell_lookup)
         )
+
+    def is_cell_in_search_bounds(
+        self,
+        cell: tuple[int, int],
+        search_bounds: tuple[int, int, int, int],
+    ) -> bool:
+        min_x, max_x, min_y, max_y = search_bounds
+        return min_x <= cell[0] <= max_x and min_y <= cell[1] <= max_y
 
     def is_walkable(
         self,
@@ -356,6 +420,16 @@ class AStarPathfinder:
     def build_cell_lookup(self, grid: GridMap) -> dict[tuple[int, int], GridCell]:
         return {(grid_cell.x, grid_cell.y): grid_cell for grid_cell in grid.cells}
 
+    def build_grid_context(self, grid: GridMap) -> AStarGridContext:
+        cell_lookup = self.build_cell_lookup(grid)
+        blocked_cells = self.get_blocked_cells(grid)
+        obstacle_soft_costs = self.build_obstacle_soft_costs_for_blocked_cells(
+            grid,
+            cell_lookup,
+            blocked_cells,
+        )
+        return AStarGridContext(grid, cell_lookup, set(blocked_cells), obstacle_soft_costs)
+
     # obstacle soft cost 후보 offset과 penalty를 만든다.
     def get_obstacle_soft_cost_offsets(
         self,
@@ -399,18 +473,36 @@ class AStarPathfinder:
         cell_lookup: dict[tuple[int, int], GridCell],
         metrics: dict | None = None,
     ) -> dict[tuple[int, int], float]:
+        blocked_cells = self.get_blocked_cells(grid)
+        if metrics is not None:
+            metrics["pathfindBlockedCellCount"] = len(blocked_cells)
+
+        return self.build_obstacle_soft_costs_for_blocked_cells(
+            grid,
+            cell_lookup,
+            blocked_cells,
+            metrics,
+        )
+
+    def get_blocked_cells(self, grid: GridMap) -> list[tuple[int, int]]:
+        return [
+            (grid_cell.x, grid_cell.y)
+            for grid_cell in grid.cells
+            if grid_cell.blocked
+        ]
+
+    def build_obstacle_soft_costs_for_blocked_cells(
+        self,
+        grid: GridMap,
+        cell_lookup: dict[tuple[int, int], GridCell],
+        blocked_cells: list[tuple[int, int]] | set[tuple[int, int]],
+        metrics: dict | None = None,
+    ) -> dict[tuple[int, int], float]:
         if self.obstacleSoftCostRadiusM <= 0.0 or self.obstacleSoftCostMaxPenalty <= 0.0:
             return {}
 
         radius_cm = self.obstacleSoftCostRadiusM * 100.0
         cell_size_cm = max(grid.cellSizeCm, 1.0)
-        blocked_cells = [
-            (grid_cell.x, grid_cell.y)
-            for grid_cell in grid.cells
-            if grid_cell.blocked
-        ]
-        if metrics is not None:
-            metrics["pathfindBlockedCellCount"] = len(blocked_cells)
 
         if not blocked_cells:
             return {}
@@ -437,6 +529,34 @@ class AStarPathfinder:
             metrics["pathfindSoftCostCellCount"] = len(soft_costs)
 
         return soft_costs
+
+    def add_blocked_cells_to_context(
+        self,
+        grid_context: AStarGridContext | None,
+        blocked_cells: set[tuple[int, int]],
+    ) -> None:
+        if grid_context is None or not blocked_cells:
+            return
+
+        grid = grid_context.grid
+        radius_cm = self.obstacleSoftCostRadiusM * 100.0
+        cell_size_cm = max(grid.cellSizeCm, 1.0)
+        soft_cost_offsets = self.get_obstacle_soft_cost_offsets(cell_size_cm, radius_cm)
+
+        for blocked_cell in blocked_cells:
+            grid_cell = grid_context.cellLookup.get(blocked_cell)
+            if grid_cell is None or not grid_cell.blocked:
+                continue
+
+            grid_context.blockedCells.add(blocked_cell)
+            for offset_x, offset_y, penalty in soft_cost_offsets:
+                candidate = (blocked_cell[0] + offset_x, blocked_cell[1] + offset_y)
+                candidate_cell = grid_context.cellLookup.get(candidate)
+                if candidate_cell is None or candidate_cell.blocked:
+                    continue
+
+                if penalty > grid_context.obstacleSoftCosts.get(candidate, 0.0):
+                    grid_context.obstacleSoftCosts[candidate] = penalty
 
     def heuristic(self, a: tuple[int, int], b: tuple[int, int]) -> float:
         delta_x = abs(a[0] - b[0])
@@ -469,6 +589,7 @@ class AStarPathfinder:
         grid: GridMap,
         cell_lookup: dict[tuple[int, int], GridCell],
         obstacle_soft_costs: dict[tuple[int, int], float] | None = None,
+        search_bounds: tuple[int, int, int, int] | None = None,
     ) -> list[tuple[int, int]]:
         if not self.bSmoothPathWithLineOfSight or len(path) < 3:
             return path
@@ -485,6 +606,7 @@ class AStarPathfinder:
                     grid,
                     cell_lookup,
                     obstacle_soft_costs,
+                    search_bounds,
                 ):
                     break
                 next_index -= 1
@@ -501,12 +623,15 @@ class AStarPathfinder:
         grid: GridMap,
         cell_lookup: dict[tuple[int, int], GridCell],
         obstacle_soft_costs: dict[tuple[int, int], float] | None = None,
+        search_bounds: tuple[int, int, int, int] | None = None,
     ) -> bool:
         delta_x = to_cell[0] - from_cell[0]
         delta_y = to_cell[1] - from_cell[1]
         steps = max(abs(delta_x), abs(delta_y)) * 4
 
         if steps <= 0:
+            if search_bounds is not None and not self.is_cell_in_search_bounds(from_cell, search_bounds):
+                return False
             return self.is_line_of_sight_cell_clear(from_cell, grid, cell_lookup, obstacle_soft_costs)
 
         previous_cell = from_cell
@@ -519,6 +644,9 @@ class AStarPathfinder:
             if sample_cell == to_cell:
                 sample_cell = to_cell
 
+            if search_bounds is not None and not self.is_cell_in_search_bounds(sample_cell, search_bounds):
+                return False
+
             if not self.is_line_of_sight_cell_clear(sample_cell, grid, cell_lookup, obstacle_soft_costs):
                 return False
 
@@ -527,6 +655,7 @@ class AStarPathfinder:
                 sample_cell,
                 grid,
                 cell_lookup,
+                search_bounds,
             ):
                 return False
 

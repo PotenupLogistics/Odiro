@@ -102,6 +102,10 @@ private:
 	UFUNCTION()
 	void HandleLidarPreviewDensitySelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
 
+	// LiDAR preview ray toggle command from the WBP button-styled checkbox.
+	UFUNCTION()
+	void HandleLidarPreviewToggleChanged(bool bIsChecked);
+
 	// Preview left-rotation command.
 	UFUNCTION()
 	void HandleRotatePreviewLeftClicked();
@@ -149,6 +153,10 @@ private:
 	void SyncProfileSlidersFromValidInputFields() const;
 	// Pushes current LiDAR preview display options into the active robot preview.
 	void ApplyRobotPreviewDisplayOptions();
+	// Shows or clears the preview LiDAR ray snapshot from the current editable values.
+	void SetLidarPreviewRaysVisible(bool bShouldShow);
+	// Syncs Preview-only option controls to the current ray visibility state.
+	void SyncLidarPreviewControlState();
 	// Applies the subsystem render target to the preview image brush.
 	void ApplyRobotPreviewRenderTarget();
 	// Pushes the WBP-authored preview input frame to the viewport-backed preview camera.
@@ -200,6 +208,9 @@ private:
 
 	// Last full viewport size sent to the viewport-backed preview camera.
 	FVector2D LastRobotPreviewViewportSizePixel = FVector2D::ZeroVector;
+
+	// Guards programmatic LiDAR preview toggle updates from firing user commands.
+	bool bSyncingLidarPreviewToggleState = false;
 
 	// Current profile path display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -253,13 +264,25 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> RotateRightButton;
 
-	// Draws current LiDAR ray mode/range in the preview.
+	// Legacy push button fallback that toggles LiDAR rays when no button-styled checkbox is authored.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> DrawLidarRaysButton;
 
-	// Clears currently drawn LiDAR rays from the preview.
+	// Push button that toggles LiDAR preview rays in newer WBP layouts.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ToggleLidarRaysButton;
+
+	// Legacy clear button fallback kept optional so WBP can remove it.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> ClearLidarRaysButton;
+
+	// Button-styled checkbox that owns the persistent selected/unselected Ray visual state.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UCheckBox> ToggleLidarRaysCheckBox;
+
+	// Preview overlay panel containing ray/range/points/density display options.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> LidarPreviewOptionsPanel;
 
 	// Toggles sampled LiDAR ray beams in the preview.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

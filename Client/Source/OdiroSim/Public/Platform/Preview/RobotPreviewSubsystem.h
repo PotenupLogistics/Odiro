@@ -60,6 +60,9 @@ public:
 	// Clears the currently drawn LiDAR ray snapshot.
 	void ClearLidarPreviewRays();
 
+	// Returns whether the current preview scene is showing LiDAR rays.
+	bool AreLidarPreviewRaysVisible() const;
+
 	// Zooms the preview camera toward or away from the robot focus point.
 	void AddCameraZoom(float WheelDelta);
 

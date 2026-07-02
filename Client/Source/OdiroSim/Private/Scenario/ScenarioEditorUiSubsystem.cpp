@@ -326,7 +326,7 @@ bool UScenarioEditorUiSubsystem::ResolveCurrentProjectScenarioPath(
 	const AScenarioEditorController* editorController = ResolveEditorController();
 	if (!editorController)
 	{
-		outFailureReason = TEXT("ScenarioEditorController unavailable.");
+		outFailureReason = TEXT("시나리오 에디터 컨트롤러를 찾을 수 없습니다.");
 		return false;
 	}
 
@@ -334,14 +334,14 @@ bool UScenarioEditorUiSubsystem::ResolveCurrentProjectScenarioPath(
 		editorController->GetSourceProjectScenarioJsonPath());
 	if (!IsScenarioEditorUiProjectScenarioJsonPath(outScenarioJsonPath))
 	{
-		outFailureReason = TEXT("LLM generate/load/run requires the editor source to be <UserProject>/scenario.json.");
+		outFailureReason = TEXT("생성, 불러오기, 실행 기능은 에디터 소스가 <UserProject>/scenario.json일 때 사용할 수 있습니다.");
 		return false;
 	}
 
 	outProjectPath = FPaths::GetPath(outScenarioJsonPath);
 	if (outProjectPath.IsEmpty())
 	{
-		outFailureReason = TEXT("Project path could not be resolved from scenario.json.");
+		outFailureReason = TEXT("scenario.json에서 프로젝트 경로를 확인하지 못했습니다.");
 		return false;
 	}
 
@@ -355,7 +355,7 @@ bool UScenarioEditorUiSubsystem::LoadLatestGeneratedProjectScenario(FString& out
 	AScenarioEditorController* editorController = ResolveEditorController();
 	if (!editorController)
 	{
-		outStatusText = TEXT("ScenarioEditorController unavailable.");
+		outStatusText = TEXT("시나리오 에디터 컨트롤러를 찾을 수 없습니다.");
 		return false;
 	}
 
@@ -376,12 +376,12 @@ bool UScenarioEditorUiSubsystem::LoadLatestGeneratedProjectScenario(FString& out
 	if (!editorController->LoadProjectScenarioJsonFile(scenarioJsonPath, resolvedJsonFilePath, diagnostics))
 	{
 		outStatusText = diagnostics.IsEmpty()
-			? FString::Printf(TEXT("scenario.json load failed: %s"), *scenarioJsonPath)
-			: FString::Printf(TEXT("scenario.json load failed:\n%s"), *FString::Join(diagnostics, TEXT("\n")));
+			? FString::Printf(TEXT("scenario.json을 불러오지 못했습니다: %s"), *scenarioJsonPath)
+			: FString::Printf(TEXT("scenario.json을 불러오지 못했습니다:\n%s"), *FString::Join(diagnostics, TEXT("\n")));
 		return false;
 	}
 
-	outStatusText = FString::Printf(TEXT("Loaded project scenario: %s"), *resolvedJsonFilePath);
+	outStatusText = TEXT("프로젝트 시나리오를 불러왔습니다.");
 	return true;
 }
 
@@ -392,7 +392,7 @@ bool UScenarioEditorUiSubsystem::RunCurrentProjectScenario(FString& outStatusTex
 	USimulatorLaunchSubsystem* launchSubsystem = ResolveSimulatorLaunchSubsystem();
 	if (!launchSubsystem)
 	{
-		outStatusText = TEXT("SimulatorLaunchSubsystem is unavailable.");
+		outStatusText = TEXT("시뮬레이터 실행 서브시스템을 찾을 수 없습니다.");
 		return false;
 	}
 
@@ -408,18 +408,21 @@ bool UScenarioEditorUiSubsystem::RunCurrentProjectScenario(FString& outStatusTex
 	if (!launchSubsystem->PrepareProjectRunSnapshot(projectPath, FString(), runId, diagnostics))
 	{
 		outStatusText = diagnostics.IsEmpty()
-			? FString::Printf(TEXT("Project run snapshot preparation failed: %s"), *projectPath)
-			: FString::Printf(TEXT("Project run snapshot preparation failed:\n%s"), *FString::Join(diagnostics, TEXT("\n")));
+			? FString::Printf(TEXT("프로젝트 실행 스냅샷을 준비하지 못했습니다: %s"), *projectPath)
+			: FString::Printf(TEXT("프로젝트 실행 스냅샷을 준비하지 못했습니다:\n%s"), *FString::Join(diagnostics, TEXT("\n")));
 		return false;
 	}
 
 	if (!launchSubsystem->StartProjectRun(projectPath, runId))
 	{
-		outStatusText = launchSubsystem->GetLastError();
+		const FString lastError = launchSubsystem->GetLastError();
+		outStatusText = lastError.IsEmpty()
+			? TEXT("시뮬레이션 실행을 시작하지 못했습니다.")
+			: FString::Printf(TEXT("시뮬레이션 실행을 시작하지 못했습니다:\n%s"), *lastError);
 		return false;
 	}
 
-	outStatusText = FString::Printf(TEXT("Project run launch requested: %s / %s"), *projectPath, *runId);
+	outStatusText = TEXT("프로젝트 실행을 요청했습니다.");
 	return true;
 }
 
@@ -677,7 +680,7 @@ bool UScenarioEditorUiSubsystem::SaveCurrentProjectScenario(
 	AScenarioEditorController* editorController = ResolveEditorController();
 	if (!editorController)
 	{
-		outStatusText = TEXT("ScenarioEditorController unavailable.");
+		outStatusText = TEXT("시나리오 에디터 컨트롤러를 찾을 수 없습니다.");
 		return false;
 	}
 
@@ -693,8 +696,8 @@ bool UScenarioEditorUiSubsystem::SaveCurrentProjectScenario(
 	if (!editorController->SaveProjectScenarioJsonFile(outScenarioJsonPath, resolvedJsonFilePath, diagnostics))
 	{
 		outStatusText = diagnostics.IsEmpty()
-			? FString::Printf(TEXT("scenario.json save failed: %s"), *outScenarioJsonPath)
-			: FString::Printf(TEXT("scenario.json save failed:\n%s"), *FString::Join(diagnostics, TEXT("\n")));
+			? FString::Printf(TEXT("scenario.json을 저장하지 못했습니다: %s"), *outScenarioJsonPath)
+			: FString::Printf(TEXT("scenario.json을 저장하지 못했습니다:\n%s"), *FString::Join(diagnostics, TEXT("\n")));
 		return false;
 	}
 

@@ -119,15 +119,12 @@ void UScenarioLlmPromptWidget::HandleGenerationCompleted(const FScenarioLlmGener
 	if (!result.bSuccess)
 	{
 		SetStatusText(result.Diagnostics.IsEmpty()
-			? FString::Printf(TEXT("시나리오 생성 실패: %s"), *result.Message)
-			: FString::Printf(TEXT("시나리오 생성 실패:\n%s"), *FString::Join(result.Diagnostics, TEXT("\n"))));
+			? FString::Printf(TEXT("시나리오 생성에 실패했습니다: %s"), *result.Message)
+			: FString::Printf(TEXT("시나리오 생성에 실패했습니다:\n%s"), *FString::Join(result.Diagnostics, TEXT("\n"))));
 		return;
 	}
 
-	SetStatusText(FString::Printf(
-		TEXT("시나리오 생성 완료: %s\n%s"),
-		*result.Message,
-		*result.ProjectScenarioJsonPath));
+	SetStatusText(TEXT("시나리오 생성이 완료되었습니다."));
 
 	if (bLoadProjectScenarioAfterGenerate)
 	{

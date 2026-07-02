@@ -32,29 +32,29 @@ bool UScenarioLlmPromptViewModel::RequestGeneration()
 	const FString trimmedPrompt = PromptText.TrimStartAndEnd();
 	if (trimmedPrompt.IsEmpty())
 	{
-		SetStatusText(TEXT("Prompt is required."));
+		SetStatusText(TEXT("프롬프트를 입력하세요."));
 		return false;
 	}
 	if (ProjectScenarioJsonPath.TrimStartAndEnd().IsEmpty())
 	{
-		SetStatusText(TEXT("Project scenario.json path is required."));
+		SetStatusText(TEXT("project scenario.json 경로가 필요합니다."));
 		return false;
 	}
 
 	if (!UiSubsystem)
 	{
-		SetStatusText(TEXT("ScenarioEditorUiSubsystem unavailable."));
+		SetStatusText(TEXT("시나리오 에디터 UI 서브시스템을 찾을 수 없습니다."));
 		return false;
 	}
 
 	FString failureReason;
 	if (!UiSubsystem->RequestScenarioGeneration(trimmedPrompt, ProjectScenarioJsonPath, EpisodeCount, failureReason))
 	{
-		SetStatusText(failureReason.IsEmpty() ? TEXT("Scenario generation request rejected.") : failureReason);
+		SetStatusText(failureReason.IsEmpty() ? TEXT("시나리오 생성 요청이 거부되었습니다.") : failureReason);
 		return false;
 	}
 
-	SetStatusText(TEXT("Scenario generation requested."));
+	SetStatusText(TEXT("시나리오 생성을 요청했습니다."));
 	SetBusy(true);
 	return true;
 }
@@ -63,7 +63,7 @@ bool UScenarioLlmPromptViewModel::RequestGenerationFromInput(const FString& prom
 {
 	if (!UiSubsystem)
 	{
-		SetStatusText(TEXT("ScenarioEditorUiSubsystem unavailable."));
+		SetStatusText(TEXT("시나리오 에디터 UI 서브시스템을 찾을 수 없습니다."));
 		return false;
 	}
 
@@ -72,7 +72,7 @@ bool UScenarioLlmPromptViewModel::RequestGenerationFromInput(const FString& prom
 	FString failureReason;
 	if (!UiSubsystem->ResolveCurrentProjectScenarioPath(scenarioJsonPath, projectPath, failureReason))
 	{
-		SetStatusText(failureReason.IsEmpty() ? TEXT("Project scenario.json path is required.") : failureReason);
+		SetStatusText(failureReason.IsEmpty() ? TEXT("project scenario.json 경로가 필요합니다.") : failureReason);
 		return false;
 	}
 
@@ -86,7 +86,7 @@ bool UScenarioLlmPromptViewModel::LoadGeneratedScenario()
 {
 	if (!UiSubsystem)
 	{
-		SetStatusText(TEXT("ScenarioEditorUiSubsystem unavailable."));
+		SetStatusText(TEXT("시나리오 에디터 UI 서브시스템을 찾을 수 없습니다."));
 		return false;
 	}
 
@@ -100,7 +100,7 @@ bool UScenarioLlmPromptViewModel::RunGeneratedSimulation()
 {
 	if (!UiSubsystem)
 	{
-		SetStatusText(TEXT("ScenarioEditorUiSubsystem unavailable."));
+		SetStatusText(TEXT("시나리오 에디터 UI 서브시스템을 찾을 수 없습니다."));
 		return false;
 	}
 

@@ -7,6 +7,7 @@
 
 class UButton;
 class UBorder;
+class UCanvasPanel;
 class UImage;
 class USlider;
 class UTextBlock;
@@ -120,6 +121,10 @@ private:
 	UFUNCTION()
 	void HandleReplayTimelineValueChanged(float Value);
 
+	// Stops replay on a snapped event marker after timeline mouse dragging ends.
+	UFUNCTION()
+	void HandleReplayTimelineMouseCaptureEnd();
+
 	// Switches the replay camera to robot-following top-down mode.
 	UFUNCTION()
 	void HandleTopDownCameraClicked();
@@ -183,6 +188,18 @@ private:
 	// Updates optional timeline, frame, and speed display widgets.
 	void UpdateReplayTimelineUi();
 
+	// Rebuilds optional event dots over the replay timeline.
+	void RebuildReplayEventMarkers();
+
+	// Clears optional event dots and timeline snap state.
+	void ClearReplayEventMarkers();
+
+	// Returns true when the requested time should snap to a nearby event marker.
+	bool TryFindTimelineSnapEvent(
+		double TimeSeconds,
+		double& OutEventTimeSeconds,
+		int32& OutEventIndex) const;
+
 	// Formats a replay time in seconds for compact UI display.
 	FText FormatReplayTime(double TimeSeconds) const;
 
@@ -234,6 +251,10 @@ private:
 	// Timeline slider that seeks by normalized replay time.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USlider> ReplayTimelineSlider;
+
+	// Optional canvas layered above ReplayTimelineSlider for colored event dots.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UCanvasPanel> ReplayTimelineMarkerCanvas;
 
 	// Fullscreen overlay root that covers the normal replay layout.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -342,6 +363,18 @@ private:
 
 	// True while native code is refreshing the slider value.
 	bool bUpdatingReplayTimelineSlider = false;
+
+	// True when the current timeline drag is snapped to an event marker.
+	bool bTimelineSnappedToEvent = false;
+
+	// Event time used when the current timeline drag is snapped.
+	double SnappedEventTimeSeconds = 0.0;
+
+	// Event index used when the current timeline drag is snapped.
+	int32 SnappedEventIndex = INDEX_NONE;
+
+	// Maximum timeline distance in seconds that snaps dragging to an event marker.
+	double TimelineEventSnapThresholdSeconds = 0.3;
 
 	// True while the fullscreen replay overlay should be visible.
 	bool bReplayFullscreen = false;

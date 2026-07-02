@@ -2,6 +2,7 @@
 
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
 #include "Components/OverlaySlot.h"
@@ -18,6 +19,7 @@
 namespace
 {
 	const int32 ReplayFullscreenLayerZOrder = 100;
+	const FVector2D ReplayEventMarkerSize(7.0f, 14.0f);
 
 	// Forces WBP-authored fullscreen slots to fill their parent instead of keeping designer-time fixed offsets.
 	void ApplyReplayFillSlot(UWidget* widget, const int32 zOrder)
@@ -45,6 +47,55 @@ namespace
 			overlaySlot->SetVerticalAlignment(VAlign_Fill);
 			overlaySlot->SetPadding(FMargin(0.0f));
 		}
+	}
+
+	// Returns the timeline marker color used for one replay event type.
+	FLinearColor GetReplayEventMarkerColor(const FString& EventType)
+	{
+		if (EventType.Equals(TEXT("Stuck"), ESearchCase::IgnoreCase)
+			|| EventType.Equals(TEXT("Collision"), ESearchCase::IgnoreCase))
+		{
+			return FLinearColor(0.95f, 0.12f, 0.08f, 1.0f);
+		}
+
+		if (EventType.Equals(TEXT("Repath"), ESearchCase::IgnoreCase))
+		{
+			return FLinearColor(1.0f, 0.72f, 0.05f, 1.0f);
+		}
+
+		if (EventType.Equals(TEXT("RobotTipOver"), ESearchCase::IgnoreCase))
+		{
+			return FLinearColor(0.75f, 0.18f, 1.0f, 1.0f);
+		}
+
+		if (EventType.Equals(TEXT("Success"), ESearchCase::IgnoreCase))
+		{
+			return FLinearColor(0.18f, 0.85f, 0.25f, 1.0f);
+		}
+
+		return FLinearColor(0.8f, 0.8f, 0.8f, 1.0f);
+	}
+
+	// Builds the hover text shown for one timeline event marker.
+	FText BuildReplayEventMarkerTooltip(const FScenarioReplayEventMarker& Marker)
+	{
+		const FString Label = Marker.EventType.IsEmpty()
+			? TEXT("Event")
+			: Marker.EventType;
+		const FString Detail = !Marker.Message.IsEmpty()
+			? Marker.Message
+			: Marker.Reason;
+
+		return Detail.IsEmpty()
+			? FText::FromString(FString::Printf(
+				TEXT("%s\n%.2fs"),
+				*Label,
+				Marker.TimeSeconds))
+			: FText::FromString(FString::Printf(
+				TEXT("%s\n%.2fs\n%s"),
+				*Label,
+				Marker.TimeSeconds,
+				*Detail));
 	}
 }
 
@@ -87,6 +138,7 @@ bool UProjectEpisodeReplayViewerWidget::OpenEpisodeReplay(const FString& Episode
 	SetVisibility(ESlateVisibility::Visible);
 	UpdateCameraModeText();
 	UpdateReplayTimelineUi();
+	RebuildReplayEventMarkers();
 	SetDiagnosticsText(FString::Printf(TEXT("Replay playing: %s"), *LoadedEpisodeDirectory));
 	RequestReplayInputFocus();
 	return true;
@@ -110,6 +162,7 @@ void UProjectEpisodeReplayViewerWidget::ResetReplay()
 	{
 		ReplayFullscreenImage->SetBrush(FSlateBrush());
 	}
+	ClearReplayEventMarkers();
 	SetReplayFullscreen(false);
 	SetDiagnosticsText(TEXT("Replay stopped."));
 	UpdateCameraModeText();
@@ -159,6 +212,8 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 	{
 		ReplayTimelineSlider->OnValueChanged.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineValueChanged);
 		ReplayTimelineSlider->OnValueChanged.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineValueChanged);
+		ReplayTimelineSlider->OnMouseCaptureEnd.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineMouseCaptureEnd);
+		ReplayTimelineSlider->OnMouseCaptureEnd.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineMouseCaptureEnd);
 	}
 
 	if (FullscreenPlayPauseButton)
@@ -232,6 +287,7 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 	UpdateReplayFullscreenVisibility();
 	UpdateCameraModeText();
 	UpdateReplayTimelineUi();
+	RebuildReplayEventMarkers();
 }
 
 void UProjectEpisodeReplayViewerWidget::RefreshReplayControlBindings()
@@ -274,6 +330,8 @@ void UProjectEpisodeReplayViewerWidget::RefreshReplayControlBindings()
 	{
 		ReplayTimelineSlider->OnValueChanged.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineValueChanged);
 		ReplayTimelineSlider->OnValueChanged.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineValueChanged);
+		ReplayTimelineSlider->OnMouseCaptureEnd.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineMouseCaptureEnd);
+		ReplayTimelineSlider->OnMouseCaptureEnd.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineMouseCaptureEnd);
 	}
 
 	if (FullscreenPlayPauseButton)
@@ -375,6 +433,7 @@ void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 	if (ReplayTimelineSlider)
 	{
 		ReplayTimelineSlider->OnValueChanged.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineValueChanged);
+		ReplayTimelineSlider->OnMouseCaptureEnd.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineMouseCaptureEnd);
 	}
 
 	if (FullscreenPlayPauseButton)
@@ -768,9 +827,64 @@ void UProjectEpisodeReplayViewerWidget::HandleReplayTimelineValueChanged(float V
 		static_cast<double>(Value),
 		0.0,
 		1.0);
-	ReplaySubsystem->Seek(
-		ReplaySubsystem->GetDurationSeconds() * NormalizedValue);
+	const double RequestedTimeSeconds =
+		ReplaySubsystem->GetDurationSeconds() * NormalizedValue;
+
+	double SnapEventTimeSeconds = 0.0;
+	int32 SnapEventIndex = INDEX_NONE;
+	const bool bShouldSnap = TryFindTimelineSnapEvent(
+		RequestedTimeSeconds,
+		SnapEventTimeSeconds,
+		SnapEventIndex);
+	const double SeekTimeSeconds = bShouldSnap
+		? SnapEventTimeSeconds
+		: RequestedTimeSeconds;
+
+	bTimelineSnappedToEvent = bShouldSnap;
+	SnappedEventTimeSeconds = bShouldSnap ? SnapEventTimeSeconds : 0.0;
+	SnappedEventIndex = bShouldSnap ? SnapEventIndex : INDEX_NONE;
+
+	ReplaySubsystem->Seek(SeekTimeSeconds);
+	if (bShouldSnap && ReplayTimelineSlider)
+	{
+		bUpdatingReplayTimelineSlider = true;
+		ReplayTimelineSlider->SetValue(static_cast<float>(
+			FMath::Clamp(
+				SeekTimeSeconds / ReplaySubsystem->GetDurationSeconds(),
+				0.0,
+				1.0)));
+		bUpdatingReplayTimelineSlider = false;
+	}
 	UpdateReplayTimelineUi();
+	RequestReplayInputFocus();
+}
+
+void UProjectEpisodeReplayViewerWidget::HandleReplayTimelineMouseCaptureEnd()
+{
+	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem)
+	{
+		bTimelineSnappedToEvent = false;
+		SnappedEventTimeSeconds = 0.0;
+		SnappedEventIndex = INDEX_NONE;
+		return;
+	}
+
+	if (bTimelineSnappedToEvent)
+	{
+		ReplaySubsystem->Seek(SnappedEventTimeSeconds);
+		ReplaySubsystem->Pause();
+		ClearReplayMovementInput();
+		ClearReplayLookInput();
+		SetDiagnosticsText(FString::Printf(
+			TEXT("Replay stopped at event %.2fs."),
+			SnappedEventTimeSeconds));
+		UpdateReplayTimelineUi();
+	}
+
+	bTimelineSnappedToEvent = false;
+	SnappedEventTimeSeconds = 0.0;
+	SnappedEventIndex = INDEX_NONE;
 	RequestReplayInputFocus();
 }
 
@@ -1166,6 +1280,99 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 		FullscreenRayToggleButton->SetIsEnabled(
 			ReplaySubsystem && ReplaySubsystem->HasReplayLidarRays());
 	}
+}
+
+void UProjectEpisodeReplayViewerWidget::RebuildReplayEventMarkers()
+{
+	ClearReplayEventMarkers();
+
+	const UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplayTimelineMarkerCanvas
+		|| !ReplaySubsystem
+		|| ReplaySubsystem->GetDurationSeconds() <= 0.0)
+	{
+		return;
+	}
+
+	ReplayTimelineMarkerCanvas->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+	const double DurationSeconds = ReplaySubsystem->GetDurationSeconds();
+	for (const FScenarioReplayEventMarker& Marker : ReplaySubsystem->GetReplayEventMarkers())
+	{
+		if (Marker.TimeSeconds < 0.0 || Marker.TimeSeconds > DurationSeconds)
+		{
+			continue;
+		}
+
+		UBorder* MarkerWidget = NewObject<UBorder>(this);
+		if (!MarkerWidget)
+		{
+			continue;
+		}
+
+		const double NormalizedTime = FMath::Clamp(
+			Marker.TimeSeconds / DurationSeconds,
+			0.0,
+			1.0);
+		MarkerWidget->SetBrushColor(GetReplayEventMarkerColor(Marker.EventType));
+		MarkerWidget->SetToolTipText(BuildReplayEventMarkerTooltip(Marker));
+		MarkerWidget->SetVisibility(ESlateVisibility::Visible);
+
+		if (UCanvasPanelSlot* MarkerSlot =
+			ReplayTimelineMarkerCanvas->AddChildToCanvas(MarkerWidget))
+		{
+			MarkerSlot->SetAnchors(FAnchors(
+				static_cast<float>(NormalizedTime),
+				0.5f,
+				static_cast<float>(NormalizedTime),
+				0.5f));
+			MarkerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+			MarkerSlot->SetPosition(FVector2D::ZeroVector);
+			MarkerSlot->SetSize(ReplayEventMarkerSize);
+			MarkerSlot->SetZOrder(1);
+		}
+	}
+}
+
+void UProjectEpisodeReplayViewerWidget::ClearReplayEventMarkers()
+{
+	if (ReplayTimelineMarkerCanvas)
+	{
+		ReplayTimelineMarkerCanvas->ClearChildren();
+	}
+
+	bTimelineSnappedToEvent = false;
+	SnappedEventTimeSeconds = 0.0;
+	SnappedEventIndex = INDEX_NONE;
+}
+
+bool UProjectEpisodeReplayViewerWidget::TryFindTimelineSnapEvent(
+	double TimeSeconds,
+	double& OutEventTimeSeconds,
+	int32& OutEventIndex) const
+{
+	OutEventTimeSeconds = 0.0;
+	OutEventIndex = INDEX_NONE;
+
+	const UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem || TimelineEventSnapThresholdSeconds <= 0.0)
+	{
+		return false;
+	}
+
+	double BestDistanceSeconds = TimelineEventSnapThresholdSeconds;
+	for (const FScenarioReplayEventMarker& Marker : ReplaySubsystem->GetReplayEventMarkers())
+	{
+		const double DistanceSeconds = FMath::Abs(Marker.TimeSeconds - TimeSeconds);
+		if (DistanceSeconds <= BestDistanceSeconds)
+		{
+			BestDistanceSeconds = DistanceSeconds;
+			OutEventTimeSeconds = Marker.TimeSeconds;
+			OutEventIndex = Marker.EventIndex;
+		}
+	}
+
+	return OutEventIndex != INDEX_NONE;
 }
 
 FText UProjectEpisodeReplayViewerWidget::FormatReplayTime(

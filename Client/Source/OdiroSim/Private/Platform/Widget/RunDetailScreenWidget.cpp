@@ -1,5 +1,6 @@
 #include "Platform/Widget/RunDetailScreenWidget.h"
 
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/WrapBox.h"
@@ -14,6 +15,8 @@
 #include "Platform/Widget/ProjectEpisodeReplayViewerWidget.h"
 #include "UI/BaseButtonWidget.h"
 #include "UI/BaseTextWidget.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogRunDetailScreenWidget, Log, All);
 
 void URunDetailScreenWidget::NativeConstruct()
 {
@@ -36,10 +39,26 @@ void URunDetailScreenWidget::NativeConstruct()
 			this,
 			&URunDetailScreenWidget::HandleAnalysisCompleted);
 	}
+
+	if (ProjectEpisodeReplayViewer)
+	{
+		ProjectEpisodeReplayViewer->OnReplayFullscreenChanged.RemoveAll(this);
+		ProjectEpisodeReplayViewer->OnReplayFullscreenChanged.AddUObject(
+			this,
+			&URunDetailScreenWidget::HandleReplayFullscreenChanged);
+	}
+
+	RestoreReplayViewerToNormalHost();
 }
 
 void URunDetailScreenWidget::NativeDestruct()
 {
+	if (ProjectEpisodeReplayViewer)
+	{
+		ProjectEpisodeReplayViewer->OnReplayFullscreenChanged.RemoveAll(this);
+		RestoreReplayViewerToNormalHost();
+	}
+
 	if (RequestAiAnalysisButton)
 	{
 		RequestAiAnalysisButton->OnBaseClicked.RemoveDynamic(
@@ -367,6 +386,72 @@ void URunDetailScreenWidget::HandleEpisodeReplayRequested(UProjectEpisodeReplayC
 	}
 
 	ProjectEpisodeReplayViewer->OpenEpisodeReplay(cardWidget->GetEpisodeDirectory());
+}
+
+void URunDetailScreenWidget::HandleReplayFullscreenChanged(
+	UProjectEpisodeReplayViewerWidget* replayViewer,
+	bool bFullscreen)
+{
+	if (!IsValid(replayViewer) || replayViewer != ProjectEpisodeReplayViewer.Get())
+	{
+		return;
+	}
+
+	if (bFullscreen)
+	{
+		if (!ReplayFullscreenHost || !ReplayViewerSize || !ProjectEpisodeReplayViewer)
+		{
+			UE_LOG(
+				LogRunDetailScreenWidget,
+				Warning,
+				TEXT("Replay fullscreen requested without complete host bindings. NormalHost=%s FullscreenHost=%s Viewer=%s"),
+				*GetNameSafe(ReplayViewerSize.Get()),
+				*GetNameSafe(ReplayFullscreenHost.Get()),
+				*GetNameSafe(ProjectEpisodeReplayViewer.Get()));
+			return;
+		}
+
+		AttachReplayViewerToHost(ReplayFullscreenHost.Get());
+		ReplayFullscreenHost->SetVisibility(ESlateVisibility::Visible);
+		return;
+	}
+
+	RestoreReplayViewerToNormalHost();
+}
+
+void URunDetailScreenWidget::AttachReplayViewerToHost(USizeBox* targetHost)
+{
+	if (!targetHost || !ProjectEpisodeReplayViewer)
+	{
+		return;
+	}
+
+	if (targetHost->GetContent() == ProjectEpisodeReplayViewer.Get())
+	{
+		return;
+	}
+
+	if (UWidget* existingContent = targetHost->GetContent())
+	{
+		existingContent->RemoveFromParent();
+	}
+
+	ProjectEpisodeReplayViewer->RemoveFromParent();
+	targetHost->SetContent(ProjectEpisodeReplayViewer.Get());
+	ProjectEpisodeReplayViewer->RefreshReplayControlBindings();
+}
+
+void URunDetailScreenWidget::RestoreReplayViewerToNormalHost()
+{
+	if (ReplayViewerSize && ProjectEpisodeReplayViewer)
+	{
+		AttachReplayViewerToHost(ReplayViewerSize.Get());
+	}
+
+	if (ReplayFullscreenHost)
+	{
+		ReplayFullscreenHost->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void URunDetailScreenWidget::HandleRequestAiAnalysisClicked(UBaseButtonWidget* button)

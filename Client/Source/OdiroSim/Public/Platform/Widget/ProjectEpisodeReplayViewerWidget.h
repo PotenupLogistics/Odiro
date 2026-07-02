@@ -37,6 +37,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Project|Replay")
 	void ResetReplay();
 
+	// Rebinds owned WBP control delegates after this viewer is moved between widget hosts.
+	void RefreshReplayControlBindings();
+
 	// Returns the latest viewer diagnostic text for parent UI status mirroring.
 	const FString& GetLastDiagnosticsText() const { return LastDiagnosticsText; }
 

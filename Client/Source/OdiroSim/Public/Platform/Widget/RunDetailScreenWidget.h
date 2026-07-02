@@ -14,6 +14,7 @@ class UProjectAiSuggestionRowWidget;
 class UProjectEpisodeReplayCardWidget;
 class UProjectEpisodeReplayViewerWidget;
 class UProjectWorkspaceViewModel;
+class USizeBox;
 class UTextBlock;
 class UVerticalBox;
 class UWrapBox;
@@ -93,6 +94,17 @@ private:
 
 	// Opens replay when an episode card is clicked.
 	void HandleEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget);
+
+	// Moves the embedded replay viewer when its fullscreen state changes.
+	void HandleReplayFullscreenChanged(
+		UProjectEpisodeReplayViewerWidget* replayViewer,
+		bool bFullscreen);
+
+	// Attaches the replay viewer to the authored normal or fullscreen host.
+	void AttachReplayViewerToHost(USizeBox* targetHost);
+
+	// Restores the replay viewer to its authored normal host.
+	void RestoreReplayViewerToNormalHost();
 
 	// Analysis button click handler.
 	UFUNCTION()
@@ -180,6 +192,14 @@ private:
 	// Optional warning row container; falls back to the suggestion container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UVerticalBox> AiWarningListBox;
+
+	// Normal replay viewer host inside the run detail content column.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<USizeBox> ReplayViewerSize;
+
+	// Fullscreen replay host layered above run detail content.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<USizeBox> ReplayFullscreenHost;
 
 	// Embedded replay viewer owned by a replay host widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

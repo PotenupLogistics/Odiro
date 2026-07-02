@@ -11,6 +11,7 @@ class UCanvasPanel;
 class UImage;
 class USlider;
 class UTextBlock;
+class UTexture2D;
 class UProjectEpisodeReplayViewerWidget;
 class UScenarioReplaySubsystem;
 enum class EScenarioReplayCameraMode : uint8;
@@ -93,6 +94,14 @@ protected:
 	virtual void NativeOnFocusLost(const FFocusEvent& InFocusEvent) override;
 
 private:
+	// Starts playback from the current replay frame.
+	UFUNCTION()
+	void HandlePlayClicked();
+
+	// Pauses playback at the current replay frame.
+	UFUNCTION()
+	void HandlePauseClicked();
+
 	// Toggles the active replay subsystem between playing and paused.
 	UFUNCTION()
 	void HandlePlayPauseClicked();
@@ -188,6 +197,11 @@ private:
 	// Updates optional timeline, frame, and speed display widgets.
 	void UpdateReplayTimelineUi();
 
+	// Updates the fullscreen play/pause button icon from the actual replay state.
+	void UpdateReplayPlaybackIcon(
+		bool bReplayPlaying,
+		bool bHasReplayFrames);
+
 	// Rebuilds optional event dots over the replay timeline.
 	void RebuildReplayEventMarkers();
 
@@ -268,6 +282,10 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> FullscreenPlayPauseButton;
 
+	// Icon image inside FullscreenPlayPauseButton that mirrors playing or paused state.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> FullscreenPlayPauseImage;
+
 	// Fullscreen button that pauses playback at the current frame.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> FullscreenStopButton;
@@ -332,6 +350,34 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ReplayPositionText;
 
+	// Button that explicitly starts replay playback in the redesigned control bar.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> PlayButton;
+
+	// Button that explicitly pauses replay playback in the redesigned control bar.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> PauseButton;
+
+	// Optional numeric robot speed value for card-style replay telemetry.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplaySpeedValueText;
+
+	// Optional playback rate value for card-style replay telemetry.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayPlaybackRateText;
+
+	// Optional robot X position value for card-style replay telemetry.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayPositionXText;
+
+	// Optional robot Y position value for card-style replay telemetry.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayPositionYText;
+
+	// Optional robot Z position value for card-style replay telemetry.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayPositionZText;
+
 	// Episode directory currently loaded by this viewer.
 	UPROPERTY(Transient)
 	FString LoadedEpisodeDirectory;
@@ -378,4 +424,12 @@ private:
 
 	// True while the fullscreen replay overlay should be visible.
 	bool bReplayFullscreen = false;
+
+	// Cached play icon used by the fullscreen play/pause button.
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> ReplayPlayIconTexture;
+
+	// Cached pause icon used by the fullscreen play/pause button.
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> ReplayPauseIconTexture;
 };

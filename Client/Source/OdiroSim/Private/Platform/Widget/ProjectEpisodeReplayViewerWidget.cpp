@@ -9,6 +9,7 @@
 #include "Components/Slider.h"
 #include "Components/TextBlock.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "InputCoreTypes.h"
 #include "Misc/Paths.h"
@@ -20,6 +21,12 @@ namespace
 {
 	const int32 ReplayFullscreenLayerZOrder = 100;
 	const FVector2D ReplayEventMarkerSize(7.0f, 14.0f);
+	// Fixed icon size used by the compact fullscreen replay control bar.
+	const FVector2D ReplayPlaybackIconSize(24.0f, 24.0f);
+	// Default play icon asset used when the replay is paused or ready.
+	const TCHAR* ReplayPlayIconPath = TEXT("/Game/Textures/Icon/T_Icon_MediaPlay.T_Icon_MediaPlay");
+	// Default pause icon asset used when the replay is actively playing.
+	const TCHAR* ReplayPauseIconPath = TEXT("/Game/Textures/Icon/T_Icon_MediaPause.T_Icon_MediaPause");
 
 	// Forces WBP-authored fullscreen slots to fill their parent instead of keeping designer-time fixed offsets.
 	void ApplyReplayFillSlot(UWidget* widget, const int32 zOrder)
@@ -104,6 +111,8 @@ UProjectEpisodeReplayViewerWidget::UProjectEpisodeReplayViewerWidget(
 	: Super(ObjectInitializer)
 {
 	SetIsFocusable(true);
+	ReplayPlayIconTexture = LoadObject<UTexture2D>(nullptr, ReplayPlayIconPath);
+	ReplayPauseIconTexture = LoadObject<UTexture2D>(nullptr, ReplayPauseIconPath);
 }
 
 bool UProjectEpisodeReplayViewerWidget::OpenEpisodeReplay(const FString& EpisodeDirectory)
@@ -180,6 +189,18 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 		PlayPauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
 	}
 
+	if (PlayButton)
+	{
+		PlayButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayClicked);
+		PlayButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayClicked);
+	}
+
+	if (PauseButton)
+	{
+		PauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePauseClicked);
+		PauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePauseClicked);
+	}
+
 	if (StopButton)
 	{
 		StopButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
@@ -220,6 +241,10 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 	{
 		FullscreenPlayPauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
 		FullscreenPlayPauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
+	}
+	if (!FullscreenPlayPauseImage)
+	{
+		FullscreenPlayPauseImage = Cast<UImage>(GetWidgetFromName(TEXT("FullscreenPlayPauseImage")));
 	}
 
 	if (FullscreenStopButton)
@@ -298,6 +323,18 @@ void UProjectEpisodeReplayViewerWidget::RefreshReplayControlBindings()
 		PlayPauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
 	}
 
+	if (PlayButton)
+	{
+		PlayButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayClicked);
+		PlayButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayClicked);
+	}
+
+	if (PauseButton)
+	{
+		PauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePauseClicked);
+		PauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePauseClicked);
+	}
+
 	if (StopButton)
 	{
 		StopButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
@@ -338,6 +375,10 @@ void UProjectEpisodeReplayViewerWidget::RefreshReplayControlBindings()
 	{
 		FullscreenPlayPauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
 		FullscreenPlayPauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
+	}
+	if (!FullscreenPlayPauseImage)
+	{
+		FullscreenPlayPauseImage = Cast<UImage>(GetWidgetFromName(TEXT("FullscreenPlayPauseImage")));
 	}
 
 	if (FullscreenStopButton)
@@ -408,6 +449,16 @@ void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 	if (PlayPauseButton)
 	{
 		PlayPauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
+	}
+
+	if (PlayButton)
+	{
+		PlayButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayClicked);
+	}
+
+	if (PauseButton)
+	{
+		PauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePauseClicked);
 	}
 
 	if (StopButton)
@@ -734,6 +785,38 @@ void UProjectEpisodeReplayViewerWidget::NativeOnFocusLost(
 	Super::NativeOnFocusLost(InFocusEvent);
 }
 
+void UProjectEpisodeReplayViewerWidget::HandlePlayClicked()
+{
+	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioReplaySubsystem is unavailable."));
+		return;
+	}
+
+	ReplaySubsystem->Play();
+	SetDiagnosticsText(TEXT("Replay playing."));
+	UpdateReplayTimelineUi();
+	RequestReplayInputFocus();
+}
+
+void UProjectEpisodeReplayViewerWidget::HandlePauseClicked()
+{
+	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioReplaySubsystem is unavailable."));
+		return;
+	}
+
+	ReplaySubsystem->Pause();
+	ClearReplayMovementInput();
+	ClearReplayLookInput();
+	SetDiagnosticsText(TEXT("Replay paused."));
+	UpdateReplayTimelineUi();
+	RequestReplayInputFocus();
+}
+
 void UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked()
 {
 	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
@@ -749,11 +832,14 @@ void UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked()
 		ClearReplayMovementInput();
 		ClearReplayLookInput();
 		SetDiagnosticsText(TEXT("Replay paused."));
+		UpdateReplayTimelineUi();
+		RequestReplayInputFocus();
 		return;
 	}
 
 	ReplaySubsystem->Play();
 	SetDiagnosticsText(TEXT("Replay playing."));
+	UpdateReplayTimelineUi();
 	RequestReplayInputFocus();
 }
 
@@ -1211,6 +1297,13 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 		ReplaySubsystem
 			? ReplaySubsystem->GetDurationSeconds()
 			: 0.0;
+	const bool bHasReplayFrames =
+		ReplaySubsystem
+			? ReplaySubsystem->HasLoadedReplayFrames()
+			: false;
+	const bool bReplayPlaying =
+		ReplaySubsystem
+			&& ReplaySubsystem->GetPlaybackState() == EScenarioReplayPlaybackState::Playing;
 
 	if (ReplayTimeText)
 	{
@@ -1252,6 +1345,28 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 			PlaybackSpeed)));
 	}
 
+	if (ReplaySpeedValueText)
+	{
+		const double RobotSpeedKmh =
+			ReplaySubsystem
+				? ReplaySubsystem->GetCurrentRobotSpeedKmh()
+				: 0.0;
+		ReplaySpeedValueText->SetText(FText::FromString(FString::Printf(
+			TEXT("%.1f km/h"),
+			RobotSpeedKmh)));
+	}
+
+	if (ReplayPlaybackRateText)
+	{
+		const double PlaybackSpeed =
+			ReplaySubsystem
+				? ReplaySubsystem->GetPlaybackSpeed()
+				: 1.0;
+		ReplayPlaybackRateText->SetText(FText::FromString(FString::Printf(
+			TEXT("%.2fx"),
+			PlaybackSpeed)));
+	}
+
 	if (ReplayPositionText)
 	{
 		const FVector RobotPositionM =
@@ -1265,6 +1380,29 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 			RobotPositionM.Z)));
 	}
 
+	const FVector RobotPositionM =
+		ReplaySubsystem
+			? ReplaySubsystem->GetCurrentRobotPositionCm() * 0.01
+			: FVector::ZeroVector;
+	if (ReplayPositionXText)
+	{
+		ReplayPositionXText->SetText(FText::FromString(FString::Printf(
+			TEXT("X %.2fm"),
+			RobotPositionM.X)));
+	}
+	if (ReplayPositionYText)
+	{
+		ReplayPositionYText->SetText(FText::FromString(FString::Printf(
+			TEXT("Y %.2fm"),
+			RobotPositionM.Y)));
+	}
+	if (ReplayPositionZText)
+	{
+		ReplayPositionZText->SetText(FText::FromString(FString::Printf(
+			TEXT("Z %.2fm"),
+			RobotPositionM.Z)));
+	}
+
 	if (ReplayTimelineSlider)
 	{
 		bUpdatingReplayTimelineSlider = true;
@@ -1275,11 +1413,60 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 		bUpdatingReplayTimelineSlider = false;
 	}
 
+	if (PlayButton)
+	{
+		PlayButton->SetIsEnabled(bHasReplayFrames && !bReplayPlaying);
+	}
+	if (PauseButton)
+	{
+		PauseButton->SetIsEnabled(bHasReplayFrames && bReplayPlaying);
+	}
+	if (ResetButton)
+	{
+		ResetButton->SetIsEnabled(bHasReplayFrames);
+	}
+	if (FullscreenPlayPauseButton)
+	{
+		FullscreenPlayPauseButton->SetIsEnabled(bHasReplayFrames);
+	}
+	if (FullscreenResetButton)
+	{
+		FullscreenResetButton->SetIsEnabled(bHasReplayFrames);
+	}
+	UpdateReplayPlaybackIcon(bReplayPlaying, bHasReplayFrames);
+
 	if (FullscreenRayToggleButton)
 	{
 		FullscreenRayToggleButton->SetIsEnabled(
 			ReplaySubsystem && ReplaySubsystem->HasReplayLidarRays());
 	}
+}
+
+void UProjectEpisodeReplayViewerWidget::UpdateReplayPlaybackIcon(
+	bool bReplayPlaying,
+	bool bHasReplayFrames)
+{
+	if (!FullscreenPlayPauseImage)
+	{
+		return;
+	}
+
+	UTexture2D* DesiredIcon = bReplayPlaying
+		? ReplayPauseIconTexture.Get()
+		: ReplayPlayIconTexture.Get();
+	if (!DesiredIcon)
+	{
+		return;
+	}
+
+	FSlateBrush IconBrush;
+	IconBrush.SetResourceObject(DesiredIcon);
+	IconBrush.ImageSize = ReplayPlaybackIconSize;
+	IconBrush.TintColor = FSlateColor(
+		bHasReplayFrames
+			? FLinearColor::White
+			: FLinearColor(1.0f, 1.0f, 1.0f, 0.35f));
+	FullscreenPlayPauseImage->SetBrush(IconBrush);
 }
 
 void UProjectEpisodeReplayViewerWidget::RebuildReplayEventMarkers()

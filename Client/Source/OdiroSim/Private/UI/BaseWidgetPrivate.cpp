@@ -357,14 +357,23 @@ namespace BaseWidgetPrivate
 
 		// The material's emissive color is written to an sRGB target, so an authored
 		// sRGB token (stored via ReinterpretAsLinear) would be gamma-brightened.
-		// Pre-encode pow 2.2 so it round-trips to the intended color. (Solid Box
-		// brushes, ApplyBorderBrushTint, skip this — they take the direct color.)
+		// Decode through the exact sRGB transfer so low gray tokens like #242424
+		// round-trip to the same visible value. Solid Box brushes and
+		// ApplyBorderBrushTint skip this because they take the direct color.
+		float DecodeSrgbChannel(const float value)
+		{
+			const float clamped = FMath::Clamp(value, 0.0f, 1.0f);
+			return clamped <= 0.04045f
+				? clamped / 12.92f
+				: FMath::Pow((clamped + 0.055f) / 1.055f, 2.4f);
+		}
+
 		FLinearColor EncodeTexturedColor(const FLinearColor& color)
 		{
 			return FLinearColor(
-				FMath::Pow(FMath::Clamp(color.R, 0.0f, 1.0f), 2.2f),
-				FMath::Pow(FMath::Clamp(color.G, 0.0f, 1.0f), 2.2f),
-				FMath::Pow(FMath::Clamp(color.B, 0.0f, 1.0f), 2.2f),
+				DecodeSrgbChannel(color.R),
+				DecodeSrgbChannel(color.G),
+				DecodeSrgbChannel(color.B),
 				color.A);
 		}
 

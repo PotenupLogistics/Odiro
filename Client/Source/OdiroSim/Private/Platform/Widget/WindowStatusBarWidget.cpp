@@ -57,6 +57,15 @@ void UWindowStatusBarWidget::NativeConstruct()
 void UWindowStatusBarWidget::NativeDestruct()
 {
 	UnbindControls();
+	OnTabSelectedNative.Clear();
+	OnConfirmActionRequestedNative.Clear();
+	OnRunActionRequestedNative.Clear();
+	OnActionRequestedNative.Clear();
+	OnResultTabCloseRequestedNative.Clear();
+	OnTabSelected.Clear();
+	OnConfirmActionRequested.Clear();
+	OnRunActionRequested.Clear();
+	OnActionRequested.Clear();
 	Super::NativeDestruct();
 }
 

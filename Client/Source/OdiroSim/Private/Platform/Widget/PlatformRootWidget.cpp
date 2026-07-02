@@ -302,15 +302,10 @@ UScenarioEditorRootWidget* UPlatformRootWidget::GetScenarioEditorRootWidget() co
 		return scenarioEditorRootWidget;
 	}
 
-	if (UScenarioEditorRootWidget* scenarioEditorRootWidget = Cast<UScenarioEditorRootWidget>(scenarioEditorScreenWidget))
-	{
-		return scenarioEditorRootWidget;
-	}
-
 	UE_LOG(
 		LogPlatformRootWidget,
 		Error,
-		TEXT("WBP_Root ScenarioEditorScreen has invalid class '%s' on widget '%s'; expected UScenarioEditorScreenWidget or UScenarioEditorRootWidget."),
+		TEXT("WBP_Root ScenarioEditorScreen has invalid class '%s' on widget '%s'; expected UScenarioEditorScreenWidget at WBP_Root -> WBP_ScenarioEditorScreen -> ScenarioEditorRootWidget."),
 		*GetNameSafe(scenarioEditorScreenWidget->GetClass()),
 		*GetNameSafe(scenarioEditorScreenWidget));
 	return nullptr;
@@ -416,13 +411,15 @@ void UPlatformRootWidget::ConfigureStatusBarForActiveScreen()
 	WindowStatusBar->SetTabVisible(UWindowTabBarWidget::GetExperimentTabId(), bWorkspaceTabsVisible);
 
 	TArray<FWindowTabConfig> resultTabs;
-	if (ActiveScreen == EPlatformRootScreen::RunDetail && !ActiveRunDetailId.IsEmpty())
+	if (!bWorkspaceTabsVisible)
+	{
+		ActiveRunDetailId.Reset();
+	}
+	if (bWorkspaceTabsVisible && !ActiveRunDetailId.IsEmpty())
 	{
 		FWindowTabConfig resultTab;
 		resultTab.TabId = BuildRunDetailTabId();
-		resultTab.Label = FText::Format(
-			NSLOCTEXT("OdiroPlatform", "RunDetailResultTabLabel", "실험 결과 {0}"),
-			FText::FromString(ActiveRunDetailId));
+		resultTab.Label = FText::FromString(MakeRunDetailResultTabDisplayId(ActiveRunDetailId));
 		resultTab.bVisible = true;
 		resultTab.bClosable = true;
 		resultTabs.Add(resultTab);
@@ -505,6 +502,19 @@ FString UPlatformRootWidget::ExtractRunIdFromResultTabId(const FName tabId)
 	return tabString.StartsWith(ResultTabPrefix)
 		? tabString.RightChop(ResultTabPrefix.Len())
 		: FString();
+}
+
+FString UPlatformRootWidget::MakeRunDetailResultTabDisplayId(const FString& runId)
+{
+	FString normalizedRunId = runId.TrimStartAndEnd();
+	if (!normalizedRunId.IsEmpty() && normalizedRunId.IsNumeric())
+	{
+		while (normalizedRunId.Len() > 1 && normalizedRunId[0] == TEXT('0'))
+		{
+			normalizedRunId.RightChopInline(1, EAllowShrinking::No);
+		}
+	}
+	return normalizedRunId;
 }
 
 void UPlatformRootWidget::ApplyRootInputMode()
@@ -726,14 +736,24 @@ void UPlatformRootWidget::HandleStatusBarActionRequested(const FName actionId)
 void UPlatformRootWidget::HandleStatusBarResultTabCloseRequested(const FName tabId)
 {
 	const FString runId = ExtractRunIdFromResultTabId(tabId);
-	if (runId.IsEmpty())
+	if (runId.IsEmpty() || runId != ActiveRunDetailId)
 	{
 		return;
 	}
 
-	if (RunDetailScreen)
+	const bool bClosingActiveRunDetail = ActiveScreen == EPlatformRootScreen::RunDetail;
+	ActiveRunDetailId.Reset();
+
+	if (bClosingActiveRunDetail && RunDetailScreen)
 	{
 		RunDetailScreen->ResetReplay();
 	}
-	ShowRunListScreen();
+	if (bClosingActiveRunDetail)
+	{
+		ShowRunListScreen();
+	}
+	else
+	{
+		ConfigureStatusBarForActiveScreen();
+	}
 }

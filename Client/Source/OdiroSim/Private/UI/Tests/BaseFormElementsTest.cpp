@@ -11,6 +11,7 @@
 #include "UI/BaseTextInputWidget.h"
 #include "UI/BaseThumbnailCardWidget.h"
 #include "UI/BaseToggleButtonWidget.h"
+#include "UI/BaseTabWidget.h"
 #include "UI/BaseTooltipWidget.h"
 #include "UI/BaseTreeViewWidget.h"
 #include "UI/BaseWidgetPrivate.h"
@@ -20,12 +21,15 @@
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
+#include "Components/Image.h"
+#include "Components/OverlaySlot.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Editor.h"
 #include "Engine/Texture2D.h"
 #include "Engine/UserInterfaceSettings.h"
 #include "Fonts/SlateFontInfo.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/AutomationTest.h"
 
 namespace
@@ -151,6 +155,293 @@ bool FBaseFormElementsIconOnlyButtonPaddingTest::RunTest(const FString& paramete
 	button->SynchronizeBaseProperties();
 	TestEqual(TEXT("labeled left padding is restored"), surfaceBorder->GetPadding().Left, authoredPadding.Left);
 	TestEqual(TEXT("labeled right padding is restored"), surfaceBorder->GetPadding().Right, authoredPadding.Right);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseFormElementsGhostButtonFrameTest,
+	"OdiroSim.UI.BaseFormElements.GhostButtonFrame",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Verifies ghost buttons hide their frame by matching stroke color to fill color.
+bool FBaseFormElementsGhostButtonFrameTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UWorld* world = GetWidgetAutomationWorld();
+	TestNotNull(TEXT("editor world exists"), world);
+	if (!world)
+	{
+		return false;
+	}
+
+	UClass* buttonClass = LoadClass<UBaseButtonWidget>(
+		nullptr,
+		TEXT("/Game/Widgets/Common/WBP_BaseButton.WBP_BaseButton_C"));
+	TestNotNull(TEXT("base button class loads"), buttonClass);
+	if (!buttonClass)
+	{
+		return false;
+	}
+
+	UBaseButtonWidget* button = CreateWidget<UBaseButtonWidget>(world, buttonClass);
+	TestNotNull(TEXT("base button widget creates"), button);
+	if (!button || !button->WidgetTree)
+	{
+		return false;
+	}
+	button->TakeWidget();
+
+	UBorder* surfaceBorder = Cast<UBorder>(button->WidgetTree->FindWidget(TEXT("SurfaceBorder")));
+	TestNotNull(TEXT("surface border is bound"), surfaceBorder);
+	if (!surfaceBorder)
+	{
+		return false;
+	}
+
+	auto assertStrokeMatchesFill = [this, surfaceBorder](const TCHAR* label)
+	{
+		UMaterialInstanceDynamic* material =
+			Cast<UMaterialInstanceDynamic>(surfaceBorder->Background.GetResourceObject());
+		const FString materialLabel = FString::Printf(TEXT("%s material exists"), label);
+		TestNotNull(*materialLabel, material);
+		if (!material)
+		{
+			return;
+		}
+
+		const FLinearColor fillColor = material->K2_GetVectorParameterValue(TEXT("FillColor"));
+		const FLinearColor strokeColor = material->K2_GetVectorParameterValue(TEXT("StrokeColor"));
+		const FString colorLabel = FString::Printf(TEXT("%s stroke matches fill"), label);
+		TestTrue(*colorLabel, strokeColor.Equals(fillColor));
+	};
+
+	button->SetVariant(EBaseWidgetVariant::Ghost);
+	button->SetBaseState(EBaseWidgetState::Hovered);
+	assertStrokeMatchesFill(TEXT("hovered ghost button"));
+
+	button->SetBaseState(EBaseWidgetState::Pressed);
+	assertStrokeMatchesFill(TEXT("pressed ghost button"));
+
+	button->SetBaseState(EBaseWidgetState::Default);
+	button->SetSelected(true);
+	assertStrokeMatchesFill(TEXT("selected ghost button"));
+
+	button->SetSelected(false);
+	button->SetBaseState(EBaseWidgetState::Disabled);
+	assertStrokeMatchesFill(TEXT("disabled ghost button"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseFormElementsClosableTabVisibilityTest,
+	"OdiroSim.UI.BaseFormElements.ClosableTabVisibility",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Verifies BaseTab owns direct CloseButton visibility without a wrapper widget.
+bool FBaseFormElementsClosableTabVisibilityTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UWorld* world = GetWidgetAutomationWorld();
+	TestNotNull(TEXT("editor world exists"), world);
+	if (!world)
+	{
+		return false;
+	}
+
+	UClass* tabClass = LoadClass<UBaseTabWidget>(
+		nullptr,
+		TEXT("/Game/Widgets/Common/WBP_BaseTab.WBP_BaseTab_C"));
+	TestNotNull(TEXT("base tab class loads"), tabClass);
+	if (!tabClass)
+	{
+		return false;
+	}
+
+	UBaseTabWidget* tab = CreateWidget<UBaseTabWidget>(world, tabClass);
+	TestNotNull(TEXT("base tab widget creates"), tab);
+	if (!tab || !tab->WidgetTree)
+	{
+		return false;
+	}
+	tab->TakeWidget();
+
+	UWidget* closeButton = tab->WidgetTree->FindWidget(TEXT("CloseButton"));
+	TestNotNull(TEXT("direct close button exists"), closeButton);
+	if (!closeButton)
+	{
+		return false;
+	}
+
+	tab->SetClosable(false);
+	TestEqual(TEXT("non-closable tab hides close button"), closeButton->GetVisibility(), ESlateVisibility::Collapsed);
+
+	tab->SetClosable(true);
+	TestEqual(TEXT("closable tab shows close button"), closeButton->GetVisibility(), ESlateVisibility::Visible);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseFormElementsTabCloseButtonLayoutTest,
+	"OdiroSim.UI.BaseFormElements.TabCloseButtonLayout",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Verifies BaseTab keeps the close affordance aligned against the full tab surface.
+bool FBaseFormElementsTabCloseButtonLayoutTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UWorld* world = GetWidgetAutomationWorld();
+	TestNotNull(TEXT("editor world exists"), world);
+	if (!world)
+	{
+		return false;
+	}
+
+	UClass* tabClass = LoadClass<UBaseTabWidget>(
+		nullptr,
+		TEXT("/Game/Widgets/Common/WBP_BaseTab.WBP_BaseTab_C"));
+	TestNotNull(TEXT("base tab class loads"), tabClass);
+	if (!tabClass)
+	{
+		return false;
+	}
+
+	UBaseTabWidget* tab = CreateWidget<UBaseTabWidget>(world, tabClass);
+	TestNotNull(TEXT("base tab widget creates"), tab);
+	if (!tab || !tab->WidgetTree)
+	{
+		return false;
+	}
+	tab->TakeWidget();
+	tab->SetContentAlign(EBaseHorizontalContentAlign::Center);
+	tab->SetClosable(true);
+
+	UBorder* surfaceBorder = Cast<UBorder>(tab->WidgetTree->FindWidget(TEXT("SurfaceBorder")));
+	UWidget* contentStack = tab->WidgetTree->FindWidget(TEXT("ContentStack"));
+	UWidget* closeButton = tab->WidgetTree->FindWidget(TEXT("CloseButton"));
+	TestNotNull(TEXT("surface border exists"), surfaceBorder);
+	TestNotNull(TEXT("content stack exists"), contentStack);
+	TestNotNull(TEXT("close button exists"), closeButton);
+	if (!surfaceBorder || !contentStack || !closeButton)
+	{
+		return false;
+	}
+
+	UOverlaySlot* contentStackSlot = Cast<UOverlaySlot>(contentStack->Slot);
+	UOverlaySlot* closeButtonSlot = Cast<UOverlaySlot>(closeButton->Slot);
+	TestNotNull(TEXT("content stack uses overlay slot"), contentStackSlot);
+	TestNotNull(TEXT("close button uses overlay slot"), closeButtonSlot);
+	if (!contentStackSlot || !closeButtonSlot)
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("tab surface content fills full tab width"), surfaceBorder->GetHorizontalAlignment(), HAlign_Fill);
+	TestEqual(TEXT("tab surface content fills full tab height"), surfaceBorder->GetVerticalAlignment(), VAlign_Fill);
+	TestEqual(TEXT("icon and label group follows content alignment"), contentStackSlot->GetHorizontalAlignment(), HAlign_Center);
+	TestEqual(TEXT("close button stays on the tab right edge"), closeButtonSlot->GetHorizontalAlignment(), HAlign_Right);
+	TestEqual(TEXT("close button remains vertically centered"), closeButtonSlot->GetVerticalAlignment(), VAlign_Center);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseFormElementsTabDividerMetricsTest,
+	"OdiroSim.UI.BaseFormElements.TabDividerMetrics",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Verifies BaseTab divider options size the WBP-owned side dividers and center them on tab edges.
+bool FBaseFormElementsTabDividerMetricsTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UWorld* world = GetWidgetAutomationWorld();
+	TestNotNull(TEXT("editor world exists"), world);
+	if (!world)
+	{
+		return false;
+	}
+
+	UClass* tabClass = LoadClass<UBaseTabWidget>(
+		nullptr,
+		TEXT("/Game/Widgets/Common/WBP_BaseTab.WBP_BaseTab_C"));
+	TestNotNull(TEXT("base tab class loads"), tabClass);
+	if (!tabClass)
+	{
+		return false;
+	}
+
+	UBaseTabWidget* tab = CreateWidget<UBaseTabWidget>(world, tabClass);
+	TestNotNull(TEXT("base tab widget creates"), tab);
+	if (!tab || !tab->WidgetTree)
+	{
+		return false;
+	}
+	tab->TakeWidget();
+
+	UImage* leftDivider = Cast<UImage>(tab->WidgetTree->FindWidget(TEXT("LeftDivider")));
+	UImage* rightDivider = Cast<UImage>(tab->WidgetTree->FindWidget(TEXT("RightDivider")));
+	TestNotNull(TEXT("left divider exists"), leftDivider);
+	TestNotNull(TEXT("right divider exists"), rightDivider);
+	if (!leftDivider || !rightDivider)
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("default divider width"), tab->GetDividerWidth(), 0.5f);
+	TestEqual(TEXT("default divider height"), tab->GetDividerHeight(), 16.0f);
+
+	tab->SetDividerSize(0.5f, 16.0f);
+	TestEqual(TEXT("left divider brush width"), leftDivider->GetBrush().ImageSize.X, 0.5f);
+	TestEqual(TEXT("left divider brush height"), leftDivider->GetBrush().ImageSize.Y, 16.0f);
+	TestEqual(TEXT("right divider brush width"), rightDivider->GetBrush().ImageSize.X, 0.5f);
+	TestEqual(TEXT("right divider brush height"), rightDivider->GetBrush().ImageSize.Y, 16.0f);
+	TestEqual(TEXT("left divider edge translation"), static_cast<float>(leftDivider->GetRenderTransform().Translation.X), -0.25f);
+	TestEqual(TEXT("right divider edge translation"), static_cast<float>(rightDivider->GetRenderTransform().Translation.X), 0.25f);
+	TestTrue(TEXT("left divider is visible by default"), tab->IsLeftDividerVisible());
+	TestTrue(TEXT("right divider is visible by default"), tab->IsRightDividerVisible());
+	TestEqual(TEXT("left divider widget is visible by default"), leftDivider->GetVisibility(), ESlateVisibility::Visible);
+	TestEqual(TEXT("right divider widget is visible by default"), rightDivider->GetVisibility(), ESlateVisibility::Visible);
+
+	tab->SetDividerEdgesVisible(false, true);
+	TestFalse(TEXT("left divider visibility flag can be disabled"), tab->IsLeftDividerVisible());
+	TestTrue(TEXT("right divider visibility flag remains enabled"), tab->IsRightDividerVisible());
+	TestEqual(TEXT("left divider widget hides when disabled"), leftDivider->GetVisibility(), ESlateVisibility::Collapsed);
+	TestEqual(TEXT("right divider widget remains visible"), rightDivider->GetVisibility(), ESlateVisibility::Visible);
+
+	tab->SetDividerEdgesVisible(true, false);
+	TestTrue(TEXT("left divider visibility flag can be restored"), tab->IsLeftDividerVisible());
+	TestFalse(TEXT("right divider visibility flag can be disabled"), tab->IsRightDividerVisible());
+	TestEqual(TEXT("left divider widget returns visible"), leftDivider->GetVisibility(), ESlateVisibility::Visible);
+	TestEqual(TEXT("right divider widget hides when disabled"), rightDivider->GetVisibility(), ESlateVisibility::Collapsed);
+
+	const UBaseWidgetColorCatalog* colors = UBaseWidgetColorCatalog::MakeDefaultCatalogReference().LoadSynchronous();
+	TestNotNull(TEXT("base color catalog exists"), colors);
+	if (!colors)
+	{
+		return false;
+	}
+	TestTrue(
+		TEXT("left divider uses DA divider color"),
+		leftDivider->GetColorAndOpacity().Equals(colors->LineDividerColor));
+	TestTrue(
+		TEXT("right divider uses DA divider color"),
+		rightDivider->GetColorAndOpacity().Equals(colors->LineDividerColor));
+
+	const UOverlaySlot* leftSlot = Cast<UOverlaySlot>(leftDivider->Slot);
+	const UOverlaySlot* rightSlot = Cast<UOverlaySlot>(rightDivider->Slot);
+	TestNotNull(TEXT("left divider uses overlay slot"), leftSlot);
+	TestNotNull(TEXT("right divider uses overlay slot"), rightSlot);
+	if (!leftSlot || !rightSlot)
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("left divider horizontal align"), leftSlot->GetHorizontalAlignment(), HAlign_Left);
+	TestEqual(TEXT("right divider horizontal align"), rightSlot->GetHorizontalAlignment(), HAlign_Right);
+	TestEqual(TEXT("left divider vertical align"), leftSlot->GetVerticalAlignment(), VAlign_Center);
+	TestEqual(TEXT("right divider vertical align"), rightSlot->GetVerticalAlignment(), VAlign_Center);
 	return true;
 }
 

@@ -127,6 +127,11 @@ namespace
 		const EBaseWidgetState state,
 		const bool bSelected)
 	{
+		if (variant == EBaseWidgetVariant::Ghost)
+		{
+			return ResolveButtonSurfaceColor(colors, variant, state, bSelected);
+		}
+
 		if (state == EBaseWidgetState::Disabled)
 		{
 			return colors.LineSubtleColor;
@@ -135,11 +140,6 @@ namespace
 		if (bSelected || state == EBaseWidgetState::Selected)
 		{
 			return state == EBaseWidgetState::Pressed ? colors.AccentActiveColor : colors.AccentColor;
-		}
-
-		if (variant == EBaseWidgetVariant::Ghost)
-		{
-			return FLinearColor::Transparent;
 		}
 
 		if (variant == EBaseWidgetVariant::Primary)

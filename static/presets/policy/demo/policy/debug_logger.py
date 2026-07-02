@@ -44,6 +44,8 @@ WATCH_FIELDS = {
     "pathfindTotalMs",
     "pathfindSoftCostMs",
     "pathfindSearchMs",
+    "pathfindGridCacheHit",
+    "pathfindSearchCellCount",
     "pathfindGridCellCount",
     "pathfindBlockedCellCount",
     "pathfindVisitedNodeCount",
@@ -62,6 +64,7 @@ WATCH_THRESHOLDS = {
     "pathfindTotalMs": 1.0,
     "pathfindSoftCostMs": 1.0,
     "pathfindSearchMs": 1.0,
+    "pathfindSearchCellCount": 50.0,
 }
 
 # 첫 snapshot에서 이미 이 값보다 커져 있으면 변화로 출력한다.
@@ -90,6 +93,8 @@ WATCH_INITIAL_VALUES = {
     "pathfindTotalMs": 0.0,
     "pathfindSoftCostMs": 0.0,
     "pathfindSearchMs": 0.0,
+    "pathfindGridCacheHit": False,
+    "pathfindSearchCellCount": 0,
     "pathfindGridCellCount": 0,
     "pathfindBlockedCellCount": 0,
     "pathfindVisitedNodeCount": 0,
@@ -138,6 +143,8 @@ CONTEXT_FIELDS = (
     "pathfindSoftCostMs",
     "pathfindSearchMs",
     "pathfindSmoothMs",
+    "pathfindGridCacheHit",
+    "pathfindSearchCellCount",
     "pathfindGridCellCount",
     "pathfindBlockedCellCount",
     "pathfindSoftCostCellCount",

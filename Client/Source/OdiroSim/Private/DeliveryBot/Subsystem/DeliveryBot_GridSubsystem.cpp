@@ -292,7 +292,7 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 			{
 				DrawDebugPoint(
 					GetWorld(),
-					cellInfo.WorldLocation + FVector(0.f, 0.f, 20.f),
+					cellInfo.WorldLocation , // + FVector(0.f, 0.f, 20.f)
 					8.f,
 					GetDebugColorByAreaType(cellInfo.AreaType),
 					true,

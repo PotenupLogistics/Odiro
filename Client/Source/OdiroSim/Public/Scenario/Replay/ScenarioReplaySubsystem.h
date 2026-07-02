@@ -36,6 +36,33 @@ enum class EScenarioReplayCameraMode : uint8
 	Orbit = 3
 };
 
+// One event marker loaded from an episode events.jsonl artifact for timeline UI.
+USTRUCT(BlueprintType)
+struct FScenarioReplayEventMarker
+{
+	GENERATED_BODY()
+
+	// Event time in replay seconds.
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Replay")
+	double TimeSeconds = 0.0;
+
+	// Stable event index from the event artifact when present.
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Replay")
+	int32 EventIndex = INDEX_NONE;
+
+	// High-level event type such as Stuck, Repath, or RobotTipOver.
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Replay")
+	FString EventType;
+
+	// Machine-readable or domain reason for the event.
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Replay")
+	FString Reason;
+
+	// Human-readable event message.
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Replay")
+	FString Message;
+};
+
 // Owns embedded replay loading, playback state, replay actors, and render target capture.
 UCLASS(BlueprintType)
 class ODIROSIM_API UScenarioReplaySubsystem : public UTickableWorldSubsystem
@@ -104,6 +131,9 @@ public:
 	// Returns the playback speed multiplier.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
 	double GetPlaybackSpeed() const { return PlaybackSpeed; }
+
+	// Returns optional timeline event markers loaded from events.jsonl.
+	const TArray<FScenarioReplayEventMarker>& GetReplayEventMarkers() const { return ReplayEventMarkers; }
 
 	// Returns the current replay time normalized into the 0..1 timeline range.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
@@ -221,6 +251,11 @@ private:
 
 	// Loads optional LiDAR ray frames for replay-only ray review.
 	bool LoadEpisodeLidarRayReplay(
+		const FString& EpisodeDirectory,
+		TArray<FString>& OutDiagnostics);
+
+	// Loads optional episode event markers from events.jsonl for timeline display.
+	void LoadEpisodeEventMarkers(
 		const FString& EpisodeDirectory,
 		TArray<FString>& OutDiagnostics);
 
@@ -349,6 +384,10 @@ private:
 	// Loaded optional LiDAR ray frames keyed by replay time.
 	UPROPERTY(Transient)
 	TArray<FEpisodeLidarRayFrame> LidarRayFrames;
+
+	// Loaded optional event markers keyed by replay time.
+	UPROPERTY(Transient)
+	TArray<FScenarioReplayEventMarker> ReplayEventMarkers;
 
 	// LiDAR config loaded from the episode run snapshot profile.
 	UPROPERTY(Transient)

@@ -15,6 +15,7 @@ class AgentState:
     grid: GridMap | None = None            # 길찾기용 Grid
 
     path: list[tuple[int, int]] = field(default_factory=list)   # 현재 경로 cell 목록
+    initialPath: list[tuple[int, int]] = field(default_factory=list)
     pathIndex: int = 0                                          # 현재 따라가고 있는 path index
 
     lastAction: dict[str, Any] | None = None  # 마지막으로 Unreal에 보낸 action
@@ -71,6 +72,7 @@ class AgentState:
     repathBlockRadiusCells: int = 0                                     # RePath가 동적 장애물을 확장해 막는 cell 반경
     currentLookAheadDistanceM: float = 0.0
     lastPathfindMetrics: dict[str, Any] = field(default_factory=dict)    # 마지막 A* 길찾기 성능 계측값
+    pathGridContext: Any | None = None
 
     # /scenario/start가 들어왔을 때 episode 상태를 새로 시작
     def reset_for_start(
@@ -87,6 +89,7 @@ class AgentState:
         self.grid = grid
 
         self.path = []
+        self.initialPath = []
         self.pathIndex = 0
         self.followPathWorldPoints = []
 
@@ -141,6 +144,7 @@ class AgentState:
         self.repathBlockRadiusCells = 0
         self.currentLookAheadDistanceM = 0.0
         self.lastPathfindMetrics = {}
+        self.pathGridContext = None
 
     # /scenario/decide가 들어왔을 때 마지막 observation 시간 정보 저장
     def update_decide_time(self, sequence: int, run_time_seconds: float) -> None:
@@ -190,6 +194,7 @@ class AgentState:
         self.grid = None
 
         self.path = []
+        self.initialPath = []
         self.pathIndex = 0
         self.followPathWorldPoints = []
 
@@ -244,3 +249,4 @@ class AgentState:
         self.repathBlockRadiusCells = 0
         self.currentLookAheadDistanceM = 0.0
         self.lastPathfindMetrics = {}
+        self.pathGridContext = None

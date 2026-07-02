@@ -39,6 +39,7 @@ namespace
 	const TCHAR* ReplayLidarRayDirectoryName = TEXT("lidar_rays");
 	const TCHAR* ReplayLidarRayManifestFileName = TEXT("rays.meta.json");
 	const TCHAR* ReplayProfileFileName = TEXT("profile.json");
+	const TCHAR* ReplayEventsFileName = TEXT("events.jsonl");
 
 	// Carries validated point cloud import paths and coordinate metadata.
 	struct FReplayPointCloudImportInfo
@@ -457,6 +458,8 @@ bool UScenarioReplaySubsystem::LoadEpisodeReplay(
 		PlaybackState = EScenarioReplayPlaybackState::Failed;
 		return false;
 	}
+
+	LoadEpisodeEventMarkers(LoadedEpisodeDirectory, OutDiagnostics);
 
 	if (!LoadEpisodeScenarioWorld(LoadedEpisodeDirectory, OutDiagnostics))
 	{
@@ -1088,6 +1091,7 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	Manifest = FEpisodeReplayManifest{};
 	LidarRayFrames.Reset();
 	LidarRayManifest = FEpisodeLidarRayReplayManifest{};
+	ReplayEventMarkers.Reset();
 	ReplayLidarSensorConfig = FDeliveryBotLidarSensorConfigInfo{};
 	bHasReplayLidarSensorConfig = false;
 	LoadedEpisodeDirectory.Reset();
@@ -1210,6 +1214,100 @@ bool UScenarioReplaySubsystem::LoadEpisodePointCloudWorld(
 		ImportInfo.ImportYAxisSign);
 
 	return true;
+}
+
+void UScenarioReplaySubsystem::LoadEpisodeEventMarkers(
+	const FString& EpisodeDirectory,
+	TArray<FString>& OutDiagnostics)
+{
+	ReplayEventMarkers.Reset();
+
+	FString EventsPath = FPaths::Combine(EpisodeDirectory, ReplayEventsFileName);
+	FPaths::NormalizeFilename(EventsPath);
+	if (!IFileManager::Get().FileExists(*EventsPath))
+	{
+		return;
+	}
+
+	TArray<FString> Lines;
+	if (!FFileHelper::LoadFileToStringArray(Lines, *EventsPath))
+	{
+		OutDiagnostics.Add(FString::Printf(
+			TEXT("Replay event markers unavailable; failed to read events file: %s"),
+			*EventsPath));
+		return;
+	}
+
+	int32 InvalidLineCount = 0;
+	for (const FString& SourceLine : Lines)
+	{
+		FString Line = SourceLine;
+		Line.TrimStartAndEndInline();
+		if (Line.IsEmpty())
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> EventObject;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Line);
+		if (!FJsonSerializer::Deserialize(Reader, EventObject) || !EventObject.IsValid())
+		{
+			++InvalidLineCount;
+			continue;
+		}
+
+		FString Schema;
+		if (EventObject->TryGetStringField(TEXT("schema"), Schema)
+			&& !Schema.Equals(TEXT("episode_event"), ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+
+		double TimeSeconds = 0.0;
+		if (!EventObject->TryGetNumberField(TEXT("run_time_seconds"), TimeSeconds)
+			|| !FMath::IsFinite(TimeSeconds)
+			|| TimeSeconds < 0.0
+			|| (Manifest.DurationSeconds > 0.0
+				&& TimeSeconds > Manifest.DurationSeconds + KINDA_SMALL_NUMBER))
+		{
+			++InvalidLineCount;
+			continue;
+		}
+
+		double EventIndexValue = static_cast<double>(ReplayEventMarkers.Num());
+		EventObject->TryGetNumberField(TEXT("event_index"), EventIndexValue);
+
+		FScenarioReplayEventMarker Marker;
+		Marker.TimeSeconds = TimeSeconds;
+		Marker.EventIndex = FMath::RoundToInt(EventIndexValue);
+		EventObject->TryGetStringField(TEXT("event_type"), Marker.EventType);
+		EventObject->TryGetStringField(TEXT("reason"), Marker.Reason);
+		EventObject->TryGetStringField(TEXT("message"), Marker.Message);
+		ReplayEventMarkers.Add(MoveTemp(Marker));
+	}
+
+	ReplayEventMarkers.Sort(
+		[](const FScenarioReplayEventMarker& Left, const FScenarioReplayEventMarker& Right)
+		{
+			return Left.TimeSeconds < Right.TimeSeconds;
+		});
+
+	if (InvalidLineCount > 0)
+	{
+		UE_LOG(
+			LogScenarioReplay,
+			Warning,
+			TEXT("Replay event marker load skipped invalid lines | Path=%s InvalidLines=%d"),
+			*EventsPath,
+			InvalidLineCount);
+	}
+
+	UE_LOG(
+		LogScenarioReplay,
+		Log,
+		TEXT("Replay event markers loaded | Path=%s Markers=%d"),
+		*EventsPath,
+		ReplayEventMarkers.Num());
 }
 
 bool UScenarioReplaySubsystem::LoadEpisodeLidarRayReplay(

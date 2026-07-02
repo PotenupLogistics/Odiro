@@ -130,6 +130,8 @@ def build_pathfind_debug(state: AgentState) -> dict:
         "pathfindOpenPushCount": metrics.get("pathfindOpenPushCount", 0),
         "pathfindPathCellCount": metrics.get("pathfindPathCellCount", 0),
         "pathfindReason": metrics.get("pathfindReason", ""),
+        "pathfindGridCacheHit": metrics.get("pathfindGridCacheHit", False),
+        "pathfindSearchCellCount": metrics.get("pathfindSearchCellCount", 0),
     }
 
 
@@ -152,7 +154,13 @@ def build_path_contract(state: AgentState) -> dict:
         "pathWorldPoints": build_path_world_points(state),
     }
 
-REPATH_EVENT_REASONS = {"dynamic_repath_ready", "collision_repath_ready"}
+REPATH_EVENT_REASONS = {
+    "dynamic_repath_ready",
+    "collision_repath_ready",
+    "local_repath_ready",
+    "collision_local_repath_ready",
+    "stuck_local_repath_ready",
+}
 
 
 def build_policy_events(state: AgentState, policy_name: str, reason: str) -> list[dict]:
@@ -254,11 +262,13 @@ class BotPolicy:
         self.configure_policies_from_start(request)
         self.pointCloudRecorder.configure_from_start(request)
         self.pathfinder.configure_from_control_spec(request.controlSpec)
+        state.pathGridContext = self.pathfinder.build_grid_context(request.grid)
 
         result = self.pathfinder.find_path(
             start=request.start,
             goal=request.goal,
             grid=request.grid,
+            grid_context=state.pathGridContext,
         )
         state.lastPathfindMetrics = result.metrics
 
@@ -283,6 +293,7 @@ class BotPolicy:
             }
 
         state.path = result.path
+        state.initialPath = list(result.path)
         state.pathIndex = 0
         state.followPathWorldPoints = []
 

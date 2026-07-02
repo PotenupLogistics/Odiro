@@ -28,6 +28,10 @@ class RePathPolicy:
         repath_debounce_seconds: float = 3.0,
         stuck_rejoin_lookahead_cells: int = 2,
         stuck_rejoin_max_distance_m: float = 5.0,
+        repath_local_rejoin_enabled: bool = True,
+        repath_local_rejoin_lookahead_cells: int = 2,
+        repath_local_rejoin_max_distance_m: float = 12.0,
+        repath_local_search_margin_m: float = 3.0,
     ):
         self.pathfinder = AStarPathfinder()
         self.repathDistanceM = repath_distance_m
@@ -40,6 +44,10 @@ class RePathPolicy:
         self.repathDebounceSeconds = repath_debounce_seconds
         self.stuckRejoinLookaheadCells = stuck_rejoin_lookahead_cells
         self.stuckRejoinMaxDistanceM = stuck_rejoin_max_distance_m
+        self.bRepathLocalRejoinEnabled = repath_local_rejoin_enabled
+        self.repathLocalRejoinLookaheadCells = repath_local_rejoin_lookahead_cells
+        self.repathLocalRejoinMaxDistanceM = repath_local_rejoin_max_distance_m
+        self.repathLocalSearchMarginM = repath_local_search_margin_m
 
     # /scenario/start의 lidarSpec 값으로 재탐색 기준을 갱신한다.
     def configure_from_start(self, request) -> None:
@@ -80,6 +88,10 @@ class RePathPolicy:
             0.0,
             float(control_spec.get("repathDebounceSeconds", self.repathDebounceSeconds)),
         )
+        self.repathCooldownSeconds = max(
+            0.0,
+            float(control_spec.get("repathCooldownSeconds", self.repathCooldownSeconds)),
+        )
         self.stuckRejoinLookaheadCells = max(
             1,
             int(control_spec.get("stuckRejoinLookaheadCells", self.stuckRejoinLookaheadCells)),
@@ -87,6 +99,23 @@ class RePathPolicy:
         self.stuckRejoinMaxDistanceM = max(
             0.5,
             float(control_spec.get("stuckRejoinMaxDistanceM", self.stuckRejoinMaxDistanceM)),
+        )
+        self.bRepathLocalRejoinEnabled = self.pathfinder.get_bool_config(
+            control_spec,
+            "repathLocalRejoinEnabled",
+            self.bRepathLocalRejoinEnabled,
+        )
+        self.repathLocalRejoinLookaheadCells = max(
+            1,
+            int(control_spec.get("repathLocalRejoinLookaheadCells", self.repathLocalRejoinLookaheadCells)),
+        )
+        self.repathLocalRejoinMaxDistanceM = max(
+            1.0,
+            float(control_spec.get("repathLocalRejoinMaxDistanceM", self.repathLocalRejoinMaxDistanceM)),
+        )
+        self.repathLocalSearchMarginM = max(
+            0.5,
+            float(control_spec.get("repathLocalSearchMarginM", self.repathLocalSearchMarginM)),
         )
         self.obstacleWarningDistanceM = obstacle_warning_distance_m
         self.nearObjectDistanceM = self.obstacleWarningDistanceM
@@ -132,6 +161,8 @@ class RePathPolicy:
                 return stop_action(), "collision_missing_goal"
 
             return None, "missing_goal"
+
+        self.ensure_grid_context(state)
 
         bFrontObstacleRepath = False
         bFrontRayInNearObject = self.should_repath(front_ray)
@@ -243,7 +274,10 @@ class RePathPolicy:
             return None, "repath_cooldown"
 
         if front_ray is not None and bFrontObstacleRepath:
+            previous_dynamic_cells = set(state.dynamicBlockedCells)
             self.mark_dynamic_obstacle_cells(request, state, front_ray)
+            new_dynamic_cells = state.dynamicBlockedCells - previous_dynamic_cells
+            self.pathfinder.add_blocked_cells_to_context(state.pathGridContext, new_dynamic_cells)
 
         if bStuckRepath:
             local_result = self.try_build_stuck_rejoin_path(request, state)
@@ -274,10 +308,46 @@ class RePathPolicy:
                 )
                 return stop_action(), "stuck_local_repath_ready"
 
+        if bFrontObstacleRepath and self.bRepathLocalRejoinEnabled:
+            local_result = self.try_build_local_rejoin_path(request, state, front_ray)
+            if local_result is not None:
+                local_path, local_metrics = local_result
+                state.lastPathfindMetrics = local_metrics
+                state.lastRepathTimeSeconds = request.runTimeSeconds
+                if front_ray is not None:
+                    self.remember_repath_debounce(request, state, front_ray)
+                state.path = local_path
+                state.pathIndex = 0
+                state.followPathWorldPoints = []
+                state.bRepathRequested = False
+                state.bStuckRepathRequested = False
+                state.stuckStartSeconds = None
+                state.repathCount += 1
+                state.recoveryUntilSeconds = 0.0
+                state.recoverySteering = 0.0
+                state.lastSteering = 0.0
+                decision = "collision_local_repath_ready" if bColliding else "local_repath_ready"
+                self.update_repath_debug(
+                    state=state,
+                    front_ray=front_ray,
+                    decision=decision,
+                    bForcedRepath=bForcedRepath,
+                    bFrontObstacleRepath=bFrontObstacleRepath,
+                    bNeedRepath=bNeedRepath,
+                    bCanRepathNow=bCanRepathNow,
+                    bFrontRayInNearObject=bFrontRayInNearObject,
+                    bRepathDebounced=bRepathDebounced,
+                )
+                if bColliding:
+                    return stop_action(), decision
+
+                return None, decision
+
         result = self.pathfinder.find_path(
             start=request.robotState,
             goal=state.goal,
             grid=state.grid,
+            grid_context=state.pathGridContext,
         )
         state.lastPathfindMetrics = result.metrics
 
@@ -341,6 +411,48 @@ class RePathPolicy:
         return None, "dynamic_repath_ready"
 
     # 정체 상태에서는 전체 goal 대신 가까운 기존 path cell로 짧게 재진입한다.
+    def ensure_grid_context(self, state: AgentState):
+        if state.grid is None:
+            return None
+
+        if state.pathGridContext is None or state.pathGridContext.grid is not state.grid:
+            state.pathGridContext = self.pathfinder.build_grid_context(state.grid)
+
+        return state.pathGridContext
+
+    def try_build_local_rejoin_path(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+        front_ray: LidarRay | None,
+    ) -> tuple[list[tuple[int, int]], dict] | None:
+        reference_path = self.get_rejoin_reference_path(state)
+        if state.grid is None or not reference_path:
+            return None
+
+        closest_index = self.get_closest_existing_path_index(request, state, reference_path)
+        if closest_index is None:
+            return None
+
+        anchor_index = self.get_local_rejoin_anchor_index(request, state, reference_path, closest_index, front_ray)
+        for candidate_index in self.get_rejoin_candidate_indices(
+            anchor_index,
+            len(reference_path),
+            self.repathLocalRejoinLookaheadCells,
+        ):
+            result = self.try_path_to_rejoin_candidate(
+                request=request,
+                state=state,
+                reference_path=reference_path,
+                candidate_index=candidate_index,
+                max_distance_m=self.repathLocalRejoinMaxDistanceM,
+                front_ray=front_ray,
+            )
+            if result is not None:
+                return result
+
+        return None
+
     def try_build_stuck_rejoin_path(
         self,
         request: ScenarioDecideRequest,
@@ -349,61 +461,173 @@ class RePathPolicy:
         if state.grid is None or not state.path:
             return None
 
-        closest_index = self.get_closest_existing_path_index(request, state)
+        closest_index = self.get_closest_existing_path_index(request, state, state.path)
         if closest_index is None:
             return None
 
+        for candidate_index in self.get_rejoin_candidate_indices(
+            closest_index,
+            len(state.path),
+            self.stuckRejoinLookaheadCells,
+        ):
+            result = self.try_path_to_rejoin_candidate(
+                request=request,
+                state=state,
+                reference_path=state.path,
+                candidate_index=candidate_index,
+                max_distance_m=self.stuckRejoinMaxDistanceM,
+                front_ray=None,
+            )
+            if result is not None:
+                return result
+
+        return None
+
+    # 후보 재진입 cell까지 작은 bounds 안에서 A*를 수행한다.
+    def try_path_to_rejoin_candidate(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+        reference_path: list[tuple[int, int]],
+        candidate_index: int,
+        max_distance_m: float,
+        front_ray: LidarRay | None,
+    ) -> tuple[list[tuple[int, int]], dict] | None:
+        if state.grid is None:
+            return None
+
+        candidate_cell = reference_path[candidate_index]
+        cell_lookup = state.pathGridContext.cellLookup if state.pathGridContext is not None else None
+        if not self.pathfinder.is_walkable(candidate_cell, state.grid, cell_lookup):
+            return None
+
+        candidate_x, candidate_y = self.cell_to_world_center(candidate_cell, state.grid)
+        distance_m = math.hypot(
+            request.robotState.x - candidate_x,
+            request.robotState.y - candidate_y,
+        ) / 100.0
+        if distance_m > max_distance_m:
+            return None
+
+        local_goal = GoalLocation(
+            hasGoal=True,
+            x=candidate_x,
+            y=candidate_y,
+            z=state.goal.z if state.goal is not None else request.robotState.z,
+        )
+        search_bounds = self.build_local_search_bounds(request, state, candidate_cell, front_ray)
+        result = self.pathfinder.find_path(
+            start=request.robotState,
+            goal=local_goal,
+            grid=state.grid,
+            grid_context=state.pathGridContext,
+            search_bounds=search_bounds,
+        )
+        if not result.success or len(result.path) < 2:
+            state.lastPathfindMetrics = result.metrics
+            return None
+
+        return result.path + reference_path[candidate_index + 1:], result.metrics
+
+    def get_rejoin_reference_path(self, state: AgentState) -> list[tuple[int, int]]:
+        if state.initialPath:
+            return state.initialPath
+
+        return state.path
+
+    def get_rejoin_candidate_indices(
+        self,
+        closest_index: int,
+        path_length: int,
+        lookahead_cells: int,
+    ) -> list[int]:
         candidate_indices: list[int] = []
-        for offset in range(1, self.stuckRejoinLookaheadCells + 1):
-            candidate_index = min(closest_index + offset, len(state.path) - 1)
+        for offset in range(1, lookahead_cells + 1):
+            candidate_index = min(closest_index + offset, path_length - 1)
             if candidate_index <= closest_index or candidate_index in candidate_indices:
                 continue
             candidate_indices.append(candidate_index)
 
-        for candidate_index in candidate_indices:
-            candidate_cell = state.path[candidate_index]
-            if not self.pathfinder.is_walkable(candidate_cell, state.grid):
+        return candidate_indices
+
+    def get_local_rejoin_anchor_index(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+        reference_path: list[tuple[int, int]],
+        closest_robot_index: int,
+        front_ray: LidarRay | None,
+    ) -> int:
+        if state.grid is None or front_ray is None:
+            return closest_robot_index
+
+        hit_x, hit_y = self.get_ray_hit_world_location(request, front_ray)
+        obstacle_cell = self.pathfinder.world_to_cell(hit_x, hit_y, state.grid)
+        obstacle_index = self.get_closest_path_index_to_cell(reference_path, obstacle_cell)
+        if obstacle_index is None or obstacle_index < closest_robot_index:
+            return closest_robot_index
+
+        return obstacle_index
+
+    def get_closest_path_index_to_cell(
+        self,
+        path: list[tuple[int, int]],
+        target_cell: tuple[int, int],
+    ) -> int | None:
+        if not path:
+            return None
+
+        closest_index = None
+        closest_distance = float("inf")
+        for index, cell in enumerate(path):
+            distance = math.hypot(target_cell[0] - cell[0], target_cell[1] - cell[1])
+            if distance >= closest_distance:
                 continue
 
-            candidate_x, candidate_y = self.cell_to_world_center(candidate_cell, state.grid)
-            distance_m = math.hypot(
-                request.robotState.x - candidate_x,
-                request.robotState.y - candidate_y,
-            ) / 100.0
-            if distance_m > self.stuckRejoinMaxDistanceM:
-                continue
+            closest_index = index
+            closest_distance = distance
 
-            local_goal = GoalLocation(
-                hasGoal=True,
-                x=candidate_x,
-                y=candidate_y,
-                z=state.goal.z if state.goal is not None else request.robotState.z,
-            )
-            result = self.pathfinder.find_path(
-                start=request.robotState,
-                goal=local_goal,
-                grid=state.grid,
-            )
-            if not result.success or len(result.path) < 2:
-                state.lastPathfindMetrics = result.metrics
-                continue
+        return closest_index
 
-            return result.path + state.path[candidate_index + 1:], result.metrics
+    def build_local_search_bounds(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+        target_cell: tuple[int, int],
+        front_ray: LidarRay | None,
+    ) -> tuple[int, int, int, int] | None:
+        if state.grid is None:
+            return None
 
-        return None
+        robot_cell = self.pathfinder.world_to_cell(request.robotState.x, request.robotState.y, state.grid)
+        bounds_cells = [robot_cell, target_cell]
+
+        if front_ray is not None:
+            hit_x, hit_y = self.get_ray_hit_world_location(request, front_ray)
+            bounds_cells.append(self.pathfinder.world_to_cell(hit_x, hit_y, state.grid))
+
+        margin_cells = max(1, math.ceil((self.repathLocalSearchMarginM * 100.0) / max(state.grid.cellSizeCm, 1.0)))
+        min_x = max(0, min(cell[0] for cell in bounds_cells) - margin_cells)
+        max_x = min(state.grid.gridSizeX - 1, max(cell[0] for cell in bounds_cells) + margin_cells)
+        min_y = max(0, min(cell[1] for cell in bounds_cells) - margin_cells)
+        max_y = min(state.grid.gridSizeY - 1, max(cell[1] for cell in bounds_cells) + margin_cells)
+
+        return min_x, max_x, min_y, max_y
 
     # 현재 로봇 위치에서 가장 가까운 기존 raw path index를 찾는다.
     def get_closest_existing_path_index(
         self,
         request: ScenarioDecideRequest,
         state: AgentState,
+        path: list[tuple[int, int]] | None = None,
     ) -> int | None:
-        if state.grid is None or not state.path:
+        reference_path = state.path if path is None else path
+        if state.grid is None or not reference_path:
             return None
 
         closest_index = None
         closest_distance = float("inf")
-        for index, cell in enumerate(state.path):
+        for index, cell in enumerate(reference_path):
             cell_x, cell_y = self.cell_to_world_center(cell, state.grid)
             distance = math.hypot(request.robotState.x - cell_x, request.robotState.y - cell_y)
             if distance >= closest_distance:

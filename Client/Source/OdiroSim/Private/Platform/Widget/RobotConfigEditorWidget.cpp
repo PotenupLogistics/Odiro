@@ -1,5 +1,6 @@
 #include "Platform/Widget/RobotConfigEditorWidget.h"
 
+#include "Blueprint/SlateBlueprintLibrary.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/CheckBox.h"
@@ -10,7 +11,9 @@
 #include "Components/Widget.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
+#include "Templates/UnrealTemplate.h"
 #include "Platform/PlatformUiSubsystem.h"
 #include "Platform/Preview/RobotPreviewSubsystem.h"
 #include "Platform/RobotProfileSettings.h"
@@ -78,6 +81,15 @@ void URobotConfigEditorWidget::NativeConstruct()
 			this,
 			&URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked);
 	}
+	if (ToggleLidarRaysButton)
+	{
+		ToggleLidarRaysButton->OnClicked.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked);
+		ToggleLidarRaysButton->OnClicked.AddDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked);
+	}
 	if (ClearLidarRaysButton)
 	{
 		ClearLidarRaysButton->OnClicked.RemoveDynamic(
@@ -86,6 +98,15 @@ void URobotConfigEditorWidget::NativeConstruct()
 		ClearLidarRaysButton->OnClicked.AddDynamic(
 			this,
 			&URobotConfigEditorWidget::HandleClearLidarPreviewRaysClicked);
+	}
+	if (ToggleLidarRaysCheckBox)
+	{
+		ToggleLidarRaysCheckBox->OnCheckStateChanged.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewToggleChanged);
+		ToggleLidarRaysCheckBox->OnCheckStateChanged.AddDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewToggleChanged);
 	}
 	if (ShowLidarRaysCheckBox)
 	{
@@ -190,6 +211,7 @@ void URobotConfigEditorWidget::NativeConstruct()
 
 	LoadProfileFromViewModel();
 	ShowAllProfileSections();
+	SyncLidarPreviewControlState();
 }
 
 void URobotConfigEditorWidget::NativeDestruct()
@@ -222,11 +244,23 @@ void URobotConfigEditorWidget::NativeDestruct()
 			this,
 			&URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked);
 	}
+	if (ToggleLidarRaysButton)
+	{
+		ToggleLidarRaysButton->OnClicked.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked);
+	}
 	if (ClearLidarRaysButton)
 	{
 		ClearLidarRaysButton->OnClicked.RemoveDynamic(
 			this,
 			&URobotConfigEditorWidget::HandleClearLidarPreviewRaysClicked);
+	}
+	if (ToggleLidarRaysCheckBox)
+	{
+		ToggleLidarRaysCheckBox->OnCheckStateChanged.RemoveDynamic(
+			this,
+			&URobotConfigEditorWidget::HandleLidarPreviewToggleChanged);
 	}
 	if (ShowLidarRaysCheckBox)
 	{
@@ -322,6 +356,7 @@ void URobotConfigEditorWidget::ActivateRobotPreview()
 {
 	if (bRobotPreviewActive)
 	{
+		SyncRobotPreviewViewportFrame();
 		RefreshRobotPreviewFromFields();
 		return;
 	}
@@ -380,6 +415,16 @@ FReply URobotConfigEditorWidget::NativeOnMouseButtonUp(
 	}
 
 	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
+}
+
+void URobotConfigEditorWidget::NativeTick(const FGeometry& MyGeometry, const float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	if (bRobotPreviewActive)
+	{
+		SyncRobotPreviewViewportFrame();
+	}
 }
 
 FReply URobotConfigEditorWidget::NativeOnMouseMove(
@@ -623,6 +668,16 @@ void URobotConfigEditorWidget::HandleLidarPreviewDensitySelectionChanged(
 	ApplyRobotPreviewDisplayOptions();
 }
 
+void URobotConfigEditorWidget::HandleLidarPreviewToggleChanged(const bool bIsChecked)
+{
+	if (bSyncingLidarPreviewToggleState)
+	{
+		return;
+	}
+
+	SetLidarPreviewRaysVisible(bIsChecked);
+}
+
 void URobotConfigEditorWidget::HandleRotatePreviewLeftClicked()
 {
 	if (!bRobotPreviewActive)
@@ -667,52 +722,14 @@ void URobotConfigEditorWidget::HandleRotatePreviewRightClicked()
 
 void URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked()
 {
-	if (!bRobotPreviewActive)
-	{
-		return;
-	}
-
-	FRobotProfileSettings previewSettings;
-	if (!TryReadFieldsIntoPreviewSettings(previewSettings))
-	{
-		SetRobotPreviewStatus(TEXT("Preview input is not ready"));
-		return;
-	}
-
 	URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem();
-	if (!PreviewSubsystem)
-	{
-		SetRobotPreviewStatus(TEXT("Preview subsystem is unavailable"));
-		return;
-	}
-
-	if (!PreviewSubsystem->ApplyPreviewSettings(previewSettings))
-	{
-		if (!PreviewSubsystem->StartPreview(this, previewSettings))
-		{
-			SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
-			return;
-		}
-		ApplyRobotPreviewRenderTarget();
-	}
-
-	ApplyRobotPreviewDisplayOptions();
-	PreviewSubsystem->DrawLidarPreviewRays();
-	SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+	const bool bShouldShow = !PreviewSubsystem || !PreviewSubsystem->AreLidarPreviewRaysVisible();
+	SetLidarPreviewRaysVisible(bShouldShow);
 }
 
 void URobotConfigEditorWidget::HandleClearLidarPreviewRaysClicked()
 {
-	if (!bRobotPreviewActive)
-	{
-		return;
-	}
-
-	if (URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem())
-	{
-		PreviewSubsystem->ClearLidarPreviewRays();
-		SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
-	}
+	SetLidarPreviewRaysVisible(false);
 }
 
 URobotProfileViewModel* URobotConfigEditorWidget::ResolveViewModel()
@@ -1121,6 +1138,7 @@ void URobotConfigEditorWidget::StartRobotPreview()
 		return;
 	}
 
+	SyncRobotPreviewViewportFrame(true);
 	ApplyRobotPreviewRenderTarget();
 	ApplyRobotPreviewDisplayOptions();
 	SetRobotPreviewStatus(previewSubsystem->GetStatusText());
@@ -1132,11 +1150,14 @@ void URobotConfigEditorWidget::StopRobotPreview()
 	{
 		RobotPreviewImage->SetBrush(FSlateBrush());
 	}
+	LastRobotPreviewFrameCenterPixel = FVector2D::ZeroVector;
+	LastRobotPreviewViewportSizePixel = FVector2D::ZeroVector;
 
 	if (URobotPreviewSubsystem* previewSubsystem = ResolveRobotPreviewSubsystem())
 	{
 		previewSubsystem->StopPreview(this);
 	}
+	SyncLidarPreviewControlState();
 }
 
 void URobotConfigEditorWidget::RefreshRobotPreviewFromFields()
@@ -1160,6 +1181,7 @@ void URobotConfigEditorWidget::RefreshRobotPreviewFromFields()
 		return;
 	}
 
+	SyncRobotPreviewViewportFrame();
 	if (!previewSubsystem->ApplyPreviewSettings(previewSettings))
 	{
 		if (!previewSubsystem->StartPreview(this, previewSettings))
@@ -1167,6 +1189,7 @@ void URobotConfigEditorWidget::RefreshRobotPreviewFromFields()
 			SetRobotPreviewStatus(previewSubsystem->GetStatusText());
 			return;
 		}
+		SyncRobotPreviewViewportFrame(true);
 		ApplyRobotPreviewRenderTarget();
 	}
 
@@ -1205,12 +1228,14 @@ void URobotConfigEditorWidget::ApplyRobotPreviewDisplayOptions()
 {
 	if (!bRobotPreviewActive)
 	{
+		SyncLidarPreviewControlState();
 		return;
 	}
 
 	URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem();
 	if (!PreviewSubsystem)
 	{
+		SyncLidarPreviewControlState();
 		return;
 	}
 
@@ -1230,6 +1255,108 @@ void URobotConfigEditorWidget::ApplyRobotPreviewDisplayOptions()
 
 	PreviewSubsystem->SetLidarDisplayOptions(DisplayOptions);
 	SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+	SyncLidarPreviewControlState();
+}
+
+void URobotConfigEditorWidget::SetLidarPreviewRaysVisible(const bool bShouldShow)
+{
+	if (!bRobotPreviewActive)
+	{
+		SyncLidarPreviewControlState();
+		return;
+	}
+
+	URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem();
+	if (!PreviewSubsystem)
+	{
+		SetRobotPreviewStatus(TEXT("Preview subsystem is unavailable"));
+		SyncLidarPreviewControlState();
+		return;
+	}
+
+	if (!bShouldShow)
+	{
+		PreviewSubsystem->ClearLidarPreviewRays();
+		SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+		SyncLidarPreviewControlState();
+		return;
+	}
+
+	FRobotProfileSettings PreviewSettings;
+	if (!TryReadFieldsIntoPreviewSettings(PreviewSettings))
+	{
+		SetRobotPreviewStatus(TEXT("Preview input is not ready"));
+		SyncLidarPreviewControlState();
+		return;
+	}
+
+	SyncRobotPreviewViewportFrame();
+	if (!PreviewSubsystem->ApplyPreviewSettings(PreviewSettings))
+	{
+		if (!PreviewSubsystem->StartPreview(this, PreviewSettings))
+		{
+			SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+			SyncLidarPreviewControlState();
+			return;
+		}
+		SyncRobotPreviewViewportFrame(true);
+		ApplyRobotPreviewRenderTarget();
+	}
+
+	ApplyRobotPreviewDisplayOptions();
+	if (!PreviewSubsystem->DrawLidarPreviewRays())
+	{
+		SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+		SyncLidarPreviewControlState();
+		return;
+	}
+	SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
+	SyncLidarPreviewControlState();
+}
+
+void URobotConfigEditorWidget::SyncLidarPreviewControlState()
+{
+	const URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem();
+	const bool bRaysVisible = bRobotPreviewActive
+		&& PreviewSubsystem
+		&& PreviewSubsystem->AreLidarPreviewRaysVisible();
+
+	if (ToggleLidarRaysCheckBox)
+	{
+		TGuardValue<bool> Guard(bSyncingLidarPreviewToggleState, true);
+		ToggleLidarRaysCheckBox->SetIsChecked(bRaysVisible);
+	}
+	if (ToggleLidarRaysButton)
+	{
+		const FLinearColor RayButtonColor = bRaysVisible
+			? FLinearColor(0.026f, 0.212f, 0.644f, 1.0f)
+			: FLinearColor(0.075f, 0.095f, 0.115f, 1.0f);
+		ToggleLidarRaysButton->SetBackgroundColor(RayButtonColor);
+	}
+
+	if (LidarPreviewOptionsPanel)
+	{
+		LidarPreviewOptionsPanel->SetIsEnabled(bRaysVisible);
+		LidarPreviewOptionsPanel->SetRenderOpacity(bRaysVisible ? 1.0f : 0.42f);
+		return;
+	}
+
+	if (ShowLidarRaysCheckBox)
+	{
+		ShowLidarRaysCheckBox->SetIsEnabled(bRaysVisible);
+	}
+	if (ShowLidarRangeCheckBox)
+	{
+		ShowLidarRangeCheckBox->SetIsEnabled(bRaysVisible);
+	}
+	if (ShowLidarPointsCheckBox)
+	{
+		ShowLidarPointsCheckBox->SetIsEnabled(bRaysVisible);
+	}
+	if (LidarPreviewDensityComboBox)
+	{
+		LidarPreviewDensityComboBox->SetIsEnabled(bRaysVisible);
+	}
 }
 
 void URobotConfigEditorWidget::ApplyRobotPreviewRenderTarget()
@@ -1257,6 +1384,65 @@ void URobotConfigEditorWidget::ApplyRobotPreviewRenderTarget()
 	previewBrush.SetResourceObject(renderTarget);
 	previewBrush.ImageSize = FVector2D(renderTarget->SizeX, renderTarget->SizeY);
 	RobotPreviewImage->SetBrush(previewBrush);
+}
+
+void URobotConfigEditorWidget::SyncRobotPreviewViewportFrame(const bool bForce)
+{
+	URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem();
+	if (!PreviewSubsystem)
+	{
+		return;
+	}
+
+	UWidget* PreviewFrameWidget = RobotPreviewViewportInputArea
+		? RobotPreviewViewportInputArea.Get()
+		: RobotPreviewImage.Get();
+	if (!PreviewFrameWidget)
+	{
+		return;
+	}
+
+	const FGeometry PreviewFrameGeometry = PreviewFrameWidget->GetCachedGeometry();
+	const FVector2D PreviewFrameLocalSize = PreviewFrameGeometry.GetLocalSize();
+	if (PreviewFrameLocalSize.X <= UE_SMALL_NUMBER || PreviewFrameLocalSize.Y <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	FVector2D FrameCenterPixel = FVector2D::ZeroVector;
+	FVector2D FrameCenterViewportPosition = FVector2D::ZeroVector;
+	USlateBlueprintLibrary::LocalToViewport(
+		this,
+		PreviewFrameGeometry,
+		PreviewFrameLocalSize * 0.5f,
+		FrameCenterPixel,
+		FrameCenterViewportPosition);
+
+	APlayerController* OwningPlayer = GetOwningPlayer();
+	if (!OwningPlayer)
+	{
+		return;
+	}
+
+	int32 ViewportWidth = 0;
+	int32 ViewportHeight = 0;
+	OwningPlayer->GetViewportSize(ViewportWidth, ViewportHeight);
+	const FVector2D ViewportSizePixel(static_cast<float>(ViewportWidth), static_cast<float>(ViewportHeight));
+	if (ViewportSizePixel.X <= UE_SMALL_NUMBER || ViewportSizePixel.Y <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	if (!bForce
+		&& FrameCenterPixel.Equals(LastRobotPreviewFrameCenterPixel, 0.5f)
+		&& ViewportSizePixel.Equals(LastRobotPreviewViewportSizePixel, 0.5f))
+	{
+		return;
+	}
+
+	LastRobotPreviewFrameCenterPixel = FrameCenterPixel;
+	LastRobotPreviewViewportSizePixel = ViewportSizePixel;
+	PreviewSubsystem->SetViewportFocusFrame(FrameCenterPixel, ViewportSizePixel);
 }
 
 void URobotConfigEditorWidget::SetRobotPreviewStatus(const FString& statusText) const

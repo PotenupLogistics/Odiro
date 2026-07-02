@@ -1,5 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "UI/BaseButtonWidget.h"
 #include "UI/BaseCheckBoxWidget.h"
 #include "UI/BaseContextMenuWidget.h"
 #include "UI/BaseDropdownWidget.h"
@@ -16,11 +17,25 @@
 #include "UI/BaseWidgetTokens.h"
 #include "UI/DisplayDpiScalingRule.h"
 
+#include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Border.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Editor.h"
+#include "Engine/Texture2D.h"
 #include "Engine/UserInterfaceSettings.h"
 #include "Fonts/SlateFontInfo.h"
 #include "Misc/AutomationTest.h"
+
+namespace
+{
+	// Returns the editor world used by WBP-backed widget automation tests.
+	UWorld* GetWidgetAutomationWorld()
+	{
+		return GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	}
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FBaseFormElementsSizeConstraintsTest,
@@ -70,6 +85,72 @@ bool FBaseFormElementsSizeConstraintsTest::RunTest(const FString& parameters)
 	TestFalse(TEXT("zero min height clears override"), sizeBox->IsMinDesiredHeightOverride());
 	TestFalse(TEXT("zero max width clears override"), sizeBox->IsMaxDesiredWidthOverride());
 	TestFalse(TEXT("zero max height clears override"), sizeBox->IsMaxDesiredHeightOverride());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseFormElementsIconOnlyButtonPaddingTest,
+	"OdiroSim.UI.BaseFormElements.IconOnlyButtonPadding",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Verifies icon-only buttons ignore authored content padding while labeled buttons restore it.
+bool FBaseFormElementsIconOnlyButtonPaddingTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UWorld* world = GetWidgetAutomationWorld();
+	TestNotNull(TEXT("editor world exists"), world);
+	if (!world)
+	{
+		return false;
+	}
+
+	UClass* buttonClass = LoadClass<UBaseButtonWidget>(
+		nullptr,
+		TEXT("/Game/Widgets/Common/WBP_BaseButton.WBP_BaseButton_C"));
+	TestNotNull(TEXT("base button class loads"), buttonClass);
+	if (!buttonClass)
+	{
+		return false;
+	}
+
+	UBaseButtonWidget* button = CreateWidget<UBaseButtonWidget>(world, buttonClass);
+	TestNotNull(TEXT("base button widget creates"), button);
+	if (!button || !button->WidgetTree)
+	{
+		return false;
+	}
+	button->TakeWidget();
+
+	UBorder* surfaceBorder = Cast<UBorder>(button->WidgetTree->FindWidget(TEXT("SurfaceBorder")));
+	TestNotNull(TEXT("surface border is bound"), surfaceBorder);
+	if (!surfaceBorder)
+	{
+		return false;
+	}
+
+	const FMargin authoredPadding = surfaceBorder->GetPadding();
+	TestTrue(TEXT("fixture has authored horizontal padding"), authoredPadding.Left > 0.0f);
+
+	UTexture2D* closeIcon = LoadObject<UTexture2D>(
+		nullptr,
+		TEXT("/Game/Textures/Icon/T_Icon_Close.T_Icon_Close"));
+	TestNotNull(TEXT("close icon loads"), closeIcon);
+	if (!closeIcon)
+	{
+		return false;
+	}
+
+	button->SetIcon(closeIcon);
+	button->SetLabel(FText::GetEmpty());
+	button->SynchronizeBaseProperties();
+	TestEqual(TEXT("icon-only left padding is cleared"), surfaceBorder->GetPadding().Left, 0.0f);
+	TestEqual(TEXT("icon-only right padding is cleared"), surfaceBorder->GetPadding().Right, 0.0f);
+
+	button->SetLabel(FText::FromString(TEXT("Label")));
+	button->SynchronizeBaseProperties();
+	TestEqual(TEXT("labeled left padding is restored"), surfaceBorder->GetPadding().Left, authoredPadding.Left);
+	TestEqual(TEXT("labeled right padding is restored"), surfaceBorder->GetPadding().Right, authoredPadding.Right);
 	return true;
 }
 

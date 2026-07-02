@@ -45,6 +45,9 @@ public:
 	// Changes the preview presentation backend and resets active transient resources.
 	void SetRenderMode(ERobotPreviewRenderMode NewRenderMode);
 
+	// Aligns the PlayerViewport preview focus to the WBP-authored preview frame.
+	void SetViewportFocusFrame(const FVector2D& FrameCenterPixel, const FVector2D& ViewportSizePixel);
+
 	// Applies editable profile values to the preview state.
 	bool ApplyPreviewSettings(const FRobotProfileSettings& Settings);
 
@@ -188,6 +191,12 @@ private:
 
 	// Current camera distance from the preview robot focus point.
 	float CameraDistanceCm = 320.0f;
+
+	// Desired preview focus offset in normalized full-viewport screen space.
+	FVector2D ViewportFocusOffsetNdc = FVector2D::ZeroVector;
+
+	// Full PlayerViewport aspect ratio used when converting screen offset to camera aim offset.
+	float PreviewViewportAspectRatio = 16.0f / 9.0f;
 
 	// Far-away world offset that isolates preview actors from gameplay actors.
 	FVector PreviewWorldOffset = FVector(650000.0, 0.0, 0.0);

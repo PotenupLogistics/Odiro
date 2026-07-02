@@ -1,5 +1,6 @@
 #include "Platform/Widget/RobotConfigEditorWidget.h"
 
+#include "Blueprint/SlateBlueprintLibrary.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/CheckBox.h"
@@ -10,6 +11,7 @@
 #include "Components/Widget.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
 #include "Platform/PlatformUiSubsystem.h"
 #include "Platform/Preview/RobotPreviewSubsystem.h"
@@ -322,6 +324,7 @@ void URobotConfigEditorWidget::ActivateRobotPreview()
 {
 	if (bRobotPreviewActive)
 	{
+		SyncRobotPreviewViewportFrame();
 		RefreshRobotPreviewFromFields();
 		return;
 	}
@@ -380,6 +383,16 @@ FReply URobotConfigEditorWidget::NativeOnMouseButtonUp(
 	}
 
 	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
+}
+
+void URobotConfigEditorWidget::NativeTick(const FGeometry& MyGeometry, const float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	if (bRobotPreviewActive)
+	{
+		SyncRobotPreviewViewportFrame();
+	}
 }
 
 FReply URobotConfigEditorWidget::NativeOnMouseMove(
@@ -686,6 +699,7 @@ void URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked()
 		return;
 	}
 
+	SyncRobotPreviewViewportFrame();
 	if (!PreviewSubsystem->ApplyPreviewSettings(previewSettings))
 	{
 		if (!PreviewSubsystem->StartPreview(this, previewSettings))
@@ -693,6 +707,7 @@ void URobotConfigEditorWidget::HandleDrawLidarPreviewRaysClicked()
 			SetRobotPreviewStatus(PreviewSubsystem->GetStatusText());
 			return;
 		}
+		SyncRobotPreviewViewportFrame(true);
 		ApplyRobotPreviewRenderTarget();
 	}
 
@@ -1121,6 +1136,7 @@ void URobotConfigEditorWidget::StartRobotPreview()
 		return;
 	}
 
+	SyncRobotPreviewViewportFrame(true);
 	ApplyRobotPreviewRenderTarget();
 	ApplyRobotPreviewDisplayOptions();
 	SetRobotPreviewStatus(previewSubsystem->GetStatusText());
@@ -1132,6 +1148,8 @@ void URobotConfigEditorWidget::StopRobotPreview()
 	{
 		RobotPreviewImage->SetBrush(FSlateBrush());
 	}
+	LastRobotPreviewFrameCenterPixel = FVector2D::ZeroVector;
+	LastRobotPreviewViewportSizePixel = FVector2D::ZeroVector;
 
 	if (URobotPreviewSubsystem* previewSubsystem = ResolveRobotPreviewSubsystem())
 	{
@@ -1160,6 +1178,7 @@ void URobotConfigEditorWidget::RefreshRobotPreviewFromFields()
 		return;
 	}
 
+	SyncRobotPreviewViewportFrame();
 	if (!previewSubsystem->ApplyPreviewSettings(previewSettings))
 	{
 		if (!previewSubsystem->StartPreview(this, previewSettings))
@@ -1167,6 +1186,7 @@ void URobotConfigEditorWidget::RefreshRobotPreviewFromFields()
 			SetRobotPreviewStatus(previewSubsystem->GetStatusText());
 			return;
 		}
+		SyncRobotPreviewViewportFrame(true);
 		ApplyRobotPreviewRenderTarget();
 	}
 
@@ -1257,6 +1277,65 @@ void URobotConfigEditorWidget::ApplyRobotPreviewRenderTarget()
 	previewBrush.SetResourceObject(renderTarget);
 	previewBrush.ImageSize = FVector2D(renderTarget->SizeX, renderTarget->SizeY);
 	RobotPreviewImage->SetBrush(previewBrush);
+}
+
+void URobotConfigEditorWidget::SyncRobotPreviewViewportFrame(const bool bForce)
+{
+	URobotPreviewSubsystem* PreviewSubsystem = ResolveRobotPreviewSubsystem();
+	if (!PreviewSubsystem)
+	{
+		return;
+	}
+
+	UWidget* PreviewFrameWidget = RobotPreviewViewportInputArea
+		? RobotPreviewViewportInputArea.Get()
+		: RobotPreviewImage.Get();
+	if (!PreviewFrameWidget)
+	{
+		return;
+	}
+
+	const FGeometry PreviewFrameGeometry = PreviewFrameWidget->GetCachedGeometry();
+	const FVector2D PreviewFrameLocalSize = PreviewFrameGeometry.GetLocalSize();
+	if (PreviewFrameLocalSize.X <= UE_SMALL_NUMBER || PreviewFrameLocalSize.Y <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	FVector2D FrameCenterPixel = FVector2D::ZeroVector;
+	FVector2D FrameCenterViewportPosition = FVector2D::ZeroVector;
+	USlateBlueprintLibrary::LocalToViewport(
+		this,
+		PreviewFrameGeometry,
+		PreviewFrameLocalSize * 0.5f,
+		FrameCenterPixel,
+		FrameCenterViewportPosition);
+
+	APlayerController* OwningPlayer = GetOwningPlayer();
+	if (!OwningPlayer)
+	{
+		return;
+	}
+
+	int32 ViewportWidth = 0;
+	int32 ViewportHeight = 0;
+	OwningPlayer->GetViewportSize(ViewportWidth, ViewportHeight);
+	const FVector2D ViewportSizePixel(static_cast<float>(ViewportWidth), static_cast<float>(ViewportHeight));
+	if (ViewportSizePixel.X <= UE_SMALL_NUMBER || ViewportSizePixel.Y <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	if (!bForce
+		&& FrameCenterPixel.Equals(LastRobotPreviewFrameCenterPixel, 0.5f)
+		&& ViewportSizePixel.Equals(LastRobotPreviewViewportSizePixel, 0.5f))
+	{
+		return;
+	}
+
+	LastRobotPreviewFrameCenterPixel = FrameCenterPixel;
+	LastRobotPreviewViewportSizePixel = ViewportSizePixel;
+	PreviewSubsystem->SetViewportFocusFrame(FrameCenterPixel, ViewportSizePixel);
 }
 
 void URobotConfigEditorWidget::SetRobotPreviewStatus(const FString& statusText) const

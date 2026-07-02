@@ -17,6 +17,8 @@ namespace
 	constexpr float RobotPreviewOrbitDegreesPerPixel = 0.18f;
 	constexpr float RobotPreviewZoomStepRatio = 0.88f;
 	constexpr float RobotPreviewCameraFovDegrees = 48.0f;
+	constexpr float RobotPreviewMaxViewportFocusOffsetNdc = 0.85f;
+	constexpr float RobotPreviewMinViewportAspectRatio = 0.1f;
 
 	const TCHAR* ResolveRobotPreviewDensityLabel(const ERobotPreviewLidarDisplayDensity Density)
 	{
@@ -235,6 +237,34 @@ void URobotPreviewSubsystem::SetRenderMode(const ERobotPreviewRenderMode NewRend
 
 	CleanupPreviewResources();
 	RenderMode = NewRenderMode;
+}
+
+void URobotPreviewSubsystem::SetViewportFocusFrame(
+	const FVector2D& FrameCenterPixel,
+	const FVector2D& ViewportSizePixel)
+{
+	if (ViewportSizePixel.X <= UE_SMALL_NUMBER || ViewportSizePixel.Y <= UE_SMALL_NUMBER)
+	{
+		ViewportFocusOffsetNdc = FVector2D::ZeroVector;
+		PreviewViewportAspectRatio = 16.0f / 9.0f;
+		RefreshPreviewView();
+		return;
+	}
+
+	const FVector2D HalfViewportSize = ViewportSizePixel * 0.5f;
+	ViewportFocusOffsetNdc = FVector2D(
+		FMath::Clamp(
+			(FrameCenterPixel.X - HalfViewportSize.X) / HalfViewportSize.X,
+			-RobotPreviewMaxViewportFocusOffsetNdc,
+			RobotPreviewMaxViewportFocusOffsetNdc),
+		FMath::Clamp(
+			(HalfViewportSize.Y - FrameCenterPixel.Y) / HalfViewportSize.Y,
+			-RobotPreviewMaxViewportFocusOffsetNdc,
+			RobotPreviewMaxViewportFocusOffsetNdc));
+	PreviewViewportAspectRatio = FMath::Max(
+		ViewportSizePixel.X / ViewportSizePixel.Y,
+		RobotPreviewMinViewportAspectRatio);
+	RefreshPreviewView();
 }
 
 UTextureRenderTarget2D* URobotPreviewSubsystem::CreatePreviewRenderTarget()
@@ -526,7 +556,20 @@ FTransform URobotPreviewSubsystem::CalculatePreviewCameraTransform()
 		FMath::Sin(YawRadians) * CosPitch,
 		FMath::Sin(PitchRadians));
 	const FVector CameraLocation = FocusLocation + OrbitDirection * CameraDistanceCm;
-	return FTransform((FocusLocation - CameraLocation).Rotation(), CameraLocation);
+	FVector LookAtLocation = FocusLocation;
+	const FRotator FocusRotation = (FocusLocation - CameraLocation).Rotation();
+	if (!IsUsingSceneCaptureRenderTarget() && !ViewportFocusOffsetNdc.IsNearlyZero())
+	{
+		const FRotationMatrix FocusRotationMatrix(FocusRotation);
+		const float HalfHorizontalFovRadians = FMath::DegreesToRadians(RobotPreviewCameraFovDegrees * 0.5f);
+		const float HalfFrameWidthCm = CameraDistanceCm * FMath::Tan(HalfHorizontalFovRadians);
+		const float HalfFrameHeightCm =
+			HalfFrameWidthCm / FMath::Max(PreviewViewportAspectRatio, RobotPreviewMinViewportAspectRatio);
+		LookAtLocation +=
+			FocusRotationMatrix.GetScaledAxis(EAxis::Y) * (-ViewportFocusOffsetNdc.X * HalfFrameWidthCm)
+			+ FocusRotationMatrix.GetScaledAxis(EAxis::Z) * (-ViewportFocusOffsetNdc.Y * HalfFrameHeightCm);
+	}
+	return FTransform((LookAtLocation - CameraLocation).Rotation(), CameraLocation);
 }
 
 void URobotPreviewSubsystem::RefreshPreviewView()
@@ -651,6 +694,8 @@ void URobotPreviewSubsystem::CleanupPreviewResources()
 	CameraOrbitYawDegrees = -150.0f;
 	CameraOrbitPitchDegrees = 24.0f;
 	CameraDistanceCm = 320.0f;
+	ViewportFocusOffsetNdc = FVector2D::ZeroVector;
+	PreviewViewportAspectRatio = 16.0f / 9.0f;
 	StatusText = TEXT("Preview 정리됨");
 }
 

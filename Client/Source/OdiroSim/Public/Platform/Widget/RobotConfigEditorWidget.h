@@ -52,6 +52,9 @@ protected:
 		const FGeometry& InGeometry,
 		const FPointerEvent& InMouseEvent) override;
 
+	// Keeps the viewport-backed preview centered inside the WBP preview frame.
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
 	// Applies preview camera orbit while right mouse is held.
 	virtual FReply NativeOnMouseMove(
 		const FGeometry& InGeometry,
@@ -148,6 +151,8 @@ private:
 	void ApplyRobotPreviewDisplayOptions();
 	// Applies the subsystem render target to the preview image brush.
 	void ApplyRobotPreviewRenderTarget();
+	// Pushes the WBP-authored preview input frame to the viewport-backed preview camera.
+	void SyncRobotPreviewViewportFrame(bool bForce = false);
 	// Updates the preview overlay status text.
 	void SetRobotPreviewStatus(const FString& statusText) const;
 	// Returns true when a screen-space pointer location is inside the preview input area.
@@ -189,6 +194,12 @@ private:
 
 	// True while the Robot tab owns the PlayerViewport-backed preview lifecycle.
 	bool bRobotPreviewActive = false;
+
+	// Last preview frame center sent to the viewport-backed preview camera.
+	FVector2D LastRobotPreviewFrameCenterPixel = FVector2D::ZeroVector;
+
+	// Last full viewport size sent to the viewport-backed preview camera.
+	FVector2D LastRobotPreviewViewportSizePixel = FVector2D::ZeroVector;
 
 	// Current profile path display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

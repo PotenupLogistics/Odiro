@@ -12,6 +12,7 @@ class UPanelWidget;
 class UProjectCreateScreenViewModel;
 class UProjectCreateScreenWidget;
 class UProjectPresetCardWidget;
+class UTextBlock;
 class UWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FProjectCreateScreenCancelRequested, UProjectCreateScreenWidget*, ProjectCreateScreen);
@@ -155,7 +156,7 @@ private:
 
 	// ViewModel diagnostics를 표시할 WBP-owned text.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> DiagnosticsText;
+	TObjectPtr<UTextBlock> DiagnosticsText;
 
 	// Parent folder picker를 여는 WBP-owned button.
 	UPROPERTY(Transient, meta = (BindWidget))

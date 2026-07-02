@@ -238,6 +238,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> AddActionTextBlock;
 
+	// Generated add button icon owned by AddActionButton.
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> AddActionIconImage;
+
 	// Generated remove button owned by the header row when action visibility requires it.
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> RemoveActionButton;
@@ -245,6 +249,10 @@ private:
 	// Generated remove button text owned by RemoveActionButton.
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> RemoveActionTextBlock;
+
+	// Generated remove button icon owned by RemoveActionButton.
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> RemoveActionIconImage;
 
 	// Generated fill spacer that pushes header actions to the right edge.
 	UPROPERTY(Transient)
@@ -303,9 +311,19 @@ private:
 	// Creates the generated asset summary header when the WBP header can host it.
 	void EnsureAssetHeaderSummary();
 	// Creates one generated header button and attaches it to the header row.
-	void CreateActionButton(TObjectPtr<UButton>& outButton, TObjectPtr<UTextBlock>& outTextBlock);
+	void CreateActionButton(
+		TObjectPtr<UButton>& outButton,
+		TObjectPtr<UTextBlock>& outTextBlock,
+		TObjectPtr<UImage>& outIconImage,
+		const TCHAR* iconPath);
 	// Applies visibility and label state to one generated header button.
-	void SetActionButtonState(UButton* button, UTextBlock* textBlock, bool bVisible, const FString& label) const;
+	void SetActionButtonState(
+		UButton* button,
+		UTextBlock* textBlock,
+		UImage* iconImage,
+		bool bVisible,
+		const FString& label,
+		const TCHAR* iconPath) const;
 	// Applies visibility state to the generated header action container.
 	void SetHeaderActionContainerVisible(bool bVisible) const;
 	// Applies expanded/collapsed icon and flat button style to the header toggle.

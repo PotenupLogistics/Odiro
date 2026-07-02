@@ -2,7 +2,9 @@
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "HAL/FileManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Platform/ScenarioEditorLaunchSubsystem.h"
@@ -23,6 +25,9 @@
 namespace
 {
 	const TCHAR* ScenarioEditorUiProjectScenarioFileName = TEXT("scenario.json");
+
+	// Project-relative source for the presentation demo scenario.
+	const TCHAR* ScenarioEditorUiDemoScenarioJsonPath = TEXT("Json/demo-scenario.json");
 
 	FString ResolveScenarioEditorUiProjectScenarioJsonPath(FString rawPath)
 	{
@@ -50,6 +55,14 @@ namespace
 		return FPaths::GetCleanFilename(scenarioJsonPath).Equals(
 			ScenarioEditorUiProjectScenarioFileName,
 			ESearchCase::IgnoreCase);
+	}
+
+	// Resolves the bundled demo scenario used by presentation-only LLM load flow.
+	FString ResolveScenarioEditorUiDemoScenarioJsonPath()
+	{
+		FString demoScenarioJsonPath = FPaths::Combine(FPaths::ProjectDir(), ScenarioEditorUiDemoScenarioJsonPath);
+		FPaths::NormalizeFilename(demoScenarioJsonPath);
+		return demoScenarioJsonPath;
 	}
 
 	// 기존 저장 파일을 덮어쓰지 않는 기본 scenario.json 저장 후보를 만든다.
@@ -382,6 +395,63 @@ bool UScenarioEditorUiSubsystem::LoadLatestGeneratedProjectScenario(FString& out
 	}
 
 	outStatusText = TEXT("프로젝트 시나리오를 불러왔습니다.");
+	return true;
+}
+
+bool UScenarioEditorUiSubsystem::LoadDemoProjectScenario(FString& outStatusText) const
+{
+	outStatusText.Reset();
+
+	AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		outStatusText = TEXT("시나리오 에디터 컨트롤러를 찾을 수 없습니다.");
+		return false;
+	}
+
+	FString scenarioJsonPath;
+	FString projectPath;
+	FString failureReason;
+	if (!ResolveCurrentProjectScenarioPath(scenarioJsonPath, projectPath, failureReason))
+	{
+		outStatusText = failureReason;
+		return false;
+	}
+
+	const FString demoScenarioJsonPath = ResolveScenarioEditorUiDemoScenarioJsonPath();
+	FString demoScenarioJson;
+	if (!FFileHelper::LoadFileToString(demoScenarioJson, *demoScenarioJsonPath))
+	{
+		outStatusText = FString::Printf(TEXT("시연용 scenario.json을 읽지 못했습니다: %s"), *demoScenarioJsonPath);
+		return false;
+	}
+
+	const FString scenarioJsonDirectory = FPaths::GetPath(scenarioJsonPath);
+	if (!scenarioJsonDirectory.IsEmpty())
+	{
+		IFileManager::Get().MakeDirectory(*scenarioJsonDirectory, true);
+	}
+
+	if (!FFileHelper::SaveStringToFile(
+			demoScenarioJson,
+			*scenarioJsonPath,
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outStatusText = FString::Printf(TEXT("프로젝트 scenario.json에 시나리오를 저장하지 못했습니다: %s"), *scenarioJsonPath);
+		return false;
+	}
+
+	FString resolvedJsonFilePath;
+	TArray<FString> diagnostics;
+	if (!editorController->LoadProjectScenarioJsonFile(scenarioJsonPath, resolvedJsonFilePath, diagnostics))
+	{
+		outStatusText = diagnostics.IsEmpty()
+			? FString::Printf(TEXT("scenario.json을 불러오지 못했습니다: %s"), *scenarioJsonPath)
+			: FString::Printf(TEXT("scenario.json을 불러오지 못했습니다:\n%s"), *FString::Join(diagnostics, TEXT("\n")));
+		return false;
+	}
+
+	outStatusText = TEXT("시나리오를 현재 프로젝트에 적용했습니다.");
 	return true;
 }
 

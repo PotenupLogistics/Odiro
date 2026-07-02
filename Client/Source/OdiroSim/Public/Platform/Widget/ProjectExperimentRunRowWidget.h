@@ -5,7 +5,8 @@
 #include "Shared/SimulationSetupTypes.h"
 #include "ProjectExperimentRunRowWidget.generated.h"
 
-class UButton;
+class UBaseButtonWidget;
+class UBaseProgressBarWidget;
 class UOdiroListItemViewModel;
 class UTextBlock;
 class UWidget;
@@ -22,6 +23,9 @@ class ODIROSIM_API UProjectExperimentRunRowWidget : public UOdiroCommonUserWidge
 	GENERATED_BODY()
 
 public:
+	// Designer/default row text를 bound WBP controls에 반영한다.
+	virtual void NativePreConstruct() override;
+
 	// 버튼 바인딩을 설정한다.
 	virtual void NativeConstruct() override;
 
@@ -34,6 +38,7 @@ public:
 		const FString& runId,
 		ESimulationRunState state,
 		bool bCompleted,
+		int32 progressTotalCount,
 		const FString& successRateLabel,
 		const FString& totalDurationLabel,
 		bool bCanAnalyze);
@@ -43,9 +48,28 @@ public:
 		UOdiroListItemViewModel* itemViewModel,
 		ESimulationRunState state,
 		bool bCompleted,
+		int32 progressTotalCount,
 		const FString& successRateLabel,
 		const FString& totalDurationLabel,
 		bool bCanAnalyze);
+
+	// Run table header나 preview row가 사용할 수 있는 임의 컬럼 텍스트를 설정한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RunRow")
+	void SetDisplayTexts(
+		FText runIdText,
+		FText progressText,
+		FText progressCountText,
+		FText successRateText,
+		FText totalDurationText,
+		FText actionText);
+
+	// Progress column에서 bar와 count label 표시 여부를 설정한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RunRow")
+	void SetProgressPresentation(bool bInShowProgressBar, bool bInShowProgressCountText);
+
+	// Action column에서 label과 analyze button 중 어느 쪽을 표시할지 설정한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RunRow")
+	void SetActionPresentation(bool bInShowActionText, bool bInShowAnalyzeButton);
 
 	// row가 대표하는 run directory를 반환한다.
 	const FString& GetRunDirectory() const { return RunDirectory; }
@@ -56,7 +80,7 @@ public:
 private:
 	// 분석 버튼 click을 native delegate로 변환한다.
 	UFUNCTION()
-	void HandleAnalyzeClicked();
+	void HandleAnalyzeClicked(UBaseButtonWidget* button);
 
 	// WBP가 소유한 state visual 중 현재 state만 보이게 한다.
 	void RefreshStateVisibility(ESimulationRunState state) const;
@@ -64,23 +88,73 @@ private:
 	// 특정 state visual visibility를 갱신한다.
 	static void SetStateBoxVisibility(UWidget* stateBox, bool bVisible);
 
+	// 현재 display property를 WBP text/button에 적용한다.
+	void ApplyDisplayTexts() const;
+
 	// project run directory 원본 경로.
 	FString RunDirectory;
 
 	// 현재 row에서 분석 요청을 허용하는지 여부.
 	bool bAnalyzeEnabled = false;
 
+	// InitializeRunRow로 실제 run data가 반영된 row인지 여부.
+	bool bHasRunData = false;
+
 	// Row 표시 데이터를 제공하는 project run item ViewModel 참조.
 	UPROPERTY(Transient)
 	TObjectPtr<UOdiroListItemViewModel> ItemViewModel;
+
+	// 첫 번째 run/id 컬럼 기본 텍스트.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	FText RunIdDisplayText;
+
+	// Header 호환용 progress 컬럼 기본 텍스트.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	FText ProgressDisplayText;
+
+	// Progress column에서 진행 횟수/총 횟수로 표시할 기본 텍스트.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	FText ProgressCountDisplayText;
+
+	// 세 번째 success rate 컬럼 기본 텍스트.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	FText SuccessRateDisplayText;
+
+	// 네 번째 duration/median 컬럼 기본 텍스트.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	FText TotalDurationDisplayText;
+
+	// 다섯 번째 action 컬럼 기본 텍스트.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	FText ActionDisplayText = NSLOCTEXT("ProjectExperimentRunRow", "DefaultActionText", "상세 보기");
+
+	// progress column에서 progress bar를 표시할지 여부.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	bool bShowProgressBar = false;
+
+	// progress column에서 진행 횟수/총 횟수 텍스트를 표시할지 여부.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	bool bShowProgressCountText = false;
+
+	// action column에서 일반 텍스트 label을 표시할지 여부.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	bool bShowActionText = false;
+
+	// action column에서 analyze button을 표시할지 여부.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	bool bShowAnalyzeButton = true;
 
 	// run id 표시 텍스트.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> RunIdText;
 
-	// 완료 run은 100%, 그 외 상태는 dash로 표시하는 상태 텍스트.
+	// 진행 횟수/총 횟수 표시 텍스트.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> ProgressText;
+	TObjectPtr<UTextBlock> ProgressCountText;
+
+	// 진행률을 표시하는 base progress bar.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseProgressBarWidget> ProgressBar;
 
 	// summary.json 기반 성공률 표시 텍스트.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -92,7 +166,11 @@ private:
 
 	// 분석 상세를 여는 버튼.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> AnalyzeButton;
+	TObjectPtr<UBaseButtonWidget> AnalyzeButton;
+
+	// action column label 표시 텍스트.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ActionLabelText;
 
 	// 대기 state visual container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

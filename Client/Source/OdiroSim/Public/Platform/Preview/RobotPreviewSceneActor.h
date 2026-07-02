@@ -125,6 +125,14 @@ private:
 		float RadiusCm,
 		float ThicknessScale);
 
+	// Adds center and front-boundary rays for one distance threshold.
+	void AddLidarPreviewRangeRaySet(
+		UInstancedStaticMeshComponent* Component,
+		const FVector& SensorLocationCm,
+		float RangeCm,
+		float FrontHalfAngleDegree,
+		float ThicknessScale);
+
 	// Adds one LiDAR ray using a local-space yaw and pitch direction.
 	void AddLidarPreviewRay(
 		UInstancedStaticMeshComponent* Component,
@@ -191,6 +199,14 @@ private:
 	// Beam instances for the stop distance ring.
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarStopRangeRingInstances;
+
+	// Beam instances that draw the slowdown threshold as front-facing rays.
+	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarSlowRangeRayInstances;
+
+	// Beam instances that draw the stop threshold as front-facing rays.
+	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarStopRangeRayInstances;
 
 	// Beam instances for front-half-angle boundary lines.
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")

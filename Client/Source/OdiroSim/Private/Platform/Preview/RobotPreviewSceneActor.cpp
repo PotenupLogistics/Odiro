@@ -2,6 +2,7 @@
 
 #include "Components/MeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "DeliveryBot/DeliveryBotLidarRayBeamRendering.h"
 #include "DeliveryBot/DeliveryBotLidarRayPattern.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
@@ -44,6 +45,10 @@ namespace
 		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRange_Slow.MI_RobotPreview_LidarRange_Slow'");
 	const TCHAR* PreviewLidarStopRangeMaterialPath =
 		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRange_Stop.MI_RobotPreview_LidarRange_Stop'");
+	const TCHAR* PreviewLidarSlowRangeRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Slow.MI_RobotPreview_LidarRay_Slow'");
+	const TCHAR* PreviewLidarStopRangeRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Stop.MI_RobotPreview_LidarRay_Stop'");
 	const TCHAR* PreviewLidarRayHitMaterialPath =
 		TEXT("/Script/Engine.Material'/Game/Materials/M_LidarRayHit.M_LidarRayHit'");
 	const TCHAR* PreviewLidarRayMissMaterialPath =
@@ -54,6 +59,7 @@ namespace
 	const float PreviewLidarBeamMeshLengthCm = 10.0f;
 	const float PreviewLidarRayThicknessScale = 0.64f;
 	const float PreviewLidarRangeThicknessScale = 0.4f;
+	const float PreviewLidarRangeRayThicknessScale = 0.54f;
 	const float PreviewLidarPointDiameterCm = 5.0f;
 	const int32 PreviewLidarRangeRingSegments = 64;
 	const int32 PreviewLidarSparseVisible2DRayBeams = 72;
@@ -107,12 +113,7 @@ namespace
 			return;
 		}
 
-		Material->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
-		const int32 MaterialSlotCount = FMath::Max(1, Component->GetNumMaterials());
-		for (int32 MaterialSlotIndex = 0; MaterialSlotIndex < MaterialSlotCount; ++MaterialSlotIndex)
-		{
-			Component->SetMaterial(MaterialSlotIndex, Material);
-		}
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(Component, Material);
 	}
 
 	EDeliveryBotLidarModeType ResolvePreviewLidarModeType(const FString& RawMode)
@@ -242,6 +243,10 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarSlowRangeRingInstances"));
 	LidarStopRangeRingInstances =
 		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarStopRangeRingInstances"));
+	LidarSlowRangeRayInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarSlowRangeRayInstances"));
+	LidarStopRangeRayInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarStopRangeRayInstances"));
 	LidarFrontBoundaryInstances =
 		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarFrontBoundaryInstances"));
 	LidarEndPointInstances =
@@ -292,6 +297,8 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	UMaterialInterface* LidarScanRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarScanRangeMaterialPath);
 	UMaterialInterface* LidarSlowRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarSlowRangeMaterialPath);
 	UMaterialInterface* LidarStopRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarStopRangeMaterialPath);
+	UMaterialInterface* LidarSlowRangeRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarSlowRangeRayMaterialPath);
+	UMaterialInterface* LidarStopRangeRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarStopRangeRayMaterialPath);
 
 	bUsingSkeletalBodyMesh = RobotSkeletalMesh.Succeeded();
 	bUsingFallbackBodyMesh = !bUsingSkeletalBodyMesh && !RobotBodyMesh.Succeeded();
@@ -320,6 +327,8 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	ConfigurePreviewInstancedMeshComponent(LidarRangeRingInstances, LidarBeamMesh);
 	ConfigurePreviewInstancedMeshComponent(LidarSlowRangeRingInstances, LidarBeamMesh);
 	ConfigurePreviewInstancedMeshComponent(LidarStopRangeRingInstances, LidarBeamMesh);
+	ConfigurePreviewInstancedMeshComponent(LidarSlowRangeRayInstances, LidarBeamMesh);
+	ConfigurePreviewInstancedMeshComponent(LidarStopRangeRayInstances, LidarBeamMesh);
 	ConfigurePreviewInstancedMeshComponent(LidarFrontBoundaryInstances, LidarBeamMesh);
 	ConfigurePreviewInstancedMeshComponent(LidarEndPointInstances, SphereMesh.Object);
 
@@ -366,45 +375,47 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	UMaterialInterface* ScanRangeMaterial = LidarScanRangeMaterial ? LidarScanRangeMaterial : FallbackRangeMaterial;
 	UMaterialInterface* SlowRangeMaterial = LidarSlowRangeMaterial ? LidarSlowRangeMaterial : FallbackRangeMaterial;
 	UMaterialInterface* StopRangeMaterial = LidarStopRangeMaterial ? LidarStopRangeMaterial : FallbackRangeMaterial;
+	UMaterialInterface* SlowRangeRayMaterial = LidarSlowRangeRayMaterial ? LidarSlowRangeRayMaterial : SlowRangeMaterial;
+	UMaterialInterface* StopRangeRayMaterial = LidarStopRangeRayMaterial ? LidarStopRangeRayMaterial : StopRangeMaterial;
 	if (PrimaryRayMaterial)
 	{
-		PrimaryRayMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
-		LidarPrimaryRayInstances->SetMaterial(0, PrimaryRayMaterial);
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(LidarPrimaryRayInstances, PrimaryRayMaterial);
 	}
 	if (SecondaryRayMaterial)
 	{
-		SecondaryRayMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
-		LidarSecondaryRayInstances->SetMaterial(0, SecondaryRayMaterial);
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(LidarSecondaryRayInstances, SecondaryRayMaterial);
 	}
 	if (ThreeDRayMaterial)
 	{
-		ThreeDRayMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
-		LidarThreeDRayInstances->SetMaterial(0, ThreeDRayMaterial);
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(LidarThreeDRayInstances, ThreeDRayMaterial);
 	}
 	if (FrontBoundaryMaterial)
 	{
-		FrontBoundaryMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
-		LidarFrontBoundaryInstances->SetMaterial(0, FrontBoundaryMaterial);
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(LidarFrontBoundaryInstances, FrontBoundaryMaterial);
 	}
 	if (EndPointMaterial)
 	{
-		EndPointMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
-		LidarEndPointInstances->SetMaterial(0, EndPointMaterial);
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(LidarEndPointInstances, EndPointMaterial);
 	}
 	if (ScanRangeMaterial)
 	{
-		ScanRangeMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
-		LidarRangeRingInstances->SetMaterial(0, ScanRangeMaterial);
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(LidarRangeRingInstances, ScanRangeMaterial);
 	}
 	if (SlowRangeMaterial)
 	{
-		SlowRangeMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
-		LidarSlowRangeRingInstances->SetMaterial(0, SlowRangeMaterial);
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(LidarSlowRangeRingInstances, SlowRangeMaterial);
 	}
 	if (StopRangeMaterial)
 	{
-		StopRangeMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
-		LidarStopRangeRingInstances->SetMaterial(0, StopRangeMaterial);
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(LidarStopRangeRingInstances, StopRangeMaterial);
+	}
+	if (SlowRangeRayMaterial)
+	{
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(LidarSlowRangeRayInstances, SlowRangeRayMaterial);
+	}
+	if (StopRangeRayMaterial)
+	{
+		FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(LidarStopRangeRayInstances, StopRangeRayMaterial);
 	}
 
 	ApplyPreviewColor(StageFloor, PreviewStageFloorColor);
@@ -436,6 +447,14 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	if (!LidarStopRangeMaterial)
 	{
 		ApplyPreviewColor(LidarStopRangeRingInstances, PreviewLidarStopRangeColor);
+	}
+	if (!LidarSlowRangeRayMaterial)
+	{
+		ApplyPreviewColor(LidarSlowRangeRayInstances, PreviewLidarSlowRangeColor);
+	}
+	if (!LidarStopRangeRayMaterial)
+	{
+		ApplyPreviewColor(LidarStopRangeRayInstances, PreviewLidarStopRangeColor);
 	}
 	if (!LidarFrontBoundaryMaterial)
 	{
@@ -549,24 +568,16 @@ void ARobotPreviewSceneActor::ConfigurePreviewInstancedMeshComponent(
 	UInstancedStaticMeshComponent* Component,
 	UStaticMesh* Mesh)
 {
-	if (!Component)
-	{
-		return;
-	}
-
-	Component->SetupAttachment(LidarRayRoot);
-	Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Component->SetGenerateOverlapEvents(false);
-	Component->SetMobility(EComponentMobility::Movable);
-	Component->SetCastShadow(false);
-	Component->SetVisibility(false, true);
-	Component->SetHiddenInGame(true);
-	Component->SetCanEverAffectNavigation(false);
-	Component->ComponentTags.Add(RobotPreviewTag);
-	if (Mesh)
-	{
-		Component->SetStaticMesh(Mesh);
-	}
+	FDeliveryBotLidarRayBeamComponentOptions BeamComponentOptions;
+	BeamComponentOptions.ComponentTag = RobotPreviewTag;
+	BeamComponentOptions.bVisible = false;
+	BeamComponentOptions.bHiddenInGame = true;
+	BeamComponentOptions.bCastShadow = false;
+	FDeliveryBotLidarRayBeamRendering::ConfigureBeamComponent(
+		Component,
+		LidarRayRoot,
+		Mesh,
+		BeamComponentOptions);
 }
 
 void ARobotPreviewSceneActor::ConfigurePreviewSkeletalMeshComponent(USkeletalMeshComponent* Component)
@@ -642,6 +653,8 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 	UMaterialInterface* LidarScanRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarScanRangeMaterialPath);
 	UMaterialInterface* LidarSlowRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarSlowRangeMaterialPath);
 	UMaterialInterface* LidarStopRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarStopRangeMaterialPath);
+	UMaterialInterface* LidarSlowRangeRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarSlowRangeRayMaterialPath);
+	UMaterialInterface* LidarStopRangeRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarStopRangeRayMaterialPath);
 
 	TArray<UInstancedStaticMeshComponent*> LidarOverlayComponents = {
 		LidarPrimaryRayInstances.Get(),
@@ -650,6 +663,8 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 		LidarRangeRingInstances.Get(),
 		LidarSlowRangeRingInstances.Get(),
 		LidarStopRangeRingInstances.Get(),
+		LidarSlowRangeRayInstances.Get(),
+		LidarStopRangeRayInstances.Get(),
 		LidarFrontBoundaryInstances.Get(),
 		LidarEndPointInstances.Get()
 	};
@@ -686,6 +701,16 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 	ApplyOptionalPreviewMaterial(
 		LidarStopRangeRingInstances.Get(),
 		LidarStopRangeMaterial ? LidarStopRangeMaterial : LidarPreviewRangeMaterial);
+	ApplyOptionalPreviewMaterial(
+		LidarSlowRangeRayInstances.Get(),
+		LidarSlowRangeRayMaterial
+			? LidarSlowRangeRayMaterial
+			: (LidarSlowRangeMaterial ? LidarSlowRangeMaterial : LidarPreviewRangeMaterial));
+	ApplyOptionalPreviewMaterial(
+		LidarStopRangeRayInstances.Get(),
+		LidarStopRangeRayMaterial
+			? LidarStopRangeRayMaterial
+			: (LidarStopRangeMaterial ? LidarStopRangeMaterial : LidarPreviewRangeMaterial));
 
 	if (!LidarPrimaryRayMaterial)
 	{
@@ -719,6 +744,14 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 	{
 		ApplyPreviewColor(LidarStopRangeRingInstances, PreviewLidarStopRangeColor);
 	}
+	if (!LidarSlowRangeRayMaterial)
+	{
+		ApplyPreviewColor(LidarSlowRangeRayInstances, PreviewLidarSlowRangeColor);
+	}
+	if (!LidarStopRangeRayMaterial)
+	{
+		ApplyPreviewColor(LidarStopRangeRayInstances, PreviewLidarStopRangeColor);
+	}
 
 	const FDeliveryBotLidarSensorConfigInfo LidarConfig = MakePreviewLidarConfig(CurrentSettings.Lidar);
 	const float SensorHeightCm = LidarConfig.SensorHeightM * 100.0f;
@@ -751,6 +784,12 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 				SensorLocationCm,
 				SlowDistanceCm,
 				PreviewLidarRangeThicknessScale);
+			AddLidarPreviewRangeRaySet(
+				LidarSlowRangeRayInstances,
+				SensorLocationCm,
+				SlowDistanceCm,
+				FrontHalfAngleDegree,
+				PreviewLidarRangeRayThicknessScale);
 		}
 		if (StopDistanceCm > UE_SMALL_NUMBER)
 		{
@@ -759,6 +798,12 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 				SensorLocationCm,
 				StopDistanceCm,
 				PreviewLidarRangeThicknessScale);
+			AddLidarPreviewRangeRaySet(
+				LidarStopRangeRayInstances,
+				SensorLocationCm,
+				StopDistanceCm,
+				FrontHalfAngleDegree,
+				PreviewLidarRangeRayThicknessScale);
 		}
 
 		AddLidarPreviewBeam(
@@ -868,10 +913,7 @@ void ARobotPreviewSceneActor::RefreshLidarPreviewRays()
 
 	for (UInstancedStaticMeshComponent* Component : LidarOverlayComponents)
 	{
-		if (Component)
-		{
-			Component->MarkRenderStateDirty();
-		}
+		FDeliveryBotLidarRayBeamRendering::MarkBeamRenderStateDirty(Component);
 	}
 }
 
@@ -887,17 +929,15 @@ void ARobotPreviewSceneActor::ClearLidarPreviewGeometry()
 		LidarRangeRingInstances.Get(),
 		LidarSlowRangeRingInstances.Get(),
 		LidarStopRangeRingInstances.Get(),
+		LidarSlowRangeRayInstances.Get(),
+		LidarStopRangeRayInstances.Get(),
 		LidarFrontBoundaryInstances.Get(),
 		LidarEndPointInstances.Get()
 	};
 	for (UInstancedStaticMeshComponent* Component : LidarOverlayComponents)
 	{
-		if (Component)
-		{
-			Component->ClearInstances();
-			Component->SetVisibility(bLidarPreviewRaysVisible, true);
-			Component->SetHiddenInGame(!bLidarPreviewRaysVisible);
-		}
+		FDeliveryBotLidarRayBeamRendering::ClearBeamInstances(Component);
+		FDeliveryBotLidarRayBeamRendering::SetBeamComponentVisible(Component, bLidarPreviewRaysVisible);
 	}
 }
 
@@ -912,25 +952,13 @@ bool ARobotPreviewSceneActor::AddLidarPreviewBeam(
 		return false;
 	}
 
-	const FVector RayDelta = EndLocationCm - StartLocationCm;
-	const double RayLengthCm = RayDelta.Size();
-	constexpr double MinRayBeamDimension = 0.001;
-	if (RayLengthCm <= MinRayBeamDimension)
-	{
-		return false;
-	}
-
-	const FVector RayDirection = RayDelta / RayLengthCm;
-	const FVector Midpoint = StartLocationCm + RayDelta * 0.5;
-	const FRotator Rotation = FRotationMatrix::MakeFromX(RayDirection).Rotator();
-	const double SafeBeamLengthCm = FMath::Max(MinRayBeamDimension, static_cast<double>(LidarBeamMeshLengthCm));
-	const double SafeThicknessScale = FMath::Max(MinRayBeamDimension, static_cast<double>(ThicknessScale));
-	const FVector Scale(
-		RayLengthCm / SafeBeamLengthCm,
-		SafeThicknessScale,
-		SafeThicknessScale);
-	Component->AddInstance(FTransform(Rotation, Midpoint, Scale), false);
-	return true;
+	return FDeliveryBotLidarRayBeamRendering::AddBeamInstance(
+		Component,
+		StartLocationCm,
+		EndLocationCm,
+		LidarBeamMeshLengthCm,
+		ThicknessScale,
+		false);
 }
 
 void ARobotPreviewSceneActor::AddLidarPreviewRangeRing(
@@ -957,6 +985,41 @@ void ARobotPreviewSceneActor::AddLidarPreviewRangeRing(
 			CenterLocationCm + EndDirection * RadiusCm,
 			ThicknessScale);
 	}
+}
+
+void ARobotPreviewSceneActor::AddLidarPreviewRangeRaySet(
+	UInstancedStaticMeshComponent* Component,
+	const FVector& SensorLocationCm,
+	const float RangeCm,
+	const float FrontHalfAngleDegree,
+	const float ThicknessScale)
+{
+	if (!Component || RangeCm <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	AddLidarPreviewBeam(
+		Component,
+		SensorLocationCm,
+		SensorLocationCm + FVector::ForwardVector * RangeCm,
+		ThicknessScale);
+
+	if (FrontHalfAngleDegree <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	AddLidarPreviewBeam(
+		Component,
+		SensorLocationCm,
+		SensorLocationCm + FRotator(0.0f, FrontHalfAngleDegree, 0.0f).Vector() * RangeCm,
+		ThicknessScale);
+	AddLidarPreviewBeam(
+		Component,
+		SensorLocationCm,
+		SensorLocationCm + FRotator(0.0f, -FrontHalfAngleDegree, 0.0f).Vector() * RangeCm,
+		ThicknessScale);
 }
 
 void ARobotPreviewSceneActor::AddLidarPreviewRay(

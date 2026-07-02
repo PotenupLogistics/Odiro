@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Shared/EpisodeLidarRayReplayDataTypes.h"
 #include "Shared/EpisodeReplayDataTypes.h"
+#include "Shared/Struct/DeliveryBot/Perception/DeliveryBotLidarSensorInfo.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "ScenarioReplaySubsystem.generated.h"
 
@@ -223,6 +224,11 @@ private:
 		const FString& EpisodeDirectory,
 		TArray<FString>& OutDiagnostics);
 
+	// Loads the episode robot LiDAR config used for replay sensor range overlays.
+	bool LoadEpisodeLidarSensorConfig(
+		const FString& EpisodeDirectory,
+		TArray<FString>& OutDiagnostics);
+
 	// Spawns the replay-only LiDAR ray actor when ray frames are loaded.
 	bool SpawnReplayLidarRayActor(TArray<FString>& OutDiagnostics);
 
@@ -343,6 +349,14 @@ private:
 	// Loaded optional LiDAR ray frames keyed by replay time.
 	UPROPERTY(Transient)
 	TArray<FEpisodeLidarRayFrame> LidarRayFrames;
+
+	// LiDAR config loaded from the episode run snapshot profile.
+	UPROPERTY(Transient)
+	FDeliveryBotLidarSensorConfigInfo ReplayLidarSensorConfig;
+
+	// True when ReplayLidarSensorConfig was loaded from a profile artifact.
+	UPROPERTY(Transient)
+	bool bHasReplayLidarSensorConfig = false;
 
 	// Current playback state.
 	UPROPERTY(Transient)

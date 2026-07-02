@@ -1,10 +1,13 @@
 ﻿#include "DeliveryBot/Component/DeliveryBot_DriveComponent.h"
 #include "ChaosVehicleMovementComponent.h"
 #include "ChaosWheeledVehicleMovementComponent.h"
+#include "Components/PrimitiveComponent.h"
 
 namespace
 {
 	constexpr float KMH_TO_CMS = 27.777778f;
+	// Forward-only drive allows tiny numerical noise but removes real backward drift.
+	constexpr float REVERSE_VELOCITY_CLAMP_TOLERANCE_CMS = 1.f;
 }
 
 // 드라이브 컴포넌트의 기본 Tick 설정을 초기화한다.
@@ -44,7 +47,8 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 				DriveConfigInfo.GearSwitchBrakeInput,
 				FMath::Max(DriveConfigInfo.StopBrakeInput, requestedBrake));
 		const bool bTargetHandbrake =
-			DriveConfigInfo.bUseHandbrakeWhenBrake && (effectiveMoveCommandInfo.bBrake || bForwardCommandRollingBackward);
+			(DriveConfigInfo.bUseHandbrakeWhenBrake && effectiveMoveCommandInfo.bBrake)
+			|| bForwardCommandRollingBackward;
 
 		if (targetBrake >= 1.f - KINDA_SMALL_NUMBER)
 		{
@@ -100,7 +104,10 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 		brake = FMath::Max(brake, FMath::Min(overspeedBrake, DriveConfigInfo.SpeedLimitBrake));
 	}
 
-	const bool bTargetHandbrake = DriveConfigInfo.bUseHandbrakeWhenBrake && effectiveMoveCommandInfo.bBrake;
+	const bool bRollingBackward = vehicleMovement->GetForwardSpeed() < -REVERSE_VELOCITY_CLAMP_TOLERANCE_CMS;
+	const bool bTargetHandbrake =
+		(DriveConfigInfo.bUseHandbrakeWhenBrake && effectiveMoveCommandInfo.bBrake)
+		|| bRollingBackward;
 
 	ApplyDriveInput(
 		vehicleMovement,
@@ -128,7 +135,9 @@ void UDeliveryBot_DriveComponent::ApplyParkingStop(UChaosVehicleMovementComponen
 	vehicleMovement->SetThrottleInput(0.f);
 	vehicleMovement->SetSteeringInput(0.f);
 	vehicleMovement->SetBrakeInput(1.f);
-	vehicleMovement->SetHandbrakeInput(DriveConfigInfo.bUseHandbrakeWhenBrake);
+	vehicleMovement->SetHandbrakeInput(true);
+
+	ClampReverseLinearVelocity(vehicleMovement);
 }
 
 // Applies a forward-gear stop for stale policy commands without engaging the handbrake.
@@ -168,7 +177,7 @@ void UDeliveryBot_DriveComponent::ApplyPolicyTimeoutSlowStop(
 		0.f,
 		0.f,
 		targetBrake,
-		false,
+		true,
 		DriveConfigInfo.MaxSpeedKmh,
 		safeDeltaTime);
 }
@@ -261,7 +270,36 @@ void UDeliveryBot_DriveComponent::ApplyDriveInput(
 	vehicleMovement->SetThrottleInput(CurrentThrottleInput);
 	vehicleMovement->SetSteeringInput(CurrentSteeringInput);
 	vehicleMovement->SetBrakeInput(CurrentBrakeInput);
-	vehicleMovement->SetHandbrakeInput(bHandbrake);
+	vehicleMovement->SetHandbrakeInput(
+		bHandbrake
+		|| targetBrake >= 1.f - KINDA_SMALL_NUMBER
+		|| vehicleMovement->GetForwardSpeed() < -REVERSE_VELOCITY_CLAMP_TOLERANCE_CMS);
+
+	ClampReverseLinearVelocity(vehicleMovement);
+}
+
+// 후진이 비활성화된 구동부에서 충돌이나 제동 반력으로 생긴 후방 선속도 성분을 제거한다.
+void UDeliveryBot_DriveComponent::ClampReverseLinearVelocity(UChaosVehicleMovementComponent* vehicleMovement) const
+{
+	if (!IsValid(vehicleMovement) || !IsValid(vehicleMovement->UpdatedPrimitive))
+		return;
+
+	UPrimitiveComponent* primitive = vehicleMovement->UpdatedPrimitive.Get();
+	if (!primitive->IsSimulatingPhysics())
+		return;
+
+	FVector forward = primitive->GetForwardVector();
+	forward.Z = 0.f;
+	if (!forward.Normalize())
+		return;
+
+	const FVector currentVelocity = primitive->GetPhysicsLinearVelocity();
+	const float signedForwardVelocity = FVector::DotProduct(currentVelocity, forward);
+	if (signedForwardVelocity >= -REVERSE_VELOCITY_CLAMP_TOLERANCE_CMS)
+		return;
+
+	const FVector clampedVelocity = currentVelocity - (forward * signedForwardVelocity);
+	primitive->SetPhysicsLinearVelocity(clampedVelocity, false);
 }
 
 // 주행 설정값을 보정해 저장하고 현재 목표 속도를 유효 범위로 맞춘다.

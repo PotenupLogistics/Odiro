@@ -84,6 +84,9 @@ protected:
 	float CurrentTargetSpeedKmh{ 0.f };
 
 private:
+	// Removes backward physics velocity introduced by braking or collision impulses.
+	void ClampReverseLinearVelocity(UChaosVehicleMovementComponent* vehicleMovement) const;
+
 	// Smooths and applies low-level drive inputs to Chaos movement.
 	void ApplyDriveInput(
 		UChaosVehicleMovementComponent* vehicleMovement,

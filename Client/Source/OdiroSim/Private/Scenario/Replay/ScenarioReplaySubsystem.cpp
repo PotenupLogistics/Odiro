@@ -2,6 +2,7 @@
 
 #include "DeliveryBot/Actor/DeliveryBotLidarRayReviewActor.h"
 #include "DeliveryBot/Actor/DeliveryBotPointCloudReviewActor.h"
+#include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
 #include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
@@ -37,6 +38,7 @@ namespace
 	const TCHAR* ReplayPointCloudCaptureSummaryFileName = TEXT("capture_summary.json");
 	const TCHAR* ReplayLidarRayDirectoryName = TEXT("lidar_rays");
 	const TCHAR* ReplayLidarRayManifestFileName = TEXT("rays.meta.json");
+	const TCHAR* ReplayProfileFileName = TEXT("profile.json");
 
 	// Carries validated point cloud import paths and coordinate metadata.
 	struct FReplayPointCloudImportInfo
@@ -93,6 +95,42 @@ namespace
 		return FPaths::IsRelative(FrameFile)
 			? FPaths::Combine(FPaths::GetPath(ManifestPath), FrameFile)
 			: FrameFile;
+	}
+
+	// Normalizes a profile path candidate before file existence checks.
+	FString NormalizeReplayProfileCandidate(const FString& ProfilePath)
+	{
+		FString NormalizedPath = ProfilePath;
+		FPaths::NormalizeFilename(NormalizedPath);
+		FPaths::CollapseRelativeDirectories(NormalizedPath);
+		return NormalizedPath;
+	}
+
+	// Resolves the profile snapshot that supplied the replay robot LiDAR settings.
+	bool TryResolveEpisodeReplayProfilePath(
+		const FString& EpisodeDirectory,
+		FString& OutProfilePath)
+	{
+		const TArray<FString> CandidatePaths = {
+			FPaths::Combine(EpisodeDirectory, ReplayProfileFileName),
+			FPaths::Combine(EpisodeDirectory, TEXT(".."), ReplayProfileFileName),
+			FPaths::Combine(EpisodeDirectory, TEXT(".."), TEXT("snapshot"), ReplayProfileFileName),
+			FPaths::Combine(EpisodeDirectory, TEXT(".."), TEXT(".."), TEXT("snapshot"), ReplayProfileFileName),
+			FPaths::Combine(EpisodeDirectory, TEXT(".."), TEXT(".."), ReplayProfileFileName)
+		};
+
+		for (const FString& CandidatePath : CandidatePaths)
+		{
+			const FString NormalizedPath = NormalizeReplayProfileCandidate(CandidatePath);
+			if (IFileManager::Get().FileExists(*NormalizedPath))
+			{
+				OutProfilePath = NormalizedPath;
+				return true;
+			}
+		}
+
+		OutProfilePath = NormalizeReplayProfileCandidate(CandidatePaths.Last());
+		return false;
 	}
 
 	// Counts all ray samples loaded for an optional LiDAR ray replay layer.
@@ -436,6 +474,7 @@ bool UScenarioReplaySubsystem::LoadEpisodeReplay(
 	}
 
 	LoadEpisodePointCloudWorld(LoadedEpisodeDirectory, OutDiagnostics);
+	LoadEpisodeLidarSensorConfig(LoadedEpisodeDirectory, OutDiagnostics);
 	LoadEpisodeLidarRayReplay(LoadedEpisodeDirectory, OutDiagnostics);
 
 	FActorSpawnParameters SpawnParameters;
@@ -650,7 +689,7 @@ bool UScenarioReplaySubsystem::HasReplayPointCloud() const
 
 bool UScenarioReplaySubsystem::HasReplayLidarRays() const
 {
-	return !LidarRayFrames.IsEmpty();
+	return bHasReplayLidarSensorConfig || !LidarRayFrames.IsEmpty();
 }
 
 int32 UScenarioReplaySubsystem::GetLidarRayFrameCount() const
@@ -1049,6 +1088,8 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	Manifest = FEpisodeReplayManifest{};
 	LidarRayFrames.Reset();
 	LidarRayManifest = FEpisodeLidarRayReplayManifest{};
+	ReplayLidarSensorConfig = FDeliveryBotLidarSensorConfigInfo{};
+	bHasReplayLidarSensorConfig = false;
 	LoadedEpisodeDirectory.Reset();
 	CurrentReplayTimeSeconds = 0.0;
 	CurrentFrameIndex = INDEX_NONE;
@@ -1258,7 +1299,65 @@ bool UScenarioReplaySubsystem::LoadEpisodeLidarRayReplay(
 		LoadedRayCount,
 		LidarRayManifest.FirstSensorSequence,
 		LidarRayManifest.LastSensorSequence);
-	return HasReplayLidarRays();
+	return !LidarRayFrames.IsEmpty();
+}
+
+bool UScenarioReplaySubsystem::LoadEpisodeLidarSensorConfig(
+	const FString& EpisodeDirectory,
+	TArray<FString>& OutDiagnostics)
+{
+	ReplayLidarSensorConfig = FDeliveryBotLidarSensorConfigInfo{};
+	bHasReplayLidarSensorConfig = false;
+
+	FString ProfilePath;
+	if (!TryResolveEpisodeReplayProfilePath(EpisodeDirectory, ProfilePath))
+	{
+		OutDiagnostics.Add(FString::Printf(
+			TEXT("Replay LiDAR range layer using default config: profile.json not found near episode directory. Last checked: %s"),
+			*ProfilePath));
+		return false;
+	}
+
+	const UDeliveryBotSetupCompiler* DeliveryBotSetupCompiler =
+		NewObject<UDeliveryBotSetupCompiler>(this);
+	if (!IsValid(DeliveryBotSetupCompiler))
+	{
+		OutDiagnostics.Add(TEXT("Replay LiDAR range layer using default config: setup compiler unavailable."));
+		return false;
+	}
+
+	const FDeliveryBotSetupCompileResult CompileResult =
+		DeliveryBotSetupCompiler->CompileDeliveryBotSetupFromJsonFile(ProfilePath);
+	for (const FScenarioCompileDiagnostic& Diagnostic : CompileResult.Diagnostics)
+	{
+		if (Diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error)
+		{
+			OutDiagnostics.Add(FString::Printf(
+				TEXT("Replay LiDAR profile diagnostic: %s"),
+				*Diagnostic.Message));
+		}
+	}
+
+	if (!CompileResult.bSuccess)
+	{
+		OutDiagnostics.Add(FString::Printf(
+			TEXT("Replay LiDAR range layer using default config: profile compile failed: %s"),
+			*ProfilePath));
+		return false;
+	}
+
+	ReplayLidarSensorConfig = CompileResult.SetupInfo.LidarSensorConfigInfo;
+	bHasReplayLidarSensorConfig = true;
+	UE_LOG(
+		LogScenarioReplay,
+		Log,
+		TEXT("Replay LiDAR sensor config loaded | Profile: %s RangeM=%.2f SlowM=%.2f StopM=%.2f FrontHalfAngle=%.2f"),
+		*ProfilePath,
+		ReplayLidarSensorConfig.ScanRangeM,
+		ReplayLidarSensorConfig.SlowDownDistanceM,
+		ReplayLidarSensorConfig.StopDistanceM,
+		ReplayLidarSensorConfig.FrontHalfAngleDegree);
+	return true;
 }
 
 bool UScenarioReplaySubsystem::SpawnReplayLidarRayActor(TArray<FString>& OutDiagnostics)
@@ -1725,9 +1824,18 @@ void UScenarioReplaySubsystem::RefreshReplayLidarRayActor()
 		return;
 	}
 
+	FEpisodeReplayRobotFrame RobotFrame;
+	int32 RobotFrameIndex = INDEX_NONE;
+	if (!BuildInterpolatedFrameAtTime(CurrentReplayTimeSeconds, RobotFrame, RobotFrameIndex))
+	{
+		ReplayLidarRayActor->ClearLidarRays();
+		return;
+	}
+
 	ReplayLidarRayActor->ApplyLidarRayFrame(
+		RobotFrame,
+		ReplayLidarSensorConfig,
 		GetCurrentLidarRayFrame(),
-		LidarRayManifest,
 		ReplayWorldOffset);
 }
 

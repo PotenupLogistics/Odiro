@@ -10,6 +10,8 @@ paths:
   - Client/Source/OdiroSim/Private/Shared/**
   - Client/Source/OdiroSim/Public/DeliveryBot/Actor/DeliveryBotLidarRayReviewActor.h
   - Client/Source/OdiroSim/Private/DeliveryBot/Actor/DeliveryBotLidarRayReviewActor.cpp
+  - Client/Source/OdiroSim/Public/DeliveryBot/DeliveryBotLidarRayBeamRendering.h
+  - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayBeamRendering.cpp
   - Client/Source/OdiroSim/Public/DeliveryBot/DeliveryBotLidarRayPattern.h
   - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayPattern.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayCardWidget.h
@@ -82,6 +84,8 @@ entry:
     description: Robot configuration left preview stage, PlayerViewport primary preview, SceneCapture fallback, profile-driven visual and sensor updates.
     read:
       - Client/Docs/RobotPreviewAgent.local.md
+      - Client/Source/OdiroSim/Public/DeliveryBot/DeliveryBotLidarRayBeamRendering.h
+      - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayBeamRendering.cpp
       - Client/Source/OdiroSim/Public/DeliveryBot/DeliveryBotLidarRayPattern.h
       - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayPattern.cpp
       - Client/Source/OdiroSim/Public/Platform/Preview
@@ -111,6 +115,8 @@ entry:
       - Client/Source/OdiroSim/Private/Episode
       - Client/Source/OdiroSim/Public/Shared
       - Client/Source/OdiroSim/Private/Shared
+      - Client/Source/OdiroSim/Public/DeliveryBot/DeliveryBotLidarRayBeamRendering.h
+      - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayBeamRendering.cpp
       - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayCardWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
@@ -174,10 +180,10 @@ guardrails:
   - Embedded Replay map and point-cloud toggles are render-layer visibility only; they must not alter replay frames, robot playback, policy, or physics.
   - Embedded Replay point-cloud review uses LidarPointCloudRuntime rendering for Orbit, Free, and VehicleFront views, while TopDown uses review-actor-owned HISM sphere instances because the plugin renderer is not reliable in orthographic capture.
   - DeliveryBot LiDAR raw hits are preserved for point-cloud/replay review, while floor/corridor/walkable surfaces are separated from policy obstacle behavior through the per-ray blocksPolicy flag.
-  - Embedded Replay LiDAR Ray review is a replay-only optional layer sourced from Unreal sensor snapshots and stored under episode/replay/lidar_rays; it must not depend on Python point-cloud artifacts.
-  - ScenarioReplaySubsystem owns LiDAR Ray artifact load state and time-to-frame selection; render actors should consume its current-frame API rather than reading rays.frames.bin directly.
+  - Embedded Replay LiDAR Ray review is a replay-only optional sensor-range layer driven by the episode profile LiDAR config and current replay robot frame; optional Unreal sensor snapshots under episode/replay/lidar_rays may inform frame timing but it must not depend on Python point-cloud artifacts.
+  - ScenarioReplaySubsystem owns Replay LiDAR profile config load, optional ray artifact state, and time-to-frame selection; render actors should consume its current-frame API rather than reading rays.frames.bin directly.
   - Embedded Replay LiDAR Ray rendering uses a ScenarioReplaySubsystem-owned replay-only actor; UI controls should toggle subsystem visibility, not spawn actors or read ray files.
-  - Embedded Replay LiDAR Ray rendering uses SM_LiDARLay through hit/miss UInstancedStaticMeshComponent components with M_LidarRayHit and M_LidarRayMiss; keep the layer default-off and add it to SceneCapture show-only only while toggled visible.
+  - Robot profile preview and Embedded Replay LiDAR Ray rendering share DeliveryBotLidarRayBeamRendering for SM_LiDARLay beam component setup, material assignment, and transform math; keep Replay default-off and add it to SceneCapture show-only only while toggled visible.
   - Embedded Replay V2 wheel data stores baked visual wheel poses from the runtime robot; replay actors must apply the poses without running Chaos Vehicle, policy, HTTP, or sensors.
   - Replay-specific high-frequency data belongs under episode/replay/ (replay.meta.json, replay.frames.bin, and future lidar_rays files); trace.jsonl remains LLM/human analysis-oriented unless a task explicitly changes trace.
 verify:

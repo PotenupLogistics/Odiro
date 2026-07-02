@@ -46,6 +46,8 @@ class AgentState:
     recoveryUntilSeconds: float = 0.0                                       # 재경로 전환 상태 호환용 시간 값
     recoverySteering: float = 0.0                                           # 재경로 전환 상태 호환용 조향 값
     lastSteering: float = 0.0                                               # 마지막으로 보낸 조향 값
+    stuckStartSeconds: float | None = None                                  # 전진 명령 중 정체가 시작된 시간
+    bStuckRepathRequested: bool = False                                     # 다음 RePath에서 가까운 경로 재진입을 요청할지 저장한다.
 
     bRepathRequested: bool = False                                      # 다음 decide에서 재경로 탐색을 요청할지 저장한다.
     targetPathIndex: int = 0                                            # 현재 실제로 바라보는 path index
@@ -115,6 +117,8 @@ class AgentState:
         self.recoveryUntilSeconds = 0.0
         self.recoverySteering = 0.0
         self.lastSteering = 0.0
+        self.stuckStartSeconds = None
+        self.bStuckRepathRequested = False
         self.bRepathRequested = False
         self.targetPathIndex = 0
         self.targetWorldPoint = None
@@ -216,6 +220,8 @@ class AgentState:
         self.recoveryUntilSeconds = 0.0
         self.recoverySteering = 0.0
         self.lastSteering = 0.0
+        self.stuckStartSeconds = None
+        self.bStuckRepathRequested = False
         self.bRepathRequested = False
         self.targetPathIndex = 0
         self.targetWorldPoint = None

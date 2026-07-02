@@ -253,6 +253,16 @@ void URobotProfileViewModel::SetLidarAngleStepDegree(const float value)
 	UE_MVVM_SET_PROPERTY_VALUE(LidarAngleStepDegree, value);
 }
 
+void URobotProfileViewModel::SetLidarVerticalMinDegree(const float value)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(LidarVerticalMinDegree, value);
+}
+
+void URobotProfileViewModel::SetLidarVerticalMaxDegree(const float value)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(LidarVerticalMaxDegree, value);
+}
+
 void URobotProfileViewModel::SetLidarVerticalStepDegree(const float value)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(LidarVerticalStepDegree, value);
@@ -362,6 +372,18 @@ bool URobotProfileViewModel::ValidateInputs(TArray<FString>& outDiagnostics) con
 	{
 		outDiagnostics.Add(TEXT("LiDAR Angle Step must be at least 1 degree."));
 	}
+	if (LidarVerticalMinDegree < -89.0f || LidarVerticalMinDegree > 89.0f)
+	{
+		outDiagnostics.Add(TEXT("LiDAR Vertical Min must be between -89 and 89 degrees."));
+	}
+	if (LidarVerticalMaxDegree < -89.0f || LidarVerticalMaxDegree > 89.0f)
+	{
+		outDiagnostics.Add(TEXT("LiDAR Vertical Max must be between -89 and 89 degrees."));
+	}
+	if (LidarVerticalMinDegree > LidarVerticalMaxDegree)
+	{
+		outDiagnostics.Add(TEXT("LiDAR Vertical Min must be less than or equal to Vertical Max."));
+	}
 	if (LidarVerticalStepDegree < 1.0f)
 	{
 		outDiagnostics.Add(TEXT("LiDAR Vertical Step must be at least 1 degree."));
@@ -424,6 +446,8 @@ FRobotProfileSettings URobotProfileViewModel::MakeSettings() const
 	settings.Lidar.StopDistanceM = LidarStopDistanceM;
 	settings.Lidar.SlowDownDistanceM = LidarSlowDownDistanceM;
 	settings.Lidar.AngleStepDegree = LidarAngleStepDegree;
+	settings.Lidar.VerticalMinDegree = LidarVerticalMinDegree;
+	settings.Lidar.VerticalMaxDegree = LidarVerticalMaxDegree;
 	settings.Lidar.VerticalStepDegree = LidarVerticalStepDegree;
 	settings.Lidar.ScanRateHz = LidarScanRateHz;
 	return settings;
@@ -452,6 +476,8 @@ void URobotProfileViewModel::ApplySettings(const FRobotProfileSettings& settings
 	SetLidarStopDistanceM(settings.Lidar.StopDistanceM);
 	SetLidarSlowDownDistanceM(settings.Lidar.SlowDownDistanceM);
 	SetLidarAngleStepDegree(settings.Lidar.AngleStepDegree);
+	SetLidarVerticalMinDegree(settings.Lidar.VerticalMinDegree);
+	SetLidarVerticalMaxDegree(settings.Lidar.VerticalMaxDegree);
 	SetLidarVerticalStepDegree(settings.Lidar.VerticalStepDegree);
 	SetLidarScanRateHz(settings.Lidar.ScanRateHz);
 }

@@ -7,6 +7,7 @@
 class UButton;
 class UHorizontalBox;
 class UImage;
+class USpacer;
 class UTextBlock;
 class UVerticalBox;
 class UWidget;
@@ -79,6 +80,10 @@ public:
 	// Whether this block header uses asset thumbnail and two-line summary text.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bAssetHeaderSummaryVisible = false;
+
+	// Whether the stable Scenario Template path is shown in the header.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bPathTextVisible = false;
 
 	// Whether the header exposes an add action for this block's collection.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
@@ -184,6 +189,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetRemoveActionVisible(bool bInRemoveActionVisible);
 
+	// Updates whether the header displays its stable Scenario Template path.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetPathTextVisible(bool bInPathTextVisible);
+
 	// Updates the shared typography catalog used by this block.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
@@ -237,6 +246,14 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> RemoveActionTextBlock;
 
+	// Generated fill spacer that pushes header actions to the right edge.
+	UPROPERTY(Transient)
+	TObjectPtr<USpacer> HeaderActionSpacer;
+
+	// Generated container that owns add/remove actions at the header right edge.
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> HeaderActionBox;
+
 	// Generated asset summary container owned by the header row.
 	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> AssetHeaderContainer;
@@ -279,6 +296,8 @@ private:
 	void UnbindControls();
 	// Creates generated header action buttons when the WBP header can host them.
 	void EnsureActionButtons();
+	// Creates the right-aligned header action container.
+	void EnsureHeaderActionContainer();
 	// Replaces the optional text toggle glyph with the configured icon image.
 	void EnsureToggleIcon();
 	// Creates the generated asset summary header when the WBP header can host it.
@@ -287,6 +306,8 @@ private:
 	void CreateActionButton(TObjectPtr<UButton>& outButton, TObjectPtr<UTextBlock>& outTextBlock);
 	// Applies visibility and label state to one generated header button.
 	void SetActionButtonState(UButton* button, UTextBlock* textBlock, bool bVisible, const FString& label) const;
+	// Applies visibility state to the generated header action container.
+	void SetHeaderActionContainerVisible(bool bVisible) const;
 	// Applies expanded/collapsed icon and flat button style to the header toggle.
 	void ApplyToggleButtonState() const;
 	// Applies cached asset summary data to generated header widgets.

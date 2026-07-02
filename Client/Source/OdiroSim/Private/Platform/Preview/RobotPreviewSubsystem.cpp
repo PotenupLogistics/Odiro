@@ -1,9 +1,12 @@
 #include "Platform/Preview/RobotPreviewSubsystem.h"
 
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "Platform/Preview/RobotPreviewSceneActor.h"
 #include "TimerManager.h"
 
@@ -13,6 +16,7 @@ namespace
 	constexpr float RobotPreviewMaxCameraPitchDegrees = 74.0f;
 	constexpr float RobotPreviewOrbitDegreesPerPixel = 0.18f;
 	constexpr float RobotPreviewZoomStepRatio = 0.88f;
+	constexpr float RobotPreviewCameraFovDegrees = 48.0f;
 
 	const TCHAR* ResolveRobotPreviewDensityLabel(const ERobotPreviewLidarDisplayDensity Density)
 	{
@@ -49,12 +53,12 @@ bool URobotPreviewSubsystem::StartPreview(UObject* Owner, const FRobotProfileSet
 	}
 
 	PreviewOwner = Owner;
-	if (!IsValid(PreviewRenderTarget))
+	if (IsUsingSceneCaptureRenderTarget() && !IsValid(PreviewRenderTarget))
 	{
 		PreviewRenderTarget = CreatePreviewRenderTarget();
 	}
 
-	if (!IsValid(PreviewRenderTarget))
+	if (IsUsingSceneCaptureRenderTarget() && !IsValid(PreviewRenderTarget))
 	{
 		StatusText = TEXT("Preview RenderTarget 생성 실패");
 		return false;
@@ -71,8 +75,15 @@ bool URobotPreviewSubsystem::StartPreview(UObject* Owner, const FRobotProfileSet
 	PreviewSceneActor->SetRobotYawDegrees(RobotYawDegrees);
 	bCameraViewInitialized = false;
 	InitializeCameraViewFromPreviewBounds();
-	CapturePreviewScene();
-	ScheduleDeferredCaptures();
+	if (!EnsurePreviewRenderBackend())
+	{
+		return false;
+	}
+	RefreshPreviewView();
+	if (IsUsingSceneCaptureRenderTarget())
+	{
+		ScheduleDeferredCaptures();
+	}
 	RefreshStatusText();
 	return true;
 }
@@ -89,12 +100,6 @@ void URobotPreviewSubsystem::StopPreview(const UObject* Owner)
 
 bool URobotPreviewSubsystem::ApplyPreviewSettings(const FRobotProfileSettings& Settings)
 {
-	if (!IsValid(PreviewRenderTarget))
-	{
-		StatusText = TEXT("Preview RenderTarget 없음");
-		return false;
-	}
-
 	CurrentSettings = Settings;
 	const bool bHadCameraViewInitialized = bCameraViewInitialized;
 	if (!EnsurePreviewScene())
@@ -110,7 +115,11 @@ bool URobotPreviewSubsystem::ApplyPreviewSettings(const FRobotProfileSettings& S
 		bCameraViewInitialized = false;
 	}
 	InitializeCameraViewFromPreviewBounds();
-	CapturePreviewScene();
+	if (!EnsurePreviewRenderBackend())
+	{
+		return false;
+	}
+	RefreshPreviewView();
 	RefreshStatusText();
 	return true;
 }
@@ -123,7 +132,7 @@ bool URobotPreviewSubsystem::DrawLidarPreviewRays()
 	}
 
 	PreviewSceneActor->DrawLidarPreviewRays();
-	CapturePreviewScene();
+	RefreshPreviewView();
 	RefreshStatusText();
 	return true;
 }
@@ -134,7 +143,7 @@ void URobotPreviewSubsystem::SetLidarDisplayOptions(const FRobotPreviewLidarDisp
 	if (IsValid(PreviewSceneActor))
 	{
 		PreviewSceneActor->SetLidarDisplayOptions(LidarDisplayOptions);
-		CapturePreviewScene();
+		RefreshPreviewView();
 	}
 	RefreshStatusText();
 }
@@ -144,7 +153,7 @@ void URobotPreviewSubsystem::ClearLidarPreviewRays()
 	if (IsValid(PreviewSceneActor))
 	{
 		PreviewSceneActor->ClearLidarPreviewRays();
-		CapturePreviewScene();
+		RefreshPreviewView();
 	}
 	RefreshStatusText();
 }
@@ -166,7 +175,7 @@ void URobotPreviewSubsystem::AddCameraZoom(const float WheelDelta)
 		MinDistanceCm,
 		MaxDistanceCm);
 
-	CapturePreviewScene();
+	RefreshPreviewView();
 	RefreshStatusText();
 }
 
@@ -182,11 +191,11 @@ void URobotPreviewSubsystem::AddCameraOrbit(const FVector2D& CursorDelta)
 	CameraOrbitYawDegrees =
 		FMath::UnwindDegrees(CameraOrbitYawDegrees + CursorDelta.X * RobotPreviewOrbitDegreesPerPixel);
 	CameraOrbitPitchDegrees = FMath::Clamp(
-		CameraOrbitPitchDegrees - CursorDelta.Y * RobotPreviewOrbitDegreesPerPixel,
+		CameraOrbitPitchDegrees + CursorDelta.Y * RobotPreviewOrbitDegreesPerPixel,
 		RobotPreviewMinCameraPitchDegrees,
 		RobotPreviewMaxCameraPitchDegrees);
 
-	CapturePreviewScene();
+	RefreshPreviewView();
 	RefreshStatusText();
 }
 
@@ -196,7 +205,7 @@ void URobotPreviewSubsystem::AddRobotYawDegrees(const float DeltaDegrees)
 	if (IsValid(PreviewSceneActor))
 	{
 		PreviewSceneActor->SetRobotYawDegrees(RobotYawDegrees);
-		CapturePreviewScene();
+		RefreshPreviewView();
 	}
 	RefreshStatusText();
 }
@@ -207,9 +216,25 @@ void URobotPreviewSubsystem::ResetRobotYaw()
 	if (IsValid(PreviewSceneActor))
 	{
 		PreviewSceneActor->SetRobotYawDegrees(RobotYawDegrees);
-		CapturePreviewScene();
+		RefreshPreviewView();
 	}
 	RefreshStatusText();
+}
+
+bool URobotPreviewSubsystem::IsUsingSceneCaptureRenderTarget() const
+{
+	return RenderMode == ERobotPreviewRenderMode::SceneCaptureRenderTarget;
+}
+
+void URobotPreviewSubsystem::SetRenderMode(const ERobotPreviewRenderMode NewRenderMode)
+{
+	if (RenderMode == NewRenderMode)
+	{
+		return;
+	}
+
+	CleanupPreviewResources();
+	RenderMode = NewRenderMode;
 }
 
 UTextureRenderTarget2D* URobotPreviewSubsystem::CreatePreviewRenderTarget()
@@ -234,9 +259,9 @@ UTextureRenderTarget2D* URobotPreviewSubsystem::CreatePreviewRenderTarget()
 bool URobotPreviewSubsystem::EnsurePreviewScene()
 {
 	UWorld* World = GetWorld();
-	if (!IsValid(World) || !IsValid(PreviewRenderTarget))
+	if (!IsValid(World))
 	{
-		StatusText = TEXT("Preview world 또는 RenderTarget 없음");
+		StatusText = TEXT("Preview world 없음");
 		return false;
 	}
 
@@ -258,7 +283,7 @@ bool URobotPreviewSubsystem::EnsurePreviewScene()
 		}
 	}
 
-	if (!IsValid(PreviewCaptureActor))
+	if (IsUsingSceneCaptureRenderTarget() && !IsValid(PreviewCaptureActor))
 	{
 		PreviewCaptureActor = SpawnPreviewCaptureActor();
 		if (!IsValid(PreviewCaptureActor))
@@ -271,6 +296,124 @@ bool URobotPreviewSubsystem::EnsurePreviewScene()
 	RefreshCaptureShowOnlyActors();
 	UpdatePreviewCaptureView();
 	return true;
+}
+
+bool URobotPreviewSubsystem::EnsurePreviewRenderBackend()
+{
+	return IsUsingSceneCaptureRenderTarget()
+		? EnsureSceneCaptureBackend()
+		: EnsurePlayerViewportBackend();
+}
+
+bool URobotPreviewSubsystem::EnsurePlayerViewportBackend()
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World) || !IsValid(PreviewSceneActor))
+	{
+		StatusText = TEXT("Preview viewport backend is unavailable.");
+		return false;
+	}
+
+	APlayerController* PlayerController = World->GetFirstPlayerController();
+	if (!IsValid(PlayerController))
+	{
+		StatusText = TEXT("Preview player controller is unavailable.");
+		return false;
+	}
+
+	if (PreviewPlayerController != PlayerController)
+	{
+		RestorePreviousViewTarget();
+		PreviewPlayerController = PlayerController;
+		PreviousViewTarget = PlayerController->GetViewTarget();
+	}
+	else if (!PreviousViewTarget.IsValid())
+	{
+		PreviousViewTarget = PlayerController->GetViewTarget();
+	}
+
+	if (!IsValid(PreviewCameraActor))
+	{
+		PreviewCameraActor = SpawnPreviewCameraActor();
+		if (!IsValid(PreviewCameraActor))
+		{
+			StatusText = TEXT("Preview camera actor creation failed.");
+			return false;
+		}
+	}
+
+	UpdatePlayerViewportView();
+	if (PlayerController->GetViewTarget() != PreviewCameraActor)
+	{
+		PlayerController->SetViewTarget(PreviewCameraActor);
+	}
+	return true;
+}
+
+bool URobotPreviewSubsystem::EnsureSceneCaptureBackend()
+{
+	if (!IsValid(PreviewRenderTarget))
+	{
+		PreviewRenderTarget = CreatePreviewRenderTarget();
+	}
+
+	if (!IsValid(PreviewRenderTarget))
+	{
+		StatusText = TEXT("Preview RenderTarget creation failed.");
+		return false;
+	}
+
+	if (!IsValid(PreviewSceneActor))
+	{
+		StatusText = TEXT("Preview scene actor is unavailable.");
+		return false;
+	}
+
+	if (!IsValid(PreviewCaptureActor))
+	{
+		PreviewCaptureActor = SpawnPreviewCaptureActor();
+		if (!IsValid(PreviewCaptureActor))
+		{
+			StatusText = TEXT("Preview capture actor creation failed.");
+			return false;
+		}
+	}
+
+	RefreshCaptureShowOnlyActors();
+	UpdatePreviewCaptureView();
+	return true;
+}
+
+ACameraActor* URobotPreviewSubsystem::SpawnPreviewCameraActor()
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World) || !IsValid(PreviewSceneActor))
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.ObjectFlags |= RF_Transient;
+	SpawnParameters.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	ACameraActor* CameraActor = World->SpawnActor<ACameraActor>(
+		PreviewWorldOffset + FVector(-400.0, -280.0, 180.0),
+		FRotator::ZeroRotator,
+		SpawnParameters);
+	if (!IsValid(CameraActor))
+	{
+		return nullptr;
+	}
+
+	CameraActor->Tags.Add(TEXT("RobotPreviewOnly"));
+	if (UCameraComponent* CameraComponent = CameraActor->GetCameraComponent())
+	{
+		CameraComponent->FieldOfView = RobotPreviewCameraFovDegrees;
+	}
+	const FTransform CameraTransform = CalculatePreviewCameraTransform();
+	CameraActor->SetActorLocationAndRotation(CameraTransform.GetLocation(), CameraTransform.GetRotation());
+	return CameraActor;
 }
 
 ASceneCapture2D* URobotPreviewSubsystem::SpawnPreviewCaptureActor()
@@ -304,7 +447,7 @@ ASceneCapture2D* URobotPreviewSubsystem::SpawnPreviewCaptureActor()
 
 	CaptureActor->Tags.Add(TEXT("RobotPreviewOnly"));
 	CaptureComponent->ProjectionType = ECameraProjectionMode::Perspective;
-	CaptureComponent->FOVAngle = 48.0f;
+	CaptureComponent->FOVAngle = RobotPreviewCameraFovDegrees;
 	CaptureComponent->PrimitiveRenderMode =
 		ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
 	CaptureComponent->ShowFlags.SetAtmosphere(false);
@@ -350,6 +493,28 @@ void URobotPreviewSubsystem::UpdatePreviewCaptureView()
 		return;
 	}
 
+	const FTransform CameraTransform = CalculatePreviewCameraTransform();
+	PreviewCaptureActor->SetActorLocationAndRotation(CameraTransform.GetLocation(), CameraTransform.GetRotation());
+}
+
+void URobotPreviewSubsystem::UpdatePlayerViewportView()
+{
+	if (!IsValid(PreviewCameraActor) || !IsValid(PreviewSceneActor))
+	{
+		return;
+	}
+
+	const FTransform CameraTransform = CalculatePreviewCameraTransform();
+	PreviewCameraActor->SetActorLocationAndRotation(CameraTransform.GetLocation(), CameraTransform.GetRotation());
+}
+
+FTransform URobotPreviewSubsystem::CalculatePreviewCameraTransform()
+{
+	if (!IsValid(PreviewSceneActor))
+	{
+		return FTransform::Identity;
+	}
+
 	const FVector FocusLocation = PreviewSceneActor->GetPreviewFocusLocation();
 	InitializeCameraViewFromPreviewBounds();
 
@@ -361,9 +526,18 @@ void URobotPreviewSubsystem::UpdatePreviewCaptureView()
 		FMath::Sin(YawRadians) * CosPitch,
 		FMath::Sin(PitchRadians));
 	const FVector CameraLocation = FocusLocation + OrbitDirection * CameraDistanceCm;
+	return FTransform((FocusLocation - CameraLocation).Rotation(), CameraLocation);
+}
 
-	PreviewCaptureActor->SetActorLocation(CameraLocation);
-	PreviewCaptureActor->SetActorRotation((FocusLocation - CameraLocation).Rotation());
+void URobotPreviewSubsystem::RefreshPreviewView()
+{
+	if (IsUsingSceneCaptureRenderTarget())
+	{
+		CapturePreviewScene();
+		return;
+	}
+
+	UpdatePlayerViewportView();
 }
 
 void URobotPreviewSubsystem::InitializeCameraViewFromPreviewBounds()
@@ -425,13 +599,40 @@ USceneCaptureComponent2D* URobotPreviewSubsystem::GetPreviewCaptureComponent() c
 		: nullptr;
 }
 
+void URobotPreviewSubsystem::RestorePreviousViewTarget()
+{
+	if (!IsValid(PreviewPlayerController))
+	{
+		PreviewPlayerController = nullptr;
+		PreviousViewTarget.Reset();
+		return;
+	}
+
+	AActor* RestoreTarget = PreviousViewTarget.Get();
+	if (IsValid(RestoreTarget) && PreviewPlayerController->GetViewTarget() == PreviewCameraActor)
+	{
+		PreviewPlayerController->SetViewTarget(RestoreTarget);
+	}
+
+	PreviewPlayerController = nullptr;
+	PreviousViewTarget.Reset();
+}
+
 void URobotPreviewSubsystem::CleanupPreviewResources()
 {
+	RestorePreviousViewTarget();
+
 	if (IsValid(PreviewCaptureActor))
 	{
 		PreviewCaptureActor->Destroy();
 	}
 	PreviewCaptureActor = nullptr;
+
+	if (IsValid(PreviewCameraActor))
+	{
+		PreviewCameraActor->Destroy();
+	}
+	PreviewCameraActor = nullptr;
 
 	if (IsValid(PreviewSceneActor))
 	{

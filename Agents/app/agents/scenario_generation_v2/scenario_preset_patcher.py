@@ -32,8 +32,11 @@ class ScenarioPresetPatcher:
         self._apply_requested_length(scenario, intent)
         self._apply_robot_anchor_consistency(scenario, intent)
         self._apply_obstacle_intent(scenario, intent, preset_id=preset_id, source_scenario=source_scenario)
-        self._apply_alpha_pedestrians(scenario)
+        self._remove_unimplemented_pedestrians(scenario)
+        self._normalize_corridor_contract(scenario)
+        self._remove_empty_optional_obstacles(scenario)
         self._apply_scenario_identity(scenario, intent, preset_id=preset_id)
+        self._sanitize_external_intent_text(scenario)
         return scenario
 
     def _apply_corridor_profile(self, scenario: dict[str, Any], intent: ScenarioIntent) -> None:
@@ -64,13 +67,13 @@ class ScenarioPresetPatcher:
                 ],
             },
             "walkway_width_m": {"min": 1.6, "max": 2.2},
-            "building_side": [{"surface": "wall", "width_m": 0.4}],
+            "building_side": [{"surface": "building", "width_m": 0.4}],
             "curb_side": [{"surface": "road", "width_m": 4.0}],
             "segments": [
                 {"id": "approach", "type": "straight", "along_range_m": [0.0, pre_corner_start_m]},
                 {
                     "id": "pre_corner_construction",
-                    "type": "narrowing",
+                    "type": "straight",
                     "along_range_m": [pre_corner_start_m, corner_along_m],
                 },
                 {
@@ -99,7 +102,7 @@ class ScenarioPresetPatcher:
         return {
             "axis": {"type": "polyline", "points_m": points},
             "walkway_width_m": {"min": 2.4, "max": 3.0},
-            "building_side": [{"surface": "wall", "width_m": 0.4}],
+            "building_side": [{"surface": "building", "width_m": 0.4}],
             "curb_side": [{"surface": "road", "width_m": 4.0}],
             "segments": [
                 {"id": "entry_straight", "type": "straight", "along_range_m": [0.0, self._rounded(length_m * 0.25)]},
@@ -110,7 +113,7 @@ class ScenarioPresetPatcher:
                 },
                 {
                     "id": "middle_construction",
-                    "type": "narrowing",
+                    "type": "straight",
                     "along_range_m": [self._rounded(length_m * 0.42), self._rounded(length_m * 0.58)],
                 },
                 {
@@ -120,7 +123,7 @@ class ScenarioPresetPatcher:
                 },
                 {
                     "id": "pre_corner_conflict",
-                    "type": "narrowing",
+                    "type": "straight",
                     "along_range_m": [self._rounded(length_m * 0.68), self._rounded(length_m * 0.84)],
                 },
                 {"id": "turn_and_exit", "type": "straight", "along_range_m": [self._rounded(length_m * 0.84), length_m]},
@@ -190,7 +193,7 @@ class ScenarioPresetPatcher:
         desired_count = self._desired_obstacle_count(intent, preset_id=preset_id, preset_placements=preset_placements)
         min_clear_width = self._min_clear_width(source_scenario, scenario)
         if desired_count <= 0:
-            scenario["obstacles"] = {"min_clear_width_m": min_clear_width, "placements": []}
+            scenario.pop("obstacles", None)
             return
 
         placement_source = source_placements if source_placements and self._has_static_obstacle_intent(intent) else preset_placements
@@ -207,9 +210,55 @@ class ScenarioPresetPatcher:
             "placements": self._dedupe_placement_ids(normalized, preset_id=preset_id),
         }
 
-    def _apply_alpha_pedestrians(self, scenario: dict[str, Any]) -> None:
-        """Keep alpha scenario generation output free of pedestrian runtime actors."""
-        scenario["pedestrians"] = {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+    def _remove_unimplemented_pedestrians(self, scenario: dict[str, Any]) -> None:
+        """Remove the unimplemented pedestrian authoring root from preset output."""
+        scenario.pop("pedestrians", None)
+
+    def _sanitize_external_intent_text(self, scenario: dict[str, Any]) -> None:
+        """Replace preset intent text that conflicts with omitted public roots."""
+        intent_text = scenario.get("intent")
+        if not isinstance(intent_text, str):
+            return
+        placements = self._placements_from(scenario)
+        pedestrian_terms = ("보행자", "pedestrian", "횡단 보행자")
+        obstacle_terms = ("장애물", "obstacle")
+        needs_replacement = any(term in intent_text for term in pedestrian_terms) or (
+            not placements and any(term in intent_text for term in obstacle_terms)
+        )
+        if not needs_replacement:
+            return
+        scenario["intent"] = (
+            "Evaluate urban sidewalk navigation with fixed static obstacles."
+            if placements
+            else "Evaluate urban sidewalk navigation to the destination."
+        )
+
+    def _normalize_corridor_contract(self, scenario: dict[str, Any]) -> None:
+        """Normalize loaded preset corridor authoring fields to the current scenario contract."""
+        corridor = scenario.get("corridor")
+        if not isinstance(corridor, dict):
+            return
+        for side_name, surface in (("building_side", "building"), ("curb_side", "road")):
+            side = corridor.get(side_name)
+            if isinstance(side, list):
+                for entry in side:
+                    if isinstance(entry, dict):
+                        entry["surface"] = surface
+        segments = corridor.get("segments")
+        if isinstance(segments, list):
+            for segment in segments:
+                if isinstance(segment, dict):
+                    segment["type"] = "straight"
+
+    def _remove_empty_optional_obstacles(self, scenario: dict[str, Any]) -> None:
+        """Omit optional obstacles when preset patching leaves no placements."""
+        obstacles = scenario.get("obstacles")
+        if not isinstance(obstacles, dict):
+            scenario.pop("obstacles", None)
+            return
+        placements = obstacles.get("placements")
+        if not isinstance(placements, list) or not placements:
+            scenario.pop("obstacles", None)
 
     def _apply_scenario_identity(self, scenario: dict[str, Any], intent: ScenarioIntent, *, preset_id: str) -> None:
         """Adjust ids and intent text when patching changes the preset semantics."""
@@ -401,29 +450,23 @@ class ScenarioPresetPatcher:
     ) -> dict[str, Any]:
         """Normalize placement anchors so patched presets validate against their corridor."""
         normalized = deepcopy(placement)
-        kind = normalized.get("kind")
-        if kind in {"fixed", "pattern"}:
-            self._normalize_legacy_prop(normalized)
-            requested_prop = self._requested_catalog_prop(intent, index=index)
-            if requested_prop is not None:
-                normalized["prop"] = requested_prop
-            at = normalized.get("at")
-            if not isinstance(at, dict):
-                at = {}
-            requested_segment = at.get("segment") if isinstance(at.get("segment"), str) else None
-            segment_id, segment_range = self._target_segment(scenario, preset_id=preset_id, requested_segment=requested_segment)
-            at["segment"] = segment_id
-            at["along_m"] = self._normalized_along_value(at.get("along_m"), segment_range, preset_id=preset_id)
-            at.setdefault("offset_m", 0.0)
-            at.setdefault("lane", "walkway")
-            normalized["at"] = at
-        elif kind == "scatter":
-            segment_id, _ = self._target_segment(scenario, preset_id=preset_id, requested_segment=None)
-            zone = normalized.get("zone")
-            if not isinstance(zone, dict):
-                zone = {}
-            zone["segments"] = [segment_id]
-            normalized["zone"] = zone
+        normalized["kind"] = "fixed"
+        self._normalize_legacy_prop(normalized)
+        requested_prop = self._requested_catalog_prop(intent, index=index)
+        if requested_prop is not None:
+            normalized["prop"] = requested_prop
+        at = normalized.get("at")
+        if not isinstance(at, dict):
+            at = {}
+        requested_segment = at.get("segment") if isinstance(at.get("segment"), str) else None
+        segment_id, segment_range = self._target_segment(scenario, preset_id=preset_id, requested_segment=requested_segment)
+        at["segment"] = segment_id
+        at["along_m"] = self._normalized_along_value(at.get("along_m"), segment_range, preset_id=preset_id)
+        at.setdefault("offset_m", 0.0)
+        at.setdefault("lane", "walkway")
+        normalized["at"] = at
+        for legacy_field in ("pattern", "count", "spacing_m", "gap_width_m", "zone", "density_per_10m", "palette"):
+            normalized.pop(legacy_field, None)
         if intent.explicit_blocking:
             normalized["allow_blocking"] = True
         return normalized

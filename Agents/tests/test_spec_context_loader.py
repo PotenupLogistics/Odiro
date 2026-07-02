@@ -32,7 +32,9 @@ def test_spec_context_loader_reads_allowlisted_docs() -> None:
     assert "# SPEC FILE: docs/specs/simulation-interface.md" in context
     assert "# SPEC FILE: contracts/specs/user-project-data.md" in context
     assert "# SPEC FILE: Client/Json/environment-catalog.md" in context
-    assert "Prop Bounding Boxes" in context
+    assert "# SPEC FILE: Client/Json/Schema/scenario.json.md" not in context
+    assert "## Props" in context
+    assert "bounding box를 직접 작성하지 않는다" in context
 
 
 def test_spec_context_loader_raises_clear_error_for_missing_allowlisted_file(tmp_path: Path) -> None:
@@ -60,3 +62,16 @@ def test_spec_context_allowlist_excludes_archive_legacy_and_agent_environment_co
     for fragment in disallowed_fragments:
         assert not any(fragment in relative_path for relative_path in allowlist)
     assert "Client/Json/environment-catalog.md" in allowlist
+    assert "Client/Json/Schema/scenario.json.md" not in allowlist
+
+
+def test_scenario_generation_spec_context_allowlist_adds_project_scenario_contract() -> None:
+    module = _loader_module()
+    allowlist = tuple(module.SCENARIO_GENERATION_SPEC_CONTEXT_ALLOWLIST)
+
+    assert "Client/Json/Schema/scenario.json.md" in allowlist
+    assert "Client/Json/environment-catalog.md" in allowlist
+    assert "contracts/specs/user-project-data.md" not in allowlist
+    assert allowlist.index("Client/Json/Schema/scenario.json.md") < allowlist.index(
+        "Client/Json/environment-catalog.md"
+    )

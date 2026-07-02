@@ -43,8 +43,7 @@ class ProjectScenarioV1Response(BaseModel):
     scenario_id: str
     intent: str
     corridor: dict[str, Any]
-    obstacles: dict[str, Any]
-    pedestrians: dict[str, Any]
+    obstacles: dict[str, Any] | None = None
     robot: dict[str, Any]
 
 

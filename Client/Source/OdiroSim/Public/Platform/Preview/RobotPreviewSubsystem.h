@@ -7,8 +7,18 @@
 #include "RobotPreviewSubsystem.generated.h"
 
 class UTextureRenderTarget2D;
+class AActor;
+class ACameraActor;
+class APlayerController;
 class ASceneCapture2D;
 class USceneCaptureComponent2D;
+
+// Selects how the robot preview scene is presented to the user.
+enum class ERobotPreviewRenderMode : uint8
+{
+	PlayerViewport,
+	SceneCaptureRenderTarget
+};
 
 // Owns transient robot preview resources for WBP_RobotConfigEditor.
 UCLASS(BlueprintType)
@@ -20,7 +30,7 @@ public:
 	// Releases preview resources when the owning world is torn down.
 	virtual void Deinitialize() override;
 
-	// Starts or reuses the preview render target for one widget owner.
+	// Starts or reuses the preview scene for one widget owner.
 	bool StartPreview(UObject* Owner, const FRobotProfileSettings& Settings);
 
 	// Stops the preview when requested by the current widget owner.
@@ -28,6 +38,12 @@ public:
 
 	// Returns the render target that the robot config widget displays.
 	UTextureRenderTarget2D* GetRenderTarget() const { return PreviewRenderTarget; }
+
+	// Returns true when the legacy SceneCapture render target backend is active.
+	bool IsUsingSceneCaptureRenderTarget() const;
+
+	// Changes the preview presentation backend and resets active transient resources.
+	void SetRenderMode(ERobotPreviewRenderMode NewRenderMode);
 
 	// Applies editable profile values to the preview state.
 	bool ApplyPreviewSettings(const FRobotProfileSettings& Settings);
@@ -63,8 +79,20 @@ private:
 	// Creates the transient render target used by the robot preview image.
 	UTextureRenderTarget2D* CreatePreviewRenderTarget();
 
-	// Creates the transient scene actor and capture actor when needed.
+	// Creates the transient scene actor when needed.
 	bool EnsurePreviewScene();
+
+	// Creates resources for the currently selected preview render backend.
+	bool EnsurePreviewRenderBackend();
+
+	// Creates the PlayerViewport camera backend and takes over the active view target.
+	bool EnsurePlayerViewportBackend();
+
+	// Creates the legacy SceneCapture render-target backend.
+	bool EnsureSceneCaptureBackend();
+
+	// Spawns the camera used by the PlayerViewport backend.
+	ACameraActor* SpawnPreviewCameraActor();
 
 	// Spawns the preview SceneCapture actor.
 	ASceneCapture2D* SpawnPreviewCaptureActor();
@@ -74,6 +102,15 @@ private:
 
 	// Updates the fixed capture camera transform for the current preview bounds.
 	void UpdatePreviewCaptureView();
+
+	// Updates the PlayerViewport camera transform for the current preview bounds.
+	void UpdatePlayerViewportView();
+
+	// Calculates the shared preview camera transform from orbit state and preview bounds.
+	FTransform CalculatePreviewCameraTransform();
+
+	// Updates the active preview backend after scene, camera, or overlay state changes.
+	void RefreshPreviewView();
 
 	// Initializes camera distance once from the current preview bounds.
 	void InitializeCameraViewFromPreviewBounds();
@@ -89,6 +126,9 @@ private:
 
 	// Releases transient render resources and owner state.
 	void CleanupPreviewResources();
+
+	// Restores the view target that was active before PlayerViewport preview began.
+	void RestorePreviousViewTarget();
 
 	// Returns whether the supplied owner still owns the active preview.
 	bool IsCurrentOwner(const UObject* Owner) const;
@@ -112,12 +152,27 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ASceneCapture2D> PreviewCaptureActor;
 
+	// Camera actor used when the preview is rendered through the game viewport.
+	UPROPERTY(Transient)
+	TObjectPtr<ACameraActor> PreviewCameraActor;
+
+	// PlayerController whose ViewTarget is temporarily owned by the preview.
+	UPROPERTY(Transient)
+	TObjectPtr<APlayerController> PreviewPlayerController;
+
+	// ViewTarget that must be restored when PlayerViewport preview stops.
+	UPROPERTY(Transient)
+	TWeakObjectPtr<AActor> PreviousViewTarget;
+
 	// Last editable profile values applied to the preview.
 	UPROPERTY(Transient)
 	FRobotProfileSettings CurrentSettings;
 
 	// Preview-only LiDAR overlay options.
 	FRobotPreviewLidarDisplayOptions LidarDisplayOptions;
+
+	// Active preview presentation backend; SceneCapture remains available as fallback.
+	ERobotPreviewRenderMode RenderMode = ERobotPreviewRenderMode::PlayerViewport;
 
 	// Current visual yaw applied to the preview robot.
 	float RobotYawDegrees = 0.0f;

@@ -53,3 +53,20 @@ bool URobotConfigScreenWidget::SaveProfile()
 {
 	return ClickRobotConfigEditorButton(RobotConfigEditor.Get(), FName(TEXT("SaveProfileButton")));
 }
+
+void URobotConfigScreenWidget::SetRobotPreviewActive(const bool bActive)
+{
+	if (!RobotConfigEditor)
+	{
+		return;
+	}
+
+	if (bActive)
+	{
+		RobotConfigEditor->ActivateRobotPreview();
+	}
+	else
+	{
+		RobotConfigEditor->DeactivateRobotPreview();
+	}
+}

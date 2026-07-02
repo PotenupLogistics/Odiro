@@ -10,6 +10,8 @@ paths:
   - Client/Source/OdiroSim/Private/Shared/**
   - Client/Source/OdiroSim/Public/DeliveryBot/Actor/DeliveryBotLidarRayReviewActor.h
   - Client/Source/OdiroSim/Private/DeliveryBot/Actor/DeliveryBotLidarRayReviewActor.cpp
+  - Client/Source/OdiroSim/Public/DeliveryBot/DeliveryBotLidarRayPattern.h
+  - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayPattern.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayCardWidget.h
   - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
@@ -77,11 +79,17 @@ entry:
       - Client/Source/OdiroSim/Public/Scenario
       - Client/Source/OdiroSim/Private/Scenario
   - id: robot-profile-preview
-    description: Robot configuration left preview stage, fixed SceneCapture camera, profile-driven visual and sensor updates.
+    description: Robot configuration left preview stage, PlayerViewport primary preview, SceneCapture fallback, profile-driven visual and sensor updates.
     read:
       - Client/Docs/RobotPreviewAgent.local.md
+      - Client/Source/OdiroSim/Public/DeliveryBot/DeliveryBotLidarRayPattern.h
+      - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayPattern.cpp
       - Client/Source/OdiroSim/Public/Platform/Preview
       - Client/Source/OdiroSim/Private/Platform/Preview
+      - Client/Source/OdiroSim/Public/Platform/Widget/PlatformRootWidget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/PlatformRootWidget.cpp
+      - Client/Source/OdiroSim/Public/Platform/Widget/RobotConfigScreenWidget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/RobotConfigScreenWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/Widget/RobotConfigEditorWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/RobotConfigEditorWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/ViewModel/RobotProfileViewModel.h
@@ -130,12 +138,14 @@ guardrails:
   - Scenario editor selection, subsystem lookup, and world mutation stay controller/subsystem/component-owned; ViewModels expose FieldNotify state and command facades through ScenarioEditorUiSubsystem.
   - ScenarioEditorToolbarWidget is the left command rail for template panel switching and transform gizmo mode/orientation commands; save, return, and status remain outside the toolbar surface.
   - Scenario editor viewport navigation input is owned by ScenarioEditorController with Enhanced Input assets under Client/Content/Input; keep mouse capture, selection, and cancel bindings explicit.
+  - Scenario editor viewport auto-fit is entry/load/view-mode-switch driven; bounds are resolved by ScenarioAuthoringSubsystem while camera application stays in ScenarioEditorController and ScenarioEditorPawn.
   - ScenarioEditorLaunchSubsystem owns ScenarioEditorMap travel gating for shared visual asset preload before the viewport becomes visible.
   - SimulatorProcessSubsystem gates project-run ScenarioSimulationMap travel behind the same shared visual asset preload when launching from the Platform root shell.
   - ScenarioViewportPresentation owns shared scenario map preload assets, the global grey-background enable switch, and grey background post-process application for editor cameras, runtime unbound post-process volumes, and preview SceneCapture components.
   - Scenario editor robot Start/Goal markers use authoring-subsystem proxy actors for selection and a ScenarioEditorController-owned viewport overlay below the active Platform root shell for visible markers.
   - Scenario editor Corridor vertex/segment handles use invisible proxy actors for selection and transform gizmo ownership, with ScenarioEditorRouteMarkerOverlayWidget painting and hit-testing the visible screen-space grips.
   - Scenario simulation robot Start/Goal markers are runtime overlay items owned by ScenarioSimulationSubsystem; simulation no longer spawns visible BP_StartPoint/BP_GoalPoint marker actors.
+  - ScenarioSimulationSubsystem owns the fixed initial runtime view by moving the local default pawn from the spawned DeliveryBot start pose; it is an initial placement, not a follow camera.
   - Scenario Object Palette commands must be backed by scenario.json authoring contracts; currently it creates only fixed static-obstacle rows in obstacles.placements.
   - ScenarioEditorShellViewModel owns editor UI selection commands for template panel/block and placeable selection; viewport and outliner placeable selection focus and scroll to the matching sidebar block, and sidebar placeable-backed blocks route reverse selection through Shell commands instead of composing selection state locally.
   - Scenario editor reusable WBP class references come from ScenarioEditorWidgetClassCatalog assets or exposed widget properties; do not add C++ WBP class-path fallbacks.
@@ -145,13 +155,15 @@ guardrails:
   - Shared corridor/geometry helpers own reusable surface metadata, procedural lane mesh helpers, and analytic surface queries.
   - Scenario editor authoring UI hides legacy GroundRegion draw/outliner affordances; Corridor surfaces are the editable ground source, while runtime GroundRegion compatibility remains in simulation/evaluation.
   - Scenario preview framing consumes Scenario-owned bounds resolving and does not inspect DeliveryBot grid actors directly.
-  - Scenario save preview uses surface-only bounds with ScenarioPreviewFitScale.
+  - Scenario save preview uses the same authored-scenario bounds and fit margin as the editor viewport fit, rendered into the preview image's own aspect ratio.
   - ScenarioPreviewCaptureSubsystem owns transient SceneCapture2D, render-target cleanup, alpha normalization, and episode warmup lifecycle for top-view orthographic FinalColorLDR PNG capture.
   - ScenarioEditorMap and ScenarioSimulationMap keep matching directional-light intensity and rotation; preview capture avoids temporary lighting and pixel-level RGB correction for episode thumbnails.
   - ScenarioEditorController requests the project preview only after scenario.json saves successfully; capture failure removes stale preview.png without changing the save result.
   - ScenarioRunnerSubsystem schedules project episode preview.png after evaluation starts; capture failure must not change episode outcome.
   - Robot profile preview is a configurator visualization only; it must not run policy, physics, replay playback, or write profile.json during live slider edits.
-  - Robot profile preview should isolate its stage through SceneCapture show-only rendering or an equivalent preview-only scene boundary.
+  - DeliveryBotLidarRayPattern owns shared LiDAR yaw/pitch sample generation for runtime tracing and Robot profile preview rendering.
+  - Robot profile preview should isolate its stage through the preview-only world offset boundary; SceneCapture show-only rendering remains a fallback backend, while PlayerViewport must restore the previous ViewTarget on cleanup.
+  - PlatformRootWidget owns Robot tab entry/exit activation for Robot profile preview; RobotConfigEditorWidget must not start the PlayerViewport preview merely from NativeConstruct.
   - Embedded Replay reads episode replay artifacts and must not call OpenLevel, launch a new window, or re-run policy/physics as replay.
   - Embedded Replay camera modes move only the replay SceneCapture; TopDown, Orbit, Free, and VehicleFront views must not alter replay frames, robot playback, or simulation physics.
   - Embedded Replay camera input and mode changes require loaded replay frames and capture actors; re-clicking Free refocuses the camera on the current replay robot.

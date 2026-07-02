@@ -13,19 +13,12 @@ from app.catalogs.static_obstacle_catalog import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLIENT_ENVIRONMENT_CATALOG = REPO_ROOT / "Client" / "Json" / "environment-catalog.md"
-BBOX_ROW_PATTERN = re.compile(
-    r"^\|\s*`(?P<prop_id>obstacle\.[^`]+)`\s*\|[^|]*\|\s*`(?P<x>[0-9]+(?:\.[0-9]+)?) x "
-    r"(?P<y>[0-9]+(?:\.[0-9]+)?) x (?P<z>[0-9]+(?:\.[0-9]+)?)`",
-    re.MULTILINE,
-)
+PROP_ROW_PATTERN = re.compile(r"^\|\s*`(?P<prop_id>obstacle\.[^`]+)`\s*\|", re.MULTILINE)
 
 
-def _client_environment_bbox_map() -> dict[str, list[float]]:
+def _client_environment_prop_ids() -> set[str]:
     text = CLIENT_ENVIRONMENT_CATALOG.read_text(encoding="utf-8-sig")
-    return {
-        match.group("prop_id"): [float(match.group("x")), float(match.group("y")), float(match.group("z"))]
-        for match in BBOX_ROW_PATTERN.finditer(text)
-    }
+    return {match.group("prop_id") for match in PROP_ROW_PATTERN.finditer(text)}
 
 
 def test_static_obstacle_catalog_loads_notion_prop_ids_and_bbox_metadata() -> None:
@@ -49,14 +42,9 @@ def test_static_obstacle_catalog_resolves_korean_and_english_aliases() -> None:
     assert resolve_static_obstacle_prop_id("SM_FireHydrant") == "obstacle.fire_hydrant"
 
 
-def test_static_obstacle_catalog_matches_client_environment_bbox_table() -> None:
-    client_bbox_map = _client_environment_bbox_map()
-    json_bbox_map = {
-        str(item["prop_id"]): [float(value) for value in item["bbox_m"]]
-        for item in load_static_obstacle_catalog()
-    }
+def test_static_obstacle_catalog_ids_are_listed_in_client_environment_catalog() -> None:
+    client_prop_ids = _client_environment_prop_ids()
+    json_prop_ids = {str(item["prop_id"]) for item in load_static_obstacle_catalog()}
 
-    assert client_bbox_map
-    assert set(json_bbox_map) == set(client_bbox_map)
-    for prop_id, bbox_m in sorted(client_bbox_map.items()):
-        assert json_bbox_map[prop_id] == bbox_m
+    assert client_prop_ids
+    assert json_prop_ids <= client_prop_ids

@@ -9,6 +9,7 @@
 #include "Platform/ViewModel/StartupScreenViewModel.h"
 #include "Platform/Widget/ProjectCreateScreenWidget.h"
 #include "Platform/Widget/ProjectOverviewScreenWidget.h"
+#include "Platform/Widget/RobotConfigScreenWidget.h"
 #include "Platform/Widget/RunDetailScreenWidget.h"
 #include "Platform/Widget/RunListScreenWidget.h"
 #include "Platform/Widget/ScenarioEditorScreenWidget.h"
@@ -103,6 +104,7 @@ void UPlatformRootWidget::NativeConstruct()
 
 void UPlatformRootWidget::NativeDestruct()
 {
+	UpdateRobotPreviewActivation(ActiveScreen, EPlatformRootScreen::Startup);
 	UnbindControls();
 	OnActiveScreenChangedNative.Clear();
 	Super::NativeDestruct();
@@ -146,11 +148,17 @@ void UPlatformRootWidget::ShowRunDetailScreen(const FString& runId)
 
 void UPlatformRootWidget::SetActiveScreen(const EPlatformRootScreen screen)
 {
+	const EPlatformRootScreen PreviousScreen = ActiveScreen;
 	ActiveScreen = (!HasActiveProject()
 		&& screen != EPlatformRootScreen::Startup
 		&& screen != EPlatformRootScreen::ProjectCreate)
 		? EPlatformRootScreen::Startup
 		: screen;
+
+	if (PreviousScreen == EPlatformRootScreen::RobotConfig && ActiveScreen != EPlatformRootScreen::RobotConfig)
+	{
+		UpdateRobotPreviewActivation(PreviousScreen, ActiveScreen);
+	}
 
 	if (ScreenContentSwitcher)
 	{
@@ -236,13 +244,39 @@ void UPlatformRootWidget::SetActiveScreen(const EPlatformRootScreen screen)
 		}
 	}
 
+	if (ActiveScreen == EPlatformRootScreen::RobotConfig)
+	{
+		UpdateRobotPreviewActivation(PreviousScreen, ActiveScreen);
+	}
+
 	ConfigureStatusBarForActiveScreen();
 	OnActiveScreenChangedNative.Broadcast(ActiveScreen);
 }
 
+void UPlatformRootWidget::UpdateRobotPreviewActivation(
+	const EPlatformRootScreen previousScreen,
+	const EPlatformRootScreen nextScreen)
+{
+	URobotConfigScreenWidget* robotConfigScreen = Cast<URobotConfigScreenWidget>(RobotConfigScreen.Get());
+	if (!robotConfigScreen)
+	{
+		return;
+	}
+
+	if (previousScreen == EPlatformRootScreen::RobotConfig && nextScreen != EPlatformRootScreen::RobotConfig)
+	{
+		robotConfigScreen->SetRobotPreviewActive(false);
+	}
+
+	if (nextScreen == EPlatformRootScreen::RobotConfig)
+	{
+		robotConfigScreen->SetRobotPreviewActive(true);
+	}
+}
+
 UScenarioEditorRootWidget* UPlatformRootWidget::GetScenarioEditorRootWidget() const
 {
-	const UWidget* scenarioEditorScreenWidget = ScenarioEditorScreen.Get();
+	UWidget* scenarioEditorScreenWidget = ScenarioEditorScreen.Get();
 	if (!IsValid(scenarioEditorScreenWidget))
 	{
 		UE_LOG(
@@ -253,28 +287,33 @@ UScenarioEditorRootWidget* UPlatformRootWidget::GetScenarioEditorRootWidget() co
 	}
 
 	const UScenarioEditorScreenWidget* scenarioEditorScreen = Cast<UScenarioEditorScreenWidget>(scenarioEditorScreenWidget);
-	if (!scenarioEditorScreen)
+	if (scenarioEditorScreen)
 	{
-		UE_LOG(
-			LogPlatformRootWidget,
-			Error,
-			TEXT("WBP_Root ScenarioEditorScreen has invalid class '%s' on widget '%s'; expected UScenarioEditorScreenWidget."),
-			*GetNameSafe(scenarioEditorScreenWidget->GetClass()),
-			*GetNameSafe(scenarioEditorScreenWidget));
-		return nullptr;
+		UScenarioEditorRootWidget* scenarioEditorRootWidget = scenarioEditorScreen->GetScenarioEditorRootWidget();
+		if (!IsValid(scenarioEditorRootWidget))
+		{
+			UE_LOG(
+				LogPlatformRootWidget,
+				Error,
+				TEXT("WBP_ScenarioEditorScreen is missing required ScenarioEditorRootWidget child; expected WBP_Root -> WBP_ScenarioEditorScreen -> ScenarioEditorRootWidget."));
+			return nullptr;
+		}
+
+		return scenarioEditorRootWidget;
 	}
 
-	UScenarioEditorRootWidget* scenarioEditorRootWidget = scenarioEditorScreen->GetScenarioEditorRootWidget();
-	if (!IsValid(scenarioEditorRootWidget))
+	if (UScenarioEditorRootWidget* scenarioEditorRootWidget = Cast<UScenarioEditorRootWidget>(scenarioEditorScreenWidget))
 	{
-		UE_LOG(
-			LogPlatformRootWidget,
-			Error,
-			TEXT("WBP_ScenarioEditorScreen is missing required ScenarioEditorRootWidget child; expected WBP_Root -> WBP_ScenarioEditorScreen -> ScenarioEditorRootWidget."));
-		return nullptr;
+		return scenarioEditorRootWidget;
 	}
 
-	return scenarioEditorRootWidget;
+	UE_LOG(
+		LogPlatformRootWidget,
+		Error,
+		TEXT("WBP_Root ScenarioEditorScreen has invalid class '%s' on widget '%s'; expected UScenarioEditorScreenWidget or UScenarioEditorRootWidget."),
+		*GetNameSafe(scenarioEditorScreenWidget->GetClass()),
+		*GetNameSafe(scenarioEditorScreenWidget));
+	return nullptr;
 }
 
 void UPlatformRootWidget::BindControls()

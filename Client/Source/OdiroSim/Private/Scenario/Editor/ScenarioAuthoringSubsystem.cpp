@@ -59,6 +59,10 @@ namespace
 	const double CorridorVertexHandleHeightCm = 0.0;
 	const double CorridorSegmentHandleHeightCm = CorridorVertexHandleHeightCm;
 	const double CorridorVertexHandleScale = 0.28;
+	// Minimum interactive viewport fit extent for point-like marker or object-only scenarios.
+	const double EditorViewportMinBoundsHalfExtentCm = 250.0;
+	// Saved preview route padding mirrors the runtime episode preview map-bounds padding.
+	const double ScenarioPreviewRouteBoundsPaddingCm = 100.0;
 
 	FScenarioParamValue MakeStringParamValue(const FString& value)
 	{
@@ -93,6 +97,77 @@ namespace
 		}
 
 		return !regionSpec.SurfaceId.Equals(AuthoringGeneratedRoadSurfaceId, ESearchCase::IgnoreCase);
+	}
+
+	// Rejects invalid transform or bounds coordinates before they enter viewport fit math.
+	bool IsFiniteVector(const FVector& value)
+	{
+		return FMath::IsFinite(value.X)
+			&& FMath::IsFinite(value.Y)
+			&& FMath::IsFinite(value.Z);
+	}
+
+	// Adds an actor origin when component bounds are empty, which keeps marker proxy anchors frameable.
+	bool TryAccumulateViewportActorBounds(
+		const AActor* actor,
+		FBox2D& inOutXYBounds,
+		double& inOutCenterZSum,
+		int32& inOutValidActorCount)
+	{
+		if (!IsValid(actor))
+		{
+			return false;
+		}
+
+		bool bAccumulatedBounds = false;
+		const FBox componentBounds = actor->GetComponentsBoundingBox(true);
+		if (componentBounds.IsValid
+			&& IsFiniteVector(componentBounds.Min)
+			&& IsFiniteVector(componentBounds.Max))
+		{
+			inOutXYBounds += FVector2D(componentBounds.Min.X, componentBounds.Min.Y);
+			inOutXYBounds += FVector2D(componentBounds.Max.X, componentBounds.Max.Y);
+			inOutCenterZSum += componentBounds.GetCenter().Z;
+			++inOutValidActorCount;
+			bAccumulatedBounds = true;
+		}
+
+		const FVector actorLocation = actor->GetActorLocation();
+		if (IsFiniteVector(actorLocation))
+		{
+			inOutXYBounds += FVector2D(actorLocation.X, actorLocation.Y);
+			if (!bAccumulatedBounds)
+			{
+				inOutCenterZSum += actorLocation.Z;
+				++inOutValidActorCount;
+			}
+			return true;
+		}
+
+		return bAccumulatedBounds;
+	}
+
+	// Keeps point-like authored scenarios frameable by the shared preview framing resolver.
+	void EnsureMinimumViewportBoundsExtent(FBox2D& inOutXYBounds)
+	{
+		if (!inOutXYBounds.bIsValid)
+		{
+			return;
+		}
+
+		const FVector2D boundsCenter = inOutXYBounds.GetCenter();
+		const FVector2D boundsSize = inOutXYBounds.GetSize();
+		const double minBoundsSize = EditorViewportMinBoundsHalfExtentCm * 2.0;
+		if (boundsSize.X < minBoundsSize)
+		{
+			inOutXYBounds.Min.X = boundsCenter.X - EditorViewportMinBoundsHalfExtentCm;
+			inOutXYBounds.Max.X = boundsCenter.X + EditorViewportMinBoundsHalfExtentCm;
+		}
+		if (boundsSize.Y < minBoundsSize)
+		{
+			inOutXYBounds.Min.Y = boundsCenter.Y - EditorViewportMinBoundsHalfExtentCm;
+			inOutXYBounds.Max.Y = boundsCenter.Y + EditorViewportMinBoundsHalfExtentCm;
+		}
 	}
 }
 
@@ -818,7 +893,7 @@ void UScenarioAuthoringSubsystem::GetEditorPlacementIgnoredActors(TArray<AActor*
 	}
 }
 
-// 현재 Editor Preview Surface만 기준으로 촬영용 Map Bounds를 계산한다.
+// Resolves saved preview bounds with the same surface and DeliveryBot route expansion used by episode previews.
 bool UScenarioAuthoringSubsystem::TryResolveScenarioPreviewMapBounds(
 	FScenarioMapBounds& outBounds) const
 {
@@ -849,15 +924,95 @@ bool UScenarioAuthoringSubsystem::TryResolveScenarioPreviewMapBounds(
 		return false;
 	}
 
-	// 시나리오 대표 Preview는 DeliveryBot Start/Goal로 영역을 확장하지 않는다.
-	const TArray<FScenarioPlaceableInstanceSpec> emptyPlaceables;
+	const FScenarioWorldSpec previewWorldSpec = BuildDraftWorldSpecForPreview();
 
-	// Surface Bounds 그대로 촬영 Bounds를 계산한다.
+	// Episode preview expands surface bounds by the DeliveryBot route using the same shared resolver.
 	return FScenarioMapBoundsResolver::TryResolve(
 		surfaceActors,
-		emptyPlaceables,
-		0.0,
+		previewWorldSpec.Placeables,
+		ScenarioPreviewRouteBoundsPaddingCm,
 		outBounds);
+}
+
+// Resolves editor viewport fit bounds from corridor, authored objects, and scenario marker anchors.
+bool UScenarioAuthoringSubsystem::TryResolveScenarioEditorViewportMapBounds(
+	FScenarioMapBounds& outBounds) const
+{
+	outBounds = FScenarioMapBounds{};
+
+	FBox2D viewportXYBounds(ForceInit);
+	double actorCenterZSum = 0.0;
+	int32 validActorCount = 0;
+	bool bHasEditorFitActor = false;
+	const auto accumulateActor =
+		[&viewportXYBounds, &actorCenterZSum, &validActorCount, &bHasEditorFitActor](
+			const AActor* actor)
+	{
+		const bool bAccumulated = TryAccumulateViewportActorBounds(
+			actor,
+			viewportXYBounds,
+			actorCenterZSum,
+			validActorCount);
+		bHasEditorFitActor = bHasEditorFitActor || bAccumulated;
+		return bAccumulated;
+	};
+	const auto accumulateGroundRegion =
+		[&accumulateActor](const AScenarioGroundRegion* regionActor, const bool bAllowGeneratedCity)
+	{
+		if (!bAllowGeneratedCity
+			&& IsValid(regionActor)
+			&& regionActor->RegionSpec.RegionId.StartsWith(AuthoringGeneratedCityRegionIdPrefix))
+		{
+			return false;
+		}
+
+		return accumulateActor(regionActor);
+	};
+
+	accumulateActor(CorridorPreviewActor.Get());
+
+	for (const TPair<FString, TObjectPtr<AScenarioGroundRegion>>& pair : GroundRegionActors)
+	{
+		accumulateGroundRegion(pair.Value.Get(), false);
+	}
+
+	for (const TPair<FString, TObjectPtr<AScenarioStaticObstacle>>& pair : StaticObstacleActors)
+	{
+		accumulateActor(pair.Value.Get());
+	}
+
+	for (const TPair<FString, TObjectPtr<AActor>>& pair : PedestrianActors)
+	{
+		accumulateActor(pair.Value.Get());
+	}
+
+	for (const TObjectPtr<AActor>& markerActor : RouteMarkerActors)
+	{
+		accumulateActor(markerActor.Get());
+	}
+
+	accumulateActor(RobotStartMarkerActor.Get());
+	accumulateActor(RobotGoalMarkerActor.Get());
+
+	// Generated city regions are background context, but remain the last fallback for surface-only previews.
+	if (!bHasEditorFitActor)
+	{
+		for (const TPair<FString, TObjectPtr<AScenarioGroundRegion>>& pair : GroundRegionActors)
+		{
+			accumulateGroundRegion(pair.Value.Get(), true);
+		}
+	}
+
+	if (!viewportXYBounds.bIsValid)
+	{
+		return false;
+	}
+
+	EnsureMinimumViewportBoundsExtent(viewportXYBounds);
+
+	outBounds.XYBounds = viewportXYBounds;
+	outBounds.CenterZ = validActorCount > 0 ? actorCenterZSum / validActorCount : 0.0;
+	return outBounds.IsValid();
 }
 
 // Corridor Handle처럼 Scenario Preview에서 숨겨야 할 Authoring Actor를 반환한다.

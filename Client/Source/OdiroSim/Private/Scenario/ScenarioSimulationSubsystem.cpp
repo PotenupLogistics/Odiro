@@ -21,6 +21,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Engine/PostProcessVolume.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -1131,6 +1132,37 @@ void UScenarioSimulationSubsystem::RemoveRuntimeRouteMarkerOverlayWidget()
 	RuntimeRouteMarkerOverlayWidget = nullptr;
 }
 
+// Robot spawn 직후 local player에 고정 초기 시야를 적용한다.
+void UScenarioSimulationSubsystem::ApplyRuntimeInitialView(AActor* robotActor)
+{
+	UWorld* world = GetWorld();
+	APlayerController* playerController = world ? world->GetFirstPlayerController() : nullptr;
+	APawn* playerPawn = IsValid(playerController) ? playerController->GetPawn() : nullptr;
+	if (!IsValid(world) || !IsValid(playerController) || !IsValid(playerPawn) || !IsValid(robotActor))
+	{
+		return;
+	}
+
+	const FVector robotLocation = robotActor->GetActorLocation();
+	const FVector rawRobotForward = robotActor->GetActorForwardVector();
+	const FVector robotForward = rawRobotForward.IsNearlyZero()
+		? FVector::ForwardVector
+		: rawRobotForward.GetSafeNormal();
+	const FVector targetLocation =
+		robotLocation + FVector::UpVector * RuntimeInitialCameraTargetHeightCm;
+	const FVector cameraLocation =
+		robotLocation
+		- robotForward * RuntimeInitialCameraBackDistanceCm
+		+ FVector::UpVector * RuntimeInitialCameraHeightCm;
+	const FRotator cameraRotation =
+		(targetLocation - cameraLocation).Rotation();
+
+	playerPawn->SetActorLocationAndRotation(cameraLocation, cameraRotation);
+	playerController->SetControlRotation(cameraRotation);
+	FViewTargetTransitionParams transitionParams;
+	playerController->SetViewTarget(playerPawn, transitionParams);
+}
+
 AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableInstanceSpec& placeableSpec)
 {
 	UWorld* world{ GetWorld() };
@@ -1204,6 +1236,7 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 		placeableSpec.AssetId,
 		placeableSpec.Category,
 		robotActor);
+	ApplyRuntimeInitialView(robotActor);
 
 	if (!bSpawnOnly)
 	{

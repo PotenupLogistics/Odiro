@@ -1,6 +1,7 @@
 #include "EditorHandlers.h"
 #include "EditorCoordination.h"
 #include "MCPBridgeOperationCoordinator.h"
+#include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "Engine/World.h"
@@ -106,6 +107,55 @@ namespace
 			return TEXT("");
 		}
 		return GEditor->PlayWorld->GetPathName();
+	}
+
+	/** Convert shutdown step names to a JSON array. */
+	TArray<TSharedPtr<FJsonValue>> MakeStringArray(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Result;
+		for (const FString& Value : Values)
+		{
+			Result.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Result;
+	}
+
+	/** Close editor-owned UI state that may otherwise keep transient widget worlds alive during process exit. */
+	bool PrepareCoordinatedEditorExit(TArray<FString>& OutSteps, FString& OutError)
+	{
+		if (!GEditor)
+		{
+			OutError = TEXT("GEditor not available during coordinated editor exit");
+			return false;
+		}
+
+		if (IsPieWorldActive())
+		{
+			OutError = FString::Printf(TEXT("Refusing to request editor exit while PIE is active: %s"), *GetActivePieWorldName());
+			return false;
+		}
+
+		UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+		if (!AssetEditorSubsystem)
+		{
+			OutError = TEXT("AssetEditorSubsystem not available during coordinated editor exit");
+			return false;
+		}
+
+		const int32 EditedAssetCount = AssetEditorSubsystem->GetAllEditedAssets().Num();
+		if (!AssetEditorSubsystem->CloseAllAssetEditors())
+		{
+			OutError = FString::Printf(TEXT("Failed to close all asset editors before editor exit; editedAssetCount=%d"), EditedAssetCount);
+			return false;
+		}
+		OutSteps.Add(FString::Printf(TEXT("closed_asset_editors:%d"), EditedAssetCount));
+
+		GEditor->ResetTransaction(NSLOCTEXT("MCP", "CoordinatedEditorExitResetTransactions", "MCP Coordinated Editor Exit"));
+		OutSteps.Add(TEXT("reset_transactions"));
+
+		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+		OutSteps.Add(TEXT("collect_garbage"));
+		return true;
 	}
 
 	/** Return whether a dirty package belongs to PIE duplicated runtime state. */
@@ -1289,11 +1339,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveDirty(const TSharedPtr<FJsonObject>&
 	const bool bIncludeMaps = OptionalBool(Params, TEXT("includeMaps"), true);
 	const bool bIncludeContent = OptionalBool(Params, TEXT("includeContent"), true);
 
-	if (bIncludeMaps && IsPieWorldActive())
+	if ((bIncludeMaps || bIncludeContent) && IsPieWorldActive())
 	{
 		return FMCPBridgeOperationCoordinator::MakeBlockedResult(
 			TEXT("active_pie_blocks_save_dirty"),
-			FString::Printf(TEXT("Refusing to save dirty maps while PIE is active: %s"), *GetActivePieWorldName()),
+			FString::Printf(TEXT("Refusing to save dirty packages while PIE is active: %s. Stop PIE before saving editor assets."), *GetActivePieWorldName()),
 			TEXT("pie_control.stop"),
 			1000.0);
 	}
@@ -1503,7 +1553,15 @@ TSharedPtr<FJsonValue> FEditorHandlers::CoordinationRequestExit(const TSharedPtr
 			1000.0);
 	}
 
-	const double DelaySeconds = OptionalNumber(Params, TEXT("delaySeconds"), 0.5);
+	TArray<FString> PreExitSteps;
+	FString PreExitError;
+	if (!PrepareCoordinatedEditorExit(PreExitSteps, PreExitError))
+	{
+		UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] coordinated editor exit cleanup failed: %s"), *PreExitError);
+		return MCPError(PreExitError);
+	}
+
+	const double DelaySeconds = OptionalNumber(Params, TEXT("delaySeconds"), 1.0);
 	const bool bForce = OptionalBool(Params, TEXT("force"), false);
 
 	Async(EAsyncExecution::Thread, [DelaySeconds, bForce]()
@@ -1518,7 +1576,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::CoordinationRequestExit(const TSharedPtr
 	auto Result = MCPSuccess();
 	Result->SetNumberField(TEXT("delaySeconds"), DelaySeconds);
 	Result->SetBoolField(TEXT("force"), bForce);
-	Result->SetStringField(TEXT("message"), TEXT("Editor exit requested"));
+	Result->SetArrayField(TEXT("preExitSteps"), MakeStringArray(PreExitSteps));
+	Result->SetStringField(TEXT("message"), TEXT("Editor exit requested after closing asset editors, resetting transactions, and collecting garbage"));
 	return MCPResult(Result);
 }
 

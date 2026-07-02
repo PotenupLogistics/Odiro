@@ -26,14 +26,10 @@ namespace
 		return FMath::Lerp(from, to, FMath::Clamp(amount, 0.0f, 1.0f));
 	}
 
-	// Neutral/secondary controls darken when pressed and brighten only on hover.
-	FLinearColor ResolveNeutralPressedSurfaceColor(
-		const UBaseWidgetColorCatalog& colors,
-		const EBaseWidgetVariant variant)
+	// Neutral/secondary buttons use the shared control active token when pressed.
+	FLinearColor ResolveNeutralPressedSurfaceColor(const UBaseWidgetColorCatalog& colors)
 	{
-		return variant == EBaseWidgetVariant::Secondary
-			? colors.SurfaceHoverColor
-			: colors.SurfacePanelColor;
+		return colors.SurfaceControlActiveColor;
 	}
 
 	// Resolves the DA-driven button fill for the current variant and interaction state.
@@ -103,13 +99,11 @@ namespace
 
 		if (state == EBaseWidgetState::Hovered)
 		{
-			return variant == EBaseWidgetVariant::Neutral
-				? colors.SurfaceControlActiveColor
-				: colors.SurfaceControlHoverColor;
+			return colors.SurfaceControlHoverColor;
 		}
 		if (state == EBaseWidgetState::Pressed)
 		{
-			return ResolveNeutralPressedSurfaceColor(colors, variant);
+			return ResolveNeutralPressedSurfaceColor(colors);
 		}
 		if (state != EBaseWidgetState::Default)
 		{
@@ -117,7 +111,11 @@ namespace
 		}
 		if (variant == EBaseWidgetVariant::Neutral)
 		{
-			return colors.SurfaceControlHoverColor;
+			return colors.SurfaceControlColor;
+		}
+		if (variant == EBaseWidgetVariant::Secondary)
+		{
+			return colors.SurfaceControlColor;
 		}
 		return colors.GetVariantColor(variant);
 	}
@@ -129,6 +127,11 @@ namespace
 		const EBaseWidgetState state,
 		const bool bSelected)
 	{
+		if (variant == EBaseWidgetVariant::Ghost)
+		{
+			return ResolveButtonSurfaceColor(colors, variant, state, bSelected);
+		}
+
 		if (state == EBaseWidgetState::Disabled)
 		{
 			return colors.LineSubtleColor;
@@ -137,11 +140,6 @@ namespace
 		if (bSelected || state == EBaseWidgetState::Selected)
 		{
 			return state == EBaseWidgetState::Pressed ? colors.AccentActiveColor : colors.AccentColor;
-		}
-
-		if (variant == EBaseWidgetVariant::Ghost)
-		{
-			return FLinearColor::Transparent;
 		}
 
 		if (variant == EBaseWidgetVariant::Primary)
@@ -234,6 +232,7 @@ FLinearColor UBaseButtonWidget::ResolveStateColor(const EBaseWidgetState state) 
 
 void UBaseButtonWidget::SynchronizeBaseProperties()
 {
+	CacheAuthoredContentPadding();
 	BaseWidgetPrivate::ApplySizeConstraints(RootSize.Get(), SizeConstraints);
 	if (RootSizeBox.Get() != RootSize.Get())
 	{
@@ -346,6 +345,7 @@ void UBaseButtonWidget::SynchronizeBaseProperties()
 			? ESlateVisibility::SelfHitTestInvisible
 			: ESlateVisibility::Collapsed);
 	}
+	ApplyIconOnlyContentPadding(bHasVisibleIcon && !bHasVisibleLabel);
 
 	if (colors && sizes)
 	{
@@ -461,6 +461,7 @@ void UBaseButtonWidget::SynchronizeProperties()
 
 void UBaseButtonWidget::OnWidgetRebuilt()
 {
+	bHasAuthoredSurfaceContentPadding = false;
 	Super::OnWidgetRebuilt();
 	UseTransparentCommonStyle();
 	SynchronizeBaseProperties();
@@ -558,6 +559,25 @@ void UBaseButtonWidget::ApplyTextStyle(UTextBlock* textBlock, const EBaseTextRol
 void UBaseButtonWidget::ApplyBorderColor(UBorder* border, const FLinearColor& color) const
 {
 	BaseWidgetPrivate::ApplyBorderBrushTint(border, color);
+}
+
+void UBaseButtonWidget::CacheAuthoredContentPadding()
+{
+	if (!bHasAuthoredSurfaceContentPadding && SurfaceBorder)
+	{
+		AuthoredSurfaceContentPadding = SurfaceBorder->GetPadding();
+		bHasAuthoredSurfaceContentPadding = true;
+	}
+}
+
+void UBaseButtonWidget::ApplyIconOnlyContentPadding(const bool bIconOnly)
+{
+	if (!SurfaceBorder || !bHasAuthoredSurfaceContentPadding)
+	{
+		return;
+	}
+
+	SurfaceBorder->SetPadding(bIconOnly ? FMargin() : AuthoredSurfaceContentPadding);
 }
 
 EBaseWidgetVariant UBaseButtonWidget::GetEffectiveVariant() const

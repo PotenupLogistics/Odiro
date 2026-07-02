@@ -3,7 +3,7 @@ owner: Bridge
 description: Go host process, local IPC, workspace files, and simulator process lifecycle.
 paths:
   - Bridge/**
-  - static/templates/**
+  - static/presets/**
   - static/run-defaults/**
   - contracts/specs/bridge-ipc.md
 entry:
@@ -20,14 +20,14 @@ entry:
   - id: resources-and-tools
     description: Project scaffolds and Bridge-local tooling.
     read:
-      - static/templates
+      - static/presets
       - static/run-defaults
       - Bridge/tools
 guardrails:
   - Bridge exposes local portless IPC; adding HTTP ports requires a contract update.
   - IPC transport is selected by Go build tags: Windows named pipe or Unix domain socket.
   - Shared observable IPC messages belong in `contracts/specs/bridge-ipc.md`.
-  - static/templates and static/run-defaults are the user-project creation and run scaffold sources.
+  - static/presets and static/run-defaults are the user-project creation and run scaffold sources.
   - Workspace validation rejects generated caches and source-only placeholders where runtime copies should not include them.
   - Process manager owns simulator child launch, status JSON lifecycle, cancellation, and completion state.
   - Bridge tools use `Bridge/tools/common.ps1`, never root `tools/common.ps1`.

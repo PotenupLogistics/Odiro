@@ -400,7 +400,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to query open pull requests."
 }
 
-$existingPrs = @($existingJson | ConvertFrom-Json)
+$existingPrs = ($existingJson -join "`n") | ConvertFrom-Json
 if ($existingPrs.Count -gt 0) {
     $pr = $existingPrs[0]
     Write-Success "Open PR already exists: #$($pr.number) $($pr.title)"

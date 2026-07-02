@@ -34,6 +34,13 @@ void UWindowActionBarWidget::NativeConstruct()
 void UWindowActionBarWidget::NativeDestruct()
 {
 	UnbindControls();
+	if (ActionButtonContainer)
+	{
+		ActionButtonContainer->ClearChildren();
+	}
+	ActionButtonsById.Reset();
+	OnActionRequestedNative.Clear();
+	OnActionRequested.Clear();
 	Super::NativeDestruct();
 }
 
@@ -146,6 +153,7 @@ void UWindowActionBarWidget::RebuildActionButtons()
 		}
 
 		ActionButtonContainer->AddChild(actionButton);
+		ClearRuntimeTransactionFlagsForWidget(actionButton);
 		ActionButtonsById.Add(config.ActionId, actionButton);
 		ConfigureActionButton(actionButton, config);
 	}

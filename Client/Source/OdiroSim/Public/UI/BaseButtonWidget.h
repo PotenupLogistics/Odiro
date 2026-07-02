@@ -238,6 +238,12 @@ protected:
 	// Applies a semantic tint to an optional border while preserving its WBP-owned brush.
 	void ApplyBorderColor(UBorder* border, const FLinearColor& color) const;
 
+	// Caches WBP-authored content padding before icon-only adjustments are applied.
+	void CacheAuthoredContentPadding();
+
+	// Removes content padding only for icon-only buttons so tiny controls remain centered.
+	void ApplyIconOnlyContentPadding(bool bIconOnly);
+
 	// Returns the variant after applying the bPrimary shortcut.
 	EBaseWidgetVariant GetEffectiveVariant() const;
 
@@ -307,6 +313,14 @@ protected:
 	// Whether a visual state has been sent since the current widget object was constructed.
 	UPROPERTY(Transient)
 	bool bHasBroadcastVisualState = false;
+
+	// WBP-authored SurfaceBorder padding restored when the button is not icon-only.
+	UPROPERTY(Transient)
+	FMargin AuthoredSurfaceContentPadding;
+
+	// Whether the WBP-authored content padding has been captured for this rebuilt tree.
+	UPROPERTY(Transient)
+	bool bHasAuthoredSurfaceContentPadding = false;
 
 	// Optional outer frame owned by the Widget Blueprint for button stroke states.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

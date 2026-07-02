@@ -6,7 +6,6 @@
 #include "Components/Widget.h"
 #include "UI/BaseButtonWidget.h"
 #include "UI/BaseTabWidget.h"
-#include "Platform/Widget/WindowResultTabWidget.h"
 
 namespace
 {
@@ -76,6 +75,15 @@ void UWindowTabBarWidget::NativeConstruct()
 void UWindowTabBarWidget::NativeDestruct()
 {
 	UnbindControls();
+	if (ResultTabContainer)
+	{
+		ResultTabContainer->ClearChildren();
+	}
+	ResultTabsById.Reset();
+	HoveredTabId = NAME_None;
+	OnTabSelectedNative.Clear();
+	OnResultTabCloseRequestedNative.Clear();
+	OnTabSelected.Clear();
 	Super::NativeDestruct();
 }
 
@@ -121,7 +129,12 @@ void UWindowTabBarWidget::SetTabVisible(const FName tabId, const bool bVisible)
 	}
 
 	TabVisibilityById.FindOrAdd(tabId) = bVisible;
+	if (!bVisible && HoveredTabId == tabId)
+	{
+		HoveredTabId = NAME_None;
+	}
 	ApplyTabVisibility(tabId, bVisible);
+	ApplyTabStates();
 }
 
 FName UWindowTabBarWidget::GetActiveTab() const
@@ -146,6 +159,10 @@ void UWindowTabBarWidget::SetResultTabs(const TArray<FWindowTabConfig>& tabs)
 		ResultTabOrder.Add(tab.TabId);
 		ResultTabConfigsById.Add(tab.TabId, tab);
 		TabVisibilityById.FindOrAdd(tab.TabId) = tab.bVisible;
+	}
+	if (!HoveredTabId.IsNone() && !IsKnownTabId(HoveredTabId))
+	{
+		HoveredTabId = NAME_None;
 	}
 
 	RebuildResultTabs();
@@ -192,6 +209,10 @@ void UWindowTabBarWidget::RemoveResultTab(const FName tabId)
 	ResultTabConfigsById.Remove(tabId);
 	ResultTabOrder.Remove(tabId);
 	TabVisibilityById.Remove(tabId);
+	if (HoveredTabId == tabId)
+	{
+		HoveredTabId = NAME_None;
+	}
 
 	if (GetActiveTab() == tabId)
 	{
@@ -209,6 +230,10 @@ void UWindowTabBarWidget::ClearResultTabs()
 	ResultTabsById.Reset();
 	ResultTabConfigsById.Reset();
 	ResultTabOrder.Reset();
+	if (!HoveredTabId.IsNone() && !IsFixedTabId(HoveredTabId))
+	{
+		HoveredTabId = NAME_None;
+	}
 	ApplyTabStates();
 }
 
@@ -287,6 +312,7 @@ void UWindowTabBarWidget::RebuildResultTabs()
 		}
 
 		ResultTabContainer->AddChild(tabWidget);
+		ClearRuntimeTransactionFlagsForWidget(tabWidget);
 		ResultTabsById.Add(tabId, tabWidget);
 		ConfigureTab(tabWidget, *config);
 		BindResultTabClose(tabWidget);
@@ -338,19 +364,13 @@ void UWindowTabBarWidget::ConfigureTab(UBaseTabWidget* tabWidget, const FWindowT
 	{
 		tabWidget->SetIcon(config.Icon.Get());
 	}
-	if (!config.IconGlyphText.IsEmpty())
-	{
-		tabWidget->SetIconGlyphText(config.IconGlyphText);
-	}
+	tabWidget->SetIconGlyphText(config.IconGlyphText);
 	if (!config.Label.IsEmpty())
 	{
 		tabWidget->SetToolTipText(config.Label);
 	}
 	ApplyTabDimensions(tabWidget, config.SizeConstraints);
-	if (UWindowResultTabWidget* resultTabWidget = Cast<UWindowResultTabWidget>(tabWidget))
-	{
-		resultTabWidget->SetClosable(config.bClosable);
-	}
+	tabWidget->SetClosable(config.bClosable);
 	ApplyTabVisibility(config.TabId, IsTabVisible(config.TabId));
 }
 
@@ -363,6 +383,10 @@ void UWindowTabBarWidget::BindTab(UBaseTabWidget* tabWidget)
 
 	tabWidget->OnBaseClicked.RemoveDynamic(this, &UWindowTabBarWidget::HandleTabSelected);
 	tabWidget->OnBaseClicked.AddDynamic(this, &UWindowTabBarWidget::HandleTabSelected);
+	tabWidget->OnBaseHovered.RemoveDynamic(this, &UWindowTabBarWidget::HandleTabHovered);
+	tabWidget->OnBaseHovered.AddDynamic(this, &UWindowTabBarWidget::HandleTabHovered);
+	tabWidget->OnBaseUnhovered.RemoveDynamic(this, &UWindowTabBarWidget::HandleTabUnhovered);
+	tabWidget->OnBaseUnhovered.AddDynamic(this, &UWindowTabBarWidget::HandleTabUnhovered);
 }
 
 void UWindowTabBarWidget::UnbindTab(UBaseTabWidget* tabWidget)
@@ -370,23 +394,25 @@ void UWindowTabBarWidget::UnbindTab(UBaseTabWidget* tabWidget)
 	if (tabWidget)
 	{
 		tabWidget->OnBaseClicked.RemoveDynamic(this, &UWindowTabBarWidget::HandleTabSelected);
+		tabWidget->OnBaseHovered.RemoveDynamic(this, &UWindowTabBarWidget::HandleTabHovered);
+		tabWidget->OnBaseUnhovered.RemoveDynamic(this, &UWindowTabBarWidget::HandleTabUnhovered);
 	}
 }
 
 void UWindowTabBarWidget::BindResultTabClose(UBaseTabWidget* tabWidget)
 {
-	if (UWindowResultTabWidget* resultTabWidget = Cast<UWindowResultTabWidget>(tabWidget))
+	if (tabWidget)
 	{
-		resultTabWidget->OnCloseRequestedNative.RemoveAll(this);
-		resultTabWidget->OnCloseRequestedNative.AddUObject(this, &UWindowTabBarWidget::HandleResultTabCloseRequested);
+		tabWidget->OnCloseRequestedNative.RemoveAll(this);
+		tabWidget->OnCloseRequestedNative.AddUObject(this, &UWindowTabBarWidget::HandleResultTabCloseRequested);
 	}
 }
 
 void UWindowTabBarWidget::UnbindResultTabClose(UBaseTabWidget* tabWidget)
 {
-	if (UWindowResultTabWidget* resultTabWidget = Cast<UWindowResultTabWidget>(tabWidget))
+	if (tabWidget)
 	{
-		resultTabWidget->OnCloseRequestedNative.RemoveAll(this);
+		tabWidget->OnCloseRequestedNative.RemoveAll(this);
 	}
 }
 
@@ -419,6 +445,74 @@ void UWindowTabBarWidget::ApplyTabStates()
 		if (tabPair.Value)
 		{
 			tabPair.Value->SetSelected(activeTabId == tabPair.Key);
+		}
+	}
+
+	TArray<TPair<FName, UBaseTabWidget*>> visibleTabs;
+	auto appendVisibleTab = [this, &visibleTabs](const FName tabId)
+	{
+		if (!IsTabVisible(tabId))
+		{
+			return;
+		}
+
+		if (UBaseTabWidget* tabWidget = ResolveTabById(tabId))
+		{
+			visibleTabs.Emplace(tabId, tabWidget);
+		}
+	};
+
+	appendVisibleTab(StartupTabId);
+	appendVisibleTab(OverviewTabId);
+	appendVisibleTab(ScenarioTabId);
+	appendVisibleTab(RobotTabId);
+	appendVisibleTab(ExperimentTabId);
+	for (const FName& tabId : ResultTabOrder)
+	{
+		appendVisibleTab(tabId);
+	}
+
+	TArray<bool> leftDividerVisibility;
+	TArray<bool> rightDividerVisibility;
+	leftDividerVisibility.Init(true, visibleTabs.Num());
+	rightDividerVisibility.Init(true, visibleTabs.Num());
+
+	auto suppressTabDividerVicinity = [&visibleTabs, &leftDividerVisibility, &rightDividerVisibility](const FName tabId)
+	{
+		if (tabId.IsNone())
+		{
+			return;
+		}
+
+		for (int32 tabIndex = 0; tabIndex < visibleTabs.Num(); ++tabIndex)
+		{
+			if (visibleTabs[tabIndex].Key != tabId)
+			{
+				continue;
+			}
+
+			leftDividerVisibility[tabIndex] = false;
+			rightDividerVisibility[tabIndex] = false;
+			if (tabIndex > 0)
+			{
+				rightDividerVisibility[tabIndex - 1] = false;
+			}
+			if (tabIndex + 1 < visibleTabs.Num())
+			{
+				leftDividerVisibility[tabIndex + 1] = false;
+			}
+			return;
+		}
+	};
+
+	suppressTabDividerVicinity(activeTabId);
+	suppressTabDividerVicinity(HoveredTabId);
+
+	for (int32 tabIndex = 0; tabIndex < visibleTabs.Num(); ++tabIndex)
+	{
+		if (UBaseTabWidget* tabWidget = visibleTabs[tabIndex].Value)
+		{
+			tabWidget->SetDividerEdgesVisible(leftDividerVisibility[tabIndex], rightDividerVisibility[tabIndex]);
 		}
 	}
 }
@@ -575,7 +669,41 @@ void UWindowTabBarWidget::HandleTabSelected(UBaseButtonWidget* tabWidget)
 	BroadcastTabSelected(tabId);
 }
 
-void UWindowTabBarWidget::HandleResultTabCloseRequested(UWindowResultTabWidget* tabWidget)
+void UWindowTabBarWidget::HandleTabHovered(UBaseButtonWidget* tabWidget)
+{
+	if (!IsValid(tabWidget))
+	{
+		return;
+	}
+
+	const FName tabId = ResolveTabIdByButton(tabWidget);
+	if (!IsKnownTabId(tabId) || !IsTabVisible(tabId))
+	{
+		return;
+	}
+
+	HoveredTabId = tabId;
+	ApplyTabStates();
+}
+
+void UWindowTabBarWidget::HandleTabUnhovered(UBaseButtonWidget* tabWidget)
+{
+	if (!IsValid(tabWidget))
+	{
+		return;
+	}
+
+	const FName tabId = ResolveTabIdByButton(tabWidget);
+	if (HoveredTabId != tabId)
+	{
+		return;
+	}
+
+	HoveredTabId = NAME_None;
+	ApplyTabStates();
+}
+
+void UWindowTabBarWidget::HandleResultTabCloseRequested(UBaseTabWidget* tabWidget)
 {
 	if (!IsValid(tabWidget))
 	{

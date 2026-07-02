@@ -5,6 +5,8 @@ Set-StrictMode -Version Latest
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $script:Stdout = [System.IO.StreamWriter]::new([Console]::OpenStandardOutput(), $script:Utf8NoBom)
 $script:Stdout.AutoFlush = $true
+# Default bridge port used when the lockfile is missing but the editor may still be alive.
+$script:DefaultBridgePort = 9877
 [Console]::InputEncoding = $script:Utf8NoBom
 [Console]::OutputEncoding = $script:Utf8NoBom
 
@@ -251,6 +253,50 @@ function Get-PortState {
     return $state
 }
 
+# Reconciles the advertised port lockfile with the bridge process that answered.
+function Update-PortStateFromBridgeStatus {
+    param(
+        [object] $PortState,
+        [object] $BridgeStatus
+    )
+    if ($null -eq $PortState -or $null -eq $BridgeStatus) {
+        return $PortState
+    }
+
+    $bridgeEditorPid = [int] (Get-ObjectProperty -Object $BridgeStatus -Name "editorPid" -DefaultValue 0)
+    if ($bridgeEditorPid -le 0) {
+        return $PortState
+    }
+
+    $bridgeEditorAlive = $null -ne (Get-Process -Id $bridgeEditorPid -ErrorAction SilentlyContinue)
+    $advertisedPid = [int] (Get-ObjectProperty -Object $PortState -Name "pid" -DefaultValue 0)
+    $advertisedProcessAlive = [bool] (Get-ObjectProperty -Object $PortState -Name "processAlive" -DefaultValue $false)
+    $advertisedFileExists = [bool] (Get-ObjectProperty -Object $PortState -Name "exists" -DefaultValue $false)
+    $classification = "ready"
+    if (-not $advertisedFileExists) {
+        $classification = "ready_missing_port_file"
+    }
+    elseif ($advertisedPid -le 0) {
+        $classification = "ready_missing_pid"
+    }
+    elseif ($advertisedPid -ne $bridgeEditorPid) {
+        $classification = "ready_stale_port_pid"
+    }
+    elseif (-not $advertisedProcessAlive) {
+        $classification = "ready_stale_process_state"
+    }
+
+    $PortState | Add-Member -NotePropertyName advertisedPid -NotePropertyValue $advertisedPid -Force
+    $PortState | Add-Member -NotePropertyName advertisedFileExists -NotePropertyValue $advertisedFileExists -Force
+    $PortState | Add-Member -NotePropertyName advertisedProcessAlive -NotePropertyValue $advertisedProcessAlive -Force
+    $PortState | Add-Member -NotePropertyName bridgeEditorPid -NotePropertyValue $bridgeEditorPid -Force
+    $PortState | Add-Member -NotePropertyName bridgeEditorProcessAlive -NotePropertyValue $bridgeEditorAlive -Force
+    $PortState | Add-Member -NotePropertyName effectiveEditorPid -NotePropertyValue $bridgeEditorPid -Force
+    $PortState | Add-Member -NotePropertyName effectiveProcessAlive -NotePropertyValue $bridgeEditorAlive -Force
+    $PortState | Add-Member -NotePropertyName classification -NotePropertyValue $classification -Force
+    return $PortState
+}
+
 # Returns whether a forced rebuild may safely start without bridge coordination.
 function Get-ColdStartEligibility {
     $portState = Get-PortState
@@ -365,9 +411,15 @@ function Invoke-BridgeMethod {
         [int] $TimeoutMs = 10000
     )
     $portState = Get-PortState
-    $port = Get-ObjectProperty -Object $portState -Name "port"
-    if (-not (Get-ObjectProperty -Object $portState -Name "exists" -DefaultValue $false) -or -not $port) {
-        throw "UE_MCP_Bridge port.json is missing."
+    $portValue = Get-ObjectProperty -Object $portState -Name "port"
+    $port = 0
+    if ($portValue) {
+        $port = [int] $portValue
+    }
+    $usingDefaultProbe = $false
+    if ($port -le 0) {
+        $port = $script:DefaultBridgePort
+        $usingDefaultProbe = $true
     }
 
     $client = [System.Net.WebSockets.ClientWebSocket]::new()
@@ -397,6 +449,12 @@ function Invoke-BridgeMethod {
         } while (-not $receive.EndOfMessage)
 
         return ($script:Utf8NoBom.GetString($memory.ToArray()) | ConvertFrom-Json)
+    }
+    catch {
+        if ($usingDefaultProbe) {
+            throw "UE_MCP_Bridge port.json is missing and default bridge port $port did not answer: $($_.Exception.Message)"
+        }
+        throw
     }
     finally {
         try {
@@ -453,7 +511,7 @@ function Get-ReloadStatus {
         $bridgeError = $_.Exception.Message
     }
     if ($bridge) {
-        $port | Add-Member -NotePropertyName classification -NotePropertyValue "ready" -Force
+        $port = Update-PortStateFromBridgeStatus -PortState $port -BridgeStatus $bridge
     }
     elseif ((Get-ObjectProperty -Object $port -Name "exists" -DefaultValue $false) -and
         (Get-ObjectProperty -Object $port -Name "processAlive" -DefaultValue $false)) {
@@ -462,6 +520,7 @@ function Get-ReloadStatus {
 
     $latestEditorLog = Get-LatestEditorLogPath
     $portPid = [int] (Get-ObjectProperty -Object $port -Name "pid" -DefaultValue 0)
+    $diagnosisPid = [int] (Get-ObjectProperty -Object $port -Name "effectiveEditorPid" -DefaultValue $portPid)
     $crashReportClients = @(Get-UnrealCrashReportClientStates)
     $pendingCrashReports = @($crashReportClients | Where-Object { $_.blocksEditorLaunch })
 
@@ -479,7 +538,7 @@ function Get-ReloadStatus {
         crashReportClients = $crashReportClients
         pendingCrashReports = $pendingCrashReports
         latestEditorLog = $latestEditorLog
-        editorStartupDiagnosis = (Get-EditorStartupDiagnosis -EditorPid $portPid -LatestLog $latestEditorLog)
+        editorStartupDiagnosis = (Get-EditorStartupDiagnosis -EditorPid $diagnosisPid -LatestLog $latestEditorLog)
     }
 
     $portClassification = [string] (Get-ObjectProperty -Object $port -Name "classification" -DefaultValue "")
@@ -491,7 +550,7 @@ function Get-ReloadStatus {
             -RecommendedArgs @{ reason = "retry after closing Unreal Crash Reporter" } `
             -RecommendedAction "Close or submit the Unreal Crash Reporter dialog before relaunching the editor.")
     }
-    if ($maintenanceTerminal -or $portClassification -eq "stale_pid") {
+    if ($maintenanceTerminal -or ($portClassification -eq "stale_pid" -and $null -eq $bridge)) {
         return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
             -CanAutoRecover $true `
             -BlockedByCrashReporter $false `
@@ -1592,29 +1651,44 @@ function Invoke-ReloadRecover {
 
     $maintenancePath = Get-ObjectProperty -Object $status -Name "maintenancePath"
     $maintenanceState = Get-ObjectProperty -Object $status -Name "maintenanceState"
+    $portState = Get-ObjectProperty -Object $status -Name "portState"
+    $bridgeStatus = Get-ObjectProperty -Object $status -Name "bridgeStatus"
+    $bridgeLive = $null -ne $bridgeStatus -and
+        [bool] (Get-ObjectProperty -Object $portState -Name "effectiveProcessAlive" -DefaultValue $false)
     if (Get-ObjectProperty -Object $status -Name "maintenance" -DefaultValue $false) {
         if (Test-TerminalMaintenanceState -Maintenance $maintenanceState) {
             Remove-Item -LiteralPath $maintenancePath -Force
             $actions.Add("cleared_terminal_maintenance")
         }
         else {
-            $result = [pscustomobject]@{
-                success = $false
-                code = "maintenance_in_progress"
-                reason = $Reason
-                status = $status
+            $currentJob = Get-ObjectProperty -Object $status -Name "currentJob"
+            $maintenanceEditorPid = [int] (Get-ObjectProperty -Object $maintenanceState -Name "editorPid" -DefaultValue 0)
+            $maintenanceEditorAlive = $maintenanceEditorPid -gt 0 -and [bool] (Get-Process -Id $maintenanceEditorPid -ErrorAction SilentlyContinue)
+            $portProcessAlive = [bool] (Get-ObjectProperty -Object $portState -Name "effectiveProcessAlive" -DefaultValue (
+                Get-ObjectProperty -Object $portState -Name "processAlive" -DefaultValue $false))
+            if ($null -eq $currentJob -and -not $maintenanceEditorAlive -and -not $portProcessAlive) {
+                Remove-Item -LiteralPath $maintenancePath -Force
+                $actions.Add("cleared_stale_dead_editor_maintenance")
             }
-            return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
-                -CanAutoRecover $false `
-                -BlockedByCrashReporter $false `
-                -RecommendedNextTool "editor_reload_wait_for_job" `
-                -RecommendedArgs @{ jobId = [string] (Get-ObjectProperty -Object $maintenanceState -Name "jobId" -DefaultValue "") } `
-                -RecommendedAction "Wait for the active reload job instead of starting another recovery.")
+            else {
+                $result = [pscustomobject]@{
+                    success = $false
+                    code = "maintenance_in_progress"
+                    reason = $Reason
+                    status = $status
+                }
+                return Add-ReloadActionAdvice -Result $result -Advice (New-ReloadActionAdvice `
+                    -CanAutoRecover $false `
+                    -BlockedByCrashReporter $false `
+                    -RecommendedNextTool "editor_reload_wait_for_job" `
+                    -RecommendedArgs @{ jobId = [string] (Get-ObjectProperty -Object $maintenanceState -Name "jobId" -DefaultValue "") } `
+                    -RecommendedAction "Wait for the active reload job instead of starting another recovery.")
+            }
         }
     }
-    $portState = Get-ObjectProperty -Object $status -Name "portState"
     $portPath = Get-ObjectProperty -Object $portState -Name "path"
     if ((Get-ObjectProperty -Object $portState -Name "exists" -DefaultValue $false) -and
+        -not $bridgeLive -and
         -not (Get-ObjectProperty -Object $portState -Name "processAlive" -DefaultValue $false)) {
         Remove-Item -LiteralPath $portPath -Force
         $actions.Add("cleared_stale_port")

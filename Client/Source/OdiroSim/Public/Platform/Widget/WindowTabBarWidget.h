@@ -10,7 +10,6 @@ class UBaseTabWidget;
 class UHorizontalBox;
 class UTexture2D;
 class UWidget;
-class UWindowResultTabWidget;
 
 // Tab 선택을 native parent surface에 전달하는 event.
 DECLARE_MULTICAST_DELEGATE_OneParam(FWindowTabSelectedNative, FName);
@@ -227,8 +226,16 @@ private:
 	UFUNCTION()
 	void HandleTabSelected(UBaseButtonWidget* tabWidget);
 
+	// BaseTab hover 시작을 logical tab id state로 변환한다.
+	UFUNCTION()
+	void HandleTabHovered(UBaseButtonWidget* tabWidget);
+
+	// BaseTab hover 종료를 logical tab id state로 변환한다.
+	UFUNCTION()
+	void HandleTabUnhovered(UBaseButtonWidget* tabWidget);
+
 	// Result tab close 요청을 logical tab id event로 변환한다.
-	void HandleResultTabCloseRequested(UWindowResultTabWidget* tabWidget);
+	void HandleResultTabCloseRequested(UBaseTabWidget* tabWidget);
 
 	// WBP layout이 소유하는 startup tab.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -276,6 +283,9 @@ private:
 
 	// 현재 선택된 logical tab id.
 	FName ActiveTabId;
+
+	// 현재 pointer hover 중인 logical tab id.
+	FName HoveredTabId;
 
 	// Startup fixed tab의 optional WBP-editable override.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Window|Tab Bar|Fixed Tabs", meta = (AllowPrivateAccess = "true"))

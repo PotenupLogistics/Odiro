@@ -116,6 +116,9 @@ private:
 	// Result tab id에서 run id를 복원한다.
 	static FString ExtractRunIdFromResultTabId(FName tabId);
 
+	// Result tab에 표시할 run id 부분을 만든다.
+	static FString MakeRunDetailResultTabDisplayId(const FString& runId);
+
 	// Root UI가 mouse cursor를 소유하도록 player input mode를 적용한다.
 	void ApplyRootInputMode();
 

@@ -5,6 +5,8 @@ Set-StrictMode -Version Latest
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $script:Stdout = [System.IO.StreamWriter]::new([Console]::OpenStandardOutput(), $script:Utf8NoBom)
 $script:Stdout.AutoFlush = $true
+# Default bridge port used when the lockfile is missing but the editor may still be alive.
+$script:DefaultBridgePort = 9877
 $script:DefaultBridgeTimeoutMs = 120000
 [Console]::InputEncoding = $script:Utf8NoBom
 [Console]::OutputEncoding = $script:Utf8NoBom
@@ -91,6 +93,50 @@ function Get-PortState {
     return $state
 }
 
+# Reconciles the advertised port lockfile with the bridge process that answered.
+function Update-PortStateFromBridgeStatus {
+    param(
+        [object] $PortState,
+        [object] $BridgeStatus
+    )
+    if ($null -eq $PortState -or $null -eq $BridgeStatus) {
+        return $PortState
+    }
+
+    $bridgeEditorPid = [int] (Get-ObjectProperty -Object $BridgeStatus -Name "editorPid" -DefaultValue 0)
+    if ($bridgeEditorPid -le 0) {
+        return $PortState
+    }
+
+    $bridgeEditorAlive = $null -ne (Get-Process -Id $bridgeEditorPid -ErrorAction SilentlyContinue)
+    $advertisedPid = [int] (Get-ObjectProperty -Object $PortState -Name "pid" -DefaultValue 0)
+    $advertisedProcessAlive = [bool] (Get-ObjectProperty -Object $PortState -Name "processAlive" -DefaultValue $false)
+    $advertisedFileExists = [bool] (Get-ObjectProperty -Object $PortState -Name "exists" -DefaultValue $false)
+    $classification = "ready"
+    if (-not $advertisedFileExists) {
+        $classification = "ready_missing_port_file"
+    }
+    elseif ($advertisedPid -le 0) {
+        $classification = "ready_missing_pid"
+    }
+    elseif ($advertisedPid -ne $bridgeEditorPid) {
+        $classification = "ready_stale_port_pid"
+    }
+    elseif (-not $advertisedProcessAlive) {
+        $classification = "ready_stale_process_state"
+    }
+
+    $PortState | Add-Member -NotePropertyName advertisedPid -NotePropertyValue $advertisedPid -Force
+    $PortState | Add-Member -NotePropertyName advertisedFileExists -NotePropertyValue $advertisedFileExists -Force
+    $PortState | Add-Member -NotePropertyName advertisedProcessAlive -NotePropertyValue $advertisedProcessAlive -Force
+    $PortState | Add-Member -NotePropertyName bridgeEditorPid -NotePropertyValue $bridgeEditorPid -Force
+    $PortState | Add-Member -NotePropertyName bridgeEditorProcessAlive -NotePropertyValue $bridgeEditorAlive -Force
+    $PortState | Add-Member -NotePropertyName effectiveEditorPid -NotePropertyValue $bridgeEditorPid -Force
+    $PortState | Add-Member -NotePropertyName effectiveProcessAlive -NotePropertyValue $bridgeEditorAlive -Force
+    $PortState | Add-Member -NotePropertyName classification -NotePropertyValue $classification -Force
+    return $PortState
+}
+
 # Sends one JSON-RPC request to the editor's WebSocket bridge.
 function Invoke-BridgeMethod {
     param(
@@ -99,13 +145,15 @@ function Invoke-BridgeMethod {
         [int] $TimeoutMs = $script:DefaultBridgeTimeoutMs
     )
     $portState = Get-PortState
-    $port = Get-ObjectProperty -Object $portState -Name "port"
-    if (-not (Get-ObjectProperty -Object $portState -Name "exists" -DefaultValue $false) -or -not $port) {
-        $pendingCrashReports = @(Get-PendingUnrealCrashReportClients)
-        if ($pendingCrashReports.Count -gt 0) {
-            throw "UE_MCP_Bridge port.json is missing and Unreal Crash Report is pending; close the Crash Report window before launching another editor."
-        }
-        throw "UE_MCP_Bridge port.json is missing."
+    $portValue = Get-ObjectProperty -Object $portState -Name "port"
+    $port = 0
+    if ($portValue) {
+        $port = [int] $portValue
+    }
+    $usingDefaultProbe = $false
+    if ($port -le 0) {
+        $port = $script:DefaultBridgePort
+        $usingDefaultProbe = $true
     }
 
     $client = [System.Net.WebSockets.ClientWebSocket]::new()
@@ -135,6 +183,16 @@ function Invoke-BridgeMethod {
         } while (-not $receive.EndOfMessage)
 
         return ($script:Utf8NoBom.GetString($memory.ToArray()) | ConvertFrom-Json)
+    }
+    catch {
+        if ($usingDefaultProbe) {
+            $pendingCrashReports = @(Get-PendingUnrealCrashReportClients)
+            if ($pendingCrashReports.Count -gt 0) {
+                throw "UE_MCP_Bridge port.json is missing and Unreal Crash Report is pending; close the Crash Report window before launching another editor."
+            }
+            throw "UE_MCP_Bridge port.json is missing and default bridge port $port did not answer: $($_.Exception.Message)"
+        }
+        throw
     }
     finally {
         try {
@@ -237,7 +295,7 @@ function Get-BridgeStatus {
         $bridgeError = $_.Exception.Message
     }
     if ($bridgeStatus) {
-        $portState | Add-Member -NotePropertyName classification -NotePropertyValue "ready" -Force
+        $portState = Update-PortStateFromBridgeStatus -PortState $portState -BridgeStatus $bridgeStatus
     }
     elseif ((Get-ObjectProperty -Object $portState -Name "exists" -DefaultValue $false) -and
         (Get-ObjectProperty -Object $portState -Name "processAlive" -DefaultValue $false)) {

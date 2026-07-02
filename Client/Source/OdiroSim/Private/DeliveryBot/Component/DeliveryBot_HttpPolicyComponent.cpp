@@ -1963,21 +1963,17 @@ bool UDeliveryBot_HttpPolicyComponent::TryParseMoveCommand(
 	double steering = 0.0;
 	double targetSpeedKmh = 0.0;
 	double brake = 0.0;
-	FString direction = TEXT("Forward");
 
 	actionObject->TryGetNumberField(TEXT("steering"), steering);
 	actionObject->TryGetNumberField(TEXT("targetSpeedKmh"), targetSpeedKmh);
 	actionObject->TryGetNumberField(TEXT("brake"), brake);
-	actionObject->TryGetStringField(TEXT("direction"), direction);
 
 	outMoveCommand.Steering = FMath::Clamp(static_cast<float>(steering), -1.f, 1.f);
 	outMoveCommand.TargetSpeedKmh = FMath::Max(static_cast<float>(targetSpeedKmh), 0.f);
 	outMoveCommand.Brake = FMath::Clamp(static_cast<float>(brake), 0.f, 1.f);
 	outMoveCommand.bBrake = outMoveCommand.Brake > KINDA_SMALL_NUMBER;
 
-	outMoveCommand.MoveDirectionType = direction.Equals(TEXT("Reverse"), ESearchCase::IgnoreCase)
-		? EDeliveryBotMoveDirectionType::Reverse
-		: EDeliveryBotMoveDirectionType::Forward;
+	outMoveCommand.MoveDirectionType = EDeliveryBotMoveDirectionType::Forward;
 
 	LastPolicyDecisionResult = FDeliveryBotPolicyDecisionResultInfo{};
 	LastPolicyDecisionResult.Sequence = LastDecisionSequence;

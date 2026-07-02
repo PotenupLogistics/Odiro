@@ -43,7 +43,7 @@ public:
 	void ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement,	const FDeliveryBotMoveCommandInfo& moveCommandInfo,	float deltaTime);
 	// Applies a configured parking stop without forcing handbrake unless requested.
 	void ApplyParkingStop(UChaosVehicleMovementComponent* vehicleMovement);
-	// Applies a rate-limited stop while waiting for a fresh policy command.
+	// Applies a forward-gear stop while waiting for a fresh policy command.
 	void ApplyPolicyTimeoutSlowStop(UChaosVehicleMovementComponent* vehicleMovement, float deltaTime);
 	
 	// Applies stored drive configuration to a Chaos wheeled movement component.
@@ -103,13 +103,13 @@ private:
 	// Converts kilometers per hour to centimeters per second.
 	float GetKmhToCmPerSecond(float speedKmh) const;
 	
-	// Resolves the desired Chaos gear for a high-level move command.
+	// Resolves high-level move commands to the forward Chaos gear.
 	int32 GetTargetGear(const FDeliveryBotMoveCommandInfo& moveCommandInfo) const;
 
-	// Resolves the direction-specific max target speed.
+	// Resolves the forward max target speed used by drive control.
 	float GetTargetMaxSpeedKmh(const FDeliveryBotMoveCommandInfo& moveCommandInfo) const;
 
-	// Resolves the acceleration or deceleration rate for the requested speed transition.
+	// Resolves the forward acceleration or deceleration rate for the requested speed transition.
 	float GetTargetAccelerationRateKmhPerSecond(const FDeliveryBotMoveCommandInfo& moveCommandInfo,	float requestedTargetSpeedKmh) const;
 
 	// Returns true when a gear switch must first brake through near-zero speed.

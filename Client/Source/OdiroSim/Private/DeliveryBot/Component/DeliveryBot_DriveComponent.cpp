@@ -2,8 +2,6 @@
 #include "ChaosVehicleMovementComponent.h"
 #include "ChaosWheeledVehicleMovementComponent.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotDrive, Log, All);
-
 namespace
 {
 	constexpr float KMH_TO_CMS = 27.777778f;
@@ -22,10 +20,13 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 	if (!IsValid(vehicleMovement))
 		return;
 
+	FDeliveryBotMoveCommandInfo effectiveMoveCommandInfo = moveCommandInfo;
+	// 정책이나 리플레이가 Reverse를 보내도 구동부에서는 전진 명령으로만 처리한다.
+	effectiveMoveCommandInfo.MoveDirectionType = EDeliveryBotMoveDirectionType::Forward;
+
 	const float safeDeltaTime = FMath::Max(deltaTime, 0.f);
-	const int32 targetGear = GetTargetGear(moveCommandInfo);
-	const float targetMaxSpeedKmh = GetTargetMaxSpeedKmh(moveCommandInfo);
-	const bool bReverseCommand = moveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse;
+	const int32 targetGear = GetTargetGear(effectiveMoveCommandInfo);
+	const float targetMaxSpeedKmh = GetTargetMaxSpeedKmh(effectiveMoveCommandInfo);
 
 	vehicleMovement->SetUseAutomaticGears(false);
 
@@ -33,70 +34,43 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 	if (bBrakeBeforeGearSwitch)
 	{
 		CurrentTargetSpeedKmh = 0.f;
+		CurrentThrottleInput = 0.f;
+
+		const float requestedBrake = FMath::Clamp(effectiveMoveCommandInfo.Brake, 0.f, 1.f);
+		const bool bForwardCommandRollingBackward = targetGear > 0;
+		const float targetBrake = bForwardCommandRollingBackward
+			? 1.f
+			: FMath::Max(
+				DriveConfigInfo.GearSwitchBrakeInput,
+				FMath::Max(DriveConfigInfo.StopBrakeInput, requestedBrake));
+		const bool bTargetHandbrake =
+			DriveConfigInfo.bUseHandbrakeWhenBrake && (effectiveMoveCommandInfo.bBrake || bForwardCommandRollingBackward);
+
+		if (targetBrake >= 1.f - KINDA_SMALL_NUMBER)
+		{
+			CurrentBrakeInput = targetBrake;
+		}
 
 		ApplyDriveInput(
 			vehicleMovement,
 			0.f,
 			0.f,
-			DriveConfigInfo.GearSwitchBrakeInput,
-			false,
+			targetBrake,
+			bTargetHandbrake,
 			targetMaxSpeedKmh,
 			safeDeltaTime);
-
-		if (bReverseCommand)
-		{
-			UE_LOG(
-				LogDeliveryBotDrive,
-				Warning,
-				TEXT("ReverseDebug | WaitingGearSwitch TargetGear=%d CurrentGear=%d RuntimeTargetGear=%d SignedSpeedKmh=%.2f BrakeInput=%.3f Handbrake=false"),
-				targetGear,
-				vehicleMovement->GetCurrentGear(),
-				vehicleMovement->GetTargetGear(),
-				GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed()),
-				CurrentBrakeInput);
-		}
 
 		return;
 	}
 
 	vehicleMovement->SetTargetGear(targetGear, true);
 
-	if (moveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse && !moveCommandInfo.bBrake)
-	{
-		CurrentBrakeInput = 0.f;
-		vehicleMovement->SetBrakeInput(0.f);
-		vehicleMovement->SetHandbrakeInput(false);
-	}
-
-	const bool bWaitingReverseGear = bReverseCommand && vehicleMovement->GetCurrentGear() != targetGear;
-	if (bWaitingReverseGear)
-	{
-		CurrentTargetSpeedKmh = 0.f;
-		CurrentThrottleInput = 0.f;
-		CurrentBrakeInput = 0.f;
-
-		vehicleMovement->SetThrottleInput(0.f);
-		vehicleMovement->SetBrakeInput(0.f);
-		vehicleMovement->SetHandbrakeInput(false);
-
-		UE_LOG(
-			LogDeliveryBotDrive,
-			Warning,
-			TEXT("ReverseDebug | WaitingReverseGear TargetGear=%d CurrentGear=%d RuntimeTargetGear=%d SignedSpeedKmh=%.2f Throttle=0 Brake=0 Handbrake=false"),
-			targetGear,
-			vehicleMovement->GetCurrentGear(),
-			vehicleMovement->GetTargetGear(),
-			GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed()));
-
-		return;
-	}
-
-	const float requestedTargetSpeedKmh = moveCommandInfo.bBrake
+	const float requestedTargetSpeedKmh = effectiveMoveCommandInfo.bBrake
 		? 0.f
-		: FMath::Clamp(moveCommandInfo.TargetSpeedKmh, 0.f, targetMaxSpeedKmh);
+		: FMath::Clamp(effectiveMoveCommandInfo.TargetSpeedKmh, 0.f, targetMaxSpeedKmh);
 
 	const float speedInterpRateKmhPerSecond =
-		GetTargetAccelerationRateKmhPerSecond(moveCommandInfo, requestedTargetSpeedKmh);
+		GetTargetAccelerationRateKmhPerSecond(effectiveMoveCommandInfo, requestedTargetSpeedKmh);
 
 	CurrentTargetSpeedKmh = FMath::FInterpConstantTo(
 		CurrentTargetSpeedKmh,
@@ -109,17 +83,16 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 	const float speedControlRangeKmh = FMath::Max(DriveConfigInfo.SlowdownSpeedRangeKmh, 0.1f);
 
 	float throttle = FMath::Clamp(speedErrorKmh / speedControlRangeKmh, 0.f, 1.f);
-	if (bReverseCommand && !moveCommandInfo.bBrake)
-	{
-		throttle = FMath::Max(throttle, 0.35f);
-		CurrentThrottleInput = FMath::Max(CurrentThrottleInput, 0.25f);
-	}
+	float brake = FMath::Clamp(effectiveMoveCommandInfo.Brake, 0.f, 1.f);
 
-	float brake = FMath::Clamp(moveCommandInfo.Brake, 0.f, 1.f);
-
-	if (moveCommandInfo.bBrake)
+	if (effectiveMoveCommandInfo.bBrake)
 	{
 		brake = FMath::Max(brake, DriveConfigInfo.StopBrakeInput);
+		if (brake >= 1.f - KINDA_SMALL_NUMBER)
+		{
+			CurrentThrottleInput = 0.f;
+			CurrentBrakeInput = brake;
+		}
 	}
 	else if (speedErrorKmh < -DriveConfigInfo.SpeedLimitToleranceKmh)
 	{
@@ -127,37 +100,16 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 		brake = FMath::Max(brake, FMath::Min(overspeedBrake, DriveConfigInfo.SpeedLimitBrake));
 	}
 
-	const bool bTargetHandbrake = DriveConfigInfo.bUseHandbrakeWhenBrake && moveCommandInfo.bBrake;
+	const bool bTargetHandbrake = DriveConfigInfo.bUseHandbrakeWhenBrake && effectiveMoveCommandInfo.bBrake;
 
 	ApplyDriveInput(
 		vehicleMovement,
 		throttle,
-		moveCommandInfo.Steering,
+		effectiveMoveCommandInfo.Steering,
 		brake,
 		bTargetHandbrake,
 		targetMaxSpeedKmh,
 		safeDeltaTime);
-
-	if (bReverseCommand)
-	{
-		UE_LOG(
-			LogDeliveryBotDrive,
-			Warning,
-			TEXT("ReverseDebug | Applied TargetGear=%d CurrentGear=%d RuntimeTargetGear=%d SignedSpeedKmh=%.2f RequestedTargetSpeed=%.2f CurrentTargetSpeed=%.2f RawThrottle=%.3f AppliedThrottle=%.3f RawBrake=%.3f AppliedBrake=%.3f Handbrake=%s MaxReverse=%.2f Delta=%.3f"),
-			targetGear,
-			vehicleMovement->GetCurrentGear(),
-			vehicleMovement->GetTargetGear(),
-			GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed()),
-			requestedTargetSpeedKmh,
-			CurrentTargetSpeedKmh,
-			throttle,
-			CurrentThrottleInput,
-			brake,
-			CurrentBrakeInput,
-			bTargetHandbrake ? TEXT("true") : TEXT("false"),
-			DriveConfigInfo.MaxReverseSpeedKmh,
-			safeDeltaTime);
-	}
 }
 
 // Applies a stop command that keeps the drivetrain out of reverse unless a later command requests it.
@@ -179,7 +131,7 @@ void UDeliveryBot_DriveComponent::ApplyParkingStop(UChaosVehicleMovementComponen
 	vehicleMovement->SetHandbrakeInput(DriveConfigInfo.bUseHandbrakeWhenBrake);
 }
 
-// Applies a gentle forward-gear stop for stale policy commands without engaging the handbrake.
+// Applies a forward-gear stop for stale policy commands without engaging the handbrake.
 void UDeliveryBot_DriveComponent::ApplyPolicyTimeoutSlowStop(
 	UChaosVehicleMovementComponent* vehicleMovement,
 	float deltaTime)
@@ -203,9 +155,13 @@ void UDeliveryBot_DriveComponent::ApplyPolicyTimeoutSlowStop(
 		vehicleMovement->SetTargetGear(targetGear, true);
 	}
 
-	const float targetBrake = bBrakeBeforeGearSwitch
-		? DriveConfigInfo.GearSwitchBrakeInput
-		: 1.f;
+	const float targetBrake = 1.f;
+
+	if (targetBrake >= 1.f - KINDA_SMALL_NUMBER)
+	{
+		CurrentThrottleInput = 0.f;
+		CurrentBrakeInput = targetBrake;
+	}
 
 	ApplyDriveInput(
 		vehicleMovement,
@@ -365,18 +321,18 @@ void UDeliveryBot_DriveComponent::SetupTorqueCurve(	UChaosWheeledVehicleMovement
 	torqueCurve->AddKey(maxRPM, 0.1f);
 }
 
-// 이동 방향에 따라 전진 기어 또는 후진 기어를 결정한다.
+// 후진 주행은 비활성화되어 모든 고수준 이동 명령은 전진 기어로 해석된다.
 int32 UDeliveryBot_DriveComponent::GetTargetGear(const FDeliveryBotMoveCommandInfo& moveCommandInfo) const
 {
-	return moveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse ? -1 : 1;
+	static_cast<void>(moveCommandInfo);
+	return 1;
 }
 
-// 이동 방향에 따라 사용할 최대 속도(km/h)를 반환한다.
+// 후진 주행은 비활성화되어 모든 이동 명령에 전진 속도 제한을 사용한다.
 float UDeliveryBot_DriveComponent::GetTargetMaxSpeedKmh(const FDeliveryBotMoveCommandInfo& moveCommandInfo) const
 {
-	return moveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse
-		? DriveConfigInfo.MaxReverseSpeedKmh
-		: DriveConfigInfo.MaxSpeedKmh;
+	static_cast<void>(moveCommandInfo);
+	return DriveConfigInfo.MaxSpeedKmh;
 }
 
 // 현재 목표 속도와 요청 속도 차이에 따라 가속 또는 감속 변화율을 선택한다.
@@ -386,9 +342,8 @@ float UDeliveryBot_DriveComponent::GetTargetAccelerationRateKmhPerSecond(const F
 	if (requestedTargetSpeedKmh <= CurrentTargetSpeedKmh)
 		return DriveConfigInfo.DecelerationRateKmhPerSecond;
 
-	return moveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse
-		? DriveConfigInfo.ReverseAccelerationRateKmhPerSecond
-		: DriveConfigInfo.AccelerationRateKmhPerSecond;
+	static_cast<void>(moveCommandInfo);
+	return DriveConfigInfo.AccelerationRateKmhPerSecond;
 }
 
 // 현재 진행 방향과 목표 기어가 반대일 때 기어 전환 전 제동이 필요한지 판단한다.

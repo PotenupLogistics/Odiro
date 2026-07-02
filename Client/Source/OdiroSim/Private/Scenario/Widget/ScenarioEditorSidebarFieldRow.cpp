@@ -27,6 +27,12 @@ namespace
 	// Texture path for editing a numeric field as a single fixed value.
 	const TCHAR* SidebarFieldFixedIconPath = TEXT("/Game/Widgets/Icon/icon_fixed.icon_fixed");
 
+	// Texture path for adding one row-owned array item.
+	const TCHAR* SidebarFieldAddActionIconPath = TEXT("/Game/Widgets/Icon/T_icon_add-circle.T_icon_add-circle");
+
+	// Texture path for removing one row-owned array item.
+	const TCHAR* SidebarFieldRemoveActionIconPath = TEXT("/Game/Widgets/Icon/T_icon_trash.T_icon_trash");
+
 	// Compact square footprint shared by field-row action buttons.
 	constexpr float SidebarFieldActionIconSize = 18.0f;
 
@@ -542,6 +548,7 @@ void UScenarioEditorSidebarFieldRow::HandleRemoveItemClicked()
 
 void UScenarioEditorSidebarFieldRow::BindControls()
 {
+	EnsureArrayActionIcons();
 	if (ValueEditableTextBox)
 	{
 		ValueEditableTextBox->OnTextCommitted.RemoveDynamic(
@@ -708,6 +715,43 @@ void UScenarioEditorSidebarFieldRow::EnsureRangeToggleIcon()
 	}
 }
 
+void UScenarioEditorSidebarFieldRow::EnsureArrayActionIcons()
+{
+	if (!AddItemIconImage && AddItemButton)
+	{
+		UTexture2D* addTexture = LoadSidebarFieldIconTexture(SidebarFieldAddActionIconPath);
+		if (addTexture)
+		{
+			AddItemIconImage = NewObject<UImage>(AddItemButton.Get());
+			if (AddItemIconImage)
+			{
+				AddItemButton->SetContent(AddItemIconImage.Get());
+			}
+		}
+	}
+	if (!RemoveItemIconImage && RemoveItemButton)
+	{
+		UTexture2D* removeTexture = LoadSidebarFieldIconTexture(SidebarFieldRemoveActionIconPath);
+		if (removeTexture)
+		{
+			RemoveItemIconImage = NewObject<UImage>(RemoveItemButton.Get());
+			if (RemoveItemIconImage)
+			{
+				RemoveItemButton->SetContent(RemoveItemIconImage.Get());
+			}
+		}
+	}
+
+	if (AddItemTextBlock)
+	{
+		AddItemTextBlock->SetVisibility(AddItemIconImage ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (RemoveItemTextBlock)
+	{
+		RemoveItemTextBlock->SetVisibility(RemoveItemIconImage ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+}
+
 void UScenarioEditorSidebarFieldRow::ApplyFlatButtonStyle(UButton* button) const
 {
 	if (!button)
@@ -743,12 +787,28 @@ void UScenarioEditorSidebarFieldRow::ApplyArrayActionButtonState() const
 {
 	ApplyFlatButtonStyle(AddItemButton.Get());
 	ApplyFlatButtonStyle(RemoveItemButton.Get());
+	if (AddItemIconImage)
+	{
+		ApplySidebarFieldIconBrush(
+			AddItemIconImage.Get(),
+			LoadSidebarFieldIconTexture(SidebarFieldAddActionIconPath),
+			MakeSidebarFieldColor(TEXT("F2F2F2")));
+	}
+	if (RemoveItemIconImage)
+	{
+		ApplySidebarFieldIconBrush(
+			RemoveItemIconImage.Get(),
+			LoadSidebarFieldIconTexture(SidebarFieldRemoveActionIconPath),
+			MakeSidebarFieldColor(TEXT("F2F2F2")));
+	}
 	if (AddItemTextBlock)
 	{
+		AddItemTextBlock->SetVisibility(AddItemIconImage ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 		AddItemTextBlock->SetColorAndOpacity(FSlateColor(MakeSidebarFieldColor(TEXT("F2F2F2"))));
 	}
 	if (RemoveItemTextBlock)
 	{
+		RemoveItemTextBlock->SetVisibility(RemoveItemIconImage ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 		RemoveItemTextBlock->SetColorAndOpacity(FSlateColor(MakeSidebarFieldColor(TEXT("F2F2F2"))));
 	}
 }
@@ -756,6 +816,7 @@ void UScenarioEditorSidebarFieldRow::ApplyArrayActionButtonState() const
 void UScenarioEditorSidebarFieldRow::ApplyVisualStyle()
 {
 	EnsureRangeToggleIcon();
+	EnsureArrayActionIcons();
 
 	if (WidgetTree)
 	{

@@ -31,6 +31,12 @@ namespace
 	// Texture path for the collapsed block toggle icon.
 	const TCHAR* SidebarBlockCollapsedIconPath = TEXT("/Game/Widgets/Icon/icon_arrow_right.icon_arrow_right");
 
+	// Texture path for adding one repeated block item.
+	const TCHAR* SidebarBlockAddActionIconPath = TEXT("/Game/Widgets/Icon/T_icon_add-circle.T_icon_add-circle");
+
+	// Texture path for deleting one repeated block item.
+	const TCHAR* SidebarBlockRemoveActionIconPath = TEXT("/Game/Widgets/Icon/T_icon_trash.T_icon_trash");
+
 	// Compact square footprint shared by header action icons.
 	constexpr float SidebarBlockActionIconSize = 16.0f;
 
@@ -458,7 +464,11 @@ void UScenarioEditorSidebarBlockWidget::EnsureActionButtons()
 		return;
 	}
 
-	CreateActionButton(AddActionButton, AddActionTextBlock);
+	CreateActionButton(
+		AddActionButton,
+		AddActionTextBlock,
+		AddActionIconImage,
+		SidebarBlockAddActionIconPath);
 	if (AddActionButton)
 	{
 		AddActionButton->OnClicked.RemoveDynamic(
@@ -469,7 +479,11 @@ void UScenarioEditorSidebarBlockWidget::EnsureActionButtons()
 			&UScenarioEditorSidebarBlockWidget::HandleAddActionClicked);
 	}
 
-	CreateActionButton(RemoveActionButton, RemoveActionTextBlock);
+	CreateActionButton(
+		RemoveActionButton,
+		RemoveActionTextBlock,
+		RemoveActionIconImage,
+		SidebarBlockRemoveActionIconPath);
 	if (RemoveActionButton)
 	{
 		RemoveActionButton->OnClicked.RemoveDynamic(
@@ -630,7 +644,9 @@ void UScenarioEditorSidebarBlockWidget::EnsureAssetHeaderSummary()
 
 void UScenarioEditorSidebarBlockWidget::CreateActionButton(
 	TObjectPtr<UButton>& outButton,
-	TObjectPtr<UTextBlock>& outTextBlock)
+	TObjectPtr<UTextBlock>& outTextBlock,
+	TObjectPtr<UImage>& outIconImage,
+	const TCHAR* iconPath)
 {
 	if (outButton || !BlockHeaderRow)
 	{
@@ -645,15 +661,39 @@ void UScenarioEditorSidebarBlockWidget::CreateActionButton(
 	}
 
 	outButton = NewObject<UButton>(this);
-	outTextBlock = NewObject<UTextBlock>(outButton.Get());
-	if (!outButton || !outTextBlock)
+	if (!outButton)
 	{
 		outButton = nullptr;
 		outTextBlock = nullptr;
+		outIconImage = nullptr;
 		return;
 	}
 
-	outButton->SetContent(outTextBlock.Get());
+	UTexture2D* iconTexture = LoadSidebarBlockIconTexture(iconPath);
+	if (iconTexture)
+	{
+		outIconImage = NewObject<UImage>(outButton.Get());
+		if (!outIconImage)
+		{
+			outButton = nullptr;
+			outTextBlock = nullptr;
+			return;
+		}
+
+		outButton->SetContent(outIconImage.Get());
+	}
+	else
+	{
+		outTextBlock = NewObject<UTextBlock>(outButton.Get());
+		if (!outTextBlock)
+		{
+			outButton = nullptr;
+			return;
+		}
+
+		outButton->SetContent(outTextBlock.Get());
+	}
+
 	outButton->SetStyle(MakeSidebarActionButtonStyle());
 	if (UPanelSlot* actionSlot = actionPanel->AddChild(outButton.Get()))
 	{
@@ -670,8 +710,10 @@ void UScenarioEditorSidebarBlockWidget::CreateActionButton(
 void UScenarioEditorSidebarBlockWidget::SetActionButtonState(
 	UButton* button,
 	UTextBlock* textBlock,
+	UImage* iconImage,
 	const bool bVisible,
-	const FString& label) const
+	const FString& label,
+	const TCHAR* iconPath) const
 {
 	if (button)
 	{
@@ -679,6 +721,13 @@ void UScenarioEditorSidebarBlockWidget::SetActionButtonState(
 		button->SetStyle(MakeSidebarActionButtonStyle());
 		button->SetBackgroundColor(FLinearColor::White);
 		button->SetColorAndOpacity(FLinearColor::White);
+	}
+	if (iconImage)
+	{
+		ApplySidebarBlockIconBrush(
+			iconImage,
+			LoadSidebarBlockIconTexture(iconPath),
+			MakeSidebarBlockColor(TEXT("F2F2F2")));
 	}
 	if (textBlock)
 	{
@@ -910,8 +959,20 @@ void UScenarioEditorSidebarBlockWidget::RefreshBlock()
 	SetTextBlockText(NameTextBlock.Get(), BlockName);
 	SetTextBlockText(PathTextBlock.Get(), BlockPath);
 	SetTextBlockText(BadgeTextBlock.Get(), BadgeText);
-	SetActionButtonState(AddActionButton.Get(), AddActionTextBlock.Get(), bAddActionVisible && !bDetailHostLayout, TEXT("+"));
-	SetActionButtonState(RemoveActionButton.Get(), RemoveActionTextBlock.Get(), bRemoveActionVisible && !bDetailHostLayout, TEXT("-"));
+	SetActionButtonState(
+		AddActionButton.Get(),
+		AddActionTextBlock.Get(),
+		AddActionIconImage.Get(),
+		bAddActionVisible && !bDetailHostLayout,
+		TEXT("+"),
+		SidebarBlockAddActionIconPath);
+	SetActionButtonState(
+		RemoveActionButton.Get(),
+		RemoveActionTextBlock.Get(),
+		RemoveActionIconImage.Get(),
+		bRemoveActionVisible && !bDetailHostLayout,
+		TEXT("-"),
+		SidebarBlockRemoveActionIconPath);
 	SetHeaderActionContainerVisible((bAddActionVisible || bRemoveActionVisible) && !bDetailHostLayout);
 	ApplyVisualStyle();
 	ApplyToggleButtonState();

@@ -1,0 +1,39 @@
+id: icon-assets
+owner: Root
+description: Static icon SVG/PNG and Unreal icon texture workflow.
+paths:
+  - static/assets/icons/**
+  - Client/Content/Textures/Icon/**
+  - docs/guides/icon-creation.md
+workflows:
+  - icon creation
+entry:
+  - id: workflow
+    description: Canonical icon creation flow.
+    read:
+      - docs/guides/icon-creation.md
+      - static/assets/icons/render-png.ps1
+  - id: examples
+    description: Existing icon examples.
+    read:
+      - static/assets/icons/svg
+      - Client/Content/Textures/Icon
+guardrails:
+  - Keep work at SVG until the user requests PNG/Unreal rendering.
+  - Remind the user that existing SVG edits need PNG and Texture Asset updates.
+  - Unreal imports use 84px-crop PNG, T_Icon_<PascalName>, Texture Group UI, and Uncompressed RGBA8.
+verify:
+  - when: SVG icon changes
+    run:
+      - XML parse touched SVG
+      - visual render check when practical
+  - when: PNG or Unreal rendering is requested
+    run:
+      - .\static\assets\icons\render-png.ps1 <icon-name> -SkipInstall
+      - confirm 24px, 48px, 96px, and 84px-crop PNG outputs
+      - verify Texture Group UI and Compression Settings Uncompressed RGBA8
+links:
+  - docs/guides/icon-creation.md
+related:
+  - root-dev-workflow
+  - client-platform-execution

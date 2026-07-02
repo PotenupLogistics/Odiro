@@ -199,6 +199,10 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> AddItemTextBlock;
 
+	// Optional icon used by the add item button when C++ or WBP owns icon binding.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UImage> AddItemIconImage;
+
 	// Optional button that requests removing an array item represented by this row.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UButton> RemoveItemButton;
@@ -206,6 +210,10 @@ public:
 	// Optional text used by the remove item button.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> RemoveItemTextBlock;
+
+	// Optional icon used by the remove item button when C++ or WBP owns icon binding.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UImage> RemoveItemIconImage;
 
 	// Emits committed text from the editable value control.
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
@@ -349,6 +357,8 @@ private:
 	void ApplyVisualStyle();
 	// Creates generated icon content for optional range/fixed buttons when WBP binding is absent.
 	void EnsureRangeToggleIcon();
+	// Creates generated icon content for optional row add/remove buttons when WBP binding is absent.
+	void EnsureArrayActionIcons();
 	// Applies the flat no-background visual style to row action buttons.
 	void ApplyFlatButtonStyle(UButton* button) const;
 	// Applies the range/fixed icon and flat visual state to the range toggle button.

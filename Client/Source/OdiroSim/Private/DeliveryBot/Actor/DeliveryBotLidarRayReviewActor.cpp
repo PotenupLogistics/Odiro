@@ -2,9 +2,13 @@
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
-#include "Engine/EngineTypes.h"
+#include "DeliveryBot/DeliveryBotLidarRayBeamRendering.h"
+#include "DeliveryBot/DeliveryBotLidarRayPattern.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
+#include "Shared/EpisodeLidarRayReplayDataTypes.h"
+#include "Shared/EpisodeReplayDataTypes.h"
+#include "Shared/Struct/DeliveryBot/Perception/DeliveryBotLidarSensorInfo.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotLidarRayReview, Log, All);
@@ -13,109 +17,93 @@ namespace
 {
 	const TCHAR* LidarRayBeamMeshPath =
 		TEXT("/Script/Engine.StaticMesh'/Game/Models/DeliveryBot/SM_LiDARLay.SM_LiDARLay'");
-	const TCHAR* LidarRayHitMaterialPath =
+	const TCHAR* PreviewLidarRayMaterialPath =
+		TEXT("/Script/Engine.Material'/Game/Materials/M_RobotPreview_LidarRay.M_RobotPreview_LidarRay'");
+	const TCHAR* PreviewLidarRangeMaterialPath =
+		TEXT("/Script/Engine.Material'/Game/Materials/M_RobotPreview_LidarRange.M_RobotPreview_LidarRange'");
+	const TCHAR* PreviewLidarPrimaryRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Primary.MI_RobotPreview_LidarRay_Primary'");
+	const TCHAR* PreviewLidarSecondaryRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Secondary.MI_RobotPreview_LidarRay_Secondary'");
+	const TCHAR* PreviewLidarThreeDRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_3D.MI_RobotPreview_LidarRay_3D'");
+	const TCHAR* PreviewLidarFrontBoundaryMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Front.MI_RobotPreview_LidarRay_Front'");
+	const TCHAR* PreviewLidarScanRangeMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRange_Max.MI_RobotPreview_LidarRange_Max'");
+	const TCHAR* PreviewLidarSlowRangeMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRange_Slow.MI_RobotPreview_LidarRange_Slow'");
+	const TCHAR* PreviewLidarStopRangeMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRange_Stop.MI_RobotPreview_LidarRange_Stop'");
+	const TCHAR* PreviewLidarSlowRangeRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Slow.MI_RobotPreview_LidarRay_Slow'");
+	const TCHAR* PreviewLidarStopRangeRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Stop.MI_RobotPreview_LidarRay_Stop'");
+	const TCHAR* FallbackLidarRayHitMaterialPath =
 		TEXT("/Script/Engine.Material'/Game/Materials/M_LidarRayHit.M_LidarRayHit'");
-	const TCHAR* LidarRayMissMaterialPath =
+	const TCHAR* FallbackLidarRayMissMaterialPath =
 		TEXT("/Script/Engine.Material'/Game/Materials/M_LidarRayMiss.M_LidarRayMiss'");
 
-	// Quantized replay ray segment key used to skip duplicate beam instances.
-	struct FReplayLidarRaySegmentKey
+	constexpr int32 LidarRangeRingSegments = 64;
+	constexpr int32 StandardVisible2DRayBeams = 180;
+	constexpr int32 StandardVisible3DYawSamplesPerLayer = 36;
+	constexpr int32 StandardVisible3DPitchLayers = 9;
+
+	// Loads optional preview materials without warning when a specific layer asset does not exist yet.
+	UMaterialInterface* LoadOptionalMaterial(const TCHAR* MaterialPath)
 	{
-		// Quantized start and end coordinates packed as X/Y/Z integer components.
-		FIntVector Start;
+		return Cast<UMaterialInterface>(
+			StaticLoadObject(
+				UMaterialInterface::StaticClass(),
+				nullptr,
+				MaterialPath,
+				nullptr,
+				LOAD_NoWarn));
+	}
 
-		// Quantized segment end coordinates.
-		FIntVector End;
+	// Returns Source when it exists, otherwise returns Fallback.
+	UMaterialInterface* ResolveMaterial(
+		UMaterialInterface* Source,
+		UMaterialInterface* Fallback)
+	{
+		return Source ? Source : Fallback;
+	}
 
-		// Whether the segment is rendered by the hit or miss component.
-		bool bHit = false;
+	// Clamps replay LiDAR settings into the same safe range used by the preview layer.
+	FDeliveryBotLidarSensorConfigInfo SanitizeReplayLidarConfig(
+		const FDeliveryBotLidarSensorConfigInfo& SourceConfig,
+		const FEpisodeLidarRayFrame* RayFrame)
+	{
+		FDeliveryBotLidarSensorConfigInfo Config = SourceConfig;
+		Config.ScanRangeM = FMath::Max(Config.ScanRangeM, 0.01f);
+		Config.AngleStepDegree = FMath::Max(Config.AngleStepDegree, 1.0f);
+		Config.SensorHeightM = FMath::Max(Config.SensorHeightM, 0.0f);
+		Config.SensorForwardOffsetM = FMath::Clamp(Config.SensorForwardOffsetM, -10.0f, 10.0f);
+		Config.SensorRightOffsetM = FMath::Clamp(Config.SensorRightOffsetM, -10.0f, 10.0f);
+		Config.FrontHalfAngleDegree = FMath::Clamp(Config.FrontHalfAngleDegree, 0.0f, 180.0f);
+		Config.StopDistanceM = FMath::Max(Config.StopDistanceM, 0.0f);
+		Config.SlowDownDistanceM = FMath::Max(Config.SlowDownDistanceM, 0.0f);
+		Config.VerticalMinDegree = FMath::Clamp(Config.VerticalMinDegree, -89.0f, 89.0f);
+		Config.VerticalMaxDegree = FMath::Clamp(Config.VerticalMaxDegree, -89.0f, 89.0f);
+		Config.VerticalStepDegree = FMath::Max(Config.VerticalStepDegree, 1.0f);
 
-		// Returns true when two quantized replay ray segments represent the same beam.
-		bool operator==(const FReplayLidarRaySegmentKey& Other) const
+		if (RayFrame != nullptr && !RayFrame->Rays.IsEmpty())
 		{
-			return Start == Other.Start
-				&& End == Other.End
-				&& bHit == Other.bHit;
-		}
-	};
+			double MaxRecordedRangeCm = 0.0;
+			for (const FEpisodeLidarRaySample& Ray : RayFrame->Rays)
+			{
+				MaxRecordedRangeCm = FMath::Max(
+					MaxRecordedRangeCm,
+					FVector::Distance(Ray.StartLocationCm, Ray.EndLocationCm));
+			}
 
-	// Hashes one quantized replay ray segment key for duplicate detection.
-	uint32 GetTypeHash(const FReplayLidarRaySegmentKey& Key)
-	{
-		uint32 Hash = static_cast<uint32>(Key.Start.X);
-		Hash = HashCombine(Hash, static_cast<uint32>(Key.Start.Y));
-		Hash = HashCombine(Hash, static_cast<uint32>(Key.Start.Z));
-		Hash = HashCombine(Hash, static_cast<uint32>(Key.End.X));
-		Hash = HashCombine(Hash, static_cast<uint32>(Key.End.Y));
-		Hash = HashCombine(Hash, static_cast<uint32>(Key.End.Z));
-		Hash = HashCombine(Hash, Key.bHit ? 0x85ebca6bu : 0xc2b2ae35u);
-		return Hash;
-	}
-
-	// Converts one world-space coordinate to a quantized grid coordinate.
-	int32 QuantizeReplayRayCoordinate(
-		const double CoordinateCm,
-		const double GridCm)
-	{
-		return FMath::RoundToInt(CoordinateCm / GridCm);
-	}
-
-	// Converts one location to a quantized grid location for duplicate detection.
-	FIntVector QuantizeReplayRayLocation(
-		const FVector& LocationCm,
-		const double GridCm)
-	{
-		return FIntVector(
-			QuantizeReplayRayCoordinate(LocationCm.X, GridCm),
-			QuantizeReplayRayCoordinate(LocationCm.Y, GridCm),
-			QuantizeReplayRayCoordinate(LocationCm.Z, GridCm));
-	}
-
-	// Configures one instanced mesh component for replay-only LiDAR ray rendering.
-	void ConfigureReplayRayInstanceComponent(
-		UInstancedStaticMeshComponent* Component,
-		USceneComponent* Parent)
-	{
-		if (Component == nullptr)
-		{
-			return;
+			if (MaxRecordedRangeCm > Config.ScanRangeM * 100.0f)
+			{
+				Config.ScanRangeM = static_cast<float>(MaxRecordedRangeCm / 100.0);
+			}
 		}
 
-		Component->SetupAttachment(Parent);
-		Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Component->SetGenerateOverlapEvents(false);
-		Component->SetMobility(EComponentMobility::Movable);
-		Component->SetCastShadow(false);
-		Component->SetVisibility(false, true);
-		Component->SetCanEverAffectNavigation(false);
-	}
-
-	// Ensures the material has an instanced-static-mesh shader permutation before assignment.
-	void EnsureReplayRayMaterialUsage(
-		UMaterialInterface* Material,
-		const TCHAR* MaterialPath)
-	{
-		if (Material == nullptr)
-		{
-			return;
-		}
-
-		if (!Material->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes))
-		{
-			UE_LOG(
-				LogDeliveryBotLidarRayReview,
-				Warning,
-				TEXT("LiDAR ray material is not usable with instanced static meshes: %s"),
-				MaterialPath);
-		}
-	}
-
-	// Returns true when every vector component is finite.
-	bool IsFiniteReplayLidarRayVector(const FVector& Value)
-	{
-		return FMath::IsFinite(Value.X)
-			&& FMath::IsFinite(Value.Y)
-			&& FMath::IsFinite(Value.Z);
+		return Config;
 	}
 }
 
@@ -126,18 +114,28 @@ ADeliveryBotLidarRayReviewActor::ADeliveryBotLidarRayReviewActor()
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	RootComponent = SceneRoot;
 
-	HitRayInstances = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("HitRayInstances"));
-	MissRayInstances = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("MissRayInstances"));
-	ConfigureReplayRayInstanceComponent(HitRayInstances, SceneRoot);
-	ConfigureReplayRayInstanceComponent(MissRayInstances, SceneRoot);
+	LidarPrimaryRayInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarPrimaryRayInstances"));
+	LidarSecondaryRayInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarSecondaryRayInstances"));
+	LidarThreeDRayInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarThreeDRayInstances"));
+	LidarRangeRingInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarRangeRingInstances"));
+	LidarSlowRangeRingInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarSlowRangeRingInstances"));
+	LidarStopRangeRingInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarStopRangeRingInstances"));
+	LidarSlowRangeRayInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarSlowRangeRayInstances"));
+	LidarStopRangeRayInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarStopRangeRayInstances"));
+	LidarFrontBoundaryInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarFrontBoundaryInstances"));
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> BeamMeshFinder(LidarRayBeamMeshPath);
-	if (BeamMeshFinder.Succeeded())
-	{
-		HitRayInstances->SetStaticMesh(BeamMeshFinder.Object);
-		MissRayInstances->SetStaticMesh(BeamMeshFinder.Object);
-	}
-	else
+	UStaticMesh* BeamMesh = BeamMeshFinder.Succeeded() ? BeamMeshFinder.Object : nullptr;
+	if (!BeamMesh)
 	{
 		UE_LOG(
 			LogDeliveryBotLidarRayReview,
@@ -146,124 +144,272 @@ ADeliveryBotLidarRayReviewActor::ADeliveryBotLidarRayReviewActor()
 			LidarRayBeamMeshPath);
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> HitMaterialFinder(LidarRayHitMaterialPath);
-	if (HitMaterialFinder.Succeeded())
-	{
-		EnsureReplayRayMaterialUsage(HitMaterialFinder.Object, LidarRayHitMaterialPath);
-		HitRayInstances->SetMaterial(0, HitMaterialFinder.Object);
-	}
-	else
-	{
-		UE_LOG(
-			LogDeliveryBotLidarRayReview,
-			Warning,
-			TEXT("Failed to load LiDAR hit material: %s"),
-			LidarRayHitMaterialPath);
-	}
+	FDeliveryBotLidarRayBeamComponentOptions BeamComponentOptions;
+	BeamComponentOptions.bVisible = false;
+	BeamComponentOptions.bHiddenInGame = true;
+	BeamComponentOptions.bCastShadow = false;
+	ForEachLidarBeamComponent(
+		[this, BeamMesh, &BeamComponentOptions](UInstancedStaticMeshComponent* Component)
+		{
+			FDeliveryBotLidarRayBeamRendering::ConfigureBeamComponent(
+				Component,
+				SceneRoot,
+				BeamMesh,
+				BeamComponentOptions);
+		});
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> MissMaterialFinder(LidarRayMissMaterialPath);
-	if (MissMaterialFinder.Succeeded())
-	{
-		EnsureReplayRayMaterialUsage(MissMaterialFinder.Object, LidarRayMissMaterialPath);
-		MissRayInstances->SetMaterial(0, MissMaterialFinder.Object);
-	}
-	else
-	{
-		UE_LOG(
-			LogDeliveryBotLidarRayReview,
-			Warning,
-			TEXT("Failed to load LiDAR miss material: %s"),
-			LidarRayMissMaterialPath);
-	}
+	UMaterialInterface* PreviewRayMaterial = LoadOptionalMaterial(PreviewLidarRayMaterialPath);
+	UMaterialInterface* PreviewRangeMaterial = LoadOptionalMaterial(PreviewLidarRangeMaterialPath);
+	UMaterialInterface* PrimaryRayMaterial = LoadOptionalMaterial(PreviewLidarPrimaryRayMaterialPath);
+	UMaterialInterface* SecondaryRayMaterial = LoadOptionalMaterial(PreviewLidarSecondaryRayMaterialPath);
+	UMaterialInterface* ThreeDRayMaterial = LoadOptionalMaterial(PreviewLidarThreeDRayMaterialPath);
+	UMaterialInterface* FrontBoundaryMaterial = LoadOptionalMaterial(PreviewLidarFrontBoundaryMaterialPath);
+	UMaterialInterface* ScanRangeMaterial = LoadOptionalMaterial(PreviewLidarScanRangeMaterialPath);
+	UMaterialInterface* SlowRangeMaterial = LoadOptionalMaterial(PreviewLidarSlowRangeMaterialPath);
+	UMaterialInterface* StopRangeMaterial = LoadOptionalMaterial(PreviewLidarStopRangeMaterialPath);
+	UMaterialInterface* SlowRangeRayMaterial = LoadOptionalMaterial(PreviewLidarSlowRangeRayMaterialPath);
+	UMaterialInterface* StopRangeRayMaterial = LoadOptionalMaterial(PreviewLidarStopRangeRayMaterialPath);
+	UMaterialInterface* FallbackHitMaterial = LoadOptionalMaterial(FallbackLidarRayHitMaterialPath);
+	UMaterialInterface* FallbackMissMaterial = LoadOptionalMaterial(FallbackLidarRayMissMaterialPath);
+	UMaterialInterface* RayFallback = ResolveMaterial(PreviewRayMaterial, FallbackHitMaterial);
+	UMaterialInterface* RangeFallback = ResolveMaterial(PreviewRangeMaterial, RayFallback);
+
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarPrimaryRayInstances,
+		ResolveMaterial(PrimaryRayMaterial, RayFallback));
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarSecondaryRayInstances,
+		ResolveMaterial(SecondaryRayMaterial, ResolveMaterial(FallbackMissMaterial, RayFallback)));
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarThreeDRayInstances,
+		ResolveMaterial(ThreeDRayMaterial, RayFallback));
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarFrontBoundaryInstances,
+		ResolveMaterial(FrontBoundaryMaterial, RayFallback));
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarRangeRingInstances,
+		ResolveMaterial(ScanRangeMaterial, RangeFallback));
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarSlowRangeRingInstances,
+		ResolveMaterial(SlowRangeMaterial, RangeFallback));
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarStopRangeRingInstances,
+		ResolveMaterial(StopRangeMaterial, RangeFallback));
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarSlowRangeRayInstances,
+		ResolveMaterial(SlowRangeRayMaterial, ResolveMaterial(SlowRangeMaterial, RangeFallback)));
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarStopRangeRayInstances,
+		ResolveMaterial(StopRangeRayMaterial, ResolveMaterial(StopRangeMaterial, RangeFallback)));
 }
 
 void ADeliveryBotLidarRayReviewActor::ApplyLidarRayFrame(
+	const FEpisodeReplayRobotFrame& RobotFrame,
+	const FDeliveryBotLidarSensorConfigInfo& LidarConfig,
 	const FEpisodeLidarRayFrame* RayFrame,
-	const FEpisodeLidarRayReplayManifest& /*Manifest*/,
 	const FVector& ReplayWorldOffset)
 {
 	ClearLidarRays();
-	if (!bLidarRaysVisible
-		|| RayFrame == nullptr
-		|| RayFrame->Rays.IsEmpty()
-		|| HitRayInstances == nullptr
-		|| MissRayInstances == nullptr)
+	if (!bLidarRaysVisible)
 	{
 		return;
 	}
 
-	const int32 RayCount = RayFrame->Rays.Num();
-	const int32 EffectiveMaxVisibleRays = FMath::Max(1, MaxVisibleRays);
-	const int32 RayStep = FMath::Max(1, FMath::CeilToInt(static_cast<float>(RayCount) / EffectiveMaxVisibleRays));
-	const double SafeDuplicateRayMergeGridCm = FMath::Max(0.0, DuplicateRayMergeGridCm);
-	TSet<FReplayLidarRaySegmentKey> RenderedRaySegments;
-	if (SafeDuplicateRayMergeGridCm > 0.0)
+	const FDeliveryBotLidarSensorConfigInfo SafeConfig =
+		SanitizeReplayLidarConfig(LidarConfig, RayFrame);
+	const float ScanRangeCm = FMath::Max(SafeConfig.ScanRangeM, 0.01f) * 100.0f;
+	const float StopDistanceCm = FMath::Clamp(SafeConfig.StopDistanceM * 100.0f, 0.0f, ScanRangeCm);
+	const float SlowDistanceCm = FMath::Clamp(SafeConfig.SlowDownDistanceM * 100.0f, 0.0f, ScanRangeCm);
+	const float FrontHalfAngleDegree = SafeConfig.FrontHalfAngleDegree;
+	const FVector SensorLocationLocalCm(
+		SafeConfig.SensorForwardOffsetM * 100.0f,
+		SafeConfig.SensorRightOffsetM * 100.0f,
+		SafeConfig.SensorHeightM * 100.0f);
+	const FTransform RobotWorldTransform(
+		RobotFrame.Rotation,
+		RobotFrame.PositionCm + ReplayWorldOffset,
+		FVector::OneVector);
+
+	TArray<FDeliveryBotLidarRaySample> RaySamples;
+	FDeliveryBotLidarRayPattern::BuildRaySamples(SafeConfig, RaySamples);
+
+	AddRangeRing(
+		LidarRangeRingInstances,
+		RobotWorldTransform,
+		SensorLocationLocalCm,
+		ScanRangeCm,
+		static_cast<float>(RangeBeamThicknessScale));
+	if (SlowDistanceCm > UE_SMALL_NUMBER)
 	{
-		RenderedRaySegments.Reserve(EffectiveMaxVisibleRays);
+		AddRangeRing(
+			LidarSlowRangeRingInstances,
+			RobotWorldTransform,
+			SensorLocationLocalCm,
+			SlowDistanceCm,
+			static_cast<float>(RangeBeamThicknessScale));
+		AddRangeRaySet(
+			LidarSlowRangeRayInstances,
+			RobotWorldTransform,
+			SensorLocationLocalCm,
+			SlowDistanceCm,
+			FrontHalfAngleDegree,
+			static_cast<float>(RangeRayBeamThicknessScale));
+	}
+	if (StopDistanceCm > UE_SMALL_NUMBER)
+	{
+		AddRangeRing(
+			LidarStopRangeRingInstances,
+			RobotWorldTransform,
+			SensorLocationLocalCm,
+			StopDistanceCm,
+			static_cast<float>(RangeBeamThicknessScale));
+		AddRangeRaySet(
+			LidarStopRangeRayInstances,
+			RobotWorldTransform,
+			SensorLocationLocalCm,
+			StopDistanceCm,
+			FrontHalfAngleDegree,
+			static_cast<float>(RangeRayBeamThicknessScale));
 	}
 
-	for (int32 RayIndex = 0; RayIndex < RayCount; RayIndex += RayStep)
+	AddRobotLocalRay(
+		LidarFrontBoundaryInstances,
+		RobotWorldTransform,
+		SensorLocationLocalCm,
+		FrontHalfAngleDegree,
+		0.0f,
+		ScanRangeCm,
+		static_cast<float>(RayBeamThicknessScale));
+	AddRobotLocalRay(
+		LidarFrontBoundaryInstances,
+		RobotWorldTransform,
+		SensorLocationLocalCm,
+		-FrontHalfAngleDegree,
+		0.0f,
+		ScanRangeCm,
+		static_cast<float>(RayBeamThicknessScale));
+
+	for (const FDeliveryBotLidarRaySample& RaySample : RaySamples)
 	{
-		const FEpisodeLidarRaySample& Ray = RayFrame->Rays[RayIndex];
-		if (!ShouldDrawRay(Ray))
+		if (RaySample.DimensionType != EDeliveryBotLidarRayDimensionType::OneD)
 		{
 			continue;
 		}
 
-		if (SafeDuplicateRayMergeGridCm > 0.0)
+		AddRobotLocalRay(
+			LidarPrimaryRayInstances,
+			RobotWorldTransform,
+			SensorLocationLocalCm,
+			RaySample.YawDegree,
+			RaySample.PitchDegree,
+			ScanRangeCm,
+			static_cast<float>(RayBeamThicknessScale * 1.5));
+	}
+
+	if (FDeliveryBotLidarRayPattern::DoesModeIncludeDimension(
+		SafeConfig.LidarModeType,
+		EDeliveryBotLidarRayDimensionType::TwoD))
+	{
+		const int32 RequestedYawRayCount = FDeliveryBotLidarRayPattern::CountYawSamples(SafeConfig);
+		const int32 YawRayStride = FMath::Max(
+			1,
+			FMath::CeilToInt(
+				static_cast<float>(RequestedYawRayCount)
+				/ static_cast<float>(FMath::Min(MaxVisibleScanRays, StandardVisible2DRayBeams))));
+		for (const FDeliveryBotLidarRaySample& RaySample : RaySamples)
 		{
-			const FReplayLidarRaySegmentKey SegmentKey{
-				QuantizeReplayRayLocation(Ray.StartLocationCm, SafeDuplicateRayMergeGridCm),
-				QuantizeReplayRayLocation(ResolveRayEndLocation(Ray), SafeDuplicateRayMergeGridCm),
-				Ray.bHit};
-			if (RenderedRaySegments.Contains(SegmentKey))
+			if (RaySample.DimensionType != EDeliveryBotLidarRayDimensionType::TwoD
+				|| (RaySample.RayIndex % YawRayStride) != 0)
 			{
 				continue;
 			}
-			RenderedRaySegments.Add(SegmentKey);
-		}
 
-		FTransform RayTransform;
-		if (!TryBuildRayInstanceTransform(Ray, ReplayWorldOffset, RayTransform))
-		{
-			continue;
+			UInstancedStaticMeshComponent* TargetComponent =
+				FDeliveryBotLidarRayPattern::IsFrontYaw(RaySample.YawDegree, FrontHalfAngleDegree)
+					? LidarPrimaryRayInstances.Get()
+					: LidarSecondaryRayInstances.Get();
+			AddRobotLocalRay(
+				TargetComponent,
+				RobotWorldTransform,
+				SensorLocationLocalCm,
+				RaySample.YawDegree,
+				RaySample.PitchDegree,
+				ScanRangeCm,
+				static_cast<float>(RayBeamThicknessScale));
 		}
-
-		UInstancedStaticMeshComponent* TargetComponent =
-			Ray.bHit ? HitRayInstances.Get() : MissRayInstances.Get();
-		TargetComponent->AddInstance(RayTransform, true);
-		++RenderedRayCount;
 	}
 
-	HitRayInstances->MarkRenderStateDirty();
-	MissRayInstances->MarkRenderStateDirty();
+	if (FDeliveryBotLidarRayPattern::DoesModeIncludeDimension(
+		SafeConfig.LidarModeType,
+		EDeliveryBotLidarRayDimensionType::ThreeD))
+	{
+		const int32 RequestedYawRayCount = FDeliveryBotLidarRayPattern::CountYawSamples(SafeConfig);
+		const int32 RequestedPitchRayCount = FDeliveryBotLidarRayPattern::CountPitchSamples(SafeConfig);
+		const int32 YawRayStride = FMath::Max(
+			1,
+			FMath::CeilToInt(
+				static_cast<float>(RequestedYawRayCount)
+				/ static_cast<float>(StandardVisible3DYawSamplesPerLayer)));
+		const int32 PitchLayerStride = FMath::Max(
+			1,
+			FMath::CeilToInt(
+				static_cast<float>(RequestedPitchRayCount)
+				/ static_cast<float>(StandardVisible3DPitchLayers)));
+		for (const FDeliveryBotLidarRaySample& RaySample : RaySamples)
+		{
+			if (RaySample.DimensionType != EDeliveryBotLidarRayDimensionType::ThreeD)
+			{
+				continue;
+			}
+
+			const int32 PitchIndex = RequestedYawRayCount > 0
+				? RaySample.RayIndex / RequestedYawRayCount
+				: 0;
+			const int32 YawRayIndex = RequestedYawRayCount > 0
+				? RaySample.RayIndex % RequestedYawRayCount
+				: RaySample.RayIndex;
+			if ((PitchIndex % PitchLayerStride) != 0 || (YawRayIndex % YawRayStride) != 0)
+			{
+				continue;
+			}
+
+			AddRobotLocalRay(
+				LidarThreeDRayInstances,
+				RobotWorldTransform,
+				SensorLocationLocalCm,
+				RaySample.YawDegree,
+				RaySample.PitchDegree,
+				ScanRangeCm,
+				static_cast<float>(RayBeamThicknessScale * 0.85));
+		}
+	}
+
+	ForEachLidarBeamComponent(
+		[](UInstancedStaticMeshComponent* Component)
+		{
+			FDeliveryBotLidarRayBeamRendering::MarkBeamRenderStateDirty(Component);
+		});
 }
 
 void ADeliveryBotLidarRayReviewActor::ClearLidarRays()
 {
 	RenderedRayCount = 0;
-	if (HitRayInstances != nullptr)
-	{
-		HitRayInstances->ClearInstances();
-	}
-	if (MissRayInstances != nullptr)
-	{
-		MissRayInstances->ClearInstances();
-	}
+	ForEachLidarBeamComponent(
+		[](UInstancedStaticMeshComponent* Component)
+		{
+			FDeliveryBotLidarRayBeamRendering::ClearBeamInstances(Component);
+		});
 }
 
 void ADeliveryBotLidarRayReviewActor::SetLidarRaysVisible(const bool bVisible)
 {
 	bLidarRaysVisible = bVisible;
 	SetActorHiddenInGame(!bVisible);
-	if (HitRayInstances != nullptr)
-	{
-		HitRayInstances->SetVisibility(bVisible, true);
-	}
-	if (MissRayInstances != nullptr)
-	{
-		MissRayInstances->SetVisibility(bVisible, true);
-	}
+	ForEachLidarBeamComponent(
+		[bVisible](UInstancedStaticMeshComponent* Component)
+		{
+			FDeliveryBotLidarRayBeamRendering::SetBeamComponentVisible(Component, bVisible);
+		});
 
 	if (!bVisible)
 	{
@@ -271,49 +417,125 @@ void ADeliveryBotLidarRayReviewActor::SetLidarRaysVisible(const bool bVisible)
 	}
 }
 
-FVector ADeliveryBotLidarRayReviewActor::ResolveRayEndLocation(const FEpisodeLidarRaySample& Ray) const
+void ADeliveryBotLidarRayReviewActor::ForEachLidarBeamComponent(
+	TFunctionRef<void(UInstancedStaticMeshComponent*)> Operation) const
 {
-	return Ray.bHit
-		? Ray.HitLocationCm
-		: Ray.EndLocationCm;
+	Operation(LidarPrimaryRayInstances.Get());
+	Operation(LidarSecondaryRayInstances.Get());
+	Operation(LidarThreeDRayInstances.Get());
+	Operation(LidarRangeRingInstances.Get());
+	Operation(LidarSlowRangeRingInstances.Get());
+	Operation(LidarStopRangeRingInstances.Get());
+	Operation(LidarSlowRangeRayInstances.Get());
+	Operation(LidarStopRangeRayInstances.Get());
+	Operation(LidarFrontBoundaryInstances.Get());
 }
 
-bool ADeliveryBotLidarRayReviewActor::TryBuildRayInstanceTransform(
-	const FEpisodeLidarRaySample& Ray,
-	const FVector& ReplayWorldOffset,
-	FTransform& OutTransform) const
+bool ADeliveryBotLidarRayReviewActor::AddWorldBeam(
+	UInstancedStaticMeshComponent* Component,
+	const FVector& StartLocationCm,
+	const FVector& EndLocationCm,
+	const float ThicknessScale)
 {
-	const FVector StartLocation = Ray.StartLocationCm + ReplayWorldOffset;
-	const FVector EndLocation = ResolveRayEndLocation(Ray) + ReplayWorldOffset;
-	const FVector RayDelta = EndLocation - StartLocation;
-	const double RayLengthCm = RayDelta.Size();
-	constexpr double MinRayBeamDimension = 0.001;
-	if (RayLengthCm <= MinRayBeamDimension)
+	if (FDeliveryBotLidarRayBeamRendering::AddBeamInstance(
+		Component,
+		StartLocationCm,
+		EndLocationCm,
+		RayBeamLengthCm,
+		ThicknessScale,
+		true))
 	{
-		return false;
+		++RenderedRayCount;
+		return true;
 	}
 
-	const FVector RayDirection = RayDelta / RayLengthCm;
-	const FVector Midpoint = StartLocation + RayDelta * 0.5;
-	const FRotator Rotation = FRotationMatrix::MakeFromX(RayDirection).Rotator();
-	const double SafeBeamLengthCm = FMath::Max(MinRayBeamDimension, RayBeamLengthCm);
-	const double SafeThicknessScale = FMath::Max(MinRayBeamDimension, RayBeamThicknessScale);
-	const FVector Scale(
-		RayLengthCm / SafeBeamLengthCm,
-		SafeThicknessScale,
-		SafeThicknessScale);
-	OutTransform = FTransform(Rotation, Midpoint, Scale);
-	return true;
+	return false;
 }
 
-bool ADeliveryBotLidarRayReviewActor::ShouldDrawRay(const FEpisodeLidarRaySample& Ray) const
+bool ADeliveryBotLidarRayReviewActor::AddRobotLocalRay(
+	UInstancedStaticMeshComponent* Component,
+	const FTransform& RobotWorldTransform,
+	const FVector& SensorLocationLocalCm,
+	const float YawDegree,
+	const float PitchDegree,
+	const float RangeCm,
+	const float ThicknessScale)
 {
-	if (!Ray.bHit && !bDrawMissRays)
+	const FVector LocalDirection = FRotator(PitchDegree, YawDegree, 0.0f).Vector();
+	const FVector StartLocation = RobotWorldTransform.TransformPosition(SensorLocationLocalCm);
+	const FVector EndLocation = RobotWorldTransform.TransformPosition(
+		SensorLocationLocalCm + LocalDirection * RangeCm);
+	return AddWorldBeam(Component, StartLocation, EndLocation, ThicknessScale);
+}
+
+void ADeliveryBotLidarRayReviewActor::AddRangeRing(
+	UInstancedStaticMeshComponent* Component,
+	const FTransform& RobotWorldTransform,
+	const FVector& SensorLocationLocalCm,
+	const float RadiusCm,
+	const float ThicknessScale)
+{
+	if (!Component || RadiusCm <= UE_SMALL_NUMBER)
 	{
-		return false;
+		return;
 	}
 
-	return IsFiniteReplayLidarRayVector(Ray.StartLocationCm)
-		&& IsFiniteReplayLidarRayVector(Ray.EndLocationCm)
-		&& IsFiniteReplayLidarRayVector(Ray.HitLocationCm);
+	const int32 SegmentCount = FMath::Max(12, LidarRangeRingSegments);
+	for (int32 SegmentIndex = 0; SegmentIndex < SegmentCount; ++SegmentIndex)
+	{
+		const float StartYawDegree = static_cast<float>(SegmentIndex) * 360.0f / static_cast<float>(SegmentCount);
+		const float EndYawDegree = static_cast<float>(SegmentIndex + 1) * 360.0f / static_cast<float>(SegmentCount);
+		const FVector StartDirection = FRotator(0.0f, StartYawDegree, 0.0f).Vector();
+		const FVector EndDirection = FRotator(0.0f, EndYawDegree, 0.0f).Vector();
+		AddWorldBeam(
+			Component,
+			RobotWorldTransform.TransformPosition(SensorLocationLocalCm + StartDirection * RadiusCm),
+			RobotWorldTransform.TransformPosition(SensorLocationLocalCm + EndDirection * RadiusCm),
+			ThicknessScale);
+	}
+}
+
+void ADeliveryBotLidarRayReviewActor::AddRangeRaySet(
+	UInstancedStaticMeshComponent* Component,
+	const FTransform& RobotWorldTransform,
+	const FVector& SensorLocationLocalCm,
+	const float RangeCm,
+	const float FrontHalfAngleDegree,
+	const float ThicknessScale)
+{
+	if (!Component || RangeCm <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	AddRobotLocalRay(
+		Component,
+		RobotWorldTransform,
+		SensorLocationLocalCm,
+		0.0f,
+		0.0f,
+		RangeCm,
+		ThicknessScale);
+
+	if (FrontHalfAngleDegree <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	AddRobotLocalRay(
+		Component,
+		RobotWorldTransform,
+		SensorLocationLocalCm,
+		FrontHalfAngleDegree,
+		0.0f,
+		RangeCm,
+		ThicknessScale);
+	AddRobotLocalRay(
+		Component,
+		RobotWorldTransform,
+		SensorLocationLocalCm,
+		-FrontHalfAngleDegree,
+		0.0f,
+		RangeCm,
+		ThicknessScale);
 }

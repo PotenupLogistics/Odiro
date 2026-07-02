@@ -2,93 +2,149 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Shared/EpisodeLidarRayReplayDataTypes.h"
 #include "DeliveryBotLidarRayReviewActor.generated.h"
 
 class UInstancedStaticMeshComponent;
 class USceneComponent;
+struct FDeliveryBotLidarSensorConfigInfo;
+struct FEpisodeLidarRayFrame;
+struct FEpisodeReplayRobotFrame;
 
-// Renders one replay LiDAR ray frame as transient replay-only instanced beam geometry.
+// Renders replay-time LiDAR sensor range overlays using the same beam style as Robot Preview.
 UCLASS(Blueprintable)
 class ODIROSIM_API ADeliveryBotLidarRayReviewActor : public AActor
 {
 	GENERATED_BODY()
 
 public:
-	// Creates the replay LiDAR ray actor and its instanced beam components.
+	// Creates the replay LiDAR range actor and its preview-style beam components.
 	ADeliveryBotLidarRayReviewActor();
 
-	// Rebuilds the beam instances from the current replay LiDAR ray frame.
+	// Rebuilds the sensor range overlay from the current replay robot frame and LiDAR settings.
 	void ApplyLidarRayFrame(
+		const FEpisodeReplayRobotFrame& RobotFrame,
+		const FDeliveryBotLidarSensorConfigInfo& LidarConfig,
 		const FEpisodeLidarRayFrame* RayFrame,
-		const FEpisodeLidarRayReplayManifest& Manifest,
 		const FVector& ReplayWorldOffset);
 
-	// Clears any rendered LiDAR ray beam instances.
+	// Clears any rendered LiDAR range beam instances.
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Replay|LiDAR")
 	void ClearLidarRays();
 
-	// Shows or hides replay LiDAR rays and clears stale beam instances when hidden.
+	// Shows or hides replay LiDAR range beams and clears stale instances when hidden.
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Replay|LiDAR")
 	void SetLidarRaysVisible(bool bVisible);
 
-	// Returns whether replay LiDAR rays are currently visible.
+	// Returns whether replay LiDAR range beams are currently visible.
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Replay|LiDAR")
 	bool IsLidarRaysVisible() const { return bLidarRaysVisible; }
 
-	// Returns the number of ray lines rendered for the current frame.
+	// Returns the number of preview-style beam instances rendered for the current frame.
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Replay|LiDAR")
 	int32 GetRenderedRayCount() const { return RenderedRayCount; }
 
 private:
-	// Resolves the world-space end location used by the replay line.
-	FVector ResolveRayEndLocation(const FEpisodeLidarRaySample& Ray) const;
+	// Applies one operation to every preview-style beam component owned by this actor.
+	void ForEachLidarBeamComponent(TFunctionRef<void(UInstancedStaticMeshComponent*)> Operation) const;
 
-	// Builds the world-space instance transform for one replay ray beam.
-	bool TryBuildRayInstanceTransform(
-		const FEpisodeLidarRaySample& Ray,
-		const FVector& ReplayWorldOffset,
-		FTransform& OutTransform) const;
+	// Draws one world-space beam and updates the rendered counter when it succeeds.
+	bool AddWorldBeam(
+		UInstancedStaticMeshComponent* Component,
+		const FVector& StartLocationCm,
+		const FVector& EndLocationCm,
+		float ThicknessScale);
 
-	// Returns true when the ray can produce a meaningful line segment.
-	bool ShouldDrawRay(const FEpisodeLidarRaySample& Ray) const;
+	// Draws one robot-local yaw/pitch ray transformed into replay world space.
+	bool AddRobotLocalRay(
+		UInstancedStaticMeshComponent* Component,
+		const FTransform& RobotWorldTransform,
+		const FVector& SensorLocationLocalCm,
+		float YawDegree,
+		float PitchDegree,
+		float RangeCm,
+		float ThicknessScale);
+
+	// Draws one preview-style horizontal range ring in robot-local space.
+	void AddRangeRing(
+		UInstancedStaticMeshComponent* Component,
+		const FTransform& RobotWorldTransform,
+		const FVector& SensorLocationLocalCm,
+		float RadiusCm,
+		float ThicknessScale);
+
+	// Draws center and front-boundary rays for one distance threshold.
+	void AddRangeRaySet(
+		UInstancedStaticMeshComponent* Component,
+		const FTransform& RobotWorldTransform,
+		const FVector& SensorLocationLocalCm,
+		float RangeCm,
+		float FrontHalfAngleDegree,
+		float ThicknessScale);
 
 	// Actor root scene component.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	// Instanced beam component that owns replay LiDAR rays with a hit result. 
+	// Beam instances for front-facing 1D or highlighted 2D rays.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
-	TObjectPtr<UInstancedStaticMeshComponent> HitRayInstances;
+	TObjectPtr<UInstancedStaticMeshComponent> LidarPrimaryRayInstances;
 
-	// Instanced beam component that owns replay LiDAR rays without a hit result.
+	// Beam instances for muted 2D peripheral rays.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
-	TObjectPtr<UInstancedStaticMeshComponent> MissRayInstances;
+	TObjectPtr<UInstancedStaticMeshComponent> LidarSecondaryRayInstances;
 
-	// Maximum number of ray instances rendered per frame to keep replay capture responsive.
+	// Beam instances for sampled 3D yaw and pitch rays.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarThreeDRayInstances;
+
+	// Beam instances for the full scan range ring.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarRangeRingInstances;
+
+	// Beam instances for the slowdown distance ring.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarSlowRangeRingInstances;
+
+	// Beam instances for the stop distance ring.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarStopRangeRingInstances;
+
+	// Beam instances that draw the slowdown threshold as front-facing rays.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarSlowRangeRayInstances;
+
+	// Beam instances that draw the stop threshold as front-facing rays.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarStopRangeRayInstances;
+
+	// Beam instances for front-half-angle boundary lines.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarFrontBoundaryInstances;
+
+	// Maximum logical scan rays rendered per frame to keep replay capture responsive.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Replay|LiDAR", meta = (ClampMin = "1"))
-	int32 MaxVisibleRays = 2000;
+	int32 MaxVisibleScanRays = 360;
 
 	// Default X-axis length in centimeters of the beam static mesh asset.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Replay|LiDAR", meta = (ClampMin = "0.001"))
 	double RayBeamLengthCm = 10.0;
 
-	// Y/Z scale applied to every beam instance to control visible ray thickness.
+	// Y/Z scale applied to normal scan ray beam instances.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Replay|LiDAR", meta = (ClampMin = "0.001"))
-	double RayBeamThicknessScale = 0.3;
+	double RayBeamThicknessScale = 0.64;
 
-	// Position quantization grid used to merge duplicate ray segments; zero disables merging.
-	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Replay|LiDAR", meta = (ClampMin = "0.0"))
-	double DuplicateRayMergeGridCm = 1.0;
+	// Y/Z scale applied to range rings.
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Replay|LiDAR", meta = (ClampMin = "0.001"))
+	double RangeBeamThicknessScale = 0.4;
 
-	// Whether miss rays should be rendered using the manifest miss color.
-	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Replay|LiDAR")
-	bool bDrawMissRays = false;
+	// Y/Z scale applied to stop/slow threshold rays.
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Replay|LiDAR", meta = (ClampMin = "0.001"))
+	double RangeRayBeamThicknessScale = 0.54;
 
-	// Whether replay LiDAR rays are visible when a frame is applied.
+	// Whether replay LiDAR range beams are visible when a frame is applied.
 	UPROPERTY(Transient)
 	bool bLidarRaysVisible = false;
 
-	// Number of ray beam instances currently stored in the hit and miss components.
+	// Number of preview-style beam instances currently stored in all components.
 	int32 RenderedRayCount = 0;
 };

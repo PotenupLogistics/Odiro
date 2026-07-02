@@ -113,6 +113,9 @@ public:
 	// 최신 generation 결과나 현재 editor source scenario를 editor draft로 다시 읽는다.
 	bool LoadLatestGeneratedProjectScenario(FString& outStatusText) const;
 
+	// 시연용 demo-scenario.json을 현재 project scenario.json에 적용하고 editor draft로 다시 읽는다.
+	bool LoadDemoProjectScenario(FString& outStatusText) const;
+
 	// 현재 editor draft를 저장하고 project run을 시작한다.
 	bool RunCurrentProjectScenario(FString& outStatusText) const;
 

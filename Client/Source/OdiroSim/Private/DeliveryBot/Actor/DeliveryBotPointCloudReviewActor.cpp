@@ -582,7 +582,7 @@ void ADeliveryBotPointCloudReviewActor::ConfigurePointCloudRendering()
 	PointCloudComponent->MarkRenderStateDirty();
 }
 
-// Rebuilds the TopDown-only sphere instances from loaded point colors.
+// Rebuilds the instanced sphere fallback from loaded point colors.
 bool ADeliveryBotPointCloudReviewActor::BuildTopDownSphereInstances()
 {
 	ClearTopDownSphereInstances();
@@ -695,7 +695,7 @@ bool ADeliveryBotPointCloudReviewActor::BuildTopDownSphereInstances()
 	return AddedPointCount > 0;
 }
 
-// Clears the TopDown-only sphere instances.
+// Clears the instanced sphere fallback.
 void ADeliveryBotPointCloudReviewActor::ClearTopDownSphereInstances()
 {
 	if (TopDownGroundPointInstances != nullptr)
@@ -716,7 +716,7 @@ void ADeliveryBotPointCloudReviewActor::ClearTopDownSphereInstances()
 	}
 }
 
-// Applies common rendering settings to one TopDown sphere instance component.
+// Applies common rendering settings to one sphere fallback instance component.
 void ADeliveryBotPointCloudReviewActor::ConfigureTopDownSphereInstanceComponent(
 	UHierarchicalInstancedStaticMeshComponent* component) const
 {
@@ -812,8 +812,13 @@ void ADeliveryBotPointCloudReviewActor::ApplyReviewRenderMode()
 	const bool bVisible = IsPointCloudVisible();
 	const bool bShowPlugin3D =
 		bVisible && ReviewRenderMode == EDeliveryBotPointCloudReviewRenderMode::Plugin3D;
+
+	// SceneCapture can fail to present the LidarPointCloud plugin path in perspective replay views.
+	// Keep the mesh fallback visible in every replay mode so the loaded cloud never disappears.
 	const bool bShowTopDownSpheres =
-		bVisible && ReviewRenderMode == EDeliveryBotPointCloudReviewRenderMode::TopDownProjection;
+		bVisible && (
+			ReviewRenderMode == EDeliveryBotPointCloudReviewRenderMode::TopDownProjection
+			|| ReviewRenderMode == EDeliveryBotPointCloudReviewRenderMode::Plugin3D);
 
 	if (PointCloudComponent != nullptr)
 	{

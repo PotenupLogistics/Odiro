@@ -195,19 +195,19 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
 	TObjectPtr<ULidarPointCloudComponent> PointCloudComponent;
 
-	// TopDown-only sphere instances for ground-colored points.
+	// Instanced sphere fallback for ground-colored points.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TopDownGroundPointInstances;
 
-	// TopDown-only sphere instances for wall-colored points.
+	// Instanced sphere fallback for wall-colored points.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TopDownWallPointInstances;
 
-	// TopDown-only sphere instances for obstacle-colored points.
+	// Instanced sphere fallback for obstacle-colored points.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TopDownObstaclePointInstances;
 
-	// TopDown-only sphere instances for unknown-colored points.
+	// Instanced sphere fallback for unknown-colored points.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TopDownUnknownPointInstances;
 
@@ -261,11 +261,11 @@ private:
 
 	// Plugin point sprite size used when rendering the cloud.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud", meta = (ClampMin = "0.1"))
-	float PointSizeCm{ 0.3f };
+	float PointSizeCm{ 24.0f };
 
 	// Sphere diameter in centimeters used only by the TopDown renderer.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|TopDown", meta = (ClampMin = "0.1"))
-	float TopDownSphereSizeCm{ 1.0f };
+	float TopDownSphereSizeCm{ 3.f };
 
 	// Optional Z offset in centimeters used only by the TopDown sphere renderer.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|TopDown")
@@ -273,7 +273,7 @@ private:
 
 	// Maximum point count loaded from one xyz file.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud", meta = (ClampMin = "1"))
-	int32 MaxPointCount{ 200000 };
+	int32 MaxPointCount{ 10000000 };
 
 	// Whether to draw debug color points in addition to plugin rendering.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|Debug")

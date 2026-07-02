@@ -91,7 +91,7 @@ bool UScenarioLlmPromptViewModel::LoadGeneratedScenario()
 	}
 
 	FString statusText;
-	const bool bLoaded = UiSubsystem->LoadLatestGeneratedProjectScenario(statusText);
+	const bool bLoaded = UiSubsystem->LoadDemoProjectScenario(statusText);
 	SetStatusText(statusText);
 	return bLoaded;
 }

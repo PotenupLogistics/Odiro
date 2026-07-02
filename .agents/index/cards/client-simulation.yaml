@@ -16,8 +16,13 @@ paths:
   - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayPattern.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayCardWidget.h
   - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
+  - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayInterestEventCardWidget.h
+  - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayInterestEventCardWidget.cpp
+  - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayInterestRegionStripWidget.h
+  - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayInterestRegionStripWidget.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
   - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayViewerWidget.cpp
+  - Client/Content/Blueprints/Vehicle/BP_DeliveryBotPreviewVisual.uasset
   - Client/Content/Blueprints/Vehicle/BP_DeliveryBotReplayVisual.uasset
   - Client/Content/Materials/M_LidarRayHit.uasset
   - Client/Content/Materials/M_LidarRayMiss.uasset
@@ -90,6 +95,7 @@ entry:
       - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayPattern.cpp
       - Client/Source/OdiroSim/Public/Platform/Preview
       - Client/Source/OdiroSim/Private/Platform/Preview
+      - Client/Content/Blueprints/Vehicle/BP_DeliveryBotPreviewVisual.uasset
       - Client/Source/OdiroSim/Public/Platform/Widget/PlatformRootWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/PlatformRootWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/Widget/RobotConfigScreenWidget.h
@@ -119,6 +125,10 @@ entry:
       - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayBeamRendering.cpp
       - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayCardWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
+      - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayInterestEventCardWidget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayInterestEventCardWidget.cpp
+      - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayInterestRegionStripWidget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayInterestRegionStripWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayViewerWidget.cpp
       - Client/Content/Blueprints/Vehicle/BP_DeliveryBotReplayVisual.uasset
@@ -175,6 +185,7 @@ guardrails:
   - Embedded Replay camera input and mode changes require loaded replay frames and capture actors; re-clicking Free refocuses the camera on the current replay robot.
   - Embedded Replay camera tuning values are project settings owned by Scenario Replay developer settings; tune camera feel there before changing replay frame data.
   - Embedded Replay timeline UI displays replay subsystem time/frame/speed state and seeks through ScenarioReplaySubsystem.Seek rather than mutating replay artifacts.
+  - Embedded Replay interest-region cards are WBP-owned repeated widgets populated from ScenarioReplaySubsystem event markers; card clicks may seek/pause playback but must not mutate episode artifacts.
   - Embedded Replay fullscreen moves the same ProjectEpisodeReplayViewerWidget between normal and fullscreen Overlay hosts; do not create a second replay viewer instance for fullscreen.
   - Embedded Replay fullscreen controls use dedicated replay button names for playback, direct camera selection, and map/point-cloud/LiDAR-ray layer toggles; the normal view can keep its single camera-cycle button.
   - Embedded Replay map and point-cloud toggles are render-layer visibility only; they must not alter replay frames, robot playback, policy, or physics.
@@ -183,6 +194,7 @@ guardrails:
   - Embedded Replay LiDAR Ray review is a replay-only optional sensor-range layer driven by the episode profile LiDAR config and current replay robot frame; optional Unreal sensor snapshots under episode/replay/lidar_rays may inform frame timing but it must not depend on Python point-cloud artifacts.
   - ScenarioReplaySubsystem owns Replay LiDAR profile config load, optional ray artifact state, and time-to-frame selection; render actors should consume its current-frame API rather than reading rays.frames.bin directly.
   - Embedded Replay LiDAR Ray rendering uses a ScenarioReplaySubsystem-owned replay-only actor; UI controls should toggle subsystem visibility, not spawn actors or read ray files.
+  - Robot profile preview uses BP_DeliveryBotPreviewVisual for the displayed DeliveryBot body and wheels; keep Replay wheel-pose contracts owned by BP_DeliveryBotReplayVisual.
   - Robot profile preview and Embedded Replay LiDAR Ray rendering share DeliveryBotLidarRayBeamRendering for SM_LiDARLay beam component setup, material assignment, and transform math; keep Replay default-off and add it to SceneCapture show-only only while toggled visible.
   - Embedded Replay V2 wheel data stores baked visual wheel poses from the runtime robot; replay actors must apply the poses without running Chaos Vehicle, policy, HTTP, or sensors.
   - Replay-specific high-frequency data belongs under episode/replay/ (replay.meta.json, replay.frames.bin, and future lidar_rays files); trace.jsonl remains LLM/human analysis-oriented unless a task explicitly changes trace.

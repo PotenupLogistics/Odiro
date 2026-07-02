@@ -6,6 +6,7 @@
 #include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Platform/ProjectSessionSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
@@ -33,6 +34,16 @@ namespace
 			FPaths::ProjectSavedDir(),
 			TEXT("Automation/ProjectCreateScreenViewModel"),
 			FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	}
+
+	// ProjectCreate preset card item 목록에 기대 preset id가 포함되는지 확인한다.
+	bool HasProjectCreatePresetItem(const TArray<FProjectCreatePresetItem>& presetItems, const FString& presetId)
+	{
+		return presetItems.ContainsByPredicate(
+			[&presetId](const FProjectCreatePresetItem& presetItem)
+			{
+				return presetItem.PresetId.Equals(presetId, ESearchCase::CaseSensitive);
+			});
 	}
 
 	// 테스트 시작 전 저장된 create option snapshot.
@@ -161,6 +172,10 @@ bool FProjectCreateScreenViewModelCreateProjectTest::RunTest(const FString& para
 	viewModel->SetSubsystemOverrides(simulatorLaunchSubsystem, projectSessionSubsystem);
 	viewModel->InitializeForGameInstance(gameInstance);
 	TestTrue(TEXT("scenario preset items available"), viewModel->GetScenarioPresetItems().Num() > 0);
+	TestTrue(TEXT("scenario preset items include blank"), HasProjectCreatePresetItem(viewModel->GetScenarioPresetItems(), TEXT("blank")));
+	TestTrue(TEXT("scenario preset items include barricade"), HasProjectCreatePresetItem(viewModel->GetScenarioPresetItems(), TEXT("barricade")));
+	TestTrue(TEXT("scenario preset items include curved"), HasProjectCreatePresetItem(viewModel->GetScenarioPresetItems(), TEXT("curved")));
+	TestTrue(TEXT("scenario preset items include s-curve"), HasProjectCreatePresetItem(viewModel->GetScenarioPresetItems(), TEXT("s-curve")));
 	TestTrue(TEXT("profile preset items available"), viewModel->GetProfilePresetItems().Num() > 0);
 	TestTrue(TEXT("policy preset items available"), viewModel->GetPolicyPresetItems().Num() > 0);
 
@@ -190,6 +205,13 @@ bool FProjectCreateScreenViewModelCreateProjectTest::RunTest(const FString& para
 	TestTrue(TEXT("active project path set"), projectSessionSubsystem->GetActiveProjectPath().Equals(projectPath, ESearchCase::IgnoreCase));
 	TestTrue(TEXT("created scenario exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("scenario.json"))));
 	TestTrue(TEXT("created profile exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("profile.json"))));
+	const FString settingPath = FPaths::Combine(projectPath, TEXT("setting.json"));
+	TestTrue(TEXT("created setting exists"), FPaths::FileExists(settingPath));
+	FString settingJson;
+	TestTrue(TEXT("created setting loads"), FFileHelper::LoadFileToString(settingJson, *settingPath));
+	TestTrue(
+		TEXT("created setting project_id uses project name"),
+		settingJson.Contains(FString::Printf(TEXT("\"project_id\": \"%s\""), *projectName)));
 	TestTrue(TEXT("created policy exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/action.py"))));
 	TestFalse(TEXT("policy manifest not copied"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/manifest.json"))));
 	TestFalse(TEXT("policy thumbnail not copied"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/thumbnail.png"))));

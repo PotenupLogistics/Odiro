@@ -3,6 +3,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/PanelWidget.h"
 #include "Components/ScrollBoxSlot.h"
+#include "Components/TextBlock.h"
 #include "Components/WrapBoxSlot.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/Paths.h"
@@ -117,7 +118,7 @@ void UProjectCreateScreenWidget::RefreshFromViewModel()
 	{
 		const FString diagnostics = viewModel->GetDiagnosticsText();
 		DiagnosticsText->SetText(FText::FromString(diagnostics));
-		DiagnosticsText->SetVisibility(diagnostics.TrimStartAndEnd().IsEmpty()
+		DiagnosticsText->SetVisibility(diagnostics.IsEmpty()
 			? ESlateVisibility::Collapsed
 			: ESlateVisibility::SelfHitTestInvisible);
 	}

@@ -4,6 +4,7 @@
 #include "Handlers/DialogHandlers.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
+#include "Misc/App.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/CoreDelegates.h"
 #include "Containers/Ticker.h"
@@ -15,6 +16,12 @@ static TSharedPtr<FMCPBridgeServer> G_BridgeServer;
 
 void FUE_MCP_BridgeModule::StartupModule()
 {
+	if (FApp::IsUnattended() || IsRunningCommandlet())
+	{
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Bridge server disabled for unattended or commandlet process"));
+		return;
+	}
+
 	// Create and start bridge server
 	G_BridgeServer = MakeShared<FMCPBridgeServer>(9877);
 	FDialogHandlers::InstallDialogHook();

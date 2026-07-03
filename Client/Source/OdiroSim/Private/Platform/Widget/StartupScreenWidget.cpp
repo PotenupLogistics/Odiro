@@ -50,7 +50,7 @@ namespace
 	}
 
 	// WBP-authored scroll style에서 가로 scrollbar가 차지하는 높이를 계산한다.
-	float ResolveHorizontalScrollbarHeight(const UScrollBox& scrollBox)
+	float ResolveStartupHorizontalScrollbarHeight(const UScrollBox& scrollBox)
 	{
 		const FVector2D scrollbarThickness = scrollBox.GetScrollbarThickness();
 		const FMargin scrollbarPadding = scrollBox.GetScrollbarPadding();
@@ -60,7 +60,7 @@ namespace
 	}
 
 	// WBP-authored scroll style에서 세로 scrollbar가 차지하는 너비를 계산한다.
-	float ResolveVerticalScrollbarWidth(const UScrollBox& scrollBox)
+	float ResolveStartupVerticalScrollbarWidth(const UScrollBox& scrollBox)
 	{
 		const FVector2D scrollbarThickness = scrollBox.GetScrollbarThickness();
 		const FMargin scrollbarPadding = scrollBox.GetScrollbarPadding();
@@ -376,8 +376,8 @@ void UStartupScreenWidget::UpdateStartupPanelScrollPadding(const FVector2D& scre
 	const FVector2D basePaddingSize(
 		StartupPanelSurfaceBasePadding.Left + StartupPanelSurfaceBasePadding.Right,
 		StartupPanelSurfaceBasePadding.Top + StartupPanelSurfaceBasePadding.Bottom);
-	const float horizontalScrollbarHeight = ResolveHorizontalScrollbarHeight(*StartupPanelHorizontalScrollBox);
-	const float verticalScrollbarWidth = ResolveVerticalScrollbarWidth(*StartupPanelVerticalScrollBox);
+	const float horizontalScrollbarHeight = ResolveStartupHorizontalScrollbarHeight(*StartupPanelHorizontalScrollBox);
+	const float verticalScrollbarWidth = ResolveStartupVerticalScrollbarWidth(*StartupPanelVerticalScrollBox);
 	const FVector2D paddedPanelSize = panelDesiredSize + basePaddingSize;
 
 	const bool bUsesStickyHorizontalScroll = StartupPanelStickyHorizontalScrollBox

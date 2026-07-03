@@ -221,11 +221,11 @@ bool FScenarioDocumentJsonProjectPresetFilesParseTest::RunTest(const FString& Pa
 	(void)Parameters;
 
 	const FString presetRoot = FPaths::ConvertRelativePathToFull(
-		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("static"), TEXT("templates"), TEXT("scenario")));
-	const FString presetIds[] = { TEXT("blank"), TEXT("curved-road"), TEXT("demo") };
+		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("static"), TEXT("presets"), TEXT("scenario")));
+	const FString presetIds[] = { TEXT("blank"), TEXT("barricade"), TEXT("curved"), TEXT("s-curve") };
 	for (const FString& presetId : presetIds)
 	{
-		const FString scenarioPath = FPaths::Combine(presetRoot, FString::Printf(TEXT("%s.json"), *presetId));
+		const FString scenarioPath = FPaths::Combine(presetRoot, presetId, TEXT("scenario.json"));
 		const FScenarioDocumentParseResult result = FScenarioDocumentJson::ParseProjectScenarioFromFile(scenarioPath);
 		TestTrue(FString::Printf(TEXT("%s scenario parses"), *presetId), result.bSuccess);
 		TestEqual(FString::Printf(TEXT("%s diagnostics"), *presetId), result.Diagnostics.Num(), 0);

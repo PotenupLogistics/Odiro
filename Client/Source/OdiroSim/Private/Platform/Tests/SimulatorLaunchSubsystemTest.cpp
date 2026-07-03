@@ -309,8 +309,9 @@ bool FSimulatorLaunchProjectPresetsTest::RunTest(const FString& parameters)
 
 	const FProjectPresetCatalog catalog = subsystem->ListProjectPresets();
 	TestTrue(TEXT("scenario presets include blank"), catalog.ScenarioPresetIds.Contains(TEXT("blank")));
-	TestTrue(TEXT("scenario presets include curved road"), catalog.ScenarioPresetIds.Contains(TEXT("curved-road")));
-	TestTrue(TEXT("scenario presets include demo"), catalog.ScenarioPresetIds.Contains(TEXT("demo")));
+	TestTrue(TEXT("scenario presets include barricade"), catalog.ScenarioPresetIds.Contains(TEXT("barricade")));
+	TestTrue(TEXT("scenario presets include curved"), catalog.ScenarioPresetIds.Contains(TEXT("curved")));
+	TestTrue(TEXT("scenario presets include s-curve"), catalog.ScenarioPresetIds.Contains(TEXT("s-curve")));
 	TestTrue(TEXT("profile presets include basic"), catalog.ProfilePresetIds.Contains(TEXT("basic")));
 	TestTrue(TEXT("profile presets include full"), catalog.ProfilePresetIds.Contains(TEXT("full")));
 	TestTrue(TEXT("policy presets include blank"), catalog.PolicyPresetIds.Contains(TEXT("blank")));
@@ -333,7 +334,7 @@ bool FSimulatorLaunchProjectPresetsTest::RunTest(const FString& parameters)
 		FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 
 	FProjectPresetSelection selection;
-	selection.ScenarioPresetId = TEXT("curved-road");
+	selection.ScenarioPresetId = TEXT("curved");
 	selection.ProfilePresetId = TEXT("full");
 	selection.PolicyPresetId = TEXT("demo");
 
@@ -345,7 +346,15 @@ bool FSimulatorLaunchProjectPresetsTest::RunTest(const FString& parameters)
 	}
 	TestTrue(TEXT("created scenario exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("scenario.json"))));
 	TestTrue(TEXT("created profile exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("profile.json"))));
-	TestTrue(TEXT("created default setting exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("setting.json"))));
+	const FString settingPath = FPaths::Combine(projectPath, TEXT("setting.json"));
+	TestTrue(TEXT("created default setting exists"), FPaths::FileExists(settingPath));
+	FString createdSettingJson;
+	TestTrue(TEXT("created setting loads"), FFileHelper::LoadFileToString(createdSettingJson, *settingPath));
+	TestTrue(
+		TEXT("created setting project_id uses project directory"),
+		createdSettingJson.Contains(FString::Printf(
+			TEXT("\"project_id\": \"%s\""),
+			*FPaths::GetCleanFilename(projectPath))));
 	TestTrue(TEXT("created demo policy exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/action.py"))));
 	TestFalse(TEXT("preset manifest not copied to project root"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("manifest.json"))));
 	TestFalse(TEXT("preset thumbnail not copied to project root"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("thumbnail.png"))));

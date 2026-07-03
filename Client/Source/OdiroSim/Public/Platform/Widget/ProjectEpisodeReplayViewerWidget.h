@@ -185,7 +185,7 @@ private:
 	// Updates the fullscreen overlay visibility from bReplayFullscreen.
 	void UpdateReplayFullscreenVisibility();
 
-	// Forces fullscreen-only child widgets to fill their authored parent slots.
+	// Applies fullscreen-only child widget slot sizing before the next Slate layout pass.
 	void ApplyReplayFullscreenLayout();
 
 	// Finds fullscreen layer toggle buttons by name when they are not exposed as WBP variables.

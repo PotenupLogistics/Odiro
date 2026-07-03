@@ -182,7 +182,8 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 			}
 		],
 		"warnings": [
-			"일부 episode 로그가 누락되었습니다."
+			"일부 episode 로그가 누락되었습니다.",
+			"skipped large file: runs/000123/episodes/000001/actions.jsonl"
 		]
 	})");
 
@@ -202,13 +203,18 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("insight severity parsed"), DashboardData.Insights[0].Severity, EProjectRunAiSuggestionSeverity::High);
 	TestTrue(TEXT("insight title parsed"), DashboardData.Insights[0].Title.Contains(TEXT("충돌")));
 	TestTrue(TEXT("insight description parsed"), DashboardData.Insights[0].Description.Contains(TEXT("반복")));
-	TestEqual(TEXT("warning count"), DashboardData.Warnings.Num(), 1);
+	TestEqual(TEXT("warning count filters internal warnings"), DashboardData.Warnings.Num(), 1);
+	if (DashboardData.Warnings.Num() > 0)
+	{
+		TestEqual(TEXT("warning keeps actionable text"), DashboardData.Warnings[0], FString(TEXT("일부 episode 로그가 누락되었습니다.")));
+	}
 	TestEqual(TEXT("suggestion count"), DashboardData.Suggestions.Num(), 2);
 	TestEqual(TEXT("string priority severity"), DashboardData.Suggestions[0].Severity, EProjectRunAiSuggestionSeverity::High);
 	TestEqual(TEXT("medium priority severity"), DashboardData.Suggestions[1].Severity, EProjectRunAiSuggestionSeverity::Medium);
 	TestTrue(TEXT("v2 suggestion title parsed"), DashboardData.Suggestions[0].Title.Contains(TEXT("정적 장애물 배치")));
 	TestTrue(TEXT("v2 suggestion reason parsed"), DashboardData.Suggestions[0].Reason.Contains(TEXT("충돌")));
 	TestTrue(TEXT("v2 suggestion recommendation parsed"), DashboardData.Suggestions[1].Recommendation.Contains(TEXT("look-ahead")));
+	TestEqual(TEXT("v2 suggestion target parsed"), DashboardData.Suggestions[0].ParameterName, FString(TEXT("environment")));
 
 	const FString EmptyRecommendationsJson = TEXT(R"({
 		"summary": {
@@ -226,6 +232,37 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("empty AI loaded"), EmptyData.bAiLoaded);
 	TestEqual(TEXT("empty suggestion count"), EmptyData.Suggestions.Num(), 0);
 	TestTrue(TEXT("empty summary parsed"), EmptyData.AiSummary.Contains(TEXT("없습니다")));
+
+	const FString LegacyRecommendationsJson = TEXT(R"({
+		"summary": "fallback 규칙 기반으로 추천을 생성했습니다.",
+		"botSetupRecommendations": [
+			{
+				"param": "stop_distance_m",
+				"current": 1.2,
+				"suggested": 1.5,
+				"reason": "near miss 때문에 정지 거리를 늘립니다."
+			}
+		],
+		"policyServerRecommendations": [
+			{
+				"param": "max_speed_mps",
+				"current": 2.0,
+				"suggested": 1.6,
+				"reason": "회전 구간 속도가 높습니다."
+			}
+		]
+	})");
+
+	FProjectRunResultDashboardData LegacyData;
+	TestTrue(
+		TEXT("legacy recommendations parsed"),
+		FProjectRunResultDashboardJson::AppendAiFromAnalysisResponseJsonString(LegacyRecommendationsJson, LegacyData));
+	TestTrue(TEXT("legacy AI loaded"), LegacyData.bAiLoaded);
+	TestEqual(TEXT("legacy suggestion count"), LegacyData.Suggestions.Num(), 2);
+	TestEqual(TEXT("legacy suggestion parameter parsed"), LegacyData.Suggestions[0].ParameterName, FString(TEXT("stop_distance_m")));
+	TestEqual(TEXT("legacy suggestion current parsed"), LegacyData.Suggestions[0].CurrentValue, FString(TEXT("1.2")));
+	TestEqual(TEXT("legacy suggestion suggested parsed"), LegacyData.Suggestions[0].SuggestedValue, FString(TEXT("1.5")));
+	TestTrue(TEXT("legacy suggestion reason parsed"), LegacyData.Suggestions[1].Reason.Contains(TEXT("속도")));
 
 	const FString InsufficientDataJson = TEXT(R"({
 		"summary": {

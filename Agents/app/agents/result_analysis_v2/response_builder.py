@@ -73,8 +73,23 @@ class ResponseBuilder:
             insights=self.public_insights(insights or []),
             patterns=patterns,
             recommendations=self.public_recommendations(recommendations),
-            warnings=warnings,
+            warnings=self._public_warnings(warnings),
         )
+
+    def _public_warnings(self, warnings: list[str]) -> list[str]:
+        """Keep user-actionable analysis warnings while hiding collector noise."""
+        public_warnings: list[str] = []
+        for warning in warnings:
+            normalized = warning.strip()
+            lowered = normalized.casefold()
+            if not normalized:
+                continue
+            if lowered.startswith("skipped large file:"):
+                continue
+            if lowered.startswith("skipped symlink in policy copy:"):
+                continue
+            public_warnings.append(normalized)
+        return public_warnings
 
     def public_insights(self, insights: list[dict[str, Any]]) -> list[AnalysisInsightV2]:
         """Trim detailed insight records down to UI card fields."""

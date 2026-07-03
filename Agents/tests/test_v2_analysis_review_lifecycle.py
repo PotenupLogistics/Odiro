@@ -312,7 +312,8 @@ def test_v2_analysis_run_data_coverage_lists_broken_json_and_large_actions_by_re
     assert coverage["skipped_large_actions_file_count"] == 1
     assert coverage["broken_json_count"] == 1
     assert coverage["broken_json_paths"] == ["runs/000002/snapshot/scenario.json"]
-    assert any("runs\\000002\\episodes\\000001\\actions.jsonl" in warning for warning in payload["warnings"])
+    assert not any("skipped large file" in warning for warning in payload["warnings"])
+    assert any("runs/000002/snapshot/scenario.json" in warning for warning in payload["warnings"])
     assert not any("runs\\000001\\episodes\\000001\\actions.jsonl" in warning for warning in payload["warnings"])
 
 

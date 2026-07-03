@@ -152,6 +152,56 @@ namespace
 		}
 	}
 
+	bool ShouldDisplayAnalysisWarning(const FString& WarningText)
+	{
+		const FString NormalizedWarning = WarningText.TrimStartAndEnd().ToLower();
+		return !NormalizedWarning.StartsWith(TEXT("skipped large file:"))
+			&& !NormalizedWarning.StartsWith(TEXT("skipped symlink in policy copy:"));
+	}
+
+	void AppendAnalysisWarningSection(
+		const TSharedPtr<FJsonObject>& RootObject,
+		const FString& FieldName,
+		const FString& Title,
+		TArray<FString>& Lines)
+	{
+		if (!RootObject.IsValid())
+		{
+			return;
+		}
+
+		const TSharedPtr<FJsonValue> ArrayValue = RootObject->TryGetField(FieldName);
+		if (!ArrayValue.IsValid() || ArrayValue->Type != EJson::Array)
+		{
+			return;
+		}
+
+		TArray<FString> DisplayWarnings;
+		for (const TSharedPtr<FJsonValue>& Value : ArrayValue->AsArray())
+		{
+			if (Value.IsValid() && Value->Type == EJson::String)
+			{
+				const FString WarningText = Value->AsString().TrimStartAndEnd();
+				if (!WarningText.IsEmpty() && ShouldDisplayAnalysisWarning(WarningText))
+				{
+					DisplayWarnings.Add(WarningText);
+				}
+			}
+		}
+
+		if (DisplayWarnings.IsEmpty())
+		{
+			return;
+		}
+
+		Lines.Add(TEXT(""));
+		Lines.Add(Title);
+		for (const FString& WarningText : DisplayWarnings)
+		{
+			Lines.Add(FString::Printf(TEXT("- %s"), *WarningText));
+		}
+	}
+
 	void AppendAnalysisV2Metrics(
 		const TSharedPtr<FJsonObject>& RootObject,
 		TArray<FString>& Lines)
@@ -448,7 +498,7 @@ namespace
 			{
 				AppendStringFieldLine(ErrorObject, TEXT("Message"), TEXT("message"), Lines);
 			}
-			AppendStringArraySection(RootObject, TEXT("warnings"), TEXT("Warnings"), Lines);
+			AppendAnalysisWarningSection(RootObject, TEXT("warnings"), TEXT("Warnings"), Lines);
 			return JoinLines(Lines);
 		}
 
@@ -468,7 +518,7 @@ namespace
 		AppendAnalysisV2Insights(RootObject, Lines);
 		AppendAnalysisV2Episodes(RootObject, Lines);
 		AppendAnalysisV2Recommendations(RootObject, Lines);
-		AppendStringArraySection(RootObject, TEXT("warnings"), TEXT("Warnings"), Lines);
+		AppendAnalysisWarningSection(RootObject, TEXT("warnings"), TEXT("Warnings"), Lines);
 		return JoinLines(Lines);
 	}
 
@@ -528,7 +578,7 @@ namespace
 
 	void AppendWarnings(const TSharedPtr<FJsonObject>& RootObject, TArray<FString>& Lines)
 	{
-		AppendStringArraySection(RootObject, TEXT("llmWarnings"), TEXT("Warnings"), Lines);
+		AppendAnalysisWarningSection(RootObject, TEXT("llmWarnings"), TEXT("Warnings"), Lines);
 	}
 
 	FPlatformAnalysisAiResponse MakeResponse(

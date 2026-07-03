@@ -44,6 +44,10 @@ public:
 	// Rebinds owned WBP control delegates after this viewer is moved between widget hosts.
 	void RefreshReplayControlBindings();
 
+	// Uses a parent-owned interest-region strip instead of a WBP_Replay child strip.
+	void SetExternalReplayInterestRegionStrip(
+		UProjectEpisodeReplayInterestRegionStripWidget* InterestRegionStrip);
+
 	// Returns the latest viewer diagnostic text for parent UI status mirroring.
 	const FString& GetLastDiagnosticsText() const { return LastDiagnosticsText; }
 
@@ -350,6 +354,10 @@ private:
 	// Optional WBP strip that displays replay event interest cards.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UProjectEpisodeReplayInterestRegionStripWidget> ReplayInterestRegionStrip;
+
+	// Parent-owned strip override used when RunDetail places interest cards outside WBP_Replay.
+	UPROPERTY(Transient)
+	TObjectPtr<UProjectEpisodeReplayInterestRegionStripWidget> ExternalReplayInterestRegionStrip;
 
 	// Fullscreen overlay root that covers the normal replay layout.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

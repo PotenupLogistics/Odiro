@@ -12,6 +12,7 @@ class UExperimentResultViewModel;
 class UOdiroListItemViewModel;
 class UProjectAiSuggestionRowWidget;
 class UProjectEpisodeReplayCardWidget;
+class UProjectEpisodeReplayInterestRegionStripWidget;
 class UProjectEpisodeReplayViewerWidget;
 class UProjectWorkspaceViewModel;
 class USizeBox;
@@ -105,6 +106,15 @@ private:
 
 	// Restores the replay viewer to its authored normal host.
 	void RestoreReplayViewerToNormalHost();
+
+	// Finds the RunDetail-owned replay interest-region strip by supported WBP names.
+	void ResolveReplayInterestRegionStrip();
+
+	// Connects the RunDetail-owned interest strip to the embedded replay viewer.
+	void ApplyReplayInterestRegionStripToViewer();
+
+	// Updates the RunDetail header with the selected replay episode id.
+	void SetReplayEpisodeNumberText(const FString& episodeId);
 
 	// Analysis button click handler.
 	UFUNCTION()
@@ -221,7 +231,15 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> ReplayFullscreenHost;
 
+	// Selected replay episode id label owned by the RunDetail header.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayEpisodeNumber;
+
 	// Embedded replay viewer owned by a replay host widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UProjectEpisodeReplayViewerWidget> ProjectEpisodeReplayViewer;
+
+	// Parent-owned replay interest strip placed below the embedded replay panel.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UProjectEpisodeReplayInterestRegionStripWidget> ReplayInterestRegionStrip;
 };

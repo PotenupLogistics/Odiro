@@ -4,6 +4,7 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/WrapBox.h"
+#include "Components/WrapBoxSlot.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/PlatformUiSubsystem.h"
 #include "Platform/ViewModel/ExperimentResultItemViewModels.h"
@@ -120,21 +121,37 @@ void URunDetailScreenWidget::RefreshFromViewModels()
 	}
 	if (TotalDurationText)
 	{
-		TotalDurationText->SetText(FText::FromString(resultViewModel->GetTotalDurationLabel()));
+		TotalDurationText->SetText(FText::FromString(resultViewModel->GetAverageDurationLabel()));
 	}
 	if (DurationMetricSub)
 	{
 		DurationMetricSub->SetText(FText::Format(
-			NSLOCTEXT("OdiroPlatform", "RunDetailAverageDurationSub", "평균 실행 시간 {0}"),
-			FText::FromString(resultViewModel->GetAverageDurationLabel())));
+			NSLOCTEXT("OdiroPlatform", "RunDetailTotalDurationSub", "총 {0} 소요"),
+			FText::FromString(resultViewModel->GetTotalDurationLabel())));
 	}
 	if (SuccessRateText)
 	{
 		SuccessRateText->SetText(FText::FromString(resultViewModel->GetSuccessRateLabel()));
 	}
+	if (SuccessMetricSub)
+	{
+		SuccessMetricSub->SetText(FText::FromString(resultViewModel->GetSuccessMetricSubLabel()));
+	}
 	if (CollisionCountText)
 	{
 		CollisionCountText->SetText(FText::FromString(resultViewModel->GetCollisionCountLabel()));
+	}
+	if (CollisionMetricSub)
+	{
+		CollisionMetricSub->SetText(FText::FromString(resultViewModel->GetCollisionMetricSubLabel()));
+	}
+	if (TimeoutMetricValue)
+	{
+		TimeoutMetricValue->SetText(FText::FromString(resultViewModel->GetTimeoutCountLabel()));
+	}
+	if (TimeoutMetricSub)
+	{
+		TimeoutMetricSub->SetText(FText::FromString(resultViewModel->GetTimeoutMetricSubLabel()));
 	}
 	if (AiSummaryText)
 	{
@@ -233,7 +250,10 @@ void URunDetailScreenWidget::RebuildEpisodeCards()
 		cardWidget->InitializeFromEpisodeViewModel(episodeItem);
 		cardWidget->OnReplayRequested.RemoveAll(this);
 		cardWidget->OnReplayRequested.AddUObject(this, &URunDetailScreenWidget::HandleEpisodeReplayRequested);
-		EpisodeReplayCardWrapBox->AddChildToWrapBox(cardWidget);
+		if (UWrapBoxSlot* cardSlot = EpisodeReplayCardWrapBox->AddChildToWrapBox(cardWidget))
+		{
+			cardSlot->SetPadding(EpisodeReplayCardPadding);
+		}
 		EpisodeCards.Add(cardWidget);
 	}
 }

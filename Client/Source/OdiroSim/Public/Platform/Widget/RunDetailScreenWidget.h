@@ -141,6 +141,10 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunDetail", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UProjectAiSuggestionRowWidget> SuggestionRowWidgetClass;
 
+	// Runtime WrapBox slot spacing for episode replay cards.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunDetail|Layout", meta = (AllowPrivateAccess = "true"))
+	FMargin EpisodeReplayCardPadding = FMargin(0.0f, 0.0f, 8.0f, 8.0f);
+
 	// Run id title display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextWidget> RunIdText;
@@ -161,9 +165,25 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextWidget> SuccessRateText;
 
+	// Success rate metric sublabel display.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> SuccessMetricSub;
+
 	// Collision count metric display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextWidget> CollisionCountText;
+
+	// Collision count metric sublabel display.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CollisionMetricSub;
+
+	// Timeout count metric display.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TimeoutMetricValue;
+
+	// Timeout count metric sublabel display.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TimeoutMetricSub;
 
 	// AI summary display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

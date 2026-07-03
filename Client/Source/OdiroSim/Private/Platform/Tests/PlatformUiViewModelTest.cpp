@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Platform/ViewModel/ExperimentConfigViewModel.h"
+#include "Platform/ViewModel/ExperimentResultItemViewModels.h"
 #include "Platform/ViewModel/ExperimentResultViewModel.h"
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 #include "Platform/ViewModel/RobotProfileViewModel.h"
@@ -156,19 +157,34 @@ bool FPlatformUiViewModelExperimentConfigTest::RunTest(const FString& parameters
 	viewModel->InitializeForGameInstance(gameInstance);
 	viewModel->SetMapId(TEXT("ScenarioSimulationMap"));
 	viewModel->SetFixedFps(30);
+	viewModel->SetTimeScale(1.5f);
+	viewModel->SetMaxDurationSeconds(90.0f);
 	viewModel->SetEpisodeCount(4);
 	viewModel->SetBaseSeed(12345);
+	viewModel->SetTipOverAngleDegrees(45.0f);
+	viewModel->SetNearMissDistanceMeters(0.75f);
+	viewModel->SetGoalAcceptanceRadiusMeters(1.25f);
 	TestTrue(TEXT("save experiment settings through viewmodel"), viewModel->SaveExperimentSettings());
 
 	viewModel->SetMapId(TEXT("Changed"));
 	viewModel->SetFixedFps(1);
+	viewModel->SetTimeScale(1.0f);
+	viewModel->SetMaxDurationSeconds(0.0f);
 	viewModel->SetEpisodeCount(1);
 	viewModel->SetBaseSeed(0);
+	viewModel->SetTipOverAngleDegrees(60.0f);
+	viewModel->SetNearMissDistanceMeters(0.5f);
+	viewModel->SetGoalAcceptanceRadiusMeters(1.0f);
 	TestTrue(TEXT("reload experiment settings through viewmodel"), viewModel->LoadFromActiveProject());
 	TestEqual(TEXT("map id round trip"), viewModel->GetMapId(), FString(TEXT("ScenarioSimulationMap")));
 	TestEqual(TEXT("fixed fps round trip"), viewModel->GetFixedFps(), 30);
+	TestEqual(TEXT("time scale round trip"), viewModel->GetTimeScale(), 1.5f);
+	TestEqual(TEXT("max duration round trip"), viewModel->GetMaxDurationSeconds(), 90.0f);
 	TestEqual(TEXT("episode count round trip"), viewModel->GetEpisodeCount(), 4);
 	TestEqual(TEXT("base seed round trip"), viewModel->GetBaseSeed(), static_cast<int64>(12345));
+	TestEqual(TEXT("tip over angle round trip"), viewModel->GetTipOverAngleDegrees(), 45.0f);
+	TestEqual(TEXT("near miss distance round trip"), viewModel->GetNearMissDistanceMeters(), 0.75f);
+	TestEqual(TEXT("goal acceptance radius round trip"), viewModel->GetGoalAcceptanceRadiusMeters(), 1.25f);
 
 	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
 	return true;
@@ -304,7 +320,14 @@ bool FPlatformUiViewModelExperimentResultTest::RunTest(const FString& parameters
 	{
 		return false;
 	}
-	UPlatformUiSubsystem* platformUiSubsystem = NewObject<UPlatformUiSubsystem>();
+	UGameInstance* gameInstance = NewObject<UGameInstance>();
+	TestNotNull(TEXT("game instance outer created"), gameInstance);
+	if (!gameInstance)
+	{
+		return false;
+	}
+
+	UPlatformUiSubsystem* platformUiSubsystem = NewObject<UPlatformUiSubsystem>(gameInstance);
 	viewModel->SetSubsystemOverride(platformUiSubsystem);
 
 	const FString testRoot = MakePlatformUiVmTestRoot();
@@ -327,6 +350,30 @@ bool FPlatformUiViewModelExperimentResultTest::RunTest(const FString& parameters
 					"pedestrian_collision_count": 0,
 					"static_obstacle_collision_count": 0
 				}
+			},
+			{
+				"episode_id": "000002",
+				"outcome": "Failure",
+				"terminal_reason": "Timeout",
+				"duration_s": 4.0,
+				"metrics": {
+					"goal_reached": 0,
+					"blocked_region_collision_count": 0,
+					"pedestrian_collision_count": 0,
+					"static_obstacle_collision_count": 0
+				}
+			},
+			{
+				"episode_id": "000003",
+				"outcome": "Failure",
+				"terminal_reason": "RobotTipOver",
+				"duration_s": 1.5,
+				"metrics": {
+					"goal_reached": 0,
+					"blocked_region_collision_count": 1,
+					"pedestrian_collision_count": 0,
+					"static_obstacle_collision_count": 1
+				}
 			}
 		]
 	})");
@@ -336,10 +383,15 @@ bool FPlatformUiViewModelExperimentResultTest::RunTest(const FString& parameters
 
 	TestTrue(TEXT("load run directory"), viewModel->LoadRunDirectory(runDirectory));
 	TestEqual(TEXT("run id loaded"), viewModel->GetRunId(), FString(TEXT("000123")));
-	TestEqual(TEXT("episode count loaded"), viewModel->GetDashboardData().EpisodeCount, 1);
-	TestEqual(TEXT("total duration label"), viewModel->GetTotalDurationLabel(), FString(TEXT("2.5 s")));
-	TestEqual(TEXT("success rate label"), viewModel->GetSuccessRateLabel(), FString(TEXT("100%")));
-	TestEqual(TEXT("collision count label"), viewModel->GetCollisionCountLabel(), FString(TEXT("0")));
+	TestEqual(TEXT("episode count loaded"), viewModel->GetDashboardData().EpisodeCount, 3);
+	TestEqual(TEXT("total duration label"), viewModel->GetTotalDurationLabel(), FString(TEXT("8.0s")));
+	TestEqual(TEXT("average duration label"), viewModel->GetAverageDurationLabel(), FString(TEXT("2.7s")));
+	TestEqual(TEXT("success rate label"), viewModel->GetSuccessRateLabel(), FString(TEXT("33%")));
+	TestEqual(TEXT("success metric sub label"), viewModel->GetSuccessMetricSubLabel(), FString(TEXT("1/3")));
+	TestEqual(TEXT("collision count label"), viewModel->GetCollisionCountLabel(), FString(TEXT("평균 0.7회")));
+	TestEqual(TEXT("collision metric sub label"), viewModel->GetCollisionMetricSubLabel(), FString(TEXT("총 2회")));
+	TestEqual(TEXT("timeout count label"), viewModel->GetTimeoutCountLabel(), FString(TEXT("33%")));
+	TestEqual(TEXT("timeout metric sub label"), viewModel->GetTimeoutMetricSubLabel(), FString(TEXT("총 1/3회")));
 
 	const FString reviewDirectory = FPaths::Combine(runDirectory, TEXT("review"));
 	TestTrue(TEXT("create review fixture directory"), IFileManager::Get().MakeDirectory(*reviewDirectory, true));
@@ -389,7 +441,14 @@ bool FPlatformUiViewModelExperimentResultTest::RunTest(const FString& parameters
 	TestTrue(TEXT("completion updates AI summary"), viewModel->GetAiSummaryText().Contains(TEXT("다시 읽었습니다")));
 	TestEqual(TEXT("completion updates insights"), viewModel->GetInsightItems().Num(), 1);
 	TestEqual(TEXT("completion updates suggestions"), viewModel->GetSuggestionItems().Num(), 1);
-	TestEqual(TEXT("completion updates warnings"), viewModel->GetWarningItems().Num(), 1);
+	TestEqual(TEXT("completion hides internal warnings"), viewModel->GetWarningItems().Num(), 0);
+	if (viewModel->GetSuggestionItems().Num() > 0)
+	{
+		TestEqual(
+			TEXT("completion maps recommendation target"),
+			viewModel->GetSuggestionItems()[0]->GetParameterName(),
+			FString(TEXT("policy")));
+	}
 
 	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
 	return true;

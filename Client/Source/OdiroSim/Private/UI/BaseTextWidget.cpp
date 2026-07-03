@@ -16,6 +16,11 @@ void UBaseTextWidget::SynchronizeBaseProperties()
 		{
 			TextBlock->SetColorAndOpacity(FSlateColor(colors->GetStateColor(EBaseWidgetState::Disabled)));
 		}
+		else if (bHasColorAndOpacityOverride)
+		{
+			TextBlock->SetColorAndOpacity(FSlateColor(ColorAndOpacityOverride));
+		}
+		TextBlock->SetAutoWrapText(bAutoWrapText);
 	}
 }
 
@@ -36,4 +41,23 @@ void UBaseTextWidget::SetDisabled(const bool bInDisabled)
 	bDisabled = bInDisabled;
 	SynchronizeBaseProperties();
 	NotifyBaseVisualStateChanged(bDisabled ? EBaseWidgetState::Disabled : EBaseWidgetState::Default);
+}
+
+void UBaseTextWidget::SetColorAndOpacityOverride(const FLinearColor inColorAndOpacity)
+{
+	ColorAndOpacityOverride = inColorAndOpacity;
+	bHasColorAndOpacityOverride = true;
+	SynchronizeBaseProperties();
+}
+
+void UBaseTextWidget::ClearColorAndOpacityOverride()
+{
+	bHasColorAndOpacityOverride = false;
+	SynchronizeBaseProperties();
+}
+
+void UBaseTextWidget::SetAutoWrapText(const bool bInAutoWrapText)
+{
+	bAutoWrapText = bInAutoWrapText;
+	SynchronizeBaseProperties();
 }

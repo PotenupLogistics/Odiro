@@ -46,6 +46,50 @@ namespace
 		}
 		return result;
 	}
+
+	// Formats a count against the total episode count without repeating the card label.
+	FString FormatExperimentResultFractionLabel(const int32 count, const int32 total)
+	{
+		return total > 0
+			? FString::Printf(TEXT("%d/%d"), count, total)
+			: FString(TEXT("-"));
+	}
+
+	// Formats a total count for metric cards that already provide the noun label.
+	FString FormatExperimentResultTotalCountLabel(const int32 count)
+	{
+		return FString::Printf(TEXT("총 %d회"), count);
+	}
+
+	// Formats a count against total episodes with a total-count prefix.
+	FString FormatExperimentResultTotalFractionLabel(const int32 count, const int32 total)
+	{
+		return total > 0
+			? FString::Printf(TEXT("총 %d/%d회"), count, total)
+			: FString(TEXT("총 -"));
+	}
+
+	// Formats a percentage from two counts for metric main values.
+	FString FormatExperimentResultPercentLabel(const int32 count, const int32 total)
+	{
+		return total > 0
+			? FString::Printf(TEXT("%.0f%%"), 100.0 * static_cast<double>(count) / total)
+			: FString(TEXT("-"));
+	}
+
+	// Formats a duration in seconds without extra spacing in the unit.
+	FString FormatExperimentResultSecondsLabel(const double seconds)
+	{
+		return FString::Printf(TEXT("%.1fs"), seconds);
+	}
+
+	// episode가 설정된 제한 시간 때문에 종료되었는지 반환한다.
+	bool IsExperimentResultTimeoutEpisode(const FProjectRunEpisodeDashboardItem& episodeItem)
+	{
+		return episodeItem.TerminalReason.Equals(TEXT("Timeout"), ESearchCase::IgnoreCase)
+			|| episodeItem.Outcome.Equals(TEXT("Timeout"), ESearchCase::IgnoreCase)
+			|| episodeItem.Outcome.Equals(TEXT("TimedOut"), ESearchCase::IgnoreCase);
+	}
 }
 
 void UExperimentResultViewModel::InitializeForGameInstance(UGameInstance* gameInstance)
@@ -234,11 +278,11 @@ void UExperimentResultViewModel::RefreshDisplayLabels()
 	UE_MVVM_SET_PROPERTY_VALUE(
 		TotalDurationLabel,
 		totalDurationLabel.IsEmpty()
-			? FString::Printf(TEXT("%.1f s"), DashboardData.TotalDurationSeconds)
+			? FormatExperimentResultSecondsLabel(DashboardData.TotalDurationSeconds)
 			: totalDurationLabel);
 
 	const FString averageDuration = DashboardData.EpisodeCount > 0
-		? FString::Printf(TEXT("%.1f s"), DashboardData.TotalDurationSeconds / DashboardData.EpisodeCount)
+		? FormatExperimentResultSecondsLabel(DashboardData.TotalDurationSeconds / DashboardData.EpisodeCount)
 		: FString(TEXT("-"));
 	UE_MVVM_SET_PROPERTY_VALUE(AverageDurationLabel, averageDuration);
 
@@ -249,13 +293,35 @@ void UExperimentResultViewModel::RefreshDisplayLabels()
 		? FString::Printf(TEXT("%.0f%%"), 100.0 * static_cast<double>(DashboardData.SuccessCount) / DashboardData.EpisodeCount)
 		: FString(TEXT("-"));
 	UE_MVVM_SET_PROPERTY_VALUE(SuccessRateLabel, successRate);
+	UE_MVVM_SET_PROPERTY_VALUE(
+		SuccessMetricSubLabel,
+		FormatExperimentResultFractionLabel(DashboardData.SuccessCount, DashboardData.EpisodeCount));
 
-	const FString collisionCountOverride = DashboardData.CollisionCountLabel.TrimStartAndEnd();
 	UE_MVVM_SET_PROPERTY_VALUE(
 		CollisionCountLabel,
-		collisionCountOverride.IsEmpty()
-			? FString::Printf(TEXT("%d"), DashboardData.CollisionCount)
-			: collisionCountOverride);
+		DashboardData.EpisodeCount > 0
+			? FString::Printf(
+				TEXT("평균 %.1f회"),
+				static_cast<double>(DashboardData.CollisionCount) / DashboardData.EpisodeCount)
+			: FString(TEXT("-")));
+
+	int32 timeoutEpisodeCount = 0;
+	for (const FProjectRunEpisodeDashboardItem& episodeItem : DashboardData.Episodes)
+	{
+		if (IsExperimentResultTimeoutEpisode(episodeItem))
+		{
+			++timeoutEpisodeCount;
+		}
+	}
+	UE_MVVM_SET_PROPERTY_VALUE(
+		CollisionMetricSubLabel,
+		FormatExperimentResultTotalCountLabel(DashboardData.CollisionCount));
+	UE_MVVM_SET_PROPERTY_VALUE(
+		TimeoutCountLabel,
+		FormatExperimentResultPercentLabel(timeoutEpisodeCount, DashboardData.EpisodeCount));
+	UE_MVVM_SET_PROPERTY_VALUE(
+		TimeoutMetricSubLabel,
+		FormatExperimentResultTotalFractionLabel(timeoutEpisodeCount, DashboardData.EpisodeCount));
 	UE_MVVM_SET_PROPERTY_VALUE(
 		AiSummaryText,
 		DashboardData.AiSummary.IsEmpty() ? FString(TEXT("AI 분석 결과가 없습니다.")) : DashboardData.AiSummary);

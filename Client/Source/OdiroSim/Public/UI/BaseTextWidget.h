@@ -40,6 +40,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Text")
 	bool IsDisabled() const { return bDisabled; }
 
+	// Applies a runtime color override after the semantic text role style.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text")
+	void SetColorAndOpacityOverride(FLinearColor inColorAndOpacity);
+
+	// Clears the runtime color override and returns to the semantic text role color.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text")
+	void ClearColorAndOpacityOverride();
+
+	// Updates whether the bound text block should wrap within its allotted width.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text")
+	void SetAutoWrapText(bool bInAutoWrapText);
+
+	// Returns whether the bound text block wraps within its allotted width.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Text")
+	bool IsAutoWrapText() const { return bAutoWrapText; }
+
 protected:
 	// Display text shown by this component.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter, Setter, BlueprintGetter = "GetText", BlueprintSetter = "SetText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
@@ -52,6 +68,18 @@ protected:
 	// Disabled text state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
+
+	// Runtime color override applied after the semantic text role when enabled.
+	UPROPERTY(Transient)
+	FLinearColor ColorAndOpacityOverride = FLinearColor::White;
+
+	// Whether ColorAndOpacityOverride is currently active.
+	UPROPERTY(Transient)
+	bool bHasColorAndOpacityOverride = false;
+
+	// Whether the bound text block wraps within its allotted width.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsAutoWrapText", Setter = "SetAutoWrapText", BlueprintGetter = "IsAutoWrapText", BlueprintSetter = "SetAutoWrapText", Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
+	bool bAutoWrapText = false;
 
 	// Text visual owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

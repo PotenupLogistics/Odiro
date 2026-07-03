@@ -556,6 +556,24 @@ void UProjectEpisodeReplayViewerWidget::RefreshReplayControlBindings()
 	}
 }
 
+void UProjectEpisodeReplayViewerWidget::SetExternalReplayInterestRegionStrip(
+	UProjectEpisodeReplayInterestRegionStripWidget* InterestRegionStrip)
+{
+	if (ExternalReplayInterestRegionStrip.Get() == InterestRegionStrip
+		&& ReplayInterestRegionStrip.Get() == InterestRegionStrip)
+	{
+		return;
+	}
+
+	UnbindReplayInterestRegionStrip();
+	ExternalReplayInterestRegionStrip = InterestRegionStrip;
+	ReplayInterestRegionStrip = nullptr;
+	ResolveReplayInterestRegionWidgets();
+	BindReplayInterestRegionStrip();
+	RebuildReplayInterestRegions();
+	UpdateReplayInterestRegionSelection(false);
+}
+
 void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 {
 	if (PlayPauseButton)
@@ -653,6 +671,8 @@ void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 
 	UnbindReplayInterestRegionStrip();
 	ResetReplay();
+	ExternalReplayInterestRegionStrip = nullptr;
+	ReplayInterestRegionStrip = nullptr;
 	Super::NativeDestruct();
 }
 
@@ -1375,6 +1395,12 @@ void UProjectEpisodeReplayViewerWidget::ResolveCompactReplayWidgets()
 
 void UProjectEpisodeReplayViewerWidget::ResolveReplayInterestRegionWidgets()
 {
+	if (ExternalReplayInterestRegionStrip)
+	{
+		ReplayInterestRegionStrip = ExternalReplayInterestRegionStrip;
+		return;
+	}
+
 	if (ReplayInterestRegionStrip)
 	{
 		return;

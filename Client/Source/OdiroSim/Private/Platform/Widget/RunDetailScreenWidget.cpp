@@ -13,6 +13,7 @@
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 #include "Platform/Widget/ProjectAiSuggestionRowWidget.h"
 #include "Platform/Widget/ProjectEpisodeReplayCardWidget.h"
+#include "Platform/Widget/ProjectEpisodeReplayInterestRegionStripWidget.h"
 #include "Platform/Widget/ProjectEpisodeReplayViewerWidget.h"
 #include "UI/BaseButtonWidget.h"
 #include "UI/BaseTextWidget.h"
@@ -50,6 +51,9 @@ void URunDetailScreenWidget::NativeConstruct()
 	}
 
 	RestoreReplayViewerToNormalHost();
+	ResolveReplayInterestRegionStrip();
+	ApplyReplayInterestRegionStripToViewer();
+	SetReplayEpisodeNumberText(FString());
 }
 
 void URunDetailScreenWidget::NativeDestruct()
@@ -58,6 +62,7 @@ void URunDetailScreenWidget::NativeDestruct()
 	{
 		ProjectEpisodeReplayViewer->OnReplayFullscreenChanged.RemoveAll(this);
 		RestoreReplayViewerToNormalHost();
+		ProjectEpisodeReplayViewer->SetExternalReplayInterestRegionStrip(nullptr);
 	}
 
 	if (RequestAiAnalysisButton)
@@ -201,6 +206,7 @@ void URunDetailScreenWidget::ResetReplay()
 	{
 		ProjectEpisodeReplayViewer->ResetReplay();
 	}
+	SetReplayEpisodeNumberText(FString());
 }
 
 UProjectWorkspaceViewModel* URunDetailScreenWidget::ResolveWorkspaceViewModel()
@@ -398,6 +404,25 @@ void URunDetailScreenWidget::AddSuggestionRowToContainer(
 	AnalysisRows.Add(rowWidget);
 }
 
+void URunDetailScreenWidget::SetReplayEpisodeNumberText(const FString& episodeId)
+{
+	UTextBlock* episodeNumberText = ReplayEpisodeNumber.Get();
+	if (!episodeNumberText)
+	{
+		ReplayEpisodeNumber = Cast<UTextBlock>(GetWidgetFromName(TEXT("ReplayEpisodeNumber")));
+		episodeNumberText = ReplayEpisodeNumber.Get();
+	}
+	if (!episodeNumberText)
+	{
+		return;
+	}
+
+	const FString trimmedEpisodeId = episodeId.TrimStartAndEnd();
+	episodeNumberText->SetText(trimmedEpisodeId.IsEmpty()
+		? FText::GetEmpty()
+		: FText::FromString(trimmedEpisodeId));
+}
+
 void URunDetailScreenWidget::HandleEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget)
 {
 	if (!ProjectEpisodeReplayViewer || !cardWidget || !cardWidget->IsReplayAvailable())
@@ -405,6 +430,8 @@ void URunDetailScreenWidget::HandleEpisodeReplayRequested(UProjectEpisodeReplayC
 		return;
 	}
 
+	ApplyReplayInterestRegionStripToViewer();
+	SetReplayEpisodeNumberText(cardWidget->GetEpisodeId());
 	ProjectEpisodeReplayViewer->OpenEpisodeReplay(cardWidget->GetEpisodeDirectory());
 }
 
@@ -459,6 +486,7 @@ void URunDetailScreenWidget::AttachReplayViewerToHost(USizeBox* targetHost)
 	ProjectEpisodeReplayViewer->RemoveFromParent();
 	targetHost->SetContent(ProjectEpisodeReplayViewer.Get());
 	ProjectEpisodeReplayViewer->RefreshReplayControlBindings();
+	ApplyReplayInterestRegionStripToViewer();
 }
 
 void URunDetailScreenWidget::RestoreReplayViewerToNormalHost()
@@ -471,6 +499,42 @@ void URunDetailScreenWidget::RestoreReplayViewerToNormalHost()
 	if (ReplayFullscreenHost)
 	{
 		ReplayFullscreenHost->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void URunDetailScreenWidget::ResolveReplayInterestRegionStrip()
+{
+	if (ReplayInterestRegionStrip)
+	{
+		return;
+	}
+
+	ReplayInterestRegionStrip =
+		Cast<UProjectEpisodeReplayInterestRegionStripWidget>(
+			GetWidgetFromName(TEXT("ReplayInterestRegionStrip")));
+
+	if (!ReplayInterestRegionStrip)
+	{
+		ReplayInterestRegionStrip =
+			Cast<UProjectEpisodeReplayInterestRegionStripWidget>(
+				GetWidgetFromName(TEXT("InterestRegionStrip")));
+	}
+
+	if (!ReplayInterestRegionStrip)
+	{
+		ReplayInterestRegionStrip =
+			Cast<UProjectEpisodeReplayInterestRegionStripWidget>(
+				GetWidgetFromName(TEXT("WBP_ReplayInterestRegionStrip")));
+	}
+}
+
+void URunDetailScreenWidget::ApplyReplayInterestRegionStripToViewer()
+{
+	ResolveReplayInterestRegionStrip();
+	if (ProjectEpisodeReplayViewer)
+	{
+		ProjectEpisodeReplayViewer->SetExternalReplayInterestRegionStrip(
+			ReplayInterestRegionStrip.Get());
 	}
 }
 

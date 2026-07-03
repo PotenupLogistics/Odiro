@@ -10,9 +10,11 @@ from app.services.llm_client import BaseLlmClient
 from app.services.llm_client_factory import create_llm_client, get_configured_provider_chain
 
 
-# Project scenario structured outputs require room for strict-schema null fields and repaired obstacle lists.
+# Structured outputs with verbose recommendation text need room to finish valid JSON.
 SCENARIO_STRUCTURED_OUTPUT_MIN_TOKENS = 4096
 SCENARIO_STRUCTURED_OUTPUT_SCHEMA_NAME = "project_scenario_v1"
+RESULT_ANALYSIS_RECOMMENDATION_STRUCTURED_OUTPUT_MIN_TOKENS = 4096
+RESULT_ANALYSIS_RECOMMENDATION_STRUCTURED_OUTPUT_SCHEMA_NAME = "analysis_recommendations_v2"
 
 
 class AgentLlmClient(Protocol):
@@ -77,4 +79,6 @@ class AgentLlmJsonClient:
         """Return the output budget needed for the requested JSON schema."""
         if schema.get("name") == SCENARIO_STRUCTURED_OUTPUT_SCHEMA_NAME:
             return max(self.settings.openaiMaxTokens, SCENARIO_STRUCTURED_OUTPUT_MIN_TOKENS)
+        if schema.get("name") == RESULT_ANALYSIS_RECOMMENDATION_STRUCTURED_OUTPUT_SCHEMA_NAME:
+            return max(self.settings.openaiMaxTokens, RESULT_ANALYSIS_RECOMMENDATION_STRUCTURED_OUTPUT_MIN_TOKENS)
         return self.settings.openaiMaxTokens

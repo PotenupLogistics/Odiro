@@ -19,6 +19,7 @@ from app.agents.result_analysis_v2.llm_failure_analyzer import LlmFailureAnalyze
 from app.agents.result_analysis_v2.rag_context_builder import FileBasedRagRetrieverAdapterV2, RagContextBuilderV2
 from app.agents.result_analysis_v2.rag_query_builder import RagQueryBuilderV2
 from app.agents.result_analysis_v2.recommendation_artifact_writer import RecommendationArtifactWriter
+from app.agents.result_analysis_v2.recommendation_schema import analysis_recommendations_v2_response_schema
 from app.agents.result_analysis_v2.recommendation_generator import RecommendationGenerator
 from app.agents.result_analysis_v2.recommendation_type_decider import RecommendationTypeDecider
 from app.agents.result_analysis_v2.recommendation_validator import RecommendationValidator
@@ -866,6 +867,7 @@ class ResultAnalysisV2Agent:
                 system_prompt=self._read_prompt("system_prompt.md"),
                 user_prompt=self._analysis_user_prompt(context),
                 response_name="analysis_recommendations_v2",
+                response_schema=analysis_recommendations_v2_response_schema(),
             )
             llm_recommendations = payload.get("recommendations", [])
             if not isinstance(llm_recommendations, list):

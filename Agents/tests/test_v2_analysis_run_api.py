@@ -27,12 +27,13 @@ class _FakeJsonClient:
         self.responses = list(responses)
         self.calls = []
 
-    def generate_json(self, *, system_prompt: str, user_prompt: str, response_name: str):
+    def generate_json(self, *, system_prompt: str, user_prompt: str, response_name: str, response_schema=None):
         self.calls.append(
             {
                 "system_prompt": system_prompt,
                 "user_prompt": user_prompt,
                 "response_name": response_name,
+                "response_schema": response_schema,
             }
         )
         response = self.responses.pop(0)

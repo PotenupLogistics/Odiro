@@ -50,13 +50,21 @@ class _FakeJsonClient:
         self.responses = list(responses)
         self.calls: list[dict[str, str]] = []
 
-    def generate_json(self, *, system_prompt: str, user_prompt: str, response_name: str) -> dict:
+    def generate_json(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_name: str,
+        response_schema=None,
+    ) -> dict:
         """Record the prompt boundary and return the next fake JSON response."""
         self.calls.append(
             {
                 "system_prompt": system_prompt,
                 "user_prompt": user_prompt,
                 "response_name": response_name,
+                "response_schema": response_schema,
             }
         )
         return self.responses.pop(0)
@@ -177,6 +185,86 @@ def _llm_policy_recommendation(*, reason: str, recommendation: str) -> dict:
             "type": "policy_parameter_adjustment",
             "content": {
                 "maxPathErrorM_max": 0.8,
+            },
+        },
+    }
+
+
+def _project2_llm_policy_recommendations(*, project_id: str) -> list[dict]:
+    """Create the policy recommendation shape observed in the Project 2 smoke run."""
+    base_content = {
+        "followSpeedKmh_max": 3.5,
+        "maxPathErrorM_max": 0.8,
+        "lookAheadDistanceM_max": 1.0,
+        "pathSmoothingDistanceM_max": 0.25,
+        "maxSteeringDelta_max": 0.06,
+    }
+    evidence = [
+        {
+            "experiment_id": project_id,
+            "run_id": "000001",
+            "episode_id": episode_id,
+        }
+        for episode_id in ("000001", "000002", "000003")
+    ]
+    return [
+        {
+            "id": "REC-LLM-001",
+            "target": "policy",
+            "priority": "high",
+            "title": "재경로 탐색과 정체 완화를 위한 주행 안정화 파라미터 조정",
+            "reason": "repath, stuck, timeout이 함께 반복되어 경로 추종 안정화 검토가 필요합니다.",
+            "recommendation": "최대 추종 속도와 경로 오차 허용, 전방 주시 거리, 조향 변화량을 보수적으로 조정하세요.",
+            "evidence": evidence,
+            "proposed_change": {
+                "type": "policy_parameter_adjustment",
+                "content": dict(base_content),
+            },
+        },
+        {
+            "id": "REC-LLM-002",
+            "target": "policy",
+            "priority": "high",
+            "title": "충돌 반복 완화를 위한 경로 오차와 조향 변화 제한 강화",
+            "reason": "collision이 반복되어 급격한 경로 이탈 또는 조향 변화 제한 검토가 필요합니다.",
+            "recommendation": "경로 오차 허용과 조향 변화량을 제한한 후보 정책으로 재실행해 충돌 감소를 확인하세요.",
+            "evidence": evidence,
+            "proposed_change": {
+                "type": "policy_parameter_adjustment",
+                "content": dict(base_content),
+            },
+        },
+    ]
+
+
+def _llm_environment_recommendation(*, project_id: str) -> dict:
+    """Create a complete LLM environment recommendation with real episode evidence."""
+    return {
+        "id": "REC-LLM-ENV-001",
+        "target": "environment",
+        "priority": "high",
+        "title": "차단 영역 배치 검토",
+        "reason": "차단 영역 침범이 반복되어 환경 배치 조건 검토가 필요합니다.",
+        "recommendation": "통과 가능 영역을 넓히고 차단 배치를 완화한 후보 환경으로 재실행해 보세요.",
+        "evidence": [
+            {
+                "experiment_id": project_id,
+                "run_id": "000001",
+                "episode_id": "000001",
+            },
+            {
+                "experiment_id": project_id,
+                "run_id": "000001",
+                "episode_id": "000002",
+            },
+        ],
+        "proposed_change": {
+            "type": "environment_scenario_adjustment",
+            "content": {
+                "increase_min_clear_width_m": True,
+                "disable_allow_blocking": True,
+                "increase_walkway_width_m": True,
+                "reason": "blocked_region_violation_repeated",
             },
         },
     }
@@ -377,6 +465,177 @@ def test_graph_runner_passes_result_analysis_system_prompt_to_llm(tmp_path) -> N
     assert response.recommendations[0]["recommendation"] == (
         "보행 경계 이탈 가능성을 줄이도록 감속 조건을 검토하는 것이 좋습니다."
     )
+
+
+def test_graph_runner_passes_result_analysis_response_schema_to_llm(tmp_path) -> None:
+    project = tmp_path / "experiments"
+    _write_blocked_episode(project, "000001")
+    _write_blocked_episode(project, "000002")
+    fake = _FakeJsonClient(
+        [
+            {
+                "recommendations": [
+                    _llm_policy_recommendation(
+                        reason="차단 구역 침범이 반복되어 주행 정책 조건 검토가 필요합니다.",
+                        recommendation="보행 경계 이탈 가능성을 줄이도록 감속 조건을 검토하는 것이 좋습니다.",
+                    )
+                ]
+            }
+        ]
+    )
+    runner = _runner_with_fake_llm(project, fake)
+
+    runner.run()
+
+    schema = fake.calls[0]["response_schema"]
+    assert schema["name"] == "analysis_recommendations_v2"
+    assert schema["strict"] is True
+    recommendation_schema = schema["schema"]["properties"]["recommendations"]["items"]
+    assert "id" in recommendation_schema["required"]
+    proposed_change_options = recommendation_schema["properties"]["proposed_change"]["anyOf"]
+    assert {option["properties"]["type"]["const"] for option in proposed_change_options} == {
+        "policy_parameter_adjustment",
+        "environment_scenario_adjustment",
+    }
+    assert all(option["type"] == "object" for option in proposed_change_options)
+    policy_change = next(
+        option for option in proposed_change_options if option["properties"]["type"]["const"] == "policy_parameter_adjustment"
+    )
+    policy_content = policy_change["properties"]["content"]["properties"]
+    assert policy_content["followSpeedKmh_max"]["maximum"] == 3.5
+    assert policy_content["lookAheadDistanceM_max"]["maximum"] == 1.0
+
+
+def test_graph_runner_accepts_llm_environment_scenario_adjustment(tmp_path) -> None:
+    project = tmp_path / "Project1"
+    project.mkdir()
+    (project / "scenario.json").write_text(
+        json.dumps(
+            {
+                "schema": "scenario",
+                "version": 1,
+                "corridor": {"walkway_width_m": 2.0},
+                "obstacles": {"min_clear_width_m": 0.9, "placements": [{"allow_blocking": True}]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write_project_blocked_episode(project, "000001")
+    _write_project_blocked_episode(project, "000002")
+    llm_recommendation = _llm_environment_recommendation(project_id=project.name)
+    fake = _FakeJsonClient([{"recommendations": [llm_recommendation]}])
+    runner = _runner_with_fake_llm(project, fake)
+
+    response = runner.run(AnalysisRunV2Request(project_path=str(project), run_id="000001"))
+
+    assert runner.last_state["recommendation_route"] == "llm_valid"
+    assert runner.last_state["recommendation_validation_route"] == "valid"
+    assert not any("rule-based recommendation fallback" in warning for warning in response.warnings)
+    assert response.recommendation_type == "environment_review"
+    assert response.recommendations == [
+        {
+            "target": "environment",
+            "priority": "high",
+            "title": llm_recommendation["title"],
+            "reason": llm_recommendation["reason"],
+            "recommendation": llm_recommendation["recommendation"],
+        }
+    ]
+    assert all(
+        field not in response.recommendations[0]
+        for field in ("id", "evidence", "proposed_change", "modified_environment_json", "modified_policy_json")
+    )
+
+    recommendations = json.loads(
+        (project / "runs" / "000001" / "review" / "0001" / "recommendations.json").read_text(encoding="utf-8")
+    )
+    detailed = recommendations["recommendations"][0]
+    assert detailed["id"] == "REC-LLM-ENV-001"
+    assert detailed["evidence"] == llm_recommendation["evidence"]
+    assert detailed["proposed_change"]["type"] == "environment_scenario_adjustment"
+    assert isinstance(detailed["proposed_change"]["content"], dict)
+    assert recommendations["modified_environment_json"] == [
+        {
+            "source_recommendation_id": "REC-LLM-ENV-001",
+            "target": "environment",
+            "content": llm_recommendation["proposed_change"]["content"],
+        }
+    ]
+    assert recommendations["modified_policy_json"] == []
+
+
+def test_graph_runner_accepts_project2_llm_policy_parameter_adjustment_shape(tmp_path) -> None:
+    project = tmp_path / "Experiment1"
+    rows = []
+    for episode_id in ("000001", "000002", "000003"):
+        episode_dir = project / "runs" / "000001" / "episodes" / episode_id
+        episode_dir.mkdir(parents=True)
+        (episode_dir / "result.json").write_text(
+            json.dumps(
+                {
+                    "summary": {
+                        "success": False,
+                        "goal_reached": False,
+                        "timeout": True,
+                        "terminal_reason": "Timeout",
+                    },
+                    "metrics": {
+                        "duration_s": 90.0,
+                        "repath_count": 5,
+                        "stuck_count": 1,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        rows.append(
+            {
+                "episode_id": episode_id,
+                "outcome": "Failure",
+                "terminal_reason": "Timeout",
+                "duration_s": 90.0,
+                "metrics": {
+                    "goal_reached": 0,
+                    "repath_count": 5,
+                    "stuck_count": 1,
+                },
+            }
+        )
+    _write_project_summary_rows(project, rows)
+    llm_recommendations = _project2_llm_policy_recommendations(project_id=project.name)
+    fake = _FakeJsonClient([{"recommendations": llm_recommendations}])
+    runner = _runner_with_fake_llm(project, fake)
+
+    response = runner.run(AnalysisRunV2Request(project_path=str(project), run_id="000001"))
+
+    assert runner.last_state["recommendation_route"] == "llm_valid"
+    assert runner.last_state["recommendation_validation_route"] == "valid"
+    assert not any("rule-based recommendation fallback" in warning for warning in response.warnings)
+    assert all(
+        field not in response.recommendations[0]
+        for field in ("id", "evidence", "proposed_change", "modified_environment_json", "modified_policy_json")
+    )
+
+    recommendations = json.loads(
+        (project / "runs" / "000001" / "review" / "0001" / "recommendations.json").read_text(encoding="utf-8")
+    )
+    detailed = recommendations["recommendations"]
+    assert [item["id"] for item in detailed] == ["REC-LLM-001", "REC-LLM-002"]
+    assert all(item["evidence"] == llm_recommendations[index]["evidence"] for index, item in enumerate(detailed))
+    assert all(item["proposed_change"]["type"] == "policy_parameter_adjustment" for item in detailed)
+    assert all(isinstance(item["proposed_change"]["content"], dict) for item in detailed)
+    assert recommendations["modified_policy_json"] == [
+        {
+            "source_recommendation_id": "REC-LLM-001",
+            "target": "policy",
+            "content": llm_recommendations[0]["proposed_change"]["content"],
+        },
+        {
+            "source_recommendation_id": "REC-LLM-002",
+            "target": "policy",
+            "content": llm_recommendations[1]["proposed_change"]["content"],
+        },
+    ]
 
 
 def test_graph_runner_falls_back_when_llm_public_text_contains_internal_source_terms(tmp_path) -> None:

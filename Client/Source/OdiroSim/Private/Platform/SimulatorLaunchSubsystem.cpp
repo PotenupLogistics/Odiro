@@ -850,6 +850,49 @@ namespace
 		return true;
 	}
 
+	bool WriteUserProjectSettingProjectId(
+		const FString& settingPath,
+		const FString& projectId,
+		TArray<FString>& outDiagnostics)
+	{
+		FString settingJson;
+		if (!FFileHelper::LoadFileToString(settingJson, *settingPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("setting.json read failed: %s"), *settingPath));
+			return false;
+		}
+
+		TSharedPtr<FJsonObject> rootObject;
+		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(settingJson);
+		if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("setting.json parse failed: %s"), *settingPath));
+			return false;
+		}
+
+		rootObject->SetStringField(TEXT("project_id"), projectId);
+
+		FString outputJson;
+		const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+			TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&outputJson);
+		if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("setting.json serialize failed: %s"), *settingPath));
+			return false;
+		}
+
+		if (!FFileHelper::SaveStringToFile(
+				outputJson,
+				*settingPath,
+				FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("setting.json write failed: %s"), *settingPath));
+			return false;
+		}
+
+		return true;
+	}
+
 	bool CopyUserProjectTree(
 		const FString& sourceRoot,
 		const FString& targetRoot,
@@ -2126,6 +2169,12 @@ bool USimulatorLaunchSubsystem::CreateProjectFromPresets(
 	}
 
 	const FString resolvedProjectPath = NormalizeAbsolutePath(projectPath);
+	const FString projectId = FPaths::GetCleanFilename(resolvedProjectPath).TrimStartAndEnd();
+	if (projectId.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("project id could not be resolved from project path."));
+		return false;
+	}
 	if (IsOverlappingPath(resolvedProjectPath, projectPresetsPath))
 	{
 		outDiagnostics.Add(TEXT("project path must not overlap project preset resources."));
@@ -2143,8 +2192,9 @@ bool USimulatorLaunchSubsystem::CreateProjectFromPresets(
 		return false;
 	}
 
+	const FString settingTargetPath = NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectSettingFileName));
 	const TPair<FString, FString> projectFiles[] = {
-		TPair<FString, FString>(settingPresetPath, NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectSettingFileName))),
+		TPair<FString, FString>(settingPresetPath, settingTargetPath),
 		TPair<FString, FString>(profilePresetPath, NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectProfileFileName))),
 		TPair<FString, FString>(scenarioPresetPath, NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectScenarioFileName))),
 	};
@@ -2154,6 +2204,10 @@ bool USimulatorLaunchSubsystem::CreateProjectFromPresets(
 		{
 			return false;
 		}
+	}
+	if (!WriteUserProjectSettingProjectId(settingTargetPath, projectId, outDiagnostics))
+	{
+		return false;
 	}
 
 	TSet<FString> policyPresetMetadataFiles;

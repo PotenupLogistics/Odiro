@@ -3,8 +3,8 @@
   "version": 1,
   "id": "curved",
   "kind": "scenario",
-  "title": "곡선 통과",
-  "subtitle": "단일 커브 · 기본 경로",
+  "title": "곡선 보도",
+  "subtitle": "완만한 곡선 도로",
   "description": "단순 곡선 구간을 통과하는 기본 시나리오입니다.",
   "sort_order": 50
 }

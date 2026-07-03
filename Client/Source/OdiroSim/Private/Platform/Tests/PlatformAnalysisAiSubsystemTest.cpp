@@ -175,7 +175,10 @@ bool FPlatformAnalysisAiDisplayTextTest::RunTest(const FString& Parameters)
 				"recommendation": "최소 통로 폭을 늘린 환경 수정 후보로 재실행하세요."
 			}
 		],
-		"warnings": ["skipped large file: runs/000005/episodes/000001/actions.jsonl"]
+		"warnings": [
+			"skipped large file: runs/000005/episodes/000001/actions.jsonl",
+			"runs/000005/episodes/000001/events.jsonl is missing."
+		]
 	})");
 
 	TArray<FString> Diagnostics;
@@ -189,7 +192,8 @@ bool FPlatformAnalysisAiDisplayTextTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("contains episode display"), DisplayText.Contains(TEXT("10.5초")));
 	TestTrue(TEXT("contains v2 recommendation title"), DisplayText.Contains(TEXT("정적 장애물 배치")));
 	TestTrue(TEXT("contains v2 recommendation text"), DisplayText.Contains(TEXT("최소 통로 폭")));
-	TestTrue(TEXT("contains v2 warning"), DisplayText.Contains(TEXT("skipped large file")));
+	TestFalse(TEXT("hides internal large file warning"), DisplayText.Contains(TEXT("skipped large file")));
+	TestTrue(TEXT("contains actionable v2 warning"), DisplayText.Contains(TEXT("events.jsonl is missing")));
 
 	const FString LegacyResponseJson = TEXT(R"({
 		"schemaVersion": "1.0.0",

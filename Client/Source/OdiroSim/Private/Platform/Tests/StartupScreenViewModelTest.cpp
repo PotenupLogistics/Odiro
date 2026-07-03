@@ -2,10 +2,13 @@
 
 #include "Platform/ViewModel/StartupScreenViewModel.h"
 
+#include "Engine/GameInstance.h"
 #include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Platform/SimulatorLaunchSubsystem.h"
 
 namespace
 {
@@ -25,6 +28,15 @@ namespace
 			FPaths::ProjectSavedDir(),
 			TEXT("Automation/StartupScreenViewModel"),
 			FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	}
+
+	// 최근 project 표시 이름 검증에 필요한 최소 setting.json을 쓴다.
+	bool WriteStartupScreenVmSettingJson(const FString& projectPath, const FString& projectId)
+	{
+		const FString settingJson = FString::Printf(
+			TEXT("{\"schema\":\"project_setting\",\"version\":1,\"project_id\":\"%s\"}"),
+			*projectId);
+		return FFileHelper::SaveStringToFile(settingJson, *FPaths::Combine(projectPath, TEXT("setting.json")));
 	}
 
 	// 테스트 중 변경한 recent-project config를 원래 사용자 값으로 복원한다.
@@ -124,6 +136,8 @@ bool FStartupScreenViewModelRecentProjectsTest::RunTest(const FString& parameter
 	}
 	FStartupScreenDiagnosticMessages diagnosticMessages;
 	diagnosticMessages.ProjectRequired = TEXT("프로젝트를 선택하세요.");
+	diagnosticMessages.ProjectFolderNotProject = TEXT("프로젝트 폴더가 아닙니다.");
+	diagnosticMessages.ProjectConfigMissingFormat = TEXT("프로젝트 파일이 누락되었습니다. ({ConfigName})");
 	viewModel->SetDiagnosticMessages(diagnosticMessages);
 
 	const FString testRoot = MakeStartupScreenVmTestRoot();
@@ -136,6 +150,10 @@ bool FStartupScreenViewModelRecentProjectsTest::RunTest(const FString& parameter
 	IFileManager::Get().MakeDirectory(*projectB, true);
 	IFileManager::Get().MakeDirectory(*projectC, true);
 	IFileManager::Get().MakeDirectory(*projectD, true);
+	TestTrue(TEXT("project A setting json created"), WriteStartupScreenVmSettingJson(projectA, TEXT("project-alpha")));
+	TestTrue(TEXT("project B setting json created"), WriteStartupScreenVmSettingJson(projectB, TEXT("project-beta")));
+	TestTrue(TEXT("project C setting json created"), WriteStartupScreenVmSettingJson(projectC, TEXT("project-gamma")));
+	TestTrue(TEXT("project D setting json created"), WriteStartupScreenVmSettingJson(projectD, TEXT("project-delta")));
 
 	TArray<FString> storedProjectPaths = { projectA, projectB, projectA };
 	if (GConfig)
@@ -167,7 +185,8 @@ bool FStartupScreenViewModelRecentProjectsTest::RunTest(const FString& parameter
 		if (item.ProjectPath.Equals(projectA, ESearchCase::IgnoreCase))
 		{
 			bProjectASelected = item.bSelected;
-			TestEqual(TEXT("project title uses folder name"), item.Title, FString(TEXT("ProjectA")));
+			TestEqual(TEXT("project title uses project_id"), item.Title, FString(TEXT("project-alpha")));
+			TestEqual(TEXT("project subtitle uses folder name"), item.Subtitle, FString(TEXT("ProjectA")));
 			TestTrue(TEXT("project directory item is enabled"), item.bEnabled);
 		}
 	}
@@ -198,6 +217,54 @@ bool FStartupScreenViewModelRecentProjectsTest::RunTest(const FString& parameter
 	TestFalse(TEXT("empty project path fails validation"), viewModel->ValidateProject(FString(), diagnostics));
 	TestTrue(TEXT("empty path diagnostic returned"), diagnostics.Num() > 0);
 	TestEqual(TEXT("empty path diagnostic text"), viewModel->GetDiagnosticsText(), FString(TEXT("프로젝트를 선택하세요.")));
+
+	UGameInstance* gameInstance = NewObject<UGameInstance>();
+	USimulatorLaunchSubsystem* simulatorLaunchSubsystem = NewObject<USimulatorLaunchSubsystem>(gameInstance);
+	TestNotNull(TEXT("game instance created"), gameInstance);
+	TestNotNull(TEXT("simulator launch subsystem created"), simulatorLaunchSubsystem);
+	if (!gameInstance || !simulatorLaunchSubsystem)
+	{
+		IFileManager::Get().DeleteDirectory(*testRoot, false, true);
+		return false;
+	}
+
+	const FString invalidProject = FPaths::Combine(testRoot, TEXT("InvalidProject"));
+	IFileManager::Get().MakeDirectory(*invalidProject, true);
+	viewModel->SetSubsystemOverrides(simulatorLaunchSubsystem, nullptr, nullptr);
+	diagnostics.Reset();
+	TestFalse(TEXT("invalid project folder fails validation"), viewModel->ValidateProject(invalidProject, diagnostics));
+	TestTrue(TEXT("invalid project returns multiple diagnostics"), diagnostics.Num() > 1);
+	TestEqual(
+		TEXT("non project folder diagnostic text"),
+		viewModel->GetDiagnosticsText(),
+		FString(TEXT("프로젝트 폴더가 아닙니다.")));
+	TestFalse(TEXT("startup diagnostic text has no LF"), viewModel->GetDiagnosticsText().Contains(TEXT("\n")));
+	TestFalse(TEXT("startup diagnostic text has no CR"), viewModel->GetDiagnosticsText().Contains(TEXT("\r")));
+
+	const FString partialProject = FPaths::Combine(testRoot, TEXT("PartialProject"));
+	FProjectPresetSelection presetSelection;
+	presetSelection.ScenarioPresetId = TEXT("s-curve");
+	presetSelection.ProfilePresetId = TEXT("full");
+	presetSelection.PolicyPresetId = TEXT("demo");
+
+	TArray<FString> createDiagnostics;
+	TestTrue(
+		TEXT("create project for partial missing config validation"),
+		simulatorLaunchSubsystem->CreateProjectFromPresets(partialProject, presetSelection, createDiagnostics));
+	if (!createDiagnostics.IsEmpty())
+	{
+		AddInfo(FString::Printf(TEXT("project create diagnostics: %s"), *FString::Join(createDiagnostics, TEXT("\n"))));
+	}
+	TestTrue(TEXT("remove one required config"), IFileManager::Get().Delete(*FPaths::Combine(partialProject, TEXT("setting.json"))));
+
+	diagnostics.Reset();
+	TestFalse(TEXT("partial project folder fails validation"), viewModel->ValidateProject(partialProject, diagnostics));
+	TestEqual(
+		TEXT("missing config diagnostic text"),
+		viewModel->GetDiagnosticsText(),
+		FString(TEXT("프로젝트 파일이 누락되었습니다. (setting.json)")));
+	TestFalse(TEXT("missing config diagnostic text has no LF"), viewModel->GetDiagnosticsText().Contains(TEXT("\n")));
+	TestFalse(TEXT("missing config diagnostic text has no CR"), viewModel->GetDiagnosticsText().Contains(TEXT("\r")));
 
 	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
 	return true;

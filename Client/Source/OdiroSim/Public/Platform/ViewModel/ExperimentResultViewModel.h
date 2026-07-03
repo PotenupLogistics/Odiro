@@ -59,9 +59,25 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
 	FString GetSuccessRateLabel() const { return SuccessRateLabel; }
 
+	// 성공률 metric의 보조 집계 표시 문자열을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	FString GetSuccessMetricSubLabel() const { return SuccessMetricSubLabel; }
+
 	// 충돌 횟수 표시 문자열을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
 	FString GetCollisionCountLabel() const { return CollisionCountLabel; }
+
+	// 충돌 횟수 metric의 보조 집계 표시 문자열을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	FString GetCollisionMetricSubLabel() const { return CollisionMetricSubLabel; }
+
+	// 타임아웃 metric의 주 표시 문자열을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	FString GetTimeoutCountLabel() const { return TimeoutCountLabel; }
+
+	// 타임아웃 metric의 보조 집계 표시 문자열을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	FString GetTimeoutMetricSubLabel() const { return TimeoutMetricSubLabel; }
 
 	// AI summary 표시 문자열을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
@@ -124,9 +140,25 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	FString SuccessRateLabel;
 
-	// 충돌 횟수 metric 표시 문자열.
+	// 성공률 metric 아래에 표시되는 성공 episode count/total 문자열.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	FString SuccessMetricSubLabel;
+
+	// episode당 평균 충돌 횟수 metric 표시 문자열.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	FString CollisionCountLabel;
+
+	// 충돌 metric 아래에 표시되는 총 충돌 횟수.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	FString CollisionMetricSubLabel;
+
+	// 타임아웃 비율 metric 표시 문자열.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	FString TimeoutCountLabel;
+
+	// 타임아웃 metric 아래에 표시되는 타임아웃 episode count/total 문자열.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	FString TimeoutMetricSubLabel;
 
 	// AI 분석 요약 표시 문자열.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))

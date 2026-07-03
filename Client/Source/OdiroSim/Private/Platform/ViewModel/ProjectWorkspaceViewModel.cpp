@@ -1,16 +1,22 @@
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 
+#include "Dom/JsonObject.h"
 #include "Engine/GameInstance.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/PlatformUiSubsystem.h"
 #include "Platform/ProjectSessionSubsystem.h"
 #include "Platform/ScenarioEditorLaunchSubsystem.h"
 #include "Platform/ViewModel/OdiroListItemViewModel.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 namespace
 {
 	const FName WorkspaceVmDefaultTabId(TEXT("ScenarioEdit"));
+	const TCHAR* WorkspaceVmProjectSettingFileName = TEXT("setting.json");
+	const TCHAR* WorkspaceVmProjectIdFieldName = TEXT("project_id");
 
 	FString NormalizeWorkspaceVmPath(FString path)
 	{
@@ -25,6 +31,37 @@ namespace
 			: FPaths::ConvertRelativePathToFull(path);
 		FPaths::NormalizeFilename(path);
 		return path;
+	}
+
+	FString ResolveWorkspaceVmProjectId(const FString& projectPath)
+	{
+		const FString normalizedProjectPath = NormalizeWorkspaceVmPath(projectPath);
+		const FString fallbackProjectId = FPaths::GetCleanFilename(normalizedProjectPath);
+		if (normalizedProjectPath.IsEmpty())
+		{
+			return FString();
+		}
+
+		const FString settingPath = NormalizeWorkspaceVmPath(FPaths::Combine(
+			normalizedProjectPath,
+			WorkspaceVmProjectSettingFileName));
+		FString settingJson;
+		if (!FFileHelper::LoadFileToString(settingJson, *settingPath))
+		{
+			return fallbackProjectId;
+		}
+
+		TSharedPtr<FJsonObject> rootObject;
+		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(settingJson);
+		if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+		{
+			return fallbackProjectId;
+		}
+
+		FString projectId;
+		rootObject->TryGetStringField(WorkspaceVmProjectIdFieldName, projectId);
+		projectId.TrimStartAndEndInline();
+		return projectId.IsEmpty() ? fallbackProjectId : projectId;
 	}
 
 	TArray<UOdiroListItemViewModel*> CopyWorkspaceVmItems(const TArray<TObjectPtr<UOdiroListItemViewModel>>& sourceItems)
@@ -80,6 +117,7 @@ void UProjectWorkspaceViewModel::RefreshFromProjectSession()
 	if (!projectSession || !projectSession->HasActiveProject())
 	{
 		SetActiveProjectPath(FString());
+		SetActiveProjectId(FString());
 		SetActiveScenarioPath(FString());
 		SetSelectedRunState(FString(), FString());
 		RunItems.Reset();
@@ -88,7 +126,9 @@ void UProjectWorkspaceViewModel::RefreshFromProjectSession()
 		return;
 	}
 
-	SetActiveProjectPath(projectSession->GetActiveProjectPath());
+	const FString activeProjectPath = projectSession->GetActiveProjectPath();
+	SetActiveProjectPath(activeProjectPath);
+	SetActiveProjectId(ResolveWorkspaceVmProjectId(activeProjectPath));
 	SetActiveScenarioPath(projectSession->GetActiveProjectScenarioPath());
 	SelectWorkspaceTab(SelectedWorkspaceTabId.IsNone() ? WorkspaceVmDefaultTabId : SelectedWorkspaceTabId);
 	RefreshProjectRuns();
@@ -148,7 +188,7 @@ void UProjectWorkspaceViewModel::RefreshProjectRuns()
 	{
 		SelectRun(ExtractRunId(runDirectories[0]));
 	}
-	SetStatusText(FString::Printf(TEXT("Project: %s\nRuns: %d"), *ActiveProjectPath, runDirectories.Num()));
+	SetStatusText(TEXT("준비됨"));
 }
 
 void UProjectWorkspaceViewModel::SelectWorkspaceTab(const FName tabId)
@@ -390,6 +430,11 @@ void UProjectWorkspaceViewModel::HandleRunInfoChanged(const FSimulatorRunInfo& r
 void UProjectWorkspaceViewModel::SetActiveProjectPath(const FString& projectPath)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(ActiveProjectPath, NormalizeWorkspaceVmPath(projectPath));
+}
+
+void UProjectWorkspaceViewModel::SetActiveProjectId(const FString& projectId)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(ActiveProjectId, projectId.TrimStartAndEnd());
 }
 
 void UProjectWorkspaceViewModel::SetActiveScenarioPath(const FString& scenarioPath)

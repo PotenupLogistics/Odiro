@@ -13,6 +13,7 @@ class UProjectEpisodeReplayInterestRegionStripWidget;
 class USlider;
 class UTextBlock;
 class UTexture2D;
+class UWidget;
 class UProjectEpisodeReplayViewerWidget;
 class UScenarioReplaySubsystem;
 enum class EScenarioReplayCameraMode : uint8;
@@ -267,6 +268,9 @@ private:
 		double& OutEventTimeSeconds,
 		int32& OutEventIndex) const;
 
+	// Updates the optional episode number display from the loaded replay directory.
+	void UpdateReplayEpisodeNumberText();
+
 	// Formats a replay time in seconds for compact UI display.
 	FText FormatReplayTime(double TimeSeconds) const;
 
@@ -414,6 +418,10 @@ private:
 	// Optional current time and duration display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ReplayTimeText;
+
+	// Optional episode number display for the loaded replay.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ReplayEpisodeNumber;
 
 	// Optional current frame and frame count display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

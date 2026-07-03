@@ -5,7 +5,6 @@
 #include "Platform/Widget/OdiroCommonUserWidget.h"
 #include "ProjectAiSuggestionRowWidget.generated.h"
 
-class UBaseTextWidget;
 class UExperimentResultSuggestionViewModel;
 class UWidget;
 
@@ -24,42 +23,60 @@ private:
 	void RefreshSeverityVisibility(EProjectRunAiSuggestionSeverity severity) const;
 
 	// Applies runtime row text and collapses optional empty fields.
-	static void SetRuntimeText(UBaseTextWidget* textWidget, const FString& text);
+	static void SetRuntimeText(UWidget* textWidget, const FString& text, bool bAutoWrap = false);
+
+	// Applies a runtime row text color to BaseText or native TextBlock widgets.
+	static void SetRuntimeTextColor(UWidget* textWidget, const FLinearColor& color);
+
+	// Returns the shared severity color for the given suggestion severity.
+	static FLinearColor ResolveSeverityTextColor(EProjectRunAiSuggestionSeverity severity);
 
 	// Shows or hides one optional WBP indicator.
 	static void SetIndicatorVisible(UWidget* widget, bool bVisible);
 
 	// Suggestion severity label display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> SeverityText;
+	TObjectPtr<UWidget> SeverityText;
 
 	// Suggestion title display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> TitleText;
+	TObjectPtr<UWidget> TitleText;
 
 	// Suggestion summary/message display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> MessageText;
+	TObjectPtr<UWidget> MessageText;
 
 	// Suggestion reason display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> ReasonText;
+	TObjectPtr<UWidget> ReasonText;
 
 	// Suggested action display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> RecommendationText;
+	TObjectPtr<UWidget> RecommendationText;
 
 	// Parameter name display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> ParameterText;
+	TObjectPtr<UWidget> ParameterText;
 
 	// Current value display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> CurrentValueText;
+	TObjectPtr<UWidget> CurrentValueText;
 
 	// Suggested value display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> SuggestedValueText;
+	TObjectPtr<UWidget> SuggestedValueText;
+
+	// Optional value pill row authored in WBP.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ValueRow;
+
+	// Optional current value pill authored in WBP.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> CurrentValuePill;
+
+	// Optional suggested value pill authored in WBP.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> SuggestedValuePill;
 
 	// High severity visual marker.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

@@ -383,9 +383,29 @@ namespace
 		{
 			diagnostics.Add(TEXT("Fixed FPS는 1 이상이어야 합니다."));
 		}
+		if (settings.TimeScale <= 0.0f)
+		{
+			diagnostics.Add(TEXT("Time Scale은 0보다 커야 합니다."));
+		}
+		if (settings.MaxDurationSeconds < 0.0f)
+		{
+			diagnostics.Add(TEXT("Max Duration은 0 이상이어야 합니다."));
+		}
 		if (settings.EpisodeCount <= 0)
 		{
 			diagnostics.Add(TEXT("Episode Count는 1 이상이어야 합니다."));
+		}
+		if (settings.TipOverAngleDegrees < 10.0f || settings.TipOverAngleDegrees > 120.0f)
+		{
+			diagnostics.Add(TEXT("Tip Over Angle은 10~120 범위여야 합니다."));
+		}
+		if (settings.NearMissDistanceMeters < 0.0f)
+		{
+			diagnostics.Add(TEXT("Near Miss Distance는 0 이상이어야 합니다."));
+		}
+		if (settings.GoalAcceptanceRadiusMeters <= 0.0f)
+		{
+			diagnostics.Add(TEXT("Goal Acceptance Radius는 0보다 커야 합니다."));
 		}
 
 		outErrorText = FString::Join(diagnostics, TEXT("\n"));
@@ -811,6 +831,7 @@ bool UPlatformUiSubsystem::LoadExperimentSettingsForProject(
 
 	const TSharedPtr<FJsonObject>* runtimeObject = nullptr;
 	const TSharedPtr<FJsonObject>* samplingObject = nullptr;
+	const TSharedPtr<FJsonObject>* evaluationObject = nullptr;
 	if (!rootObject->TryGetObjectField(TEXT("runtime"), runtimeObject) || !runtimeObject || !runtimeObject->IsValid())
 	{
 		outErrorText = TEXT("setting.json에 runtime object가 없습니다.");
@@ -819,6 +840,11 @@ bool UPlatformUiSubsystem::LoadExperimentSettingsForProject(
 	if (!rootObject->TryGetObjectField(TEXT("sampling"), samplingObject) || !samplingObject || !samplingObject->IsValid())
 	{
 		outErrorText = TEXT("setting.json에 sampling object가 없습니다.");
+		return false;
+	}
+	if (!rootObject->TryGetObjectField(TEXT("evaluation"), evaluationObject) || !evaluationObject || !evaluationObject->IsValid())
+	{
+		outErrorText = TEXT("setting.json에 evaluation object가 없습니다.");
 		return false;
 	}
 
@@ -830,15 +856,30 @@ bool UPlatformUiSubsystem::LoadExperimentSettingsForProject(
 
 	double fixedFps = 60.0;
 	(*runtimeObject)->TryGetNumberField(TEXT("fixed_fps"), fixedFps);
+	double timeScale = 1.0;
+	(*runtimeObject)->TryGetNumberField(TEXT("time_scale"), timeScale);
+	double maxDurationSeconds = 60.0;
+	(*runtimeObject)->TryGetNumberField(TEXT("max_duration_s"), maxDurationSeconds);
 	double episodeCount = 1.0;
 	(*samplingObject)->TryGetNumberField(TEXT("episode_count"), episodeCount);
 	double baseSeed = 0.0;
 	(*samplingObject)->TryGetNumberField(TEXT("base_seed"), baseSeed);
+	double tipOverAngleDegrees = 60.0;
+	(*evaluationObject)->TryGetNumberField(TEXT("tip_over_angle_deg"), tipOverAngleDegrees);
+	double nearMissDistanceMeters = 0.5;
+	(*evaluationObject)->TryGetNumberField(TEXT("near_miss_distance_m"), nearMissDistanceMeters);
+	double goalAcceptanceRadiusMeters = 1.0;
+	(*evaluationObject)->TryGetNumberField(TEXT("goal_acceptance_radius_m"), goalAcceptanceRadiusMeters);
 
 	outSettings.MapId = mapId.TrimStartAndEnd();
 	outSettings.FixedFps = FMath::Max(1, FMath::RoundToInt(fixedFps));
+	outSettings.TimeScale = FMath::Max(UE_SMALL_NUMBER, static_cast<float>(timeScale));
+	outSettings.MaxDurationSeconds = FMath::Max(0.0f, static_cast<float>(maxDurationSeconds));
 	outSettings.EpisodeCount = FMath::Max(1, FMath::RoundToInt(episodeCount));
 	outSettings.BaseSeed = static_cast<int64>(baseSeed);
+	outSettings.TipOverAngleDegrees = FMath::Clamp(static_cast<float>(tipOverAngleDegrees), 10.0f, 120.0f);
+	outSettings.NearMissDistanceMeters = FMath::Max(0.0f, static_cast<float>(nearMissDistanceMeters));
+	outSettings.GoalAcceptanceRadiusMeters = FMath::Max(UE_SMALL_NUMBER, static_cast<float>(goalAcceptanceRadiusMeters));
 	return true;
 }
 
@@ -871,10 +912,17 @@ bool UPlatformUiSubsystem::SaveExperimentSettingsForProject(
 		FindOrCreatePlatformUiObjectField(rootObject.ToSharedRef(), TEXT("runtime"));
 	const TSharedRef<FJsonObject> samplingObject =
 		FindOrCreatePlatformUiObjectField(rootObject.ToSharedRef(), TEXT("sampling"));
+	const TSharedRef<FJsonObject> evaluationObject =
+		FindOrCreatePlatformUiObjectField(rootObject.ToSharedRef(), TEXT("evaluation"));
 	runtimeObject->SetStringField(TEXT("map_id"), settings.MapId.TrimStartAndEnd());
 	runtimeObject->SetNumberField(TEXT("fixed_fps"), settings.FixedFps);
+	runtimeObject->SetNumberField(TEXT("time_scale"), settings.TimeScale);
+	runtimeObject->SetNumberField(TEXT("max_duration_s"), settings.MaxDurationSeconds);
 	samplingObject->SetNumberField(TEXT("episode_count"), settings.EpisodeCount);
 	samplingObject->SetNumberField(TEXT("base_seed"), static_cast<double>(settings.BaseSeed));
+	evaluationObject->SetNumberField(TEXT("tip_over_angle_deg"), settings.TipOverAngleDegrees);
+	evaluationObject->SetNumberField(TEXT("near_miss_distance_m"), settings.NearMissDistanceMeters);
+	evaluationObject->SetNumberField(TEXT("goal_acceptance_radius_m"), settings.GoalAcceptanceRadiusMeters);
 
 	FString updatedJson;
 	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =

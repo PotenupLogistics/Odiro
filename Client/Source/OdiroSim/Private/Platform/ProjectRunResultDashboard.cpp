@@ -361,6 +361,13 @@ namespace
 		return !Item.Title.IsEmpty() || !Item.Description.IsEmpty();
 	}
 
+	bool ShouldDisplayAnalysisWarning(const FString& WarningText)
+	{
+		const FString NormalizedWarning = WarningText.TrimStartAndEnd().ToLower();
+		return !NormalizedWarning.StartsWith(TEXT("skipped large file:"))
+			&& !NormalizedWarning.StartsWith(TEXT("skipped symlink in policy copy:"));
+	}
+
 	FProjectRunAiSuggestionDashboardItem MakeSuggestion(const FJsonObject& Object)
 	{
 		FProjectRunAiSuggestionDashboardItem Item;
@@ -378,6 +385,10 @@ namespace
 		if (Item.ParameterName.IsEmpty())
 		{
 			Item.ParameterName = ReadTrimmedDashboardString(Object, TEXT("parameter"));
+		}
+		if (Item.ParameterName.IsEmpty())
+		{
+			Item.ParameterName = ReadTrimmedDashboardString(Object, TEXT("target"));
 		}
 		Item.CurrentValue = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("current"))).TrimStartAndEnd();
 		Item.SuggestedValue = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("suggested"))).TrimStartAndEnd();
@@ -428,7 +439,7 @@ namespace
 				}
 			}
 
-			if (!WarningText.IsEmpty())
+			if (!WarningText.IsEmpty() && ShouldDisplayAnalysisWarning(WarningText))
 			{
 				OutDashboardData.Warnings.Add(WarningText);
 			}
@@ -626,6 +637,61 @@ namespace
 		return true;
 	}
 
+	bool AppendLegacyRecommendationsArray(
+		const FJsonObject& RootObject,
+		const FString& FieldName,
+		FProjectRunResultDashboardData& OutDashboardData)
+	{
+		TArray<TSharedPtr<FJsonValue>> RecommendationValues;
+		if (!TryGetDashboardArrayField(RootObject, FieldName, RecommendationValues))
+		{
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& RecommendationValue : RecommendationValues)
+		{
+			if (!RecommendationValue.IsValid() || RecommendationValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject> RecommendationObject = RecommendationValue->AsObject();
+			if (!RecommendationObject.IsValid())
+			{
+				continue;
+			}
+
+			FProjectRunAiSuggestionDashboardItem Suggestion = MakeSuggestion(*RecommendationObject);
+			if (!HasSuggestionDisplayContent(Suggestion))
+			{
+				continue;
+			}
+
+			OutDashboardData.Suggestions.Add(MoveTemp(Suggestion));
+		}
+		return true;
+	}
+
+	bool AppendLegacyRecommendationsArrays(
+		const FJsonObject& RootObject,
+		FProjectRunResultDashboardData& OutDashboardData)
+	{
+		bool bFoundRecommendations = false;
+		bFoundRecommendations |= AppendLegacyRecommendationsArray(
+			RootObject,
+			TEXT("botSetupRecommendations"),
+			OutDashboardData);
+		bFoundRecommendations |= AppendLegacyRecommendationsArray(
+			RootObject,
+			TEXT("episodeSetupRecommendations"),
+			OutDashboardData);
+		bFoundRecommendations |= AppendLegacyRecommendationsArray(
+			RootObject,
+			TEXT("policyServerRecommendations"),
+			OutDashboardData);
+		return bFoundRecommendations;
+	}
+
 	bool AppendLatestRecommendationsFile(
 		const FString& ReviewDirectory,
 		FProjectRunResultDashboardData& OutDashboardData)
@@ -710,7 +776,12 @@ namespace
 		}
 
 		AppendInsightsArray(RootObject, OutDashboardData);
+		const int32 InitialSuggestionCount = OutDashboardData.Suggestions.Num();
 		AppendRecommendationsArray(RootObject, OutDashboardData);
+		if (OutDashboardData.Suggestions.Num() == InitialSuggestionCount)
+		{
+			AppendLegacyRecommendationsArrays(RootObject, OutDashboardData);
+		}
 		OutDashboardData.bAiLoaded = true;
 		return true;
 	}

@@ -60,8 +60,13 @@ bool UExperimentConfigViewModel::LoadFromProject(const FString& projectPath)
 
 	SetMapId(settings.MapId);
 	SetFixedFps(settings.FixedFps);
+	SetTimeScale(settings.TimeScale);
+	SetMaxDurationSeconds(settings.MaxDurationSeconds);
 	SetEpisodeCount(settings.EpisodeCount);
 	SetBaseSeed(settings.BaseSeed);
+	SetTipOverAngleDegrees(settings.TipOverAngleDegrees);
+	SetNearMissDistanceMeters(settings.NearMissDistanceMeters);
+	SetGoalAcceptanceRadiusMeters(settings.GoalAcceptanceRadiusMeters);
 	ClearDiagnostics();
 	return true;
 }
@@ -90,8 +95,13 @@ bool UExperimentConfigViewModel::SaveToProject(const FString& projectPath)
 	FExperimentConfigSettings settings;
 	settings.MapId = MapId.TrimStartAndEnd();
 	settings.FixedFps = FixedFps;
+	settings.TimeScale = TimeScale;
+	settings.MaxDurationSeconds = MaxDurationSeconds;
 	settings.EpisodeCount = EpisodeCount;
 	settings.BaseSeed = BaseSeed;
+	settings.TipOverAngleDegrees = TipOverAngleDegrees;
+	settings.NearMissDistanceMeters = NearMissDistanceMeters;
+	settings.GoalAcceptanceRadiusMeters = GoalAcceptanceRadiusMeters;
 
 	FString statusText;
 	const bool bSaved = UPlatformUiSubsystem::SaveExperimentSettingsForProject(
@@ -112,6 +122,16 @@ void UExperimentConfigViewModel::SetFixedFps(const int32 fixedFps)
 	UE_MVVM_SET_PROPERTY_VALUE(FixedFps, fixedFps);
 }
 
+void UExperimentConfigViewModel::SetTimeScale(const float timeScale)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(TimeScale, timeScale);
+}
+
+void UExperimentConfigViewModel::SetMaxDurationSeconds(const float maxDurationSeconds)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(MaxDurationSeconds, maxDurationSeconds);
+}
+
 void UExperimentConfigViewModel::SetEpisodeCount(const int32 episodeCount)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(EpisodeCount, episodeCount);
@@ -120,6 +140,21 @@ void UExperimentConfigViewModel::SetEpisodeCount(const int32 episodeCount)
 void UExperimentConfigViewModel::SetBaseSeed(const int64 baseSeed)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(BaseSeed, baseSeed);
+}
+
+void UExperimentConfigViewModel::SetTipOverAngleDegrees(const float tipOverAngleDegrees)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(TipOverAngleDegrees, tipOverAngleDegrees);
+}
+
+void UExperimentConfigViewModel::SetNearMissDistanceMeters(const float nearMissDistanceMeters)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(NearMissDistanceMeters, nearMissDistanceMeters);
+}
+
+void UExperimentConfigViewModel::SetGoalAcceptanceRadiusMeters(const float goalAcceptanceRadiusMeters)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(GoalAcceptanceRadiusMeters, goalAcceptanceRadiusMeters);
 }
 
 bool UExperimentConfigViewModel::CanSaveExperimentSettings() const
@@ -148,9 +183,29 @@ bool UExperimentConfigViewModel::ValidateInputs(TArray<FString>& outDiagnostics)
 	{
 		outDiagnostics.Add(TEXT("Fixed FPS는 1 이상이어야 합니다."));
 	}
+	if (TimeScale <= 0.0f)
+	{
+		outDiagnostics.Add(TEXT("Time Scale은 0보다 커야 합니다."));
+	}
+	if (MaxDurationSeconds < 0.0f)
+	{
+		outDiagnostics.Add(TEXT("Max Duration은 0 이상이어야 합니다."));
+	}
 	if (EpisodeCount <= 0)
 	{
 		outDiagnostics.Add(TEXT("Episode Count는 1 이상이어야 합니다."));
+	}
+	if (TipOverAngleDegrees < 10.0f || TipOverAngleDegrees > 120.0f)
+	{
+		outDiagnostics.Add(TEXT("Tip Over Angle은 10~120 범위여야 합니다."));
+	}
+	if (NearMissDistanceMeters < 0.0f)
+	{
+		outDiagnostics.Add(TEXT("Near Miss Distance는 0 이상이어야 합니다."));
+	}
+	if (GoalAcceptanceRadiusMeters <= 0.0f)
+	{
+		outDiagnostics.Add(TEXT("Goal Acceptance Radius는 0보다 커야 합니다."));
 	}
 	return outDiagnostics.IsEmpty();
 }

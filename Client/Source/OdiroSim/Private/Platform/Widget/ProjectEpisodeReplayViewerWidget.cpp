@@ -16,6 +16,7 @@
 #include "Platform/Widget/ProjectEpisodeReplayInterestRegionStripWidget.h"
 #include "Scenario/Replay/ScenarioReplaySubsystem.h"
 #include "Styling/SlateBrush.h"
+#include "UI/BaseTextWidget.h"
 #include "Widgets/SWidget.h"
 
 namespace
@@ -36,6 +37,74 @@ namespace
 	const TCHAR* ReplayThirdPersonCameraIconPath = TEXT("/Game/Textures/Icon/T_Icon_ViewTpv.T_Icon_ViewTpv");
 	// First-person camera icon asset used by the vehicle-front camera mode.
 	const TCHAR* ReplayFirstPersonCameraIconPath = TEXT("/Game/Textures/Icon/T_Icon_ViewFpv.T_Icon_ViewFpv");
+
+	// Finds the numeric suffix used by episode replay directories.
+	FString ExtractReplayEpisodeNumberToken(const FString& EpisodeDirectory)
+	{
+		FString normalizedDirectory = EpisodeDirectory.TrimStartAndEnd();
+		FPaths::NormalizeDirectoryName(normalizedDirectory);
+		const FString cleanName = FPaths::GetCleanFilename(normalizedDirectory);
+		if (cleanName.IsEmpty())
+		{
+			return FString();
+		}
+
+		int32 digitEnd = cleanName.Len() - 1;
+		while (digitEnd >= 0 && !FChar::IsDigit(cleanName[digitEnd]))
+		{
+			--digitEnd;
+		}
+		if (digitEnd < 0)
+		{
+			return cleanName;
+		}
+
+		int32 digitStart = digitEnd;
+		while (digitStart >= 0 && FChar::IsDigit(cleanName[digitStart]))
+		{
+			--digitStart;
+		}
+		return cleanName.Mid(digitStart + 1, digitEnd - digitStart);
+	}
+
+	// Formats the current replay episode number for compact replay chrome.
+	FText FormatReplayEpisodeNumberText(const FString& EpisodeDirectory)
+	{
+		const FString numberToken = ExtractReplayEpisodeNumberToken(EpisodeDirectory);
+		if (numberToken.IsEmpty())
+		{
+			return FText::GetEmpty();
+		}
+
+		if (numberToken.IsNumeric())
+		{
+			const int64 episodeNumber = FCString::Atoi64(*numberToken);
+			return FText::FromString(FString::Printf(TEXT("#%lld"), static_cast<long long>(episodeNumber)));
+		}
+		return FText::FromString(numberToken);
+	}
+
+	// Sets optional replay chrome text regardless of whether WBP uses BaseText or TextBlock.
+	void SetReplayChromeText(UWidget* Widget, const FText& Text)
+	{
+		if (!Widget)
+		{
+			return;
+		}
+
+		if (UBaseTextWidget* BaseText = Cast<UBaseTextWidget>(Widget))
+		{
+			BaseText->SetText(Text);
+		}
+		else if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+		{
+			TextBlock->SetText(Text);
+		}
+
+		Widget->SetVisibility(Text.IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
+	}
 
 	// Forces WBP-authored fullscreen slots to fill their parent instead of keeping designer-time fixed offsets.
 	void ApplyReplayFillSlot(UWidget* widget, const int32 zOrder)
@@ -156,6 +225,7 @@ bool UProjectEpisodeReplayViewerWidget::OpenEpisodeReplay(const FString& Episode
 	FPaths::NormalizeDirectoryName(LoadedEpisodeDirectory);
 	if (LoadedEpisodeDirectory.IsEmpty())
 	{
+		UpdateReplayEpisodeNumberText();
 		SetDiagnosticsText(TEXT("Replay episode directory is empty."));
 		return false;
 	}
@@ -170,6 +240,8 @@ bool UProjectEpisodeReplayViewerWidget::OpenEpisodeReplay(const FString& Episode
 	TArray<FString> Diagnostics;
 	if (!ReplaySubsystem->LoadEpisodeReplay(LoadedEpisodeDirectory, Diagnostics))
 	{
+		LoadedEpisodeDirectory.Reset();
+		UpdateReplayEpisodeNumberText();
 		SetDiagnosticsText(Diagnostics.IsEmpty()
 			? TEXT("Replay load failed.")
 			: FString::Join(Diagnostics, TEXT("\n")));
@@ -181,6 +253,7 @@ bool UProjectEpisodeReplayViewerWidget::OpenEpisodeReplay(const FString& Episode
 	SetReplayFullscreen(false);
 	SetVisibility(ESlateVisibility::Visible);
 	UpdateCameraModeText();
+	UpdateReplayEpisodeNumberText();
 	UpdateReplayTimelineUi();
 	RebuildReplayEventMarkers();
 	RebuildReplayInterestRegions();
@@ -199,6 +272,7 @@ void UProjectEpisodeReplayViewerWidget::ResetReplay()
 	}
 
 	LoadedEpisodeDirectory.Reset();
+	UpdateReplayEpisodeNumberText();
 	if (ReplayImage)
 	{
 		ReplayImage->SetBrush(FSlateBrush());
@@ -1877,6 +1951,11 @@ bool UProjectEpisodeReplayViewerWidget::TryFindTimelineSnapEvent(
 	}
 
 	return OutEventIndex != INDEX_NONE;
+}
+
+void UProjectEpisodeReplayViewerWidget::UpdateReplayEpisodeNumberText()
+{
+	SetReplayChromeText(ReplayEpisodeNumber.Get(), FormatReplayEpisodeNumberText(LoadedEpisodeDirectory));
 }
 
 FText UProjectEpisodeReplayViewerWidget::FormatReplayTime(

@@ -53,6 +53,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentConfig")
 	int32 GetFixedFps() const { return FixedFps; }
 
+	// time scale 입력을 설정한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentConfig")
+	void SetTimeScale(float timeScale);
+
+	// time scale 입력을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentConfig")
+	float GetTimeScale() const { return TimeScale; }
+
+	// max duration seconds 입력을 설정한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentConfig")
+	void SetMaxDurationSeconds(float maxDurationSeconds);
+
+	// max duration seconds 입력을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentConfig")
+	float GetMaxDurationSeconds() const { return MaxDurationSeconds; }
+
 	// episode count 입력을 설정한다.
 	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentConfig")
 	void SetEpisodeCount(int32 episodeCount);
@@ -68,6 +84,30 @@ public:
 	// base seed 입력을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentConfig")
 	int64 GetBaseSeed() const { return BaseSeed; }
+
+	// tip over angle 입력을 설정한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentConfig")
+	void SetTipOverAngleDegrees(float tipOverAngleDegrees);
+
+	// tip over angle 입력을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentConfig")
+	float GetTipOverAngleDegrees() const { return TipOverAngleDegrees; }
+
+	// near miss distance 입력을 설정한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentConfig")
+	void SetNearMissDistanceMeters(float nearMissDistanceMeters);
+
+	// near miss distance 입력을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentConfig")
+	float GetNearMissDistanceMeters() const { return NearMissDistanceMeters; }
+
+	// goal acceptance radius 입력을 설정한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentConfig")
+	void SetGoalAcceptanceRadiusMeters(float goalAcceptanceRadiusMeters);
+
+	// goal acceptance radius 입력을 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentConfig")
+	float GetGoalAcceptanceRadiusMeters() const { return GoalAcceptanceRadiusMeters; }
 
 	// 저장 가능한 입력 상태인지 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentConfig")
@@ -94,6 +134,14 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentConfig", meta = (AllowPrivateAccess = "true"))
 	int32 FixedFps = 60;
 
+	// runtime.time_scale 입력 상태.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentConfig", meta = (AllowPrivateAccess = "true"))
+	float TimeScale = 1.0f;
+
+	// runtime.max_duration_s 입력 상태.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentConfig", meta = (AllowPrivateAccess = "true"))
+	float MaxDurationSeconds = 60.0f;
+
 	// sampling.episode_count 입력 상태.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentConfig", meta = (AllowPrivateAccess = "true"))
 	int32 EpisodeCount = 1;
@@ -101,4 +149,16 @@ private:
 	// sampling.base_seed 입력 상태.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentConfig", meta = (AllowPrivateAccess = "true"))
 	int64 BaseSeed = 0;
+
+	// evaluation.tip_over_angle_deg 입력 상태.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentConfig", meta = (AllowPrivateAccess = "true"))
+	float TipOverAngleDegrees = 60.0f;
+
+	// evaluation.near_miss_distance_m 입력 상태.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentConfig", meta = (AllowPrivateAccess = "true"))
+	float NearMissDistanceMeters = 0.5f;
+
+	// evaluation.goal_acceptance_radius_m 입력 상태.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentConfig", meta = (AllowPrivateAccess = "true"))
+	float GoalAcceptanceRadiusMeters = 1.0f;
 };

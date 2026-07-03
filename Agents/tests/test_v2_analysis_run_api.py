@@ -718,6 +718,88 @@ def test_v2_analysis_run_exposes_repath_and_tip_over_metrics(tmp_path) -> None:
     assert any(finding["type"] == "robot_tip_over" for finding in report["findings"])
 
 
+def test_v2_analysis_run_insights_describe_observed_collision_metrics_only(tmp_path) -> None:
+    """Collision insights mention only observed event types and include repeat counts."""
+    project = tmp_path / "Project1"
+    for episode_id, static_collisions, repaths in (
+        ("000001", 6, 5),
+        ("000002", 1, 4),
+        ("000003", 1, 6),
+    ):
+        _write_episode(
+            project,
+            episode_id,
+            {
+                "summary": {
+                    "success": False,
+                    "goal_reached": False,
+                    "terminal_reason": "StaticObstacleCollision",
+                },
+                "metrics": {
+                    "collision_count": static_collisions,
+                    "static_obstacle_collision_count": static_collisions,
+                    "pedestrian_collision_count": 0,
+                    "blocked_region_violation_count": 0,
+                    "repath_count": repaths,
+                    "duration_s": 60.0,
+                },
+            },
+            '{"event_type": "static_obstacle_collision"}\n',
+        )
+    _write_episode(
+        project,
+        "000004",
+        {
+            "summary": {"success": True, "goal_reached": True, "terminal_reason": "GoalReached"},
+            "metrics": {"goal_reached": 1, "repath_count": 7, "duration_s": 22.0},
+        },
+        '{"event_type": "repath"}\n',
+    )
+    _write_episode(
+        project,
+        "000005",
+        {
+            "summary": {
+                "success": False,
+                "goal_reached": False,
+                "terminal_reason": "RobotTipOver",
+            },
+            "metrics": {
+                "robot_tip_over_count": 1,
+                "repath_count": 6,
+                "duration_s": 27.0,
+            },
+        },
+        '{"event_type": "robot_tip_over"}\n{"event_type": "repath"}\n',
+    )
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert all(set(insight) == {"severity", "title", "description"} for insight in payload["insights"])
+    collision_insight = payload["insights"][0]
+    assert collision_insight["severity"] == "high"
+    assert collision_insight["title"] == "정적 장애물 충돌 반복"
+    assert "정적 장애물 충돌이 8회 발생" in collision_insight["description"]
+    assert "3개 episode에서 충돌 패턴이 반복" in collision_insight["description"]
+    assert "보행자" not in collision_insight["description"]
+    assert "차단 구역" not in collision_insight["description"]
+    assert any(
+        insight["title"] == "전복 이벤트 확인"
+        and "1개 episode에서 로봇 전복이 발생했습니다" in insight["description"]
+        for insight in payload["insights"]
+    )
+    assert any(
+        insight["title"] == "재경로 탐색 반복"
+        and "5개 episode에서 재경로 탐색이 반복되었습니다" in insight["description"]
+        for insight in payload["insights"]
+    )
+    assert "analysis_mode" not in payload
+    assert "modified_policy_json" not in payload
+    assert "modified_environment_json" not in payload
+
+
 def test_v2_analysis_run_fills_repath_from_result_event_summary_when_summary_rows_omit_it(tmp_path) -> None:
     """Result event summaries supply public Repath counts when dashboard rows omit that metric."""
     project = tmp_path / "Project1"
@@ -1097,7 +1179,7 @@ def test_v2_analysis_run_terminal_reason_controls_goal_not_reached_finding(tmp_p
             assert "goal_not_reached" not in finding_types
         if case_name == "BlockedRegionCollision":
             assert payload["recommendation_type"] == "environment_review"
-            assert any(insight["title"] == "충돌 관련 이벤트 확인" for insight in payload["insights"])
+            assert any(insight["title"] == "차단 구역 위반 확인" for insight in payload["insights"])
         if case_name == "RobotTipOver":
             assert payload["recommendation_type"] == "policy_review"
             assert any(insight["title"] == "정책 검토 우선" for insight in payload["insights"])

@@ -552,6 +552,7 @@ class ResultAnalysisV2Agent:
                 findings=findings,
                 evidence=evidence,
                 metrics=response.metrics,
+                patterns=response.patterns or [],
                 recommendation_type=decision.recommendation_type,
             )
             response.insights = self.response_builder.public_insights(detailed_insights)
@@ -628,6 +629,7 @@ class ResultAnalysisV2Agent:
         findings: list[dict[str, Any]],
         evidence: list[dict[str, Any]],
         metrics: AnalysisMetricsV2 | None,
+        patterns: list[dict[str, Any]],
         recommendation_type: str,
     ) -> list[dict[str, Any]]:
         """Build detailed report insights from findings and public metrics."""
@@ -638,6 +640,11 @@ class ResultAnalysisV2Agent:
             str(item.get("evidence_id")): item for item in evidence if item.get("evidence_id")
         }
         insights: list[dict[str, Any]] = []
+        collision_counts = self._collision_metric_counts(
+            metrics=metrics,
+            findings=findings,
+            evidence_by_id=evidence_by_id,
+        )
         if (
             metrics is not None
             and metrics.collision_count == 0
@@ -660,18 +667,62 @@ class ResultAnalysisV2Agent:
                     evidence_by_id=evidence_by_id,
                 )
             )
-        if {"static_obstacle_collision", "blocked_region_collision", "pedestrian_collision"} & finding_types:
+        if any(count > 0 for count in collision_counts.values()):
             evidence_ids = self._finding_evidence_ids(
                 findings,
                 {"static_obstacle_collision", "blocked_region_collision", "pedestrian_collision"},
             )
+            title, detail = self._collision_insight_text(collision_counts=collision_counts, patterns=patterns)
             insights.append(
                 self._insight(
                     index=len(insights) + 1,
                     insight_type="collision_observed",
                     severity="high",
-                    title="충돌 관련 이벤트 확인",
-                    detail="정적 장애물, 보행자, 또는 차단 구역 충돌 이벤트가 확인되었습니다.",
+                    title=title,
+                    detail=detail,
+                    evidence_ids=evidence_ids,
+                    evidence_by_id=evidence_by_id,
+                )
+            )
+        if self._metric_value(metrics, "robot_tip_over_count") > 0:
+            evidence_ids = self._finding_evidence_ids(findings, {"robot_tip_over"})
+            episode_count = self._episode_count_from_evidence(evidence_ids, evidence_by_id)
+            if episode_count == 0:
+                episode_count = max(1, self._metric_value(metrics, "robot_tip_over_count"))
+            insights.append(
+                self._insight(
+                    index=len(insights) + 1,
+                    insight_type="robot_tip_over_observed",
+                    severity="medium",
+                    title="전복 이벤트 확인",
+                    detail=(
+                        f"{episode_count}개 episode에서 로봇 전복이 발생했습니다. "
+                        "장애물 접촉 이후 자세 안정성 또는 충돌 반응 조건을 함께 확인할 필요가 있습니다."
+                    ),
+                    evidence_ids=evidence_ids,
+                    evidence_by_id=evidence_by_id,
+                )
+            )
+        repath_repeat_count = self._pattern_count(patterns, {"repath_repeated"})
+        if repath_repeat_count > 0 or self._metric_value(metrics, "repath_count") >= 3:
+            evidence_ids = self._finding_evidence_ids(findings, {"repath"})
+            if repath_repeat_count > 0:
+                detail = (
+                    f"{repath_repeat_count}개 episode에서 재경로 탐색이 반복되었습니다. "
+                    "장애물 주변에서 경로가 안정적으로 유지되지 않았는지 확인할 필요가 있습니다."
+                )
+            else:
+                detail = (
+                    f"재경로 탐색이 {self._metric_value(metrics, 'repath_count')}회 발생했습니다. "
+                    "장애물 주변에서 경로가 안정적으로 유지되지 않았는지 확인할 필요가 있습니다."
+                )
+            insights.append(
+                self._insight(
+                    index=len(insights) + 1,
+                    insight_type="repath_repeated",
+                    severity="medium",
+                    title="재경로 탐색 반복",
+                    detail=detail,
                     evidence_ids=evidence_ids,
                     evidence_by_id=evidence_by_id,
                 )
@@ -715,6 +766,147 @@ class ResultAnalysisV2Agent:
                 )
             )
         return insights[:3]
+
+    def _collision_metric_counts(
+        self,
+        *,
+        metrics: AnalysisMetricsV2 | None,
+        findings: list[dict[str, Any]],
+        evidence_by_id: dict[str, dict[str, Any]],
+    ) -> dict[str, int]:
+        """Return observed collision counts from public metrics with evidence fallback."""
+        metric_counts = {
+            "static_obstacle_collision": self._metric_value(metrics, "static_obstacle_collision_count"),
+            "pedestrian_collision": self._metric_value(metrics, "pedestrian_collision_count"),
+            "blocked_region_collision": self._metric_value(metrics, "blocked_region_violation_count"),
+        }
+        evidence_metric_names = {
+            "static_obstacle_collision": "static_obstacle_collision_count",
+            "pedestrian_collision": "pedestrian_collision_count",
+            "blocked_region_collision": "blocked_region_violation_count",
+        }
+        for finding_type, evidence_metric_name in evidence_metric_names.items():
+            if metric_counts[finding_type] > 0:
+                continue
+            metric_counts[finding_type] = self._evidence_metric_total(
+                self._finding_evidence_ids(findings, {finding_type}),
+                evidence_by_id,
+                evidence_metric_name,
+            )
+        return metric_counts
+
+    def _collision_insight_text(
+        self,
+        *,
+        collision_counts: dict[str, int],
+        patterns: list[dict[str, Any]],
+    ) -> tuple[str, str]:
+        """Build collision insight text from observed metric counts only."""
+        collision_parts: list[tuple[str, int]] = []
+        static_count = collision_counts.get("static_obstacle_collision", 0)
+        pedestrian_count = collision_counts.get("pedestrian_collision", 0)
+        blocked_count = collision_counts.get("blocked_region_collision", 0)
+        if static_count > 0:
+            collision_parts.append(("정적 장애물 충돌", static_count))
+        if pedestrian_count > 0:
+            collision_parts.append(("보행자 충돌", pedestrian_count))
+        if blocked_count > 0:
+            collision_parts.append(("차단 구역 위반", blocked_count))
+
+        repeat_count = self._pattern_count(
+            patterns,
+            {
+                "collision_repeated",
+                "static_obstacle_collision_repeated",
+                "pedestrian_collision_repeated",
+                "blocked_region_collision_repeated",
+                "blocked_region_violation_repeated",
+            },
+        )
+        title = self._collision_insight_title(collision_parts=collision_parts, repeat_count=repeat_count)
+        detail = self._collision_insight_detail(collision_parts=collision_parts, repeat_count=repeat_count)
+        return title, detail
+
+    def _collision_insight_title(self, *, collision_parts: list[tuple[str, int]], repeat_count: int) -> str:
+        """Return a user-facing title for the observed collision types."""
+        if len(collision_parts) == 1:
+            label = collision_parts[0][0]
+            return f"{label} 반복" if repeat_count > 1 else f"{label} 확인"
+        return "충돌 이벤트 반복" if repeat_count > 1 else "충돌 이벤트 확인"
+
+    def _collision_insight_detail(self, *, collision_parts: list[tuple[str, int]], repeat_count: int) -> str:
+        """Return a detail string that avoids unobserved collision categories."""
+        if len(collision_parts) == 1:
+            label, count = collision_parts[0]
+            detail = f"{label}이 {count}회 발생"
+            if repeat_count > 0:
+                detail = f"{detail}했고, {repeat_count}개 episode에서 충돌 패턴이 반복되었습니다."
+            else:
+                detail = f"{detail}했습니다."
+            return f"{detail} {self._collision_followup_text(label)}"
+
+        event_text = ", ".join(f"{label} {count}회" for label, count in collision_parts)
+        detail = f"{event_text}가 발생"
+        if repeat_count > 0:
+            detail = f"{detail}했고, {repeat_count}개 episode에서 충돌 관련 패턴이 반복되었습니다."
+        else:
+            detail = f"{detail}했습니다."
+        return f"{detail} 발생한 충돌 유형별로 장애물 배치, 보행자 회피, 통과 가능 영역 조건을 분리해 확인할 필요가 있습니다."
+
+    def _collision_followup_text(self, collision_label: str) -> str:
+        """Return the follow-up sentence for one collision type."""
+        if collision_label == "정적 장애물 충돌":
+            return "장애물 배치나 유효 통로 폭이 주행 경로를 과도하게 제한했을 가능성이 있습니다."
+        if collision_label == "보행자 충돌":
+            return "보행자 근접 상황에서 감속, 정지, 회피 조건이 충분했는지 확인할 필요가 있습니다."
+        return "차단 영역 배치나 통과 가능 영역 조건이 주행 경로와 충돌했는지 확인할 필요가 있습니다."
+
+    def _pattern_count(self, patterns: list[dict[str, Any]], pattern_types: set[str]) -> int:
+        """Return the largest repeated-episode count for the requested pattern types."""
+        counts = [
+            int(pattern.get("count", 0))
+            for pattern in patterns
+            if pattern.get("type") in pattern_types and isinstance(pattern.get("count"), int)
+        ]
+        return max(counts, default=0)
+
+    def _episode_count_from_evidence(
+        self,
+        evidence_ids: list[str],
+        evidence_by_id: dict[str, dict[str, Any]],
+    ) -> int:
+        """Count unique episodes represented by the selected evidence ids."""
+        return len(
+            {
+                str(evidence_by_id[evidence_id].get("episode_id"))
+                for evidence_id in evidence_ids
+                if evidence_id in evidence_by_id and evidence_by_id[evidence_id].get("episode_id")
+            }
+        )
+
+    def _evidence_metric_total(
+        self,
+        evidence_ids: list[str],
+        evidence_by_id: dict[str, dict[str, Any]],
+        metric_name: str,
+    ) -> int:
+        """Sum evidence values for one metric when public metrics lack a count."""
+        total = 0
+        for evidence_id in evidence_ids:
+            item = evidence_by_id.get(evidence_id)
+            if not item or item.get("metric") != metric_name:
+                continue
+            value = item.get("value")
+            if isinstance(value, int | float):
+                total += max(0, int(value))
+        return total
+
+    def _metric_value(self, metrics: AnalysisMetricsV2 | None, metric_name: str) -> int:
+        """Read one non-negative integer metric from the public metrics model."""
+        if metrics is None:
+            return 0
+        value = getattr(metrics, metric_name, 0)
+        return max(0, int(value)) if isinstance(value, int | float) else 0
 
     def _insight(
         self,

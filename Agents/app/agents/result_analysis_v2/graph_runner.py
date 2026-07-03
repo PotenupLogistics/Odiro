@@ -21,6 +21,7 @@ from app.agents.result_analysis_v2.routes import (
     default_recommendation_route_for_analysis,
     route_for_valid_recommendations,
 )
+from app.agents.result_analysis_v2.recommendation_schema import analysis_recommendations_v2_response_schema
 from app.core.settings import Settings
 
 try:
@@ -329,6 +330,7 @@ class ResultAnalysisGraphRunnerV2:
                 system_prompt=self.agent._read_prompt("system_prompt.md"),
                 user_prompt=self.agent._analysis_user_prompt(state.get("analysis_context", {})),
                 response_name="analysis_recommendations_v2",
+                response_schema=analysis_recommendations_v2_response_schema(),
             )
             return {**state, "llm_analysis": payload, "analysis_mode": "llm_candidate"}
         except Exception:

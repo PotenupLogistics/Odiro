@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.agents.common.llm_json_client import AgentLlmJsonClient
+from app.agents.result_analysis_v2.recommendation_schema import analysis_recommendations_v2_response_schema
 from app.core.settings import Settings
 from app.models.llm import LlmGenerationRequest, LlmGenerationResponse, LlmProvider
 
@@ -35,6 +36,24 @@ def test_agent_llm_json_client_raises_scenario_schema_output_budget() -> None:
         user_prompt="user",
         response_name="scenario_graph_template",
         response_schema={"name": "project_scenario_v1", "schema": {"type": "object"}, "strict": True},
+    )
+
+    assert response == {"ok": True}
+    assert client.requests[0].maxTokens >= 4096
+
+
+def test_agent_llm_json_client_raises_result_analysis_recommendation_schema_output_budget() -> None:
+    client = _CapturingLlmClient()
+    agent_client = AgentLlmJsonClient(
+        settings=Settings(_env_file=None, openaiMaxTokens=1200),
+        client=client,
+    )
+
+    response = agent_client.generate_json(
+        system_prompt="system",
+        user_prompt="user",
+        response_name="analysis_recommendations_v2",
+        response_schema=analysis_recommendations_v2_response_schema(),
     )
 
     assert response == {"ok": True}

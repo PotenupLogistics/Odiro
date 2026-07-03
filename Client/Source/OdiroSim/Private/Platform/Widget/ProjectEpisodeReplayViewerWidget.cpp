@@ -11,6 +11,7 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
+#include "Framework/Application/SlateApplication.h"
 #include "InputCoreTypes.h"
 #include "Misc/Paths.h"
 #include "Platform/Widget/ProjectEpisodeReplayInterestRegionStripWidget.h"
@@ -183,6 +184,37 @@ namespace
 				*Label,
 				Marker.TimeSeconds,
 				*Detail));
+	}
+
+	// Clears transient timeline marker widgets without leaving Slate tooltip state alive.
+	void ClearReplayMarkerCanvas(UCanvasPanel* MarkerCanvas)
+	{
+		if (!MarkerCanvas)
+		{
+			return;
+		}
+
+		const int32 ChildCount = MarkerCanvas->GetChildrenCount();
+		if (ChildCount <= 0)
+		{
+			return;
+		}
+
+		if (FSlateApplication::IsInitialized())
+		{
+			FSlateApplication::Get().CloseToolTip();
+		}
+
+		for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+		{
+			if (UWidget* MarkerWidget = MarkerCanvas->GetChildAt(ChildIndex))
+			{
+				MarkerWidget->SetToolTipText(FText::GetEmpty());
+				MarkerWidget->SetToolTip(nullptr);
+			}
+		}
+
+		MarkerCanvas->ClearChildren();
 	}
 
 	// Applies one texture brush to a WBP-authored icon image.
@@ -1334,7 +1366,6 @@ void UProjectEpisodeReplayViewerWidget::ApplyReplayFullscreenLayout()
 {
 	ApplyReplayFillSlot(ReplayFullscreenLayer.Get(), ReplayFullscreenLayerZOrder);
 	InvalidateLayoutAndVolatility();
-	ForceLayoutPrepass();
 }
 
 // Finds fullscreen layer toggle buttons by name when they are not exposed as WBP variables.
@@ -1886,14 +1917,8 @@ void UProjectEpisodeReplayViewerWidget::AddReplayEventMarkersToCanvas(
 
 void UProjectEpisodeReplayViewerWidget::ClearReplayEventMarkers()
 {
-	if (ReplayTimelineMarkerCanvas)
-	{
-		ReplayTimelineMarkerCanvas->ClearChildren();
-	}
-	if (ReplayCompactTimelineMarkerCanvas)
-	{
-		ReplayCompactTimelineMarkerCanvas->ClearChildren();
-	}
+	ClearReplayMarkerCanvas(ReplayTimelineMarkerCanvas.Get());
+	ClearReplayMarkerCanvas(ReplayCompactTimelineMarkerCanvas.Get());
 
 	bTimelineSnappedToEvent = false;
 	SnappedEventTimeSeconds = 0.0;

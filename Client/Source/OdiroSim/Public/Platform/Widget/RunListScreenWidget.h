@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Shared/SimulationSetupTypes.h"
+#include "TimerManager.h"
 #include "UI/BaseWidget.h"
 #include "RunListScreenWidget.generated.h"
 
@@ -58,11 +59,23 @@ private:
 	// Resolves and caches experiment config ViewModel.
 	UExperimentConfigViewModel* ResolveExperimentConfigViewModel();
 
+	// Refreshes only the run result list, preserving visible experiment setting edits.
+	void RefreshRunResults();
+
+	// Starts periodic run result polling while this screen is constructed.
+	void StartRunResultsPolling();
+
+	// Stops periodic run result polling before row widgets are released.
+	void StopRunResultsPolling();
+
+	// Timer callback that refreshes run result artifacts from disk.
+	void HandleRunResultsPollingTick();
+
 	// Commits visible experiment setting inputs into the ViewModel and saves setting.json.
 	bool SaveExperimentSettings();
 
 	// Rebuilds run row widgets from the workspace ViewModel items.
-	void RebuildRunRows();
+	void RebuildRunRows(bool bForceRebuild = false);
 
 	// Returns the configured run row class.
 	TSubclassOf<UProjectExperimentRunRowWidget> ResolveRunRowWidgetClass() const;
@@ -91,6 +104,12 @@ private:
 	// Runtime run row widgets owned by this screen.
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProjectExperimentRunRowWidget>> RunRows;
+
+	// Timer handle for active run result list polling.
+	FTimerHandle RunResultsPollingTimerHandle;
+
+	// Last rendered run result signature used to skip redundant row rebuilds.
+	FString RenderedRunResultsSignature;
 
 	// Run row Widget Blueprint class used for dynamic rows.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList", meta = (AllowPrivateAccess = "true"))

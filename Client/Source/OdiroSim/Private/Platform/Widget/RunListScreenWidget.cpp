@@ -15,6 +15,9 @@
 
 namespace
 {
+	// RunList 화면이 열려 있는 동안 결과 목록을 다시 읽는 간격.
+	constexpr float RunListResultsPollingIntervalSeconds = 2.5f;
+
 	FString NormalizeRunListPath(FString path)
 	{
 		path = path.TrimStartAndEnd();
@@ -168,6 +171,7 @@ namespace
 		return true;
 	}
 
+	// run summary dashboard에서 row에 표시할 문자열 묶음.
 	struct FRunListDashboardLabels
 	{
 		FString SuccessRateLabel = TEXT("-");
@@ -175,6 +179,33 @@ namespace
 		int32 EpisodeCount = 0;
 	};
 
+	// 한 row를 그릴 때 필요한 파일 기반 결과 snapshot.
+	struct FRunListRenderedRowData
+	{
+		UOdiroListItemViewModel* Item = nullptr;
+		ESimulationRunState RunState = ESimulationRunState::Pending;
+		FRunListDashboardLabels DashboardLabels;
+		int32 ProgressTotalCount = 0;
+	};
+
+	// status.json과 summary.json을 기준으로 run state를 계산한다.
+	ESimulationRunState ResolveRunListState(const FString& runDirectory)
+	{
+		const FString normalizedRunDirectory = NormalizeRunListPath(runDirectory);
+		const FString statusPath = NormalizeRunListPath(FPaths::Combine(normalizedRunDirectory, TEXT("status.json")));
+		ESimulationRunState runState = ESimulationRunState::Pending;
+		if (UPlatformUiSubsystem::TryReadBridgeRunStatusState(statusPath, runState))
+		{
+			return runState;
+		}
+
+		const FString summaryPath = NormalizeRunListPath(FPaths::Combine(normalizedRunDirectory, TEXT("summary.json")));
+		return UPlatformUiSubsystem::DoesResolvedFileExist(summaryPath)
+			? ESimulationRunState::Completed
+			: ESimulationRunState::Pending;
+	}
+
+	// summary dashboard를 RunList row label 값으로 변환한다.
 	FRunListDashboardLabels MakeRunListDashboardLabels(const FString& runDirectory)
 	{
 		FRunListDashboardLabels labels;
@@ -197,6 +228,61 @@ namespace
 		labels.TotalDurationLabel = FString::Printf(TEXT("%.1f s"), dashboardData.TotalDurationSeconds);
 		return labels;
 	}
+
+	// ViewModel item과 파일 기반 결과 snapshot을 render-ready row data로 결합한다.
+	TArray<FRunListRenderedRowData> BuildRunListRenderedRows(
+		const TArray<UOdiroListItemViewModel*>& runItems,
+		const UExperimentConfigViewModel* configViewModel)
+	{
+		const int32 configuredEpisodeCount = configViewModel ? FMath::Max(1, configViewModel->GetEpisodeCount()) : 0;
+		TArray<FRunListRenderedRowData> renderedRows;
+		renderedRows.Reserve(runItems.Num());
+
+		for (UOdiroListItemViewModel* item : runItems)
+		{
+			if (!item)
+			{
+				continue;
+			}
+
+			FRunListRenderedRowData rowData;
+			rowData.Item = item;
+			rowData.RunState = ResolveRunListState(item->GetPayloadPath());
+			rowData.DashboardLabels = MakeRunListDashboardLabels(item->GetPayloadPath());
+			rowData.ProgressTotalCount = rowData.DashboardLabels.EpisodeCount > 0
+				? rowData.DashboardLabels.EpisodeCount
+				: configuredEpisodeCount;
+			renderedRows.Add(rowData);
+		}
+		return renderedRows;
+	}
+
+	// 결과 목록이 실제로 바뀌었는지 비교할 compact signature를 만든다.
+	FString BuildRunListResultsSignature(const TArray<FRunListRenderedRowData>& renderedRows)
+	{
+		TArray<FString> signatureLines;
+		signatureLines.Reserve(renderedRows.Num());
+		for (const FRunListRenderedRowData& rowData : renderedRows)
+		{
+			const UOdiroListItemViewModel* item = rowData.Item;
+			if (!item)
+			{
+				continue;
+			}
+
+			signatureLines.Add(FString::Printf(
+				TEXT("%s|%s|%d|%s|%s|%d|%d|%d"),
+				*item->GetItemId(),
+				*NormalizeRunListPath(item->GetPayloadPath()),
+				static_cast<int32>(rowData.RunState),
+				*rowData.DashboardLabels.SuccessRateLabel,
+				*rowData.DashboardLabels.TotalDurationLabel,
+				rowData.DashboardLabels.EpisodeCount,
+				rowData.ProgressTotalCount,
+				item->IsSelected() ? 1 : 0));
+		}
+		return FString::Join(signatureLines, TEXT("\n"));
+	}
 }
 
 void URunListScreenWidget::NativeConstruct()
@@ -214,6 +300,8 @@ void URunListScreenWidget::NativeConstruct()
 
 void URunListScreenWidget::NativeDestruct()
 {
+	StopRunResultsPolling();
+
 	if (StartRunButton)
 	{
 		StartRunButton->OnBaseClicked.RemoveDynamic(this, &URunListScreenWidget::HandleRunClicked);
@@ -269,7 +357,8 @@ void URunListScreenWidget::RefreshFromViewModels()
 		}
 	}
 
-	RebuildRunRows();
+	RebuildRunRows(true);
+	StartRunResultsPolling();
 }
 
 bool URunListScreenWidget::StartNewRun()
@@ -327,6 +416,56 @@ UExperimentConfigViewModel* URunListScreenWidget::ResolveExperimentConfigViewMod
 	return ExperimentConfigViewModel.Get();
 }
 
+void URunListScreenWidget::RefreshRunResults()
+{
+	UProjectWorkspaceViewModel* workspaceViewModel = ResolveWorkspaceViewModel();
+	if (!workspaceViewModel)
+	{
+		ClearRunRows();
+		return;
+	}
+
+	workspaceViewModel->RefreshProjectRuns();
+	RebuildRunRows();
+}
+
+void URunListScreenWidget::StartRunResultsPolling()
+{
+	UWorld* world = GetWorld();
+	if (!world || world->WorldType == EWorldType::Editor || !IsVisible())
+	{
+		return;
+	}
+
+	world->GetTimerManager().ClearTimer(RunResultsPollingTimerHandle);
+	world->GetTimerManager().SetTimer(
+		RunResultsPollingTimerHandle,
+		this,
+		&URunListScreenWidget::HandleRunResultsPollingTick,
+		RunListResultsPollingIntervalSeconds,
+		true,
+		RunListResultsPollingIntervalSeconds);
+}
+
+void URunListScreenWidget::StopRunResultsPolling()
+{
+	if (UWorld* world = GetWorld())
+	{
+		world->GetTimerManager().ClearTimer(RunResultsPollingTimerHandle);
+	}
+	RunResultsPollingTimerHandle.Invalidate();
+}
+
+void URunListScreenWidget::HandleRunResultsPollingTick()
+{
+	if (!IsVisible())
+	{
+		StopRunResultsPolling();
+		return;
+	}
+	RefreshRunResults();
+}
+
 bool URunListScreenWidget::SaveExperimentSettings()
 {
 	UExperimentConfigViewModel* configViewModel = ResolveExperimentConfigViewModel();
@@ -372,7 +511,7 @@ bool URunListScreenWidget::SaveExperimentSettings()
 	return bSaved;
 }
 
-void URunListScreenWidget::RebuildRunRows()
+void URunListScreenWidget::RebuildRunRows(const bool bForceRebuild)
 {
 	UProjectWorkspaceViewModel* workspaceViewModel = ResolveWorkspaceViewModel();
 	UExperimentConfigViewModel* configViewModel = ResolveExperimentConfigViewModel();
@@ -387,10 +526,21 @@ void URunListScreenWidget::RebuildRunRows()
 		return;
 	}
 
-	ClearRunRows();
-
-	for (UOdiroListItemViewModel* item : workspaceViewModel->GetRunItems())
+	const TArray<FRunListRenderedRowData> renderedRows = BuildRunListRenderedRows(
+		workspaceViewModel->GetRunItems(),
+		configViewModel);
+	const FString newSignature = BuildRunListResultsSignature(renderedRows);
+	if (!bForceRebuild && newSignature == RenderedRunResultsSignature && RunRows.Num() == renderedRows.Num())
 	{
+		return;
+	}
+
+	ClearRunRows();
+	RenderedRunResultsSignature = newSignature;
+
+	for (const FRunListRenderedRowData& rowData : renderedRows)
+	{
+		UOdiroListItemViewModel* item = rowData.Item;
 		if (!item)
 		{
 			continue;
@@ -403,20 +553,14 @@ void URunListScreenWidget::RebuildRunRows()
 			continue;
 		}
 
-		const ESimulationRunState runState = ResolveRunState(item->GetPayloadPath());
-		const FRunListDashboardLabels dashboardLabels = MakeRunListDashboardLabels(item->GetPayloadPath());
-		const int32 configuredEpisodeCount = configViewModel ? FMath::Max(1, configViewModel->GetEpisodeCount()) : 0;
-		const int32 progressTotalCount = dashboardLabels.EpisodeCount > 0
-			? dashboardLabels.EpisodeCount
-			: configuredEpisodeCount;
 		rowWidget->InitializeFromItemViewModel(
 			item,
-			runState,
-			runState == ESimulationRunState::Completed,
-			progressTotalCount,
-			dashboardLabels.SuccessRateLabel,
-			dashboardLabels.TotalDurationLabel,
-			runState == ESimulationRunState::Completed);
+			rowData.RunState,
+			rowData.RunState == ESimulationRunState::Completed,
+			rowData.ProgressTotalCount,
+			rowData.DashboardLabels.SuccessRateLabel,
+			rowData.DashboardLabels.TotalDurationLabel,
+			rowData.RunState == ESimulationRunState::Completed);
 		rowWidget->OnAnalyzeRequested.RemoveAll(this);
 		rowWidget->OnAnalyzeRequested.AddUObject(this, &URunListScreenWidget::HandleRunRowAnalyzeRequested);
 		RunRowListBox->AddChild(rowWidget);
@@ -431,18 +575,7 @@ TSubclassOf<UProjectExperimentRunRowWidget> URunListScreenWidget::ResolveRunRowW
 
 ESimulationRunState URunListScreenWidget::ResolveRunState(const FString& runDirectory)
 {
-	const FString normalizedRunDirectory = NormalizeRunListPath(runDirectory);
-	const FString statusPath = NormalizeRunListPath(FPaths::Combine(normalizedRunDirectory, TEXT("status.json")));
-	ESimulationRunState runState = ESimulationRunState::Pending;
-	if (UPlatformUiSubsystem::TryReadBridgeRunStatusState(statusPath, runState))
-	{
-		return runState;
-	}
-
-	const FString summaryPath = NormalizeRunListPath(FPaths::Combine(normalizedRunDirectory, TEXT("summary.json")));
-	return UPlatformUiSubsystem::DoesResolvedFileExist(summaryPath)
-		? ESimulationRunState::Completed
-		: ESimulationRunState::Pending;
+	return ResolveRunListState(runDirectory);
 }
 
 void URunListScreenWidget::ClearRunRows()
@@ -456,6 +589,7 @@ void URunListScreenWidget::ClearRunRows()
 		}
 	}
 	RunRows.Reset();
+	RenderedRunResultsSignature.Reset();
 	if (RunRowListBox)
 	{
 		RunRowListBox->ClearChildren();

@@ -13,7 +13,16 @@ trap {
 $clientDir = Get-ClientRoot
 $projectFile = Get-ClientProjectFile
 $unrealEditor = Resolve-UnrealEditor -ProjectFile $projectFile
-$previewWindowArgs = @("-windowed", "-ResX=1920", "-ResY=1080")
+$previewWindowArgs = @(
+    "-windowed",
+    "-ResX=1920",
+    "-ResY=1080",
+    "-ini:Game:[/Script/EngineSettings.GeneralProjectSettings]:bUseBorderlessWindow=True",
+    "-ini:Game:[/Script/EngineSettings.GeneralProjectSettings]:bAllowWindowResize=True",
+    "-ini:Game:[/Script/EngineSettings.GeneralProjectSettings]:bShouldWindowPreserveAspectRatio=False",
+    "-ini:Game:[/Script/EngineSettings.GeneralProjectSettings]:MinWindowWidth=480",
+    "-ini:Game:[/Script/EngineSettings.GeneralProjectSettings]:MinWindowHeight=320"
+)
 $previewArgs = @($args)
 $arguments = @($projectFile, "-game", "-NoSplash") + $previewWindowArgs + $previewArgs
 

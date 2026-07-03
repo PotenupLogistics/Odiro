@@ -35,6 +35,8 @@ namespace
 	const TCHAR* ReplayTopDownCameraIconPath = TEXT("/Game/Textures/Icon/T_Icon_ViewTop.T_Icon_ViewTop");
 	// Third-person camera icon asset used by orbit and free camera modes.
 	const TCHAR* ReplayThirdPersonCameraIconPath = TEXT("/Game/Textures/Icon/T_Icon_ViewTpv.T_Icon_ViewTpv");
+	// Free camera icon asset used by the compact camera cycle button.
+	const TCHAR* ReplayFreeCameraIconPath = TEXT("/Game/Textures/Icon/T_Icon_TargetLockOn.T_Icon_TargetLockOn");
 	// First-person camera icon asset used by the vehicle-front camera mode.
 	const TCHAR* ReplayFirstPersonCameraIconPath = TEXT("/Game/Textures/Icon/T_Icon_ViewFpv.T_Icon_ViewFpv");
 
@@ -216,6 +218,7 @@ UProjectEpisodeReplayViewerWidget::UProjectEpisodeReplayViewerWidget(
 	ReplayPauseIconTexture = LoadObject<UTexture2D>(nullptr, ReplayPauseIconPath);
 	ReplayTopDownCameraIconTexture = LoadObject<UTexture2D>(nullptr, ReplayTopDownCameraIconPath);
 	ReplayThirdPersonCameraIconTexture = LoadObject<UTexture2D>(nullptr, ReplayThirdPersonCameraIconPath);
+	ReplayFreeCameraIconTexture = LoadObject<UTexture2D>(nullptr, ReplayFreeCameraIconPath);
 	ReplayFirstPersonCameraIconTexture = LoadObject<UTexture2D>(nullptr, ReplayFirstPersonCameraIconPath);
 }
 
@@ -1528,9 +1531,13 @@ UTexture2D* UProjectEpisodeReplayViewerWidget::GetReplayCameraModeIcon(
 	switch (CameraMode)
 	{
 	case EScenarioReplayCameraMode::Orbit:
-	case EScenarioReplayCameraMode::Free:
 		return ReplayThirdPersonCameraIconTexture.Get()
 			? ReplayThirdPersonCameraIconTexture.Get()
+			: ReplayTopDownCameraIconTexture.Get();
+
+	case EScenarioReplayCameraMode::Free:
+		return ReplayFreeCameraIconTexture.Get()
+			? ReplayFreeCameraIconTexture.Get()
 			: ReplayTopDownCameraIconTexture.Get();
 
 	case EScenarioReplayCameraMode::VehicleFront:

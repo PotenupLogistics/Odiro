@@ -526,6 +526,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> ReplayThirdPersonCameraIconTexture;
 
+	// Cached free camera icon used by the compact camera cycle button.
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> ReplayFreeCameraIconTexture;
+
 	// Cached first-person camera icon used by the vehicle-front camera mode.
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> ReplayFirstPersonCameraIconTexture;

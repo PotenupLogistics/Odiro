@@ -295,6 +295,27 @@ void ADeliveryBotPointCloudReviewActor::SetReviewRenderMode(const EDeliveryBotPo
 }
 
 // 현재 scenario 번호에 맞는 point cloud capture 폴더를 만든다.
+// Applies runtime visual emphasis without changing the loaded point positions.
+void ADeliveryBotPointCloudReviewActor::ConfigureReviewVisualStyle(
+	const float InPointSizeCm,
+	const float InTopDownSphereSizeCm,
+	const float InColorBrightnessMultiplier)
+{
+	PointSizeCm = FMath::Max(0.1f, InPointSizeCm);
+	TopDownSphereSizeCm = FMath::Max(0.1f, InTopDownSphereSizeCm);
+	ColorBrightnessMultiplier = FMath::Max(0.0f, InColorBrightnessMultiplier);
+
+	if (!LoadedPoints.IsEmpty())
+	{
+		RebuildPointCloudAsset();
+		return;
+	}
+
+	ConfigurePointCloudRendering();
+	ApplyTopDownSphereMaterials();
+	ApplyReviewRenderMode();
+}
+
 FString ADeliveryBotPointCloudReviewActor::BuildScenarioCaptureDirectory() const
 {
 	const FString scenarioFolderName = FString::Printf(
@@ -518,6 +539,17 @@ FVector ADeliveryBotPointCloudReviewActor::ResolvePointWorldLocation(
 }
 
 // 로드된 point 목록으로 instanced mesh와 선택적 debug overlay를 만든다.
+// Applies the actor's review brightness multiplier to one point color.
+FColor ADeliveryBotPointCloudReviewActor::ResolveReviewDisplayColor(const FColor& Color) const
+{
+	const float Multiplier = FMath::Max(0.0f, ColorBrightnessMultiplier);
+	return FColor(
+		static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Color.R * Multiplier), 0, 255)),
+		static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Color.G * Multiplier), 0, 255)),
+		static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Color.B * Multiplier), 0, 255)),
+		Color.A);
+}
+
 bool ADeliveryBotPointCloudReviewActor::RebuildPointCloudAsset()
 {
 	if (PointCloudComponent == nullptr)
@@ -542,7 +574,7 @@ bool ADeliveryBotPointCloudReviewActor::RebuildPointCloudAsset()
 				static_cast<float>(LocalLocation.X),
 				static_cast<float>(LocalLocation.Y),
 				static_cast<float>(LocalLocation.Z)),
-			point.Color,
+			ResolveReviewDisplayColor(point.Color),
 			true,
 			0);
 	}
@@ -740,25 +772,33 @@ void ADeliveryBotPointCloudReviewActor::ApplyTopDownSphereMaterials()
 	{
 		TopDownGroundPointInstances->SetMaterial(
 			0,
-			GetOrCreateTopDownSphereMaterial(TopDownGroundPointMaterial, GroundPointColor));
+			GetOrCreateTopDownSphereMaterial(
+				TopDownGroundPointMaterial,
+				ResolveReviewDisplayColor(GroundPointColor)));
 	}
 	if (TopDownWallPointInstances != nullptr)
 	{
 		TopDownWallPointInstances->SetMaterial(
 			0,
-			GetOrCreateTopDownSphereMaterial(TopDownWallPointMaterial, WallPointColor));
+			GetOrCreateTopDownSphereMaterial(
+				TopDownWallPointMaterial,
+				ResolveReviewDisplayColor(WallPointColor)));
 	}
 	if (TopDownObstaclePointInstances != nullptr)
 	{
 		TopDownObstaclePointInstances->SetMaterial(
 			0,
-			GetOrCreateTopDownSphereMaterial(TopDownObstaclePointMaterial, ObstaclePointColor));
+			GetOrCreateTopDownSphereMaterial(
+				TopDownObstaclePointMaterial,
+				ResolveReviewDisplayColor(ObstaclePointColor)));
 	}
 	if (TopDownUnknownPointInstances != nullptr)
 	{
 		TopDownUnknownPointInstances->SetMaterial(
 			0,
-			GetOrCreateTopDownSphereMaterial(TopDownUnknownPointMaterial, UnknownPointColor));
+			GetOrCreateTopDownSphereMaterial(
+				TopDownUnknownPointMaterial,
+				ResolveReviewDisplayColor(UnknownPointColor)));
 	}
 }
 

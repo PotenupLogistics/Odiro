@@ -64,6 +64,12 @@ private:
 	// Rebuilds episode replay card widgets.
 	void RebuildEpisodeCards();
 
+	// Opens the first replay-capable episode when this run does not already have a loaded replay.
+	void OpenInitialEpisodeReplay();
+
+	// Opens replay for one episode card and mirrors the selected episode header on success.
+	bool OpenEpisodeReplayCard(UProjectEpisodeReplayCardWidget* cardWidget);
+
 	// Rebuilds AI analysis row widgets.
 	void RebuildAnalysisRows();
 
@@ -142,6 +148,14 @@ private:
 	// Run id currently shown by this detail screen.
 	UPROPERTY(Transient)
 	FString DisplayedRunId;
+
+	// Run id whose replay is currently loaded in the embedded viewer.
+	UPROPERTY(Transient)
+	FString LoadedReplayRunId;
+
+	// Episode directory currently loaded in the embedded replay viewer.
+	UPROPERTY(Transient)
+	FString LoadedReplayEpisodeDirectory;
 
 	// Episode card Widget Blueprint class.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunDetail", meta = (AllowPrivateAccess = "true"))

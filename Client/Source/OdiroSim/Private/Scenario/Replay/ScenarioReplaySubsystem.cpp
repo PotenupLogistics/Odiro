@@ -18,6 +18,7 @@
 #include "Misc/Paths.h"
 #include "Scenario/Replay/ScenarioReplayDeveloperSettings.h"
 #include "Scenario/Replay/DeliveryBotReplayActor.h"
+#include "Scenario/Replay/ScenarioReplayRouteMarkerActor.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Shared/ScenarioCompileTypes.h"
@@ -36,10 +37,15 @@ namespace
 	const TCHAR* ReplayPointCloudMapFileName = TEXT("map_accumulated.xyz");
 	const TCHAR* ReplayPointCloudManifestFileName = TEXT("manifest.json");
 	const TCHAR* ReplayPointCloudCaptureSummaryFileName = TEXT("capture_summary.json");
+	const TCHAR* ReplayPointCloudFramesIndexFileName = TEXT("frames.jsonl");
+	const TCHAR* ReplayPointCloudFramesDirectoryName = TEXT("frames");
 	const TCHAR* ReplayLidarRayDirectoryName = TEXT("lidar_rays");
 	const TCHAR* ReplayLidarRayManifestFileName = TEXT("rays.meta.json");
 	const TCHAR* ReplayProfileFileName = TEXT("profile.json");
 	const TCHAR* ReplayEventsFileName = TEXT("events.jsonl");
+	const float ReplayPointCloudHighlightPointSizeCm = 40.0f;
+	const float ReplayPointCloudHighlightSphereSizeCm = 6.0f;
+	const float ReplayPointCloudHighlightColorBrightness = 1.65f;
 
 	// Carries validated point cloud import paths and coordinate metadata.
 	struct FReplayPointCloudImportInfo
@@ -389,6 +395,146 @@ namespace
 		return false;
 	}
 
+	// Normalizes a point cloud frame path candidate before file existence checks.
+	FString NormalizeReplayPointCloudFramePathCandidate(const FString& CandidatePath)
+	{
+		FString NormalizedPath = CandidatePath;
+		FPaths::NormalizeFilename(NormalizedPath);
+		FPaths::CollapseRelativeDirectories(NormalizedPath);
+		return NormalizedPath;
+	}
+
+	// Adds one point cloud frame path candidate when it is not empty.
+	void AddReplayPointCloudFramePathCandidate(
+		TArray<FString>& InOutCandidates,
+		const FString& CandidatePath)
+	{
+		FString NormalizedPath = NormalizeReplayPointCloudFramePathCandidate(CandidatePath);
+		if (!NormalizedPath.IsEmpty())
+		{
+			InOutCandidates.AddUnique(NormalizedPath);
+		}
+	}
+
+	// Resolves a point cloud frame path reference from frames.jsonl into an absolute xyz path.
+	bool TryResolveReplayPointCloudFramePath(
+		const FString& EpisodeDirectory,
+		const FString& PathReference,
+		const int32 SensorSequence,
+		FString& OutFramePath)
+	{
+		OutFramePath.Reset();
+
+		FString PointCloudDirectory = FPaths::Combine(
+			EpisodeDirectory,
+			ReplayPointCloudDirectoryName);
+		FPaths::NormalizeDirectoryName(PointCloudDirectory);
+
+		TArray<FString> Candidates;
+		FString NormalizedReference = PathReference.TrimStartAndEnd();
+		FPaths::NormalizeFilename(NormalizedReference);
+
+		if (!NormalizedReference.IsEmpty())
+		{
+			if (FPaths::IsRelative(NormalizedReference))
+			{
+				AddReplayPointCloudFramePathCandidate(
+					Candidates,
+					FPaths::Combine(EpisodeDirectory, NormalizedReference));
+				AddReplayPointCloudFramePathCandidate(
+					Candidates,
+					FPaths::Combine(PointCloudDirectory, NormalizedReference));
+
+				const int32 PointCloudMarkerIndex =
+					NormalizedReference.Find(ReplayPointCloudDirectoryName, ESearchCase::IgnoreCase);
+				if (PointCloudMarkerIndex != INDEX_NONE)
+				{
+					AddReplayPointCloudFramePathCandidate(
+						Candidates,
+						FPaths::Combine(
+							EpisodeDirectory,
+							NormalizedReference.Mid(PointCloudMarkerIndex)));
+				}
+			}
+			else
+			{
+				AddReplayPointCloudFramePathCandidate(Candidates, NormalizedReference);
+			}
+		}
+
+		if (SensorSequence != INDEX_NONE)
+		{
+			AddReplayPointCloudFramePathCandidate(
+				Candidates,
+				FPaths::Combine(
+					PointCloudDirectory,
+					ReplayPointCloudFramesDirectoryName,
+					FString::Printf(TEXT("frame_%06d.xyz"), SensorSequence)));
+		}
+
+		for (const FString& CandidatePath : Candidates)
+		{
+			if (IFileManager::Get().FileExists(*CandidatePath))
+			{
+				OutFramePath = CandidatePath;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Parses one frames.jsonl object into a replay point cloud frame record.
+	bool TryReadReplayPointCloudFrameRecord(
+		const FString& EpisodeDirectory,
+		const FJsonObject& FrameObject,
+		FScenarioReplayPointCloudFrameRecord& OutRecord,
+		FString& OutErrorMessage)
+	{
+		OutRecord = FScenarioReplayPointCloudFrameRecord{};
+		OutErrorMessage.Reset();
+
+		double TimeSeconds = 0.0;
+		if (!FrameObject.TryGetNumberField(TEXT("runTimeSeconds"), TimeSeconds))
+		{
+			FrameObject.TryGetNumberField(TEXT("sensorTimeSeconds"), TimeSeconds);
+		}
+		if (!FMath::IsFinite(TimeSeconds) || TimeSeconds < 0.0)
+		{
+			OutErrorMessage = TEXT("runTimeSeconds is missing or invalid.");
+			return false;
+		}
+
+		double SensorSequenceValue = INDEX_NONE;
+		FrameObject.TryGetNumberField(TEXT("sensorSequence"), SensorSequenceValue);
+		const int32 SensorSequence = FMath::RoundToInt(SensorSequenceValue);
+
+		FString PathReference;
+		FrameObject.TryGetStringField(TEXT("path"), PathReference);
+
+		FString FramePath;
+		if (!TryResolveReplayPointCloudFramePath(
+			EpisodeDirectory,
+			PathReference,
+			SensorSequence,
+			FramePath))
+		{
+			OutErrorMessage = FString::Printf(
+				TEXT("frame xyz path is missing or does not exist: %s"),
+				*PathReference);
+			return false;
+		}
+
+		double PointCountValue = 0.0;
+		FrameObject.TryGetNumberField(TEXT("pointCount"), PointCountValue);
+
+		OutRecord.TimeSeconds = TimeSeconds;
+		OutRecord.SensorSequence = SensorSequence;
+		OutRecord.XyzFilePath = MoveTemp(FramePath);
+		OutRecord.PointCount = FMath::Max(0, FMath::RoundToInt(PointCountValue));
+		return true;
+	}
+
 	// Appends schema diagnostics to replay UI diagnostics.
 	void AppendReplaySchemaDiagnostics(
 		const TArray<FScenarioSchemaDiagnostic>& SourceDiagnostics,
@@ -618,6 +764,11 @@ void UScenarioReplaySubsystem::SetReplayMapVisible(const bool bVisible)
 		}
 	}
 
+	if (IsValid(ReplayRouteMarkerActor))
+	{
+		ReplayRouteMarkerActor->SetRouteMarkersVisible(bVisible);
+	}
+
 	RefreshReplayCaptureShowOnlyActors();
 	CaptureReplayScene();
 
@@ -638,6 +789,14 @@ void UScenarioReplaySubsystem::SetReplayPointCloudVisible(const bool bVisible)
 	{
 		ReplayPointCloudActor->SetPointCloudVisible(bVisible);
 	}
+	if (IsValid(ReplayPointCloudFrameHighlightActor))
+	{
+		ReplayPointCloudFrameHighlightActor->SetPointCloudVisible(bVisible);
+		if (bVisible)
+		{
+			ApplyPointCloudFrameHighlightAtTime(CurrentReplayTimeSeconds);
+		}
+	}
 
 	RefreshReplayCaptureShowOnlyActors();
 	CaptureReplayScene();
@@ -647,7 +806,9 @@ void UScenarioReplaySubsystem::SetReplayPointCloudVisible(const bool bVisible)
 		Log,
 		TEXT("Replay point cloud visibility changed | Visible=%s Available=%s"),
 		bReplayPointCloudVisible ? TEXT("true") : TEXT("false"),
-		IsValid(ReplayPointCloudActor) ? TEXT("true") : TEXT("false"));
+		IsValid(ReplayPointCloudActor) || IsValid(ReplayPointCloudFrameHighlightActor)
+			? TEXT("true")
+			: TEXT("false"));
 }
 
 void UScenarioReplaySubsystem::SetReplayLidarRaysVisible(const bool bVisible)
@@ -1060,11 +1221,23 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	}
 	ReplayRobotActor = nullptr;
 
+	if (IsValid(ReplayRouteMarkerActor))
+	{
+		ReplayRouteMarkerActor->Destroy();
+	}
+	ReplayRouteMarkerActor = nullptr;
+
 	if (IsValid(ReplayPointCloudActor))
 	{
 		ReplayPointCloudActor->Destroy();
 	}
 	ReplayPointCloudActor = nullptr;
+
+	if (IsValid(ReplayPointCloudFrameHighlightActor))
+	{
+		ReplayPointCloudFrameHighlightActor->Destroy();
+	}
+	ReplayPointCloudFrameHighlightActor = nullptr;
 
 	if (IsValid(ReplayLidarRayActor))
 	{
@@ -1092,19 +1265,27 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	LidarRayFrames.Reset();
 	LidarRayManifest = FEpisodeLidarRayReplayManifest{};
 	ReplayEventMarkers.Reset();
+	PointCloudFrameRecords.Reset();
 	ReplayLidarSensorConfig = FDeliveryBotLidarSensorConfigInfo{};
 	bHasReplayLidarSensorConfig = false;
 	LoadedEpisodeDirectory.Reset();
 	CurrentReplayTimeSeconds = 0.0;
 	CurrentFrameIndex = INDEX_NONE;
 	CurrentLidarRayFrameIndex = INDEX_NONE;
+	CurrentPointCloudFrameHighlightIndex = INDEX_NONE;
 	CurrentRobotSpeedKmh = 0.0;
+	CurrentRobotThrottle = 0.0;
+	CurrentRobotSteering = 0.0;
+	CurrentRobotBrake = 0.0;
+	CurrentRobotTargetSpeedKmh = 0.0;
 	CurrentRobotPositionCm = FVector::ZeroVector;
 	PlaybackState = EScenarioReplayPlaybackState::Stopped;
 	CameraMode = EScenarioReplayCameraMode::TopDown;
 	bReplayMapVisible = true;
 	bReplayPointCloudVisible = true;
 	bReplayLidarRaysVisible = false;
+	ReplayPointCloudCaptureOriginCm = FVector::ZeroVector;
+	ReplayPointCloudImportYAxisSign = -1.0f;
 	FreeCameraLocation = FVector::ZeroVector;
 	FreeCameraRotation = FRotator(-35.0, 0.0, 0.0);
 }
@@ -1184,6 +1365,8 @@ bool UScenarioReplaySubsystem::LoadEpisodePointCloudWorld(
 
 	PointCloudActor->Tags.AddUnique(FName(TEXT("ReplayOnly")));
 	PointCloudActor->SetPointCloudVisible(bReplayPointCloudVisible);
+	ReplayPointCloudCaptureOriginCm = ImportInfo.CaptureOriginCm;
+	ReplayPointCloudImportYAxisSign = ImportInfo.ImportYAxisSign;
 
 	if (!PointCloudActor->LoadReplayMapPointCloudFromFile(
 		ImportInfo.XyzFilePath,
@@ -1198,6 +1381,32 @@ bool UScenarioReplaySubsystem::LoadEpisodePointCloudWorld(
 	}
 
 	ReplayPointCloudActor = PointCloudActor;
+	LoadEpisodePointCloudFrameIndex(EpisodeDirectory, OutDiagnostics);
+
+	if (!PointCloudFrameRecords.IsEmpty())
+	{
+		ADeliveryBotPointCloudReviewActor* HighlightActor =
+			World->SpawnActor<ADeliveryBotPointCloudReviewActor>(
+				ADeliveryBotPointCloudReviewActor::StaticClass(),
+				ReplayWorldOffset,
+				FRotator::ZeroRotator,
+				SpawnParameters);
+		if (IsValid(HighlightActor))
+		{
+			HighlightActor->Tags.AddUnique(FName(TEXT("ReplayOnly")));
+			HighlightActor->ConfigureReviewVisualStyle(
+				ReplayPointCloudHighlightPointSizeCm,
+				ReplayPointCloudHighlightSphereSizeCm,
+				ReplayPointCloudHighlightColorBrightness);
+			HighlightActor->SetPointCloudVisible(bReplayPointCloudVisible);
+			ReplayPointCloudFrameHighlightActor = HighlightActor;
+		}
+		else
+		{
+			OutDiagnostics.Add(TEXT("Failed to spawn replay point cloud frame highlight actor."));
+		}
+	}
+
 	RefreshReplayPointCloudRenderMode();
 	RefreshReplayCaptureShowOnlyActors();
 
@@ -1214,6 +1423,90 @@ bool UScenarioReplaySubsystem::LoadEpisodePointCloudWorld(
 		ImportInfo.ImportYAxisSign);
 
 	return true;
+}
+
+// Loads optional per-frame point cloud records used for current-frame highlight overlay.
+void UScenarioReplaySubsystem::LoadEpisodePointCloudFrameIndex(
+	const FString& EpisodeDirectory,
+	TArray<FString>& OutDiagnostics)
+{
+	PointCloudFrameRecords.Reset();
+	CurrentPointCloudFrameHighlightIndex = INDEX_NONE;
+
+	FString FrameIndexPath = FPaths::Combine(
+		EpisodeDirectory,
+		ReplayPointCloudDirectoryName,
+		ReplayPointCloudFramesIndexFileName);
+	FPaths::NormalizeFilename(FrameIndexPath);
+	if (!IFileManager::Get().FileExists(*FrameIndexPath))
+	{
+		return;
+	}
+
+	TArray<FString> Lines;
+	if (!FFileHelper::LoadFileToStringArray(Lines, *FrameIndexPath))
+	{
+		OutDiagnostics.Add(FString::Printf(
+			TEXT("Replay point cloud frame highlight disabled; failed to read frame index: %s"),
+			*FrameIndexPath));
+		return;
+	}
+
+	int32 InvalidLineCount = 0;
+	for (const FString& SourceLine : Lines)
+	{
+		FString Line = SourceLine;
+		Line.TrimStartAndEndInline();
+		if (Line.IsEmpty())
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> FrameObject;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Line);
+		if (!FJsonSerializer::Deserialize(Reader, FrameObject) || !FrameObject.IsValid())
+		{
+			++InvalidLineCount;
+			continue;
+		}
+
+		FScenarioReplayPointCloudFrameRecord FrameRecord;
+		FString ErrorMessage;
+		if (!TryReadReplayPointCloudFrameRecord(
+			EpisodeDirectory,
+			*FrameObject,
+			FrameRecord,
+			ErrorMessage))
+		{
+			++InvalidLineCount;
+			continue;
+		}
+
+		PointCloudFrameRecords.Add(MoveTemp(FrameRecord));
+	}
+
+	PointCloudFrameRecords.Sort(
+		[](const FScenarioReplayPointCloudFrameRecord& Left, const FScenarioReplayPointCloudFrameRecord& Right)
+		{
+			return Left.TimeSeconds < Right.TimeSeconds;
+		});
+
+	if (InvalidLineCount > 0)
+	{
+		UE_LOG(
+			LogScenarioReplay,
+			Warning,
+			TEXT("Replay point cloud frame index skipped invalid lines | Path=%s InvalidLines=%d"),
+			*FrameIndexPath,
+			InvalidLineCount);
+	}
+
+	UE_LOG(
+		LogScenarioReplay,
+		Log,
+		TEXT("Replay point cloud frame index loaded | Path=%s Frames=%d"),
+		*FrameIndexPath,
+		PointCloudFrameRecords.Num());
 }
 
 void UScenarioReplaySubsystem::LoadEpisodeEventMarkers(
@@ -1576,6 +1869,11 @@ bool UScenarioReplaySubsystem::SpawnReplayScenarioWorld(
 		}
 	}
 
+	if (!SpawnReplayRouteMarkerActor(WorldSpec, OutDiagnostics))
+	{
+		bAllSpawned = false;
+	}
+
 	const TSoftObjectPtr<UScenarioCityBlockCatalog> CityBlockCatalogRef =
 		UScenarioCityBlockCatalog::MakeDefaultCatalogReference();
 	const UScenarioCityBlockCatalog* CityBlockCatalog = CityBlockCatalogRef.LoadSynchronous();
@@ -1606,6 +1904,98 @@ bool UScenarioReplaySubsystem::SpawnReplayScenarioWorld(
 		CityBlockResult.SkippedNoEntryCount);
 
 	return bAllSpawned;
+}
+
+bool UScenarioReplaySubsystem::SpawnReplayRouteMarkerActor(
+	const FScenarioWorldSpec& WorldSpec,
+	TArray<FString>& OutDiagnostics)
+{
+	FVector StartLocationCm = FVector::ZeroVector;
+	FVector GoalLocationCm = FVector::ZeroVector;
+	bool bHasStartLocation = false;
+	bool bHasGoalLocation = false;
+	if (!TryResolveReplayRouteMarkerLocations(
+		WorldSpec,
+		StartLocationCm,
+		bHasStartLocation,
+		GoalLocationCm,
+		bHasGoalLocation))
+	{
+		return true;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		OutDiagnostics.Add(TEXT("Replay route markers require a valid world."));
+		return false;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.ObjectFlags |= RF_Transient;
+	SpawnParameters.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AScenarioReplayRouteMarkerActor* RouteMarkerActor =
+		World->SpawnActor<AScenarioReplayRouteMarkerActor>(
+			AScenarioReplayRouteMarkerActor::StaticClass(),
+			FTransform::Identity,
+			SpawnParameters);
+	if (!IsValid(RouteMarkerActor))
+	{
+		OutDiagnostics.Add(TEXT("Failed to spawn replay route marker actor."));
+		return false;
+	}
+
+	RouteMarkerActor->Tags.AddUnique(FName(TEXT("ReplayOnly")));
+	RouteMarkerActor->ConfigureRouteMarkers(
+		StartLocationCm + ReplayWorldOffset,
+		bHasStartLocation,
+		GoalLocationCm + ReplayWorldOffset,
+		bHasGoalLocation);
+	RouteMarkerActor->SetRouteMarkersVisible(bReplayMapVisible);
+	ReplayRouteMarkerActor = RouteMarkerActor;
+	RefreshReplayCaptureShowOnlyActors();
+
+	return true;
+}
+
+bool UScenarioReplaySubsystem::TryResolveReplayRouteMarkerLocations(
+	const FScenarioWorldSpec& WorldSpec,
+	FVector& OutStartLocationCm,
+	bool& bOutHasStartLocation,
+	FVector& OutGoalLocationCm,
+	bool& bOutHasGoalLocation) const
+{
+	OutStartLocationCm = FVector::ZeroVector;
+	OutGoalLocationCm = FVector::ZeroVector;
+	bOutHasStartLocation = false;
+	bOutHasGoalLocation = false;
+
+	for (const FScenarioPlaceableInstanceSpec& PlaceableSpec : WorldSpec.Placeables)
+	{
+		if (PlaceableSpec.Category != EScenarioActorCategory::DeliveryBot)
+		{
+			continue;
+		}
+
+		const FDeliveryBotLocationSetupInfo& LocationSetupInfo =
+			PlaceableSpec.DeliveryBot.SetupInfo.LocationSetupInfo;
+		OutStartLocationCm = PlaceableSpec.DeliveryBot.bHasStartLocation
+			? LocationSetupInfo.StartLocationCm
+			: PlaceableSpec.Transform.GetLocation();
+		bOutHasStartLocation = true;
+
+		if (PlaceableSpec.DeliveryBot.bHasGoalLocation || LocationSetupInfo.bHasGoal)
+		{
+			OutGoalLocationCm = LocationSetupInfo.GoalLocationCm;
+			bOutHasGoalLocation = true;
+		}
+
+		return bOutHasStartLocation || bOutHasGoalLocation;
+	}
+
+	return false;
 }
 
 bool UScenarioReplaySubsystem::SpawnReplayStaticObstacle(
@@ -1714,11 +2104,20 @@ void UScenarioReplaySubsystem::PopulateReplayCaptureShowOnlyActors(
 				CaptureComponent.ShowOnlyActors.Add(Actor);
 			}
 		}
+
+		if (IsValid(ReplayRouteMarkerActor))
+		{
+			CaptureComponent.ShowOnlyActors.Add(ReplayRouteMarkerActor);
+		}
 	}
 
 	if (bReplayPointCloudVisible && IsValid(ReplayPointCloudActor))
 	{
 		CaptureComponent.ShowOnlyActors.Add(ReplayPointCloudActor);
+	}
+	if (bReplayPointCloudVisible && IsValid(ReplayPointCloudFrameHighlightActor))
+	{
+		CaptureComponent.ShowOnlyActors.Add(ReplayPointCloudFrameHighlightActor);
 	}
 
 	if (bReplayLidarRaysVisible && IsValid(ReplayLidarRayActor))
@@ -1739,16 +2138,113 @@ void UScenarioReplaySubsystem::RefreshReplayCaptureShowOnlyActors()
 // Updates the point cloud renderer for the active replay camera mode.
 void UScenarioReplaySubsystem::RefreshReplayPointCloudRenderMode()
 {
-	if (!IsValid(ReplayPointCloudActor))
-	{
-		return;
-	}
-
 	const EDeliveryBotPointCloudReviewRenderMode RenderMode =
 		CameraMode == EScenarioReplayCameraMode::TopDown
 			? EDeliveryBotPointCloudReviewRenderMode::TopDownProjection
 			: EDeliveryBotPointCloudReviewRenderMode::Plugin3D;
-	ReplayPointCloudActor->SetReviewRenderMode(RenderMode);
+
+	if (IsValid(ReplayPointCloudActor))
+	{
+		ReplayPointCloudActor->SetReviewRenderMode(RenderMode);
+	}
+	if (IsValid(ReplayPointCloudFrameHighlightActor))
+	{
+		ReplayPointCloudFrameHighlightActor->SetReviewRenderMode(RenderMode);
+	}
+}
+
+// Updates the current-frame point cloud highlight for the requested replay time.
+void UScenarioReplaySubsystem::ApplyPointCloudFrameHighlightAtTime(const double TimeSeconds)
+{
+	if (!IsValid(ReplayPointCloudFrameHighlightActor) || PointCloudFrameRecords.IsEmpty())
+	{
+		CurrentPointCloudFrameHighlightIndex = INDEX_NONE;
+		return;
+	}
+	if (!bReplayPointCloudVisible)
+	{
+		return;
+	}
+
+	const int32 FrameIndex = ResolvePointCloudFrameHighlightIndexAtTime(TimeSeconds);
+	if (FrameIndex == CurrentPointCloudFrameHighlightIndex)
+	{
+		return;
+	}
+
+	CurrentPointCloudFrameHighlightIndex = FrameIndex;
+	if (!PointCloudFrameRecords.IsValidIndex(FrameIndex))
+	{
+		ReplayPointCloudFrameHighlightActor->ClearPointCloud();
+		return;
+	}
+
+	const FScenarioReplayPointCloudFrameRecord& FrameRecord =
+		PointCloudFrameRecords[FrameIndex];
+	if (!ReplayPointCloudFrameHighlightActor->LoadReplayMapPointCloudFromFile(
+		FrameRecord.XyzFilePath,
+		ReplayPointCloudCaptureOriginCm,
+		ReplayPointCloudImportYAxisSign))
+	{
+		UE_LOG(
+			LogScenarioReplay,
+			Warning,
+			TEXT("Replay point cloud frame highlight load failed | Index=%d Path=%s"),
+			FrameIndex,
+			*FrameRecord.XyzFilePath);
+		ReplayPointCloudFrameHighlightActor->ClearPointCloud();
+		return;
+	}
+
+	RefreshReplayPointCloudRenderMode();
+	ReplayPointCloudFrameHighlightActor->SetPointCloudVisible(bReplayPointCloudVisible);
+}
+
+// Returns the point cloud frame index active at the requested replay time.
+int32 UScenarioReplaySubsystem::ResolvePointCloudFrameHighlightIndexAtTime(
+	const double TimeSeconds) const
+{
+	if (PointCloudFrameRecords.IsEmpty() || !FMath::IsFinite(TimeSeconds))
+	{
+		return INDEX_NONE;
+	}
+
+	int32 LowerIndex = 0;
+	int32 UpperIndex = PointCloudFrameRecords.Num() - 1;
+	int32 BestIndex = INDEX_NONE;
+	while (LowerIndex <= UpperIndex)
+	{
+		const int32 MidIndex = LowerIndex + (UpperIndex - LowerIndex) / 2;
+		if (PointCloudFrameRecords[MidIndex].TimeSeconds <= TimeSeconds)
+		{
+			BestIndex = MidIndex;
+			LowerIndex = MidIndex + 1;
+		}
+		else
+		{
+			UpperIndex = MidIndex - 1;
+		}
+	}
+
+	return BestIndex;
+}
+
+// Updates the route marker mesh and billboard facing for the active replay camera mode.
+void UScenarioReplaySubsystem::RefreshReplayRouteMarkerPresentation()
+{
+	if (!IsValid(ReplayRouteMarkerActor))
+	{
+		return;
+	}
+
+	const bool bUseBillboardMarkers =
+		CameraMode != EScenarioReplayCameraMode::TopDown;
+	ReplayRouteMarkerActor->SetBillboardMarkersEnabled(bUseBillboardMarkers);
+
+	if (bUseBillboardMarkers && IsValid(ReplayCaptureActor))
+	{
+		ReplayRouteMarkerActor->FaceCameraLocation(ReplayCaptureActor->GetActorLocation());
+	}
 }
 
 bool UScenarioReplaySubsystem::ApplyFrameAtTime(double TimeSeconds)
@@ -1768,8 +2264,13 @@ bool UScenarioReplaySubsystem::ApplyFrameAtTime(double TimeSeconds)
 	ReplayRobotActor->ApplyReplayFrame(Frame, ReplayWorldOffset);
 	CurrentFrameIndex = FrameIndex;
 	CurrentRobotSpeedKmh = Frame.SpeedKmh;
+	CurrentRobotThrottle = Frame.Throttle;
+	CurrentRobotSteering = Frame.Steering;
+	CurrentRobotBrake = Frame.Brake;
+	CurrentRobotTargetSpeedKmh = Frame.TargetSpeedKmh;
 	CurrentRobotPositionCm = Frame.PositionCm;
 	ApplyLidarRayFrameAtTime(TimeSeconds);
+	ApplyPointCloudFrameHighlightAtTime(TimeSeconds);
 
 	UpdateReplayCaptureView(Frame);
 	CaptureReplayScene();
@@ -2051,6 +2552,7 @@ void UScenarioReplaySubsystem::CaptureReplayScene()
 {
 	if (USceneCaptureComponent2D* CaptureComponent = GetReplayCaptureComponent())
 	{
+		RefreshReplayRouteMarkerPresentation();
 		CaptureComponent->CaptureScene();
 	}
 }

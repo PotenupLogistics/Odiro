@@ -5,6 +5,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/WrapBox.h"
 #include "Components/WrapBoxSlot.h"
+#include "Misc/Paths.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/PlatformUiSubsystem.h"
 #include "Platform/ViewModel/ExperimentResultItemViewModels.h"
@@ -169,6 +170,7 @@ void URunDetailScreenWidget::RefreshFromViewModels()
 	}
 
 	RebuildEpisodeCards();
+	OpenInitialEpisodeReplay();
 	RebuildAnalysisRows();
 }
 
@@ -206,6 +208,8 @@ void URunDetailScreenWidget::ResetReplay()
 	{
 		ProjectEpisodeReplayViewer->ResetReplay();
 	}
+	LoadedReplayRunId.Reset();
+	LoadedReplayEpisodeDirectory.Reset();
 	SetReplayEpisodeNumberText(FString());
 }
 
@@ -262,6 +266,67 @@ void URunDetailScreenWidget::RebuildEpisodeCards()
 		}
 		EpisodeCards.Add(cardWidget);
 	}
+}
+
+// Opens the first replay-capable episode when this run does not already have a loaded replay.
+void URunDetailScreenWidget::OpenInitialEpisodeReplay()
+{
+	if (!ProjectEpisodeReplayViewer)
+	{
+		return;
+	}
+
+	UProjectWorkspaceViewModel* workspaceViewModel = ResolveWorkspaceViewModel();
+	FString selectedRunId = workspaceViewModel
+		? workspaceViewModel->GetSelectedRunId()
+		: DisplayedRunId;
+	selectedRunId = selectedRunId.TrimStartAndEnd();
+
+	if (!selectedRunId.IsEmpty()
+		&& LoadedReplayRunId.Equals(selectedRunId, ESearchCase::IgnoreCase)
+		&& !LoadedReplayEpisodeDirectory.IsEmpty())
+	{
+		return;
+	}
+
+	for (UProjectEpisodeReplayCardWidget* cardWidget : EpisodeCards)
+	{
+		if (cardWidget
+			&& cardWidget->IsReplayAvailable()
+			&& OpenEpisodeReplayCard(cardWidget))
+		{
+			return;
+		}
+	}
+
+	ResetReplay();
+}
+
+// Opens replay for one episode card and mirrors the selected episode header on success.
+bool URunDetailScreenWidget::OpenEpisodeReplayCard(
+	UProjectEpisodeReplayCardWidget* cardWidget)
+{
+	if (!ProjectEpisodeReplayViewer || !cardWidget || !cardWidget->IsReplayAvailable())
+	{
+		return false;
+	}
+
+	ApplyReplayInterestRegionStripToViewer();
+	if (!ProjectEpisodeReplayViewer->OpenEpisodeReplay(cardWidget->GetEpisodeDirectory()))
+	{
+		return false;
+	}
+
+	SetReplayEpisodeNumberText(cardWidget->GetEpisodeId());
+
+	UProjectWorkspaceViewModel* workspaceViewModel = ResolveWorkspaceViewModel();
+	LoadedReplayRunId = workspaceViewModel
+		? workspaceViewModel->GetSelectedRunId()
+		: DisplayedRunId;
+	LoadedReplayRunId = LoadedReplayRunId.TrimStartAndEnd();
+	LoadedReplayEpisodeDirectory = cardWidget->GetEpisodeDirectory();
+	FPaths::NormalizeDirectoryName(LoadedReplayEpisodeDirectory);
+	return true;
 }
 
 void URunDetailScreenWidget::RebuildAnalysisRows()
@@ -425,14 +490,7 @@ void URunDetailScreenWidget::SetReplayEpisodeNumberText(const FString& episodeId
 
 void URunDetailScreenWidget::HandleEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget)
 {
-	if (!ProjectEpisodeReplayViewer || !cardWidget || !cardWidget->IsReplayAvailable())
-	{
-		return;
-	}
-
-	ApplyReplayInterestRegionStripToViewer();
-	SetReplayEpisodeNumberText(cardWidget->GetEpisodeId());
-	ProjectEpisodeReplayViewer->OpenEpisodeReplay(cardWidget->GetEpisodeDirectory());
+	OpenEpisodeReplayCard(cardWidget);
 }
 
 void URunDetailScreenWidget::HandleReplayFullscreenChanged(

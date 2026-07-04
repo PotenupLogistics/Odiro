@@ -2,9 +2,6 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Components/PanelWidget.h"
-#include "Components/ScrollBox.h"
-#include "Components/ScrollBoxSlot.h"
-#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
 #include "HAL/PlatformProcess.h"
@@ -48,26 +45,6 @@ namespace
 		FPaths::NormalizeFilename(path);
 		return path;
 	}
-
-	// WBP-authored scroll style에서 가로 scrollbar가 차지하는 높이를 계산한다.
-	float ResolveStartupHorizontalScrollbarHeight(const UScrollBox& scrollBox)
-	{
-		const FVector2D scrollbarThickness = scrollBox.GetScrollbarThickness();
-		const FMargin scrollbarPadding = scrollBox.GetScrollbarPadding();
-		return FMath::Max(
-			scrollBox.GetWidgetBarStyle().Thickness,
-			scrollbarThickness.Y + scrollbarPadding.Top + scrollbarPadding.Bottom);
-	}
-
-	// WBP-authored scroll style에서 세로 scrollbar가 차지하는 너비를 계산한다.
-	float ResolveStartupVerticalScrollbarWidth(const UScrollBox& scrollBox)
-	{
-		const FVector2D scrollbarThickness = scrollBox.GetScrollbarThickness();
-		const FMargin scrollbarPadding = scrollBox.GetScrollbarPadding();
-		return FMath::Max(
-			scrollBox.GetWidgetBarStyle().Thickness,
-			scrollbarThickness.X + scrollbarPadding.Left + scrollbarPadding.Right);
-	}
 }
 
 void UStartupScreenWidget::NativePreConstruct()
@@ -81,79 +58,12 @@ void UStartupScreenWidget::NativeConstruct()
 	EnsureStartupScreenViewModel();
 	ApplyDiagnosticMessagesToViewModel();
 	BindControls();
-	if (StartupPanelHorizontalScrollBox)
-	{
-		StartupPanelHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentHorizontalScrolled);
-		StartupPanelHorizontalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentHorizontalScrolled);
-	}
-	if (StartupPanelVerticalScrollBox)
-	{
-		StartupPanelVerticalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentVerticalScrolled);
-		StartupPanelVerticalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentVerticalScrolled);
-	}
-	if (StartupPanelStickyHorizontalScrollBox)
-	{
-		StartupPanelStickyHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyHorizontalScrolled);
-		StartupPanelStickyHorizontalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyHorizontalScrolled);
-	}
-	if (StartupPanelStickyVerticalScrollBox)
-	{
-		StartupPanelStickyVerticalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyVerticalScrolled);
-		StartupPanelStickyVerticalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyVerticalScrolled);
-	}
-	CaptureStartupPanelAuthoredLayout();
 	RefreshFromViewModel();
-}
-
-void UStartupScreenWidget::NativeTick(const FGeometry& myGeometry, const float inDeltaTime)
-{
-	Super::NativeTick(myGeometry, inDeltaTime);
-	UpdateStartupPanelScrollPadding(myGeometry.GetLocalSize());
 }
 
 void UStartupScreenWidget::NativeDestruct()
 {
 	UnbindControls();
-	if (StartupPanelHorizontalScrollBox)
-	{
-		StartupPanelHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentHorizontalScrolled);
-	}
-	if (StartupPanelStickyHorizontalScrollBox)
-	{
-		StartupPanelStickyHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyHorizontalScrolled);
-	}
-	if (StartupPanelVerticalScrollBox)
-	{
-		StartupPanelVerticalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentVerticalScrolled);
-	}
-	if (StartupPanelStickyVerticalScrollBox)
-	{
-		StartupPanelStickyVerticalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyVerticalScrolled);
-	}
 	for (URecentProjectCardWidget* cardWidget : RecentProjectCards)
 	{
 		if (cardWidget)
@@ -346,168 +256,6 @@ TSubclassOf<URecentProjectCardWidget> UStartupScreenWidget::ResolveRecentProject
 	return RecentProjectCardWidgetClass;
 }
 
-void UStartupScreenWidget::UpdateStartupPanelScrollPadding(const FVector2D& screenSize)
-{
-	if (!StartupPanelVerticalScrollBox || !StartupPanelHorizontalScrollBox || !StartupPanelSurface)
-	{
-		return;
-	}
-	if (!bHasStartupPanelSurfaceBasePadding && !CaptureStartupPanelAuthoredLayout())
-	{
-		return;
-	}
-
-	FVector2D viewportSize = StartupPanelVerticalScrollBox->GetCachedGeometry().GetLocalSize();
-	if (viewportSize.IsNearlyZero())
-	{
-		viewportSize = screenSize;
-	}
-	if (viewportSize.X <= 0.0f || viewportSize.Y <= 0.0f)
-	{
-		return;
-	}
-
-	StartupPanelSurface->ForceLayoutPrepass();
-	const FVector2D panelDesiredSize = StartupPanelSurface->GetDesiredSize();
-	if (panelDesiredSize.X <= 0.0f || panelDesiredSize.Y <= 0.0f)
-	{
-		return;
-	}
-	const FVector2D basePaddingSize(
-		StartupPanelSurfaceBasePadding.Left + StartupPanelSurfaceBasePadding.Right,
-		StartupPanelSurfaceBasePadding.Top + StartupPanelSurfaceBasePadding.Bottom);
-	const float horizontalScrollbarHeight = ResolveStartupHorizontalScrollbarHeight(*StartupPanelHorizontalScrollBox);
-	const float verticalScrollbarWidth = ResolveStartupVerticalScrollbarWidth(*StartupPanelVerticalScrollBox);
-	const FVector2D paddedPanelSize = panelDesiredSize + basePaddingSize;
-
-	const bool bUsesStickyHorizontalScroll = StartupPanelStickyHorizontalScrollBox
-		&& StartupPanelStickyHorizontalScrollSpacer;
-	const bool bUsesStickyVerticalScroll = StartupPanelStickyVerticalScrollBox
-		&& StartupPanelStickyVerticalScrollSpacer;
-	bool bNeedsHorizontalScroll = false;
-	bool bNeedsVerticalScroll = false;
-	for (int32 passIndex = 0; passIndex < 2; ++passIndex)
-	{
-		const float availableWidth = viewportSize.X
-			- (!bUsesStickyVerticalScroll && bNeedsVerticalScroll ? verticalScrollbarWidth : 0.0f);
-		bNeedsHorizontalScroll = availableWidth + KINDA_SMALL_NUMBER < paddedPanelSize.X;
-		const float requiredHeight = paddedPanelSize.Y
-			+ (!bUsesStickyHorizontalScroll && bNeedsHorizontalScroll ? horizontalScrollbarHeight : 0.0f);
-		bNeedsVerticalScroll = viewportSize.Y + KINDA_SMALL_NUMBER < requiredHeight;
-	}
-
-	if (CachedStartupPanelPaddingInput.Equals(viewportSize, KINDA_SMALL_NUMBER)
-		&& CachedStartupPanelDesiredSize.Equals(panelDesiredSize, KINDA_SMALL_NUMBER)
-		&& bCachedStartupPanelNeedsHorizontalScroll == bNeedsHorizontalScroll
-		&& bCachedStartupPanelNeedsVerticalScroll == bNeedsVerticalScroll)
-	{
-		return;
-	}
-
-	CachedStartupPanelPaddingInput = viewportSize;
-	CachedStartupPanelDesiredSize = panelDesiredSize;
-	bCachedStartupPanelNeedsHorizontalScroll = bNeedsHorizontalScroll;
-	bCachedStartupPanelNeedsVerticalScroll = bNeedsVerticalScroll;
-
-	StartupPanelHorizontalScrollBox->SetAlwaysShowScrollbar(false);
-	StartupPanelHorizontalScrollBox->SetScrollBarVisibility(
-		!bUsesStickyHorizontalScroll && bNeedsHorizontalScroll
-			? ESlateVisibility::Visible
-			: ESlateVisibility::Collapsed);
-	StartupPanelVerticalScrollBox->SetAlwaysShowScrollbar(false);
-	StartupPanelVerticalScrollBox->SetScrollBarVisibility(
-		!bUsesStickyVerticalScroll && bNeedsVerticalScroll
-			? ESlateVisibility::Visible
-			: ESlateVisibility::Collapsed);
-
-	const float availablePanelCenteringWidth = viewportSize.X
-		- (!bUsesStickyVerticalScroll && bNeedsVerticalScroll ? verticalScrollbarWidth : 0.0f);
-	const float horizontalExtraPadding = FMath::Max(0.0f, (availablePanelCenteringWidth - panelDesiredSize.X - basePaddingSize.X) * 0.5f);
-	const FMargin adjustedPanelPadding(
-		StartupPanelSurfaceBasePadding.Left + horizontalExtraPadding,
-		StartupPanelSurfaceBasePadding.Top,
-		StartupPanelSurfaceBasePadding.Right + horizontalExtraPadding,
-		StartupPanelSurfaceBasePadding.Bottom);
-
-	if (UScrollBoxSlot* panelSlot = Cast<UScrollBoxSlot>(StartupPanelSurface->Slot))
-	{
-		panelSlot->SetPadding(adjustedPanelPadding);
-	}
-
-	if (StartupPanelStickyHorizontalScrollBox)
-	{
-		StartupPanelStickyHorizontalScrollBox->SetVisibility(
-			bUsesStickyHorizontalScroll && bNeedsHorizontalScroll
-				? ESlateVisibility::Visible
-				: ESlateVisibility::Collapsed);
-
-		if (StartupPanelStickyHorizontalScrollSpacer)
-		{
-			const float stickyRangeCompensation = bUsesStickyVerticalScroll && bNeedsVerticalScroll
-				? verticalScrollbarWidth
-				: 0.0f;
-			StartupPanelStickyHorizontalScrollSpacer->SetSize(FVector2D(
-				FMath::Max(1.0f, panelDesiredSize.X + adjustedPanelPadding.Left + adjustedPanelPadding.Right - stickyRangeCompensation),
-				1.0f));
-		}
-	}
-
-	if (StartupPanelStickyVerticalScrollBox)
-	{
-		StartupPanelStickyVerticalScrollBox->SetVisibility(
-			bUsesStickyVerticalScroll && bNeedsVerticalScroll
-				? ESlateVisibility::Visible
-				: ESlateVisibility::Collapsed);
-
-		if (StartupPanelStickyVerticalScrollSpacer)
-		{
-			const float stickyRangeCompensation = bUsesStickyHorizontalScroll && bNeedsHorizontalScroll
-				? horizontalScrollbarHeight
-				: 0.0f;
-			StartupPanelStickyVerticalScrollSpacer->SetSize(FVector2D(
-				1.0f,
-				FMath::Max(1.0f, panelDesiredSize.Y + basePaddingSize.Y - stickyRangeCompensation)));
-		}
-	}
-
-	if (!bNeedsHorizontalScroll)
-	{
-		TGuardValue<bool> syncGuard(bSyncingStartupPanelHorizontalScroll, true);
-		StartupPanelHorizontalScrollBox->SetScrollOffset(0.0f);
-		if (StartupPanelStickyHorizontalScrollBox)
-		{
-			StartupPanelStickyHorizontalScrollBox->SetScrollOffset(0.0f);
-		}
-	}
-	if (!bNeedsVerticalScroll)
-	{
-		TGuardValue<bool> syncGuard(bSyncingStartupPanelVerticalScroll, true);
-		StartupPanelVerticalScrollBox->SetScrollOffset(0.0f);
-		if (StartupPanelStickyVerticalScrollBox)
-		{
-			StartupPanelStickyVerticalScrollBox->SetScrollOffset(0.0f);
-		}
-	}
-}
-
-bool UStartupScreenWidget::CaptureStartupPanelAuthoredLayout()
-{
-	if (!StartupPanelSurface)
-	{
-		return false;
-	}
-
-	const UScrollBoxSlot* panelSlot = Cast<UScrollBoxSlot>(StartupPanelSurface->Slot);
-	if (!panelSlot)
-	{
-		return false;
-	}
-
-	StartupPanelSurfaceBasePadding = panelSlot->GetPadding();
-	bHasStartupPanelSurfaceBasePadding = true;
-	return true;
-}
-
 bool UStartupScreenWidget::BrowseForExistingProjectFolder(FString& outFolder) const
 {
 	outFolder.Reset();
@@ -562,50 +310,6 @@ void UStartupScreenWidget::HandleOpenProjectClicked(UBaseButtonWidget*)
 void UStartupScreenWidget::HandleCreateProjectClicked(UBaseButtonWidget*)
 {
 	OnCreateProjectRequested.Broadcast(this);
-}
-
-void UStartupScreenWidget::HandleStartupPanelStickyHorizontalScrolled(const float currentOffset)
-{
-	if (bSyncingStartupPanelHorizontalScroll || !StartupPanelHorizontalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingStartupPanelHorizontalScroll, true);
-	StartupPanelHorizontalScrollBox->SetScrollOffset(currentOffset);
-}
-
-void UStartupScreenWidget::HandleStartupPanelContentHorizontalScrolled(const float currentOffset)
-{
-	if (bSyncingStartupPanelHorizontalScroll || !StartupPanelStickyHorizontalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingStartupPanelHorizontalScroll, true);
-	StartupPanelStickyHorizontalScrollBox->SetScrollOffset(currentOffset);
-}
-
-void UStartupScreenWidget::HandleStartupPanelStickyVerticalScrolled(const float currentOffset)
-{
-	if (bSyncingStartupPanelVerticalScroll || !StartupPanelVerticalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingStartupPanelVerticalScroll, true);
-	StartupPanelVerticalScrollBox->SetScrollOffset(currentOffset);
-}
-
-void UStartupScreenWidget::HandleStartupPanelContentVerticalScrolled(const float currentOffset)
-{
-	if (bSyncingStartupPanelVerticalScroll || !StartupPanelStickyVerticalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingStartupPanelVerticalScroll, true);
-	StartupPanelStickyVerticalScrollBox->SetScrollOffset(currentOffset);
 }
 
 void UStartupScreenWidget::HandleRecentProjectCardSelected(URecentProjectCardWidget* cardWidget)

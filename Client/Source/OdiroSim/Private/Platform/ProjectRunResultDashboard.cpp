@@ -361,7 +361,7 @@ namespace
 		return !Item.Title.IsEmpty() || !Item.Description.IsEmpty();
 	}
 
-	bool ShouldDisplayAnalysisWarning(const FString& WarningText)
+	bool ShouldDisplayDashboardAnalysisWarning(const FString& WarningText)
 	{
 		const FString NormalizedWarning = WarningText.TrimStartAndEnd().ToLower();
 		return !NormalizedWarning.StartsWith(TEXT("skipped large file:"))
@@ -439,7 +439,7 @@ namespace
 				}
 			}
 
-			if (!WarningText.IsEmpty() && ShouldDisplayAnalysisWarning(WarningText))
+			if (!WarningText.IsEmpty() && ShouldDisplayDashboardAnalysisWarning(WarningText))
 			{
 				OutDashboardData.Warnings.Add(WarningText);
 			}

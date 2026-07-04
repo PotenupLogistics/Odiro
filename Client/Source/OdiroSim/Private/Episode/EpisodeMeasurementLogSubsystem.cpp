@@ -884,10 +884,9 @@ FEpisodeReplayRobotFrame UEpisodeMeasurementLogSubsystem::BuildReplayFrame(
 		{
 			const FDeliveryBotDriveRuntimeSnapshot DriveSnapshot =
 				DriveComponent->GetRuntimeSnapshot();
+			// Replay keeps policy-requested steering, brake, and target speed;
+			// the drive snapshot only supplies the low-level throttle value.
 			ReplayFrame.Throttle = DriveSnapshot.Throttle;
-			ReplayFrame.Brake = DriveSnapshot.Brake;
-			ReplayFrame.Steering = DriveSnapshot.Steering;
-			ReplayFrame.TargetSpeedKmh = DriveSnapshot.TargetSpeedKmh;
 		}
 	}
 

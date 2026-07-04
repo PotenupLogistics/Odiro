@@ -10,6 +10,7 @@
 class ADeliveryBotReplayActor;
 class ADeliveryBotPointCloudReviewActor;
 class ADeliveryBotLidarRayReviewActor;
+class AScenarioReplayRouteMarkerActor;
 class AActor;
 class ASceneCapture2D;
 class UScenarioReplayDeveloperSettings;
@@ -18,6 +19,22 @@ class USceneCaptureComponent2D;
 struct FScenarioPlaceableInstanceSpec;
 struct FScenarioStaticObstaclePropEntry;
 struct FScenarioWorldSpec;
+
+// One per-frame point cloud capture record loaded from lidar_point_cloud/frames.jsonl.
+struct FScenarioReplayPointCloudFrameRecord
+{
+	// Replay-relative time in seconds when the point cloud frame was captured.
+	double TimeSeconds = 0.0;
+
+	// Source LiDAR sensor sequence that produced the point cloud frame.
+	int32 SensorSequence = INDEX_NONE;
+
+	// Absolute path to the per-frame xyz point cloud file.
+	FString XyzFilePath;
+
+	// Number of points declared by the frame index when present.
+	int32 PointCount = 0;
+};
 
 // Camera mode used by the embedded replay SceneCapture.
 UENUM(BlueprintType)
@@ -123,6 +140,22 @@ public:
 	// Returns the current robot speed in kilometers per hour.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
 	double GetCurrentRobotSpeedKmh() const { return CurrentRobotSpeedKmh; }
+
+	// Returns the current robot throttle input in the 0..1 range.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	double GetCurrentRobotThrottle() const { return CurrentRobotThrottle; }
+
+	// Returns the current robot steering input in the -1..1 range.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	double GetCurrentRobotSteering() const { return CurrentRobotSteering; }
+
+	// Returns the current robot brake input in the 0..1 range.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	double GetCurrentRobotBrake() const { return CurrentRobotBrake; }
+
+	// Returns the current policy-requested target speed in kilometers per hour.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	double GetCurrentRobotTargetSpeedKmh() const { return CurrentRobotTargetSpeedKmh; }
 
 	// Returns the current interpolated robot position in replay centimeters.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
@@ -249,6 +282,11 @@ private:
 		const FString& EpisodeDirectory,
 		TArray<FString>& OutDiagnostics);
 
+	// Loads optional per-frame point cloud records used for current-frame highlight overlay.
+	void LoadEpisodePointCloudFrameIndex(
+		const FString& EpisodeDirectory,
+		TArray<FString>& OutDiagnostics);
+
 	// Loads optional LiDAR ray frames for replay-only ray review.
 	bool LoadEpisodeLidarRayReplay(
 		const FString& EpisodeDirectory,
@@ -271,6 +309,19 @@ private:
 	bool SpawnReplayScenarioWorld(
 		const FScenarioWorldSpec& WorldSpec,
 		TArray<FString>& OutDiagnostics);
+
+	// Spawns the replay-only start and goal marker actor from the robot route spec.
+	bool SpawnReplayRouteMarkerActor(
+		const FScenarioWorldSpec& WorldSpec,
+		TArray<FString>& OutDiagnostics);
+
+	// Resolves the replay route start and goal locations from one compiled world spec.
+	bool TryResolveReplayRouteMarkerLocations(
+		const FScenarioWorldSpec& WorldSpec,
+		FVector& OutStartLocationCm,
+		bool& bOutHasStartLocation,
+		FVector& OutGoalLocationCm,
+		bool& bOutHasGoalLocation) const;
 
 	// Spawns one replay-only static obstacle from the compiled scenario placeable.
 	bool SpawnReplayStaticObstacle(
@@ -298,6 +349,15 @@ private:
 
 	// Updates the point cloud renderer for the active replay camera mode.
 	void RefreshReplayPointCloudRenderMode();
+
+	// Updates the current-frame point cloud highlight for the requested replay time.
+	void ApplyPointCloudFrameHighlightAtTime(double TimeSeconds);
+
+	// Returns the point cloud frame index active at the requested replay time.
+	int32 ResolvePointCloudFrameHighlightIndexAtTime(double TimeSeconds) const;
+
+	// Updates the route marker mesh and billboard facing for the active replay camera mode.
+	void RefreshReplayRouteMarkerPresentation();
 
 	// Applies the nearest loaded frame and captures the scene into the render target.
 	bool ApplyFrameAtTime(double TimeSeconds);
@@ -369,9 +429,17 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> ReplayScenarioActors;
 
+	// Replay-only start and goal marker actor generated from the episode route spec.
+	UPROPERTY(Transient)
+	TObjectPtr<AScenarioReplayRouteMarkerActor> ReplayRouteMarkerActor;
+
 	// Replay-only point cloud actor generated from episode lidar_point_cloud artifacts.
 	UPROPERTY(Transient)
 	TObjectPtr<ADeliveryBotPointCloudReviewActor> ReplayPointCloudActor;
+
+	// Replay-only actor that highlights the LiDAR point cloud frame closest to current replay time.
+	UPROPERTY(Transient)
+	TObjectPtr<ADeliveryBotPointCloudReviewActor> ReplayPointCloudFrameHighlightActor;
 
 	// Replay-only actor that renders currently selected LiDAR ray frame lines.
 	UPROPERTY(Transient)
@@ -388,6 +456,9 @@ private:
 	// Loaded optional event markers keyed by replay time.
 	UPROPERTY(Transient)
 	TArray<FScenarioReplayEventMarker> ReplayEventMarkers;
+
+	// Loaded optional per-frame point cloud records keyed by replay time.
+	TArray<FScenarioReplayPointCloudFrameRecord> PointCloudFrameRecords;
 
 	// LiDAR config loaded from the episode run snapshot profile.
 	UPROPERTY(Transient)
@@ -429,8 +500,23 @@ private:
 	// LiDAR ray frame index currently represented in UI and future ray rendering.
 	int32 CurrentLidarRayFrameIndex = INDEX_NONE;
 
+	// Point cloud frame index currently loaded into the highlight overlay actor.
+	int32 CurrentPointCloudFrameHighlightIndex = INDEX_NONE;
+
 	// Robot speed currently represented in UI and diagnostics.
 	double CurrentRobotSpeedKmh = 0.0;
+
+	// Robot throttle input currently represented in UI and diagnostics.
+	double CurrentRobotThrottle = 0.0;
+
+	// Robot steering input currently represented in UI and diagnostics.
+	double CurrentRobotSteering = 0.0;
+
+	// Robot brake input currently represented in UI and diagnostics.
+	double CurrentRobotBrake = 0.0;
+
+	// Policy-requested target speed currently represented in UI and diagnostics.
+	double CurrentRobotTargetSpeedKmh = 0.0;
 
 	// Robot position currently represented in UI and diagnostics.
 	FVector CurrentRobotPositionCm = FVector::ZeroVector;
@@ -440,6 +526,12 @@ private:
 
 	// Far-away offset that isolates replay actors from the active scenario world.
 	FVector ReplayWorldOffset = FVector(500000.0, 0.0, 0.0);
+
+	// Capture origin used to restore per-frame point cloud map-local coordinates.
+	FVector ReplayPointCloudCaptureOriginCm = FVector::ZeroVector;
+
+	// Y-axis sign used to restore per-frame point cloud map-local coordinates.
+	float ReplayPointCloudImportYAxisSign = -1.0f;
 
 	// Orthographic camera height above the replay robot.
 	double CaptureHeightCm = 3000.0;

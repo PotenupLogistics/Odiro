@@ -455,6 +455,58 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ReplaySpeedValueText;
 
+	// Optional numeric robot target speed value for card-style replay telemetry.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayTargetSpeedValueText;
+
+	// Optional numeric robot steering value for card-style replay telemetry.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplaySteeringValueText;
+
+	// Optional numeric robot brake value for card-style replay telemetry.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayBrakeValueText;
+
+	// Optional compact telemetry row that should only appear in embedded replay mode.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ReplayCompactDriveTelemetryRow;
+
+	// Optional compact replay speed pill shown over the embedded replay.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ReplayCompactSpeedPill;
+
+	// Optional compact replay target speed pill shown over the embedded replay.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ReplayCompactTargetSpeedPill;
+
+	// Optional compact replay steering pill shown over the embedded replay.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ReplayCompactSteeringPill;
+
+	// Optional compact replay brake pill shown over the embedded replay.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ReplayCompactBrakePill;
+
+	// Optional compact replay speed value shown over the embedded replay.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayCompactSpeedValueText;
+
+	// Optional compact replay throttle value shown over the embedded replay.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayCompactThrottleValueText;
+
+	// Optional compact replay target speed value shown over the embedded replay.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayCompactTargetSpeedValueText;
+
+	// Optional compact replay steering value shown over the embedded replay.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayCompactSteeringValueText;
+
+	// Optional compact replay brake value shown over the embedded replay.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReplayCompactBrakeValueText;
+
 	// Optional playback rate value for card-style replay telemetry.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ReplayPlaybackRateText;

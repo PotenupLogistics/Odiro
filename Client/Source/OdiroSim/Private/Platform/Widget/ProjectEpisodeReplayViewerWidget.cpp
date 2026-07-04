@@ -1360,6 +1360,31 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayFullscreenVisibility()
 				? ESlateVisibility::Collapsed
 				: ESlateVisibility::Visible);
 	}
+
+	const ESlateVisibility CompactTelemetryVisibility =
+		bReplayFullscreen
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::Visible;
+	for (UWidget* CompactTelemetryWidget : {
+		ReplayCompactDriveTelemetryRow.Get(),
+		ReplayCompactSpeedPill.Get(),
+		ReplayCompactTargetSpeedPill.Get(),
+		ReplayCompactSteeringPill.Get(),
+		ReplayCompactBrakePill.Get() })
+	{
+		if (CompactTelemetryWidget)
+		{
+			CompactTelemetryWidget->SetVisibility(CompactTelemetryVisibility);
+		}
+	}
+
+	if (ExitFullscreenButton)
+	{
+		ExitFullscreenButton->SetVisibility(
+			bReplayFullscreen
+				? ESlateVisibility::Visible
+				: ESlateVisibility::Collapsed);
+	}
 }
 
 void UProjectEpisodeReplayViewerWidget::ApplyReplayFullscreenLayout()
@@ -1390,7 +1415,21 @@ void UProjectEpisodeReplayViewerWidget::ResolveFullscreenLayerToggleWidgets()
 
 	if (!ExitFullscreenButton)
 	{
-		ExitFullscreenButton = Cast<UButton>(GetWidgetFromName(TEXT("ExitFullscreenButton")));
+		static constexpr const TCHAR* ExitFullscreenButtonNames[] = {
+			TEXT("ExitFullscreenButton"),
+			TEXT("FullscreenExitButton"),
+			TEXT("ReplayExitFullscreenButton"),
+			TEXT("ReplayFullscreenExitButton")
+		};
+
+		for (const TCHAR* ButtonName : ExitFullscreenButtonNames)
+		{
+			ExitFullscreenButton = Cast<UButton>(GetWidgetFromName(ButtonName));
+			if (ExitFullscreenButton)
+			{
+				break;
+			}
+		}
 	}
 }
 
@@ -1667,6 +1706,22 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 	const bool bReplayPlaying =
 		ReplaySubsystem
 			&& ReplaySubsystem->GetPlaybackState() == EScenarioReplayPlaybackState::Playing;
+	const double RobotSpeedKmh =
+		ReplaySubsystem
+			? ReplaySubsystem->GetCurrentRobotSpeedKmh()
+			: 0.0;
+	const double RobotTargetSpeedKmh =
+		ReplaySubsystem
+			? ReplaySubsystem->GetCurrentRobotTargetSpeedKmh()
+			: 0.0;
+	const double RobotSteering =
+		ReplaySubsystem
+			? FMath::Clamp(ReplaySubsystem->GetCurrentRobotSteering(), -1.0, 1.0)
+			: 0.0;
+	const double RobotBrake =
+		ReplaySubsystem
+			? FMath::Clamp(ReplaySubsystem->GetCurrentRobotBrake(), 0.0, 1.0)
+			: 0.0;
 
 	if (ReplayTimeText)
 	{
@@ -1694,10 +1749,6 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 
 	if (ReplaySpeedText)
 	{
-		const double RobotSpeedKmh =
-			ReplaySubsystem
-				? ReplaySubsystem->GetCurrentRobotSpeedKmh()
-				: 0.0;
 		const double PlaybackSpeed =
 			ReplaySubsystem
 				? ReplaySubsystem->GetPlaybackSpeed()
@@ -1710,13 +1761,69 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 
 	if (ReplaySpeedValueText)
 	{
-		const double RobotSpeedKmh =
-			ReplaySubsystem
-				? ReplaySubsystem->GetCurrentRobotSpeedKmh()
-				: 0.0;
 		ReplaySpeedValueText->SetText(FText::FromString(FString::Printf(
 			TEXT("%.1f km/h"),
 			RobotSpeedKmh)));
+	}
+
+	if (ReplayTargetSpeedValueText)
+	{
+		ReplayTargetSpeedValueText->SetText(FText::FromString(FString::Printf(
+			TEXT("%.1f km/h"),
+			RobotTargetSpeedKmh)));
+	}
+
+	if (ReplaySteeringValueText)
+	{
+		ReplaySteeringValueText->SetText(FText::FromString(FString::Printf(
+			TEXT("%+.2f"),
+			RobotSteering)));
+	}
+
+	if (ReplayBrakeValueText)
+	{
+		ReplayBrakeValueText->SetText(FText::FromString(FString::Printf(
+			TEXT("%.0f%%"),
+			RobotBrake * 100.0)));
+	}
+
+	if (ReplayCompactSpeedValueText)
+	{
+		ReplayCompactSpeedValueText->SetText(FText::FromString(FString::Printf(
+			TEXT("%.1f km/h"),
+			RobotSpeedKmh)));
+	}
+
+	if (ReplayCompactThrottleValueText)
+	{
+		const double RobotThrottle =
+			ReplaySubsystem
+				? FMath::Clamp(ReplaySubsystem->GetCurrentRobotThrottle(), 0.0, 1.0)
+				: 0.0;
+		ReplayCompactThrottleValueText->SetText(FText::FromString(FString::Printf(
+			TEXT("%.0f%%"),
+			RobotThrottle * 100.0)));
+	}
+
+	if (ReplayCompactTargetSpeedValueText)
+	{
+		ReplayCompactTargetSpeedValueText->SetText(FText::FromString(FString::Printf(
+			TEXT("%.1f km/h"),
+			RobotTargetSpeedKmh)));
+	}
+
+	if (ReplayCompactSteeringValueText)
+	{
+		ReplayCompactSteeringValueText->SetText(FText::FromString(FString::Printf(
+			TEXT("%+.2f"),
+			RobotSteering)));
+	}
+
+	if (ReplayCompactBrakeValueText)
+	{
+		ReplayCompactBrakeValueText->SetText(FText::FromString(FString::Printf(
+			TEXT("%.0f%%"),
+			RobotBrake * 100.0)));
 	}
 
 	if (ReplayPlaybackRateText)

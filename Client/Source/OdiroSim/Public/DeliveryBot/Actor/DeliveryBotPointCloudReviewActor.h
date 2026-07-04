@@ -121,6 +121,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|PointCloud")
 	EDeliveryBotPointCloudReviewRenderMode GetReviewRenderMode() const { return ReviewRenderMode; }
 
+	// Applies runtime visual emphasis without changing the loaded point positions.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PointCloud")
+	void ConfigureReviewVisualStyle(
+		float InPointSizeCm,
+		float InTopDownSphereSizeCm,
+		float InColorBrightnessMultiplier);
+
 private:
 	// File path helpers
 
@@ -153,6 +160,9 @@ private:
 
 	// Resolves point data to its world-space debug draw location.
 	FVector ResolvePointWorldLocation(const FDeliveryBotPointCloudReviewPointInfo& point) const;
+
+	// Applies the actor's review brightness multiplier to one point color.
+	FColor ResolveReviewDisplayColor(const FColor& Color) const;
 
 	// Rebuilds the runtime Lidar Point Cloud asset and component.
 	bool RebuildPointCloudAsset();
@@ -286,6 +296,10 @@ private:
 	// Screen size for debug color overlay points.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|Debug", meta = (ClampMin = "1.0"))
 	float DebugOverlayPointSize{ 5.f };
+
+	// Runtime color multiplier used for emphasized replay point cloud layers.
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|Style", meta = (ClampMin = "0.0"))
+	float ColorBrightnessMultiplier{ 1.0f };
 
 	// Capture origin used to restore map_accumulated.xyz points into source world coordinates.
 	FVector MapCaptureOriginCm = FVector::ZeroVector;

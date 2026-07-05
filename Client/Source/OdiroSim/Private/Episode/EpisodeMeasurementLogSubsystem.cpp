@@ -2,6 +2,7 @@
 
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/Component/DeliveryBot_DriveComponent.h"
+#include "DeliveryBot/DeliveryBotLidarRayPattern.h"
 #include "Components/SceneComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -585,6 +586,11 @@ bool UEpisodeMeasurementLogSubsystem::StartProjectReplayRecording(
 		LidarRayReplayRecorder = MakeUnique<FEpisodeLidarRayReplayRecorder>();
 	}
 
+	if (!FullLidarPointCloudRecorder)
+	{
+		FullLidarPointCloudRecorder = MakeUnique<FEpisodeFullLidarPointCloudRecorder>();
+	}
+
 	TArray<FString> ReplayDiagnostics;
 	const bool bStarted = ReplayRecorder->Open(
 		EpisodeDirectory,
@@ -617,6 +623,23 @@ bool UEpisodeMeasurementLogSubsystem::StartProjectReplayRecording(
 		{
 			LidarRayReplayRecorder->Abort();
 		}
+
+		TArray<FString> FullPointCloudDiagnostics;
+		const bool bFullPointCloudStarted = FullLidarPointCloudRecorder->Open(
+			EpisodeDirectory,
+			FullPointCloudDiagnostics);
+		for (const FString& Diagnostic : FullPointCloudDiagnostics)
+		{
+			AddDiagnostic(
+				EEpisodeMeasurementLogSeverity::Warning,
+				TEXT("project_full_lidar_point_cloud_start_warning"),
+				Diagnostic);
+		}
+
+		if (!bFullPointCloudStarted)
+		{
+			FullLidarPointCloudRecorder->Abort();
+		}
 	}
 
 	return bStarted;
@@ -626,7 +649,8 @@ void UEpisodeMeasurementLogSubsystem::StopProjectReplayRecording()
 {
 	const bool bReplayOpen = ReplayRecorder && ReplayRecorder->IsOpen();
 	const bool bLidarRayReplayOpen = LidarRayReplayRecorder && LidarRayReplayRecorder->IsOpen();
-	if (!bReplayOpen && !bLidarRayReplayOpen)
+	const bool bFullPointCloudOpen = FullLidarPointCloudRecorder && FullLidarPointCloudRecorder->IsOpen();
+	if (!bReplayOpen && !bLidarRayReplayOpen && !bFullPointCloudOpen)
 	{
 		return;
 	}
@@ -653,6 +677,19 @@ void UEpisodeMeasurementLogSubsystem::StopProjectReplayRecording()
 			AddDiagnostic(
 				EEpisodeMeasurementLogSeverity::Warning,
 				TEXT("project_lidar_ray_replay_stop_warning"),
+				Diagnostic);
+		}
+	}
+
+	if (bFullPointCloudOpen)
+	{
+		TArray<FString> FullPointCloudDiagnostics;
+		FullLidarPointCloudRecorder->Close(FullPointCloudDiagnostics);
+		for (const FString& Diagnostic : FullPointCloudDiagnostics)
+		{
+			AddDiagnostic(
+				EEpisodeMeasurementLogSeverity::Warning,
+				TEXT("project_full_lidar_point_cloud_stop_warning"),
 				Diagnostic);
 		}
 	}
@@ -801,8 +838,20 @@ bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
 	const FEpisodeMeasurementLogTickRecord TickRecord = BuildTickRecord(DeltaTime);
 	const bool bReplayOpen = ReplayRecorder && ReplayRecorder->IsOpen();
 	const bool bLidarRayReplayOpen = LidarRayReplayRecorder && LidarRayReplayRecorder->IsOpen();
+	const bool bFullPointCloudOpen = FullLidarPointCloudRecorder && FullLidarPointCloudRecorder->IsOpen();
 	const bool bDriveDebugOpen = IsProjectDriveDebugLogging();
-	ADeliveryBot* RobotActor = (bReplayOpen || bLidarRayReplayOpen || bDriveDebugOpen) ? FindRobotActor() : nullptr;
+	ADeliveryBot* RobotActor = (bReplayOpen || bLidarRayReplayOpen || bFullPointCloudOpen || bDriveDebugOpen)
+		? FindRobotActor()
+		: nullptr;
+
+	FDeliveryBotObservationInfo Observation;
+	bool bHasObservation = false;
+	if ((bLidarRayReplayOpen || bFullPointCloudOpen) && IsValid(RobotActor))
+	{
+		Observation = RobotActor->BuildObservation();
+		bHasObservation = true;
+	}
+
 	if (bReplayOpen)
 	{
 		TArray<FString> ReplayDiagnostics;
@@ -820,10 +869,9 @@ bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
 		}
 	}
 
-	if (bLidarRayReplayOpen && IsValid(RobotActor))
+	if (bLidarRayReplayOpen && bHasObservation)
 	{
 		TArray<FString> LidarRayReplayDiagnostics;
-		const FDeliveryBotObservationInfo Observation = RobotActor->BuildObservation();
 		LidarRayReplayRecorder->RecordSensorSnapshot(
 			TickRecord.WorldTimeSeconds,
 			Observation.SensorSequence,
@@ -836,6 +884,29 @@ bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
 				TEXT("project_lidar_ray_replay_write_warning"),
 				Diagnostic,
 				TickRecord.WorldTimeSeconds);
+		}
+	}
+
+	if (bFullPointCloudOpen && bHasObservation)
+	{
+		const FDeliveryBotSetupInfo& SetupInfo = RobotActor->GetSetupInfo();
+		if (FDeliveryBotLidarRayPattern::IsOusterOS1Mode(SetupInfo.LidarSensorConfigInfo.LidarModeType))
+		{
+			TArray<FString> FullPointCloudDiagnostics;
+			FullLidarPointCloudRecorder->RecordSensorSnapshot(
+				TickRecord.WorldTimeSeconds,
+				Observation.SensorSequence,
+				Observation.LidarScanInfo,
+				SetupInfo.PointCloudCaptureConfigInfo,
+				FullPointCloudDiagnostics);
+			for (const FString& Diagnostic : FullPointCloudDiagnostics)
+			{
+				AddDiagnostic(
+					EEpisodeMeasurementLogSeverity::Warning,
+					TEXT("project_full_lidar_point_cloud_write_warning"),
+					Diagnostic,
+					TickRecord.WorldTimeSeconds);
+			}
 		}
 	}
 

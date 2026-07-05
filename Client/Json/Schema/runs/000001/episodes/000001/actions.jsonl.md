@@ -90,6 +90,8 @@ runs/<RunId>/episodes/<EpisodeId>/actions.jsonl
 | `target_id` | string or null | 예 | 감지된 semantic target id. Miss 또는 조인 실패면 `null`. |
 | `target_tags` | array | 예 | 감지된 target tag 목록. |
 
+For model-specific 3D LiDAR modes such as `OusterOS1`, `rays_3d[]` may also include `channel_index`, `column_index`, `relative_time_seconds`, and `sensor_model`.
+
 ## policy_ray_selection
 
 | 필드 | 타입 | 필수 | 설명 |

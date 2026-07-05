@@ -99,6 +99,10 @@ struct ODIROSIM_API FRobotProfileLidarSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float StopDistanceM = 2.00f;
 
+	// robot.lidar.obstacle_warning_distance_m RePath trigger distance in meters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
+	float ObstacleWarningDistanceM = 8.00f;
+
 	// robot.lidar.slow_down_distance_m obstacle slowdown distance in meters.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RobotProfile")
 	float SlowDownDistanceM = 8.00f;

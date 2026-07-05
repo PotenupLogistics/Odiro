@@ -181,6 +181,17 @@ def safe_int(value: object, default: int = 0) -> int:
         return default
 
 
+def safe_optional_int(value: object) -> int | None:
+    """Convert optional JSON scalar values to int while preserving missing values."""
+    if value is None:
+        return None
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_actor_tags(data: dict) -> list[str]:
     """Return actorTags as a stable string list."""
     actor_tags = data.get("actorTags", [])
@@ -364,6 +375,10 @@ def parse_lidar_ray_3d(data: dict):
             "yawDegree": safe_float(data.get("yawDegree", data.get("rayYawDegree", 0.0))),
             "pitchDegree": safe_float(data.get("pitchDegree", data.get("rayPitchDegree", 0.0))),
             "rayIndex": data.get("rayIndex"),
+            "channelIndex": data.get("channelIndex"),
+            "columnIndex": data.get("columnIndex"),
+            "relativeTimeSeconds": safe_float(data.get("relativeTimeSeconds", 0.0)),
+            "sensorModel": str(data.get("sensorModel") or ""),
             "actorName": data.get("actorName"),
             "actorTags": parse_actor_tags(data),
             "hitLocationCm": parse_vector_cm(data.get("hitLocationCm")),
@@ -403,6 +418,9 @@ def parse_lidar_observation(data: dict):
             "rays1d": parse_lidar_ray_array(lidar_data.get("rays1d", []), parse_lidar_ray_1d),
             "rays2d": parse_lidar_ray_array(lidar_data.get("rays2d", []), parse_lidar_ray_2d),
             "rays3d": parse_lidar_ray_array(lidar_data.get("rays3d", []), parse_lidar_ray_3d),
+            "rawRays3dCount": safe_optional_int(lidar_data.get("rawRays3dCount")),
+            "transmittedRays3dCount": safe_optional_int(lidar_data.get("transmittedRays3dCount")),
+            "rays3dCompacted": bool(lidar_data.get("rays3dCompacted", False)),
         },
     )
 

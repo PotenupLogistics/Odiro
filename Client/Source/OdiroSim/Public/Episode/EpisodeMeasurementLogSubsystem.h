@@ -83,6 +83,9 @@ public:
 	/// Returns true while project replay recording is active.
 	bool IsProjectReplayRecording() const;
 
+	/// Returns true while temporary drive debug logging is active.
+	bool IsProjectDriveDebugLogging() const { return !CurrentProjectDriveDebugPath.IsEmpty(); }
+
 	/// Returns the absolute path of the active log file.
 	UFUNCTION(BlueprintPure, Category = "Episode|MeasurementLog")
 	FString GetCurrentLogPath() const;
@@ -125,6 +128,10 @@ private:
 	int32 NextProjectTraceSampleIndex = 0;
 	FTimerHandle ProjectTraceTimerHandle;
 	float ProjectTraceIntervalSeconds = 1.0f / 60.0f;
+	/// Temporary drive diagnostic file path written next to project trace output.
+	FString CurrentProjectDriveDebugPath;
+	/// Monotonic sample index for temporary drive diagnostics.
+	int32 NextProjectDriveDebugSampleIndex = 0;
 	TUniquePtr<FEpisodeReplayRecorder> ReplayRecorder;
 	/// Optional replay-only LiDAR ray recorder that shares the project replay lifecycle.
 	TUniquePtr<FEpisodeLidarRayReplayRecorder> LidarRayReplayRecorder;
@@ -137,6 +144,14 @@ private:
 	bool WriteHeader(double WorldTimeSeconds);
 	bool WriteTick(float DeltaTime);
 	bool WriteProjectTraceTick(float DeltaTime);
+	/// Opens the temporary drive-debug JSONL writer next to project trace output.
+	bool StartProjectDriveDebugLogging(const FString& EpisodeDirectory);
+	/// Closes the temporary drive-debug JSONL writer without writing a footer.
+	void StopProjectDriveDebugLogging();
+	/// Appends one temporary drive-debug sample for diagnosing low-level drive control.
+	bool WriteProjectDriveDebugTick(
+		const FEpisodeMeasurementLogTickRecord& TickRecord,
+		ADeliveryBot* RobotActor);
 	void HandleProjectTraceTimerTick();
 	bool WriteFooter(const FString& CloseReason);
 	FEpisodeMeasurementLogTickRecord BuildTickRecord(float DeltaTime);

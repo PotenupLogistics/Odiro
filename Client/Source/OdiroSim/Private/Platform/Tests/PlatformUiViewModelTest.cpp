@@ -245,6 +245,7 @@ bool FPlatformUiViewModelRobotProfileTest::RunTest(const FString& parameters)
 	viewModel->SetLidarSensorHeightM(0.09f);
 	viewModel->SetLidarFrontHalfAngleDegree(65.00f);
 	viewModel->SetLidarStopDistanceM(2.50f);
+	viewModel->SetLidarObstacleWarningDistanceM(7.25f);
 	viewModel->SetLidarSlowDownDistanceM(9.00f);
 	viewModel->SetLidarAngleStepDegree(4.00f);
 	viewModel->SetLidarVerticalMinDegree(-12.00f);
@@ -270,6 +271,7 @@ bool FPlatformUiViewModelRobotProfileTest::RunTest(const FString& parameters)
 	viewModel->SetLidarSensorHeightM(1.0f);
 	viewModel->SetLidarFrontHalfAngleDegree(1.0f);
 	viewModel->SetLidarStopDistanceM(1.0f);
+	viewModel->SetLidarObstacleWarningDistanceM(1.0f);
 	viewModel->SetLidarSlowDownDistanceM(1.0f);
 	viewModel->SetLidarAngleStepDegree(1.0f);
 	viewModel->SetLidarVerticalMinDegree(-1.0f);
@@ -294,6 +296,7 @@ bool FPlatformUiViewModelRobotProfileTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("lidar sensor height round trip"), FMath::IsNearlyEqual(viewModel->GetLidarSensorHeightM(), 0.09f));
 	TestTrue(TEXT("lidar front angle round trip"), FMath::IsNearlyEqual(viewModel->GetLidarFrontHalfAngleDegree(), 65.00f));
 	TestTrue(TEXT("lidar stop distance round trip"), FMath::IsNearlyEqual(viewModel->GetLidarStopDistanceM(), 2.50f));
+	TestTrue(TEXT("lidar obstacle warning distance round trip"), FMath::IsNearlyEqual(viewModel->GetLidarObstacleWarningDistanceM(), 7.25f));
 	TestTrue(TEXT("lidar slowdown distance round trip"), FMath::IsNearlyEqual(viewModel->GetLidarSlowDownDistanceM(), 9.00f));
 	TestTrue(TEXT("lidar angle step round trip"), FMath::IsNearlyEqual(viewModel->GetLidarAngleStepDegree(), 4.00f));
 	TestTrue(TEXT("lidar vertical min round trip"), FMath::IsNearlyEqual(viewModel->GetLidarVerticalMinDegree(), -12.00f));

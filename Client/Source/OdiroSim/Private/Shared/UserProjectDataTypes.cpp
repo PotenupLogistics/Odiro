@@ -1461,6 +1461,30 @@ namespace
 			object->SetField(TEXT("hit_location_cm"), CloneFieldOrNull(sourceObject, TEXT("hitLocationCm")));
 		}
 
+		double channelIndex = 0.0;
+		if (sourceObject.TryGetNumberField(TEXT("channelIndex"), channelIndex))
+		{
+			object->SetNumberField(TEXT("channel_index"), channelIndex);
+		}
+
+		double columnIndex = 0.0;
+		if (sourceObject.TryGetNumberField(TEXT("columnIndex"), columnIndex))
+		{
+			object->SetNumberField(TEXT("column_index"), columnIndex);
+		}
+
+		double relativeTimeSeconds = 0.0;
+		if (sourceObject.TryGetNumberField(TEXT("relativeTimeSeconds"), relativeTimeSeconds))
+		{
+			object->SetNumberField(TEXT("relative_time_seconds"), relativeTimeSeconds);
+		}
+
+		FString sensorModel;
+		if (sourceObject.TryGetStringField(TEXT("sensorModel"), sensorModel))
+		{
+			object->SetStringField(TEXT("sensor_model"), sensorModel);
+		}
+
 		SetTargetIdField(object, sourceObject);
 		SetTargetTagsField(object, sourceObject);
 		return object;
@@ -1500,7 +1524,11 @@ namespace
 
 	FString NormalizePolicyRaySelectionMode(const FString& mode)
 	{
-		const FString normalizedMode = mode.TrimStartAndEnd().ToLower();
+		const FString normalizedMode = mode.TrimStartAndEnd()
+			.ToLower()
+			.Replace(TEXT("_"), TEXT(""))
+			.Replace(TEXT("-"), TEXT(""))
+			.Replace(TEXT(" "), TEXT(""));
 		if (normalizedMode == TEXT("oned") || normalizedMode == TEXT("1d"))
 		{
 			return TEXT("1d");
@@ -1509,7 +1537,10 @@ namespace
 		{
 			return TEXT("2d");
 		}
-		if (normalizedMode == TEXT("threed") || normalizedMode == TEXT("3d"))
+		if (normalizedMode == TEXT("threed")
+			|| normalizedMode == TEXT("3d")
+			|| normalizedMode == TEXT("ousteros1")
+			|| normalizedMode == TEXT("os1"))
 		{
 			return TEXT("3d");
 		}
@@ -1573,7 +1604,11 @@ namespace
 		const FString lidarMode = lidarObject.IsValid()
 			? ReadStringOrDefault(*lidarObject, TEXT("mode"))
 			: FString();
-		const FString normalizedLidarMode = lidarMode.TrimStartAndEnd().ToLower();
+		const FString normalizedLidarMode = lidarMode.TrimStartAndEnd()
+			.ToLower()
+			.Replace(TEXT("_"), TEXT(""))
+			.Replace(TEXT("-"), TEXT(""))
+			.Replace(TEXT(" "), TEXT(""));
 
 		if (normalizedLidarMode == TEXT("oned") || normalizedLidarMode == TEXT("1d"))
 		{
@@ -1586,7 +1621,10 @@ namespace
 		{
 			return TEXT("2d");
 		}
-		if (normalizedLidarMode == TEXT("threed") || normalizedLidarMode == TEXT("3d"))
+		if (normalizedLidarMode == TEXT("threed")
+			|| normalizedLidarMode == TEXT("3d")
+			|| normalizedLidarMode == TEXT("ousteros1")
+			|| normalizedLidarMode == TEXT("os1"))
 		{
 			return TEXT("3d");
 		}

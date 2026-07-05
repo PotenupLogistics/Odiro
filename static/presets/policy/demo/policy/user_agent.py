@@ -39,6 +39,8 @@ def is_ignored_lidar_policy_ray(ray) -> bool:
     return (
         (actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0)
         or actor_name.startswith("ScenarioCorridorRuntimeActor")
+        or "ground" in normalized_tags
+        or any(tag.endswith(".ground") for tag in normalized_tags)
         or "wall" in normalized_tags
         or any(tag.endswith(".wall") for tag in normalized_tags)
     )

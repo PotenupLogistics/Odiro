@@ -232,7 +232,11 @@ bool UDeliveryBotSetupCompiler::ReadOptionalLidarModeField(const FJsonObject& js
 		return false;
 	}
 
-	const FString normalized = jsonValue->AsString().ToLower().Replace(TEXT("_"), TEXT(""));
+	const FString normalized = jsonValue->AsString()
+		.ToLower()
+		.Replace(TEXT("_"), TEXT(""))
+		.Replace(TEXT("-"), TEXT(""))
+		.Replace(TEXT(" "), TEXT(""));
 
 	if (normalized == TEXT("1d") || normalized == TEXT("oned"))
 	{
@@ -255,6 +259,12 @@ bool UDeliveryBotSetupCompiler::ReadOptionalLidarModeField(const FJsonObject& js
 	if (normalized == TEXT("3d") || normalized == TEXT("threed"))
 	{
 		targetValue = EDeliveryBotLidarModeType::ThreeD;
+		return true;
+	}
+
+	if (normalized == TEXT("ousteros1") || normalized == TEXT("os1"))
+	{
+		targetValue = EDeliveryBotLidarModeType::OusterOS1;
 		return true;
 	}
 

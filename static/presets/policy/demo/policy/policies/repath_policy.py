@@ -964,10 +964,15 @@ class RePathPolicy:
         normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
         return any(self.is_static_map_tag(tag) for tag in normalized_tags)
 
+    # Ground-tagged low surfaces are traversable and should not seed dynamic RePath blocks.
+    def is_ground_tag(self, tag: str) -> bool:
+        return tag == "ground" or tag.endswith(".ground")
+
     # 정적 맵 geometry 태그인지 확인한다.
     def is_static_map_tag(self, tag: str) -> bool:
         return (
-            tag == "city_block"
+            self.is_ground_tag(tag)
+            or tag == "city_block"
             or tag == "building"
             or tag == "wall"
             or tag.startswith("city_block_role_")

@@ -182,13 +182,15 @@ namespace
 			&& normalizedMode != TEXT("front2d")
 			&& normalizedMode != TEXT("3d")
 			&& normalizedMode != TEXT("threed")
+			&& normalizedMode != TEXT("ousteros1")
+			&& normalizedMode != TEXT("os1")
 			&& normalizedMode != TEXT("1dand2d")
 			&& normalizedMode != TEXT("onedandtwod")
 			&& normalizedMode != TEXT("2dand3d")
 			&& normalizedMode != TEXT("twodandthreed")
 			&& normalizedMode != TEXT("all"))
 		{
-			diagnostics.Add(TEXT("LiDAR Mode must be 1D, 2D, or 3D."));
+			diagnostics.Add(TEXT("LiDAR Mode must be 1D, 2D, 3D, or Ouster OS1."));
 		}
 		if (settings.ScanRangeM < 0.0f)
 		{
@@ -213,6 +215,10 @@ namespace
 		if (settings.StopDistanceM < 0.0f)
 		{
 			diagnostics.Add(TEXT("LiDAR Stop Distance must be 0 m or greater."));
+		}
+		if (settings.ObstacleWarningDistanceM < 0.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Obstacle Warning Distance must be 0 m or greater."));
 		}
 		if (settings.SlowDownDistanceM < 0.0f)
 		{
@@ -335,6 +341,10 @@ namespace
 		if (normalized == TEXT("3d") || normalized == TEXT("threed"))
 		{
 			return TEXT("3d");
+		}
+		if (normalized == TEXT("ousteros1") || normalized == TEXT("os1"))
+		{
+			return TEXT("ouster_os1");
 		}
 		if (normalized == TEXT("1dand2d") || normalized == TEXT("onedandtwod"))
 		{
@@ -1087,6 +1097,15 @@ bool UPlatformUiSubsystem::LoadRobotProfileForProject(
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("sensor_right_offset_m"), outSettings.Lidar.SensorRightOffsetM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("front_half_angle_degree"), outSettings.Lidar.FrontHalfAngleDegree);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("stop_distance_m"), outSettings.Lidar.StopDistanceM);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("near_miss_distance_m"), outSettings.Lidar.ObstacleWarningDistanceM);
+		ReadOptionalRobotProfileNumberField(
+			*lidarObject,
+			TEXT("near_obstacle_warning_distance_m"),
+			outSettings.Lidar.ObstacleWarningDistanceM);
+		ReadOptionalRobotProfileNumberField(
+			*lidarObject,
+			TEXT("obstacle_warning_distance_m"),
+			outSettings.Lidar.ObstacleWarningDistanceM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("slow_down_distance_m"), outSettings.Lidar.SlowDownDistanceM);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("angle_step_degree"), outSettings.Lidar.AngleStepDegree);
 		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("vertical_min_degree"), outSettings.Lidar.VerticalMinDegree);
@@ -1180,6 +1199,7 @@ bool UPlatformUiSubsystem::SaveRobotProfileForProject(
 	lidarObject->SetNumberField(TEXT("sensor_right_offset_m"), settings.Lidar.SensorRightOffsetM);
 	lidarObject->SetNumberField(TEXT("front_half_angle_degree"), settings.Lidar.FrontHalfAngleDegree);
 	lidarObject->SetNumberField(TEXT("stop_distance_m"), settings.Lidar.StopDistanceM);
+	lidarObject->SetNumberField(TEXT("obstacle_warning_distance_m"), settings.Lidar.ObstacleWarningDistanceM);
 	lidarObject->SetNumberField(TEXT("slow_down_distance_m"), settings.Lidar.SlowDownDistanceM);
 	lidarObject->SetNumberField(TEXT("angle_step_degree"), settings.Lidar.AngleStepDegree);
 	lidarObject->SetNumberField(TEXT("vertical_min_degree"), settings.Lidar.VerticalMinDegree);

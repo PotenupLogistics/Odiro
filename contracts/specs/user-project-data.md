@@ -174,11 +174,14 @@ schema:
 
 | Field                       | Type    | 의미                                                                        |
 | --------------------------- | ------- | --------------------------------------------------------------------------- |
-| `mode`                      | string  | LiDAR mode. `OneD`, `TwoD`, `ThreeD`, `OneDAndTwoD`, `TwoDAndThreeD`, `All` |
+| `mode`                      | string  | LiDAR mode. `OneD`, `TwoD`, `ThreeD`, `OusterOS1`, `OneDAndTwoD`, `TwoDAndThreeD`, `All` |
 | `range_m`                   | number  | LiDAR 감지 거리                                                             |
 | `angle_step_degree`         | number  | ray 간 yaw 간격                                                             |
 | `height_m`                  | number  | ray 시작 높이                                                               |
 | `front_half_angle_degree`   | number  | 전방 장애물 판정 half angle                                                 |
+| `stop_distance_m`           | number  | 정지 판정 거리                                                              |
+| `obstacle_warning_distance_m` | number | RePath 전방 장애물 판정 거리                                                |
+| `slow_down_distance_m`      | number  | 감속 거리                                                                   |
 | `vertical_min_degree`       | number  | 3D LiDAR 최소 pitch                                                         |
 | `vertical_max_degree`       | number  | 3D LiDAR 최대 pitch                                                         |
 | `vertical_step_degree`      | number  | 3D LiDAR pitch 간격                                                         |
@@ -197,6 +200,8 @@ schema:
 | `OneDAndTwoD` | 1D와 2D scan 함께 사용 |
 | `TwoDAndThreeD` | 2D와 3D scan 함께 사용 |
 | `All` | 1D, 2D, 3D scan 함께 사용 |
+
+`OusterOS1` is accepted as an Ouster OS1-style rotating 3D scan mode. It emits the existing `rays_3d` contract rather than a model-specific ray array.
 
 `robot.lidar.point_cloud` field:
 
@@ -721,6 +726,8 @@ line schema:
 | `hit_location_cm` | object or null | Unreal world hit 위치. miss면 `null` |
 | `target_id` | string or null | 감지된 semantic target id. miss 또는 조인 실패면 `null` |
 | `target_tags` | string[] | 감지된 target tag 목록 |
+
+For model-specific 3D LiDAR modes such as `OusterOS1`, `rays_3d[]` may also include `channel_index`, `column_index`, `relative_time_seconds`, and `sensor_model`.
 
 `policy_ray_selection` field:
 

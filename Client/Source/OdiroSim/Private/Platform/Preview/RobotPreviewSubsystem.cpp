@@ -19,6 +19,7 @@ namespace
 	constexpr float RobotPreviewCameraFovDegrees = 48.0f;
 	constexpr float RobotPreviewMaxViewportFocusOffsetNdc = 0.85f;
 	constexpr float RobotPreviewMinViewportAspectRatio = 0.1f;
+	constexpr double RobotPreviewLidarAnimationIntervalSeconds = 1.0 / 24.0;
 
 	const TCHAR* ResolveRobotPreviewDensityLabel(const ERobotPreviewLidarDisplayDensity Density)
 	{
@@ -86,6 +87,7 @@ bool URobotPreviewSubsystem::StartPreview(UObject* Owner, const FRobotProfileSet
 	{
 		ScheduleDeferredCaptures();
 	}
+	RefreshLidarPreviewAnimationTimer();
 	RefreshStatusText();
 	return true;
 }
@@ -122,6 +124,7 @@ bool URobotPreviewSubsystem::ApplyPreviewSettings(const FRobotProfileSettings& S
 		return false;
 	}
 	RefreshPreviewView();
+	RefreshLidarPreviewAnimationTimer();
 	RefreshStatusText();
 	return true;
 }
@@ -135,6 +138,7 @@ bool URobotPreviewSubsystem::DrawLidarPreviewRays()
 
 	PreviewSceneActor->DrawLidarPreviewRays();
 	RefreshPreviewView();
+	RefreshLidarPreviewAnimationTimer();
 	RefreshStatusText();
 	return true;
 }
@@ -147,6 +151,7 @@ void URobotPreviewSubsystem::SetLidarDisplayOptions(const FRobotPreviewLidarDisp
 		PreviewSceneActor->SetLidarDisplayOptions(LidarDisplayOptions);
 		RefreshPreviewView();
 	}
+	RefreshLidarPreviewAnimationTimer();
 	RefreshStatusText();
 }
 
@@ -157,6 +162,7 @@ void URobotPreviewSubsystem::ClearLidarPreviewRays()
 		PreviewSceneActor->ClearLidarPreviewRays();
 		RefreshPreviewView();
 	}
+	RefreshLidarPreviewAnimationTimer();
 	RefreshStatusText();
 }
 
@@ -588,6 +594,49 @@ void URobotPreviewSubsystem::RefreshPreviewView()
 	UpdatePlayerViewportView();
 }
 
+void URobotPreviewSubsystem::RefreshLidarPreviewAnimationTimer()
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	const bool bShouldAnimate =
+		IsValid(PreviewSceneActor)
+		&& PreviewSceneActor->ShouldAnimateLidarPreview();
+	FTimerManager& TimerManager = World->GetTimerManager();
+	if (!bShouldAnimate)
+	{
+		TimerManager.ClearTimer(LidarPreviewAnimationTimerHandle);
+		return;
+	}
+
+	if (TimerManager.IsTimerActive(LidarPreviewAnimationTimerHandle))
+	{
+		return;
+	}
+
+	TimerManager.SetTimer(
+		LidarPreviewAnimationTimerHandle,
+		this,
+		&URobotPreviewSubsystem::HandleLidarPreviewAnimationTick,
+		static_cast<float>(RobotPreviewLidarAnimationIntervalSeconds),
+		true);
+}
+
+void URobotPreviewSubsystem::HandleLidarPreviewAnimationTick()
+{
+	if (!IsValid(PreviewSceneActor) || !PreviewSceneActor->ShouldAnimateLidarPreview())
+	{
+		RefreshLidarPreviewAnimationTimer();
+		return;
+	}
+
+	PreviewSceneActor->AdvanceLidarPreviewAnimation(RobotPreviewLidarAnimationIntervalSeconds);
+	RefreshPreviewView();
+}
+
 void URobotPreviewSubsystem::InitializeCameraViewFromPreviewBounds()
 {
 	if (bCameraViewInitialized || !IsValid(PreviewSceneActor))
@@ -668,6 +717,11 @@ void URobotPreviewSubsystem::RestorePreviousViewTarget()
 
 void URobotPreviewSubsystem::CleanupPreviewResources()
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(LidarPreviewAnimationTimerHandle);
+	}
+
 	RestorePreviousViewTarget();
 
 	if (IsValid(PreviewCaptureActor))

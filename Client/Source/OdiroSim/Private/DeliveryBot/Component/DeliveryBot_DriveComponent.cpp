@@ -8,6 +8,9 @@ namespace
 	constexpr float KMH_TO_CMS = 27.777778f;
 	// Forward-only drive allows tiny numerical noise but removes real backward drift.
 	constexpr float REVERSE_VELOCITY_CLAMP_TOLERANCE_CMS = 1.f;
+	// Target tracking uses coast-only overspeed handling to avoid repeated low-speed brake pulses.
+	constexpr float TARGET_SPEED_THROTTLE_DEADBAND_MIN_KMH = 0.1f;
+	constexpr float TARGET_SPEED_THROTTLE_DEADBAND_MAX_KMH = 0.5f;
 }
 
 // 드라이브 컴포넌트의 기본 Tick 설정을 초기화한다.
@@ -40,6 +43,13 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 		CurrentThrottleInput = 0.f;
 
 		const float requestedBrake = FMath::Clamp(effectiveMoveCommandInfo.Brake, 0.f, 1.f);
+		LastRequestedTargetSpeedKmh = 0.f;
+		LastCurrentForwardSpeedKmh = GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed());
+		LastSpeedErrorKmh = -FMath::Abs(LastCurrentForwardSpeedKmh);
+		LastRequestedBrake = requestedBrake;
+		LastSpeedLimitKmh = targetMaxSpeedKmh;
+		bLastTargetSpeedOverspeed = false;
+
 		const bool bForwardCommandRollingBackward = targetGear > 0;
 		const float targetBrake = bForwardCommandRollingBackward
 			? 1.f
@@ -82,12 +92,26 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 		safeDeltaTime,
 		speedInterpRateKmhPerSecond);
 
-	const float currentSpeedKmh = FMath::Abs(GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed()));
+	LastRequestedTargetSpeedKmh = requestedTargetSpeedKmh;
+	LastCurrentForwardSpeedKmh = GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed());
+	LastSpeedLimitKmh = targetMaxSpeedKmh;
+
+	const float currentSpeedKmh = FMath::Abs(LastCurrentForwardSpeedKmh);
 	const float speedErrorKmh = CurrentTargetSpeedKmh - currentSpeedKmh;
 	const float speedControlRangeKmh = FMath::Max(DriveConfigInfo.SlowdownSpeedRangeKmh, 0.1f);
+	const float targetSpeedThrottleDeadbandKmh = FMath::Clamp(
+		DriveConfigInfo.SpeedLimitToleranceKmh,
+		TARGET_SPEED_THROTTLE_DEADBAND_MIN_KMH,
+		TARGET_SPEED_THROTTLE_DEADBAND_MAX_KMH);
 
-	float throttle = FMath::Clamp(speedErrorKmh / speedControlRangeKmh, 0.f, 1.f);
+	float throttle = speedErrorKmh > targetSpeedThrottleDeadbandKmh
+		? FMath::Clamp((speedErrorKmh - targetSpeedThrottleDeadbandKmh) / speedControlRangeKmh, 0.f, 1.f)
+		: 0.f;
 	float brake = FMath::Clamp(effectiveMoveCommandInfo.Brake, 0.f, 1.f);
+	LastSpeedErrorKmh = speedErrorKmh;
+	LastRequestedBrake = brake;
+	bLastTargetSpeedOverspeed =
+		!effectiveMoveCommandInfo.bBrake && speedErrorKmh < -targetSpeedThrottleDeadbandKmh;
 
 	if (effectiveMoveCommandInfo.bBrake)
 	{
@@ -97,11 +121,6 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 			CurrentThrottleInput = 0.f;
 			CurrentBrakeInput = brake;
 		}
-	}
-	else if (speedErrorKmh < -DriveConfigInfo.SpeedLimitToleranceKmh)
-	{
-		const float overspeedBrake = FMath::Clamp(-speedErrorKmh / speedControlRangeKmh, 0.f, 1.f);
-		brake = FMath::Max(brake, FMath::Min(overspeedBrake, DriveConfigInfo.SpeedLimitBrake));
 	}
 
 	const bool bRollingBackward = vehicleMovement->GetForwardSpeed() < -REVERSE_VELOCITY_CLAMP_TOLERANCE_CMS;
@@ -129,6 +148,17 @@ void UDeliveryBot_DriveComponent::ApplyParkingStop(UChaosVehicleMovementComponen
 	CurrentBrakeInput = 1.f;
 	CurrentSteeringInput = 0.f;
 	CurrentTargetSpeedKmh = 0.f;
+	LastRequestedTargetSpeedKmh = 0.f;
+	LastCurrentForwardSpeedKmh = GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed());
+	LastSpeedErrorKmh = -FMath::Abs(LastCurrentForwardSpeedKmh);
+	LastRequestedBrake = 1.f;
+	LastTargetThrottle = 0.f;
+	LastTargetBrake = 1.f;
+	LastLimitedThrottle = 0.f;
+	LastSpeedLimitKmh = DriveConfigInfo.MaxSpeedKmh;
+	bLastSpeedLimitBrakeApplied = false;
+	bLastTargetSpeedOverspeed = false;
+	bLastHandbrake = true;
 
 	vehicleMovement->SetUseAutomaticGears(false);
 	vehicleMovement->SetTargetGear(1, true);
@@ -157,6 +187,12 @@ void UDeliveryBot_DriveComponent::ApplyPolicyTimeoutSlowStop(
 		0.f,
 		safeDeltaTime,
 		DriveConfigInfo.DecelerationRateKmhPerSecond);
+	LastRequestedTargetSpeedKmh = 0.f;
+	LastCurrentForwardSpeedKmh = GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed());
+	LastSpeedErrorKmh = CurrentTargetSpeedKmh - FMath::Abs(LastCurrentForwardSpeedKmh);
+	LastRequestedBrake = 1.f;
+	LastSpeedLimitKmh = DriveConfigInfo.MaxSpeedKmh;
+	bLastTargetSpeedOverspeed = false;
 
 	vehicleMovement->SetUseAutomaticGears(false);
 	if (!bBrakeBeforeGearSwitch)
@@ -240,14 +276,27 @@ void UDeliveryBot_DriveComponent::ApplyDriveInput(
 	const float currentSpeedCmS = FMath::Abs(vehicleMovement->GetForwardSpeed());
 	const float speedLimitCmS = GetKmhToCmPerSecond(speedLimitKmh);
 	const float speedToleranceCmS = GetKmhToCmPerSecond(DriveConfigInfo.SpeedLimitToleranceKmh);
+	bool bSpeedLimitBrakeApplied = false;
 
 	if (currentSpeedCmS > speedLimitCmS + speedToleranceCmS)
 	{
 		targetBrake = FMath::Max(targetBrake, DriveConfigInfo.SpeedLimitBrake);
+		bSpeedLimitBrakeApplied = true;
 	}
 
 	const float targetSteering = FMath::Clamp(steering, -1.f, 1.f);
 	const float targetThrottle = targetBrake > KINDA_SMALL_NUMBER ? 0.f : limitedThrottle;
+	const bool bResolvedHandbrake =
+		bHandbrake
+		|| targetBrake >= 1.f - KINDA_SMALL_NUMBER
+		|| vehicleMovement->GetForwardSpeed() < -REVERSE_VELOCITY_CLAMP_TOLERANCE_CMS;
+
+	LastLimitedThrottle = limitedThrottle;
+	LastTargetThrottle = targetThrottle;
+	LastTargetBrake = targetBrake;
+	LastSpeedLimitKmh = speedLimitKmh;
+	bLastSpeedLimitBrakeApplied = bSpeedLimitBrakeApplied;
+	bLastHandbrake = bResolvedHandbrake;
 
 	CurrentThrottleInput = FMath::FInterpConstantTo(
 		CurrentThrottleInput,
@@ -270,10 +319,7 @@ void UDeliveryBot_DriveComponent::ApplyDriveInput(
 	vehicleMovement->SetThrottleInput(CurrentThrottleInput);
 	vehicleMovement->SetSteeringInput(CurrentSteeringInput);
 	vehicleMovement->SetBrakeInput(CurrentBrakeInput);
-	vehicleMovement->SetHandbrakeInput(
-		bHandbrake
-		|| targetBrake >= 1.f - KINDA_SMALL_NUMBER
-		|| vehicleMovement->GetForwardSpeed() < -REVERSE_VELOCITY_CLAMP_TOLERANCE_CMS);
+	vehicleMovement->SetHandbrakeInput(bResolvedHandbrake);
 
 	ClampReverseLinearVelocity(vehicleMovement);
 }
@@ -334,6 +380,17 @@ FDeliveryBotDriveRuntimeSnapshot UDeliveryBot_DriveComponent::GetRuntimeSnapshot
 	Snapshot.Brake = CurrentBrakeInput;
 	Snapshot.Steering = CurrentSteeringInput;
 	Snapshot.TargetSpeedKmh = CurrentTargetSpeedKmh;
+	Snapshot.RequestedTargetSpeedKmh = LastRequestedTargetSpeedKmh;
+	Snapshot.CurrentForwardSpeedKmh = LastCurrentForwardSpeedKmh;
+	Snapshot.SpeedErrorKmh = LastSpeedErrorKmh;
+	Snapshot.RequestedBrake = LastRequestedBrake;
+	Snapshot.TargetThrottle = LastTargetThrottle;
+	Snapshot.TargetBrake = LastTargetBrake;
+	Snapshot.LimitedThrottle = LastLimitedThrottle;
+	Snapshot.SpeedLimitKmh = LastSpeedLimitKmh;
+	Snapshot.bSpeedLimitBrakeApplied = bLastSpeedLimitBrakeApplied;
+	Snapshot.bTargetSpeedOverspeed = bLastTargetSpeedOverspeed;
+	Snapshot.bHandbrake = bLastHandbrake;
 	return Snapshot;
 }
 

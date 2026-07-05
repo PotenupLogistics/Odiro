@@ -122,6 +122,11 @@ def parse_actor_tags(data: dict) -> list[str]:
     return [str(actor_tag) for actor_tag in actor_tags]
 
 
+# LiDAR hit가 정책 장애물 판단에 포함되는지 파싱한다.
+def parse_blocks_policy(data: dict) -> bool:
+    return bool(data.get("blocksPolicy", data.get("blocks_policy", True)))
+
+
 # Unreal vector JSON을 cm 단위 dict로 변환한다.
 def parse_vector_cm(data: object) -> dict[str, float] | None:
     if not isinstance(data, dict):
@@ -142,6 +147,7 @@ def parse_legacy_lidar_ray(data: dict) -> LidarRay:
     return LidarRay(
         hit=bool(data.get("hit", False)),
         distanceM=float(data.get("distanceM", 0.0)),
+        blocksPolicy=parse_blocks_policy(data),
         rayIndex=data.get("rayIndex"),
         rayYawDegree=float(data.get("rayYawDegree", data.get("yawDegree", 0.0))),
         actorName=data.get("actorName"),
@@ -154,6 +160,7 @@ def parse_lidar_ray_1d(data: dict) -> LidarRay1D:
     return LidarRay1D(
         hit=bool(data.get("hit", False)),
         distanceM=float(data.get("distanceM", 0.0)),
+        blocksPolicy=parse_blocks_policy(data),
         rayIndex=data.get("rayIndex"),
         actorName=data.get("actorName"),
         actorTags=parse_actor_tags(data),
@@ -165,6 +172,7 @@ def parse_lidar_ray_2d(data: dict) -> LidarRay2D:
     return LidarRay2D(
         hit=bool(data.get("hit", False)),
         distanceM=float(data.get("distanceM", 0.0)),
+        blocksPolicy=parse_blocks_policy(data),
         yawDegree=float(data.get("yawDegree", data.get("rayYawDegree", 0.0))),
         rayIndex=data.get("rayIndex"),
         actorName=data.get("actorName"),
@@ -177,9 +185,14 @@ def parse_lidar_ray_3d(data: dict) -> LidarRay3D:
     return LidarRay3D(
         hit=bool(data.get("hit", False)),
         distanceM=float(data.get("distanceM", 0.0)),
+        blocksPolicy=parse_blocks_policy(data),
         yawDegree=float(data.get("yawDegree", data.get("rayYawDegree", 0.0))),
         pitchDegree=float(data.get("pitchDegree", data.get("rayPitchDegree", 0.0))),
         rayIndex=data.get("rayIndex"),
+        channelIndex=data.get("channelIndex"),
+        columnIndex=data.get("columnIndex"),
+        relativeTimeSeconds=float(data.get("relativeTimeSeconds", 0.0)),
+        sensorModel=str(data.get("sensorModel") or ""),
         actorName=data.get("actorName"),
         actorTags=parse_actor_tags(data),
         hitLocationCm=parse_vector_cm(data.get("hitLocationCm")),
@@ -196,6 +209,17 @@ def parse_lidar_ray_array(values: object, parse_ray) -> list:
         for ray_data in values
         if isinstance(ray_data, dict)
     ]
+
+
+# Optional integer LiDAR metadata를 파싱한다.
+def parse_optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # typed LiDAR observation 입력을 구조체로 변환한다.
@@ -217,6 +241,9 @@ def parse_lidar_observation(data: dict) -> LidarObservation:
         rays1d=parse_lidar_ray_array(lidar_data.get("rays1d", []), parse_lidar_ray_1d),
         rays2d=parse_lidar_ray_array(lidar_data.get("rays2d", []), parse_lidar_ray_2d),
         rays3d=parse_lidar_ray_array(lidar_data.get("rays3d", []), parse_lidar_ray_3d),
+        rawRays3dCount=parse_optional_int(lidar_data.get("rawRays3dCount")),
+        transmittedRays3dCount=parse_optional_int(lidar_data.get("transmittedRays3dCount")),
+        rays3dCompacted=bool(lidar_data.get("rays3dCompacted", False)),
     )
 
 

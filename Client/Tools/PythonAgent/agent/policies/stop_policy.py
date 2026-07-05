@@ -190,6 +190,9 @@ class StopPolicy:
         return "LidarObstacleWarning"
 
     def is_ignored_lidar_policy_ray(self, ray) -> bool:
+        if not getattr(ray, "blocksPolicy", True):
+            return True
+
         actor_name = ray.actorName or ""
         actor_tags = ray.actorTags or []
         return actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0

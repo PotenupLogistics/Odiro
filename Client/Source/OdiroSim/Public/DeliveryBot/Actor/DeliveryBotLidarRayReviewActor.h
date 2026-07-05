@@ -109,6 +109,10 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarStopRangeRingInstances;
 
+	// Beam instances for the obstacle-warning distance ring.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarObstacleWarningRangeRingInstances;
+
 	// Beam instances that draw the slowdown threshold as front-facing rays.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarSlowRangeRayInstances;
@@ -116,6 +120,10 @@ private:
 	// Beam instances that draw the stop threshold as front-facing rays.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarStopRangeRayInstances;
+
+	// Beam instances that draw the obstacle-warning threshold as front-facing rays.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarObstacleWarningRangeRayInstances;
 
 	// Beam instances for front-half-angle boundary lines.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")

@@ -283,7 +283,7 @@ private:
 
 	// Maximum point count loaded from one xyz file.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud", meta = (ClampMin = "1"))
-	int32 MaxPointCount{ 10000000 };
+	int32 MaxPointCount{ INT_MAX };
 
 	// Whether to draw debug color points in addition to plugin rendering.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|Debug")

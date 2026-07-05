@@ -4,6 +4,7 @@
 #include "Platform/Preview/RobotPreviewSceneActor.h"
 #include "Platform/RobotProfileSettings.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "TimerManager.h"
 #include "RobotPreviewSubsystem.generated.h"
 
 class UTextureRenderTarget2D;
@@ -118,6 +119,12 @@ private:
 	// Updates the active preview backend after scene, camera, or overlay state changes.
 	void RefreshPreviewView();
 
+	// Starts or stops preview-only LiDAR animation based on the current mode and visibility.
+	void RefreshLidarPreviewAnimationTimer();
+
+	// Advances OS1 preview ray sweep animation from the timer.
+	void HandleLidarPreviewAnimationTick();
+
 	// Initializes camera distance once from the current preview bounds.
 	void InitializeCameraViewFromPreviewBounds();
 
@@ -203,6 +210,9 @@ private:
 
 	// Far-away world offset that isolates preview actors from gameplay actors.
 	FVector PreviewWorldOffset = FVector(650000.0, 0.0, 0.0);
+
+	// Repeating timer used only while an animated LiDAR preview mode is visible.
+	FTimerHandle LidarPreviewAnimationTimerHandle;
 
 	// User-facing status shown over the preview render target.
 	FString StatusText = TEXT("Preview 준비 중");

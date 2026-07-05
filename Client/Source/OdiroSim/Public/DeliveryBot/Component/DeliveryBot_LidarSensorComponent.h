@@ -87,7 +87,11 @@ private:
 		const FVector& startLocationCm,
 		const FVector& endLocationCm,
 		const FHitResult* hitResult,
-		const TArray<FHitResult>& rawHitResults) const;
+		const TArray<FHitResult>& rawHitResults,
+		bool bDrawMissRayLine) const;
+
+	// Keeps model-specific debug rendering readable without changing captured scan data.
+	bool ShouldDrawDebugLidarRay(const FDeliveryBotLidarRaySample& raySample) const;
 
 	// Python과 point cloud로 전달되는 LiDAR hit world location을 누적 점으로 표시한다.
 	void DrawAccumulatedHitLocationDebug(const FVector& hitLocationCm, bool bObstacleHit) const;

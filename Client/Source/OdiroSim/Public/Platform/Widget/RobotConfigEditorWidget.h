@@ -464,6 +464,14 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseSliderWidget> LidarStopDistanceSlider;
 
+	// robot.lidar.obstacle_warning_distance_m input.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableText> LidarObstacleWarningDistanceInput;
+
+	// robot.lidar.obstacle_warning_distance_m slider.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseSliderWidget> LidarObstacleWarningDistanceSlider;
+
 	// robot.lidar.slow_down_distance_m input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableText> LidarSlowDownDistanceInput;

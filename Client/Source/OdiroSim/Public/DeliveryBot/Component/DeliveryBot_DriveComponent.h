@@ -29,6 +29,50 @@ struct FDeliveryBotDriveRuntimeSnapshot
 	// Smoothed target speed currently used by drive control.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
 	float TargetSpeedKmh = 0.0f;
+
+	// Policy-requested target speed before drive-side interpolation.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	float RequestedTargetSpeedKmh = 0.0f;
+
+	// Current signed forward speed sampled from Chaos movement.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	float CurrentForwardSpeedKmh = 0.0f;
+
+	// Difference between smoothed target speed and current absolute speed.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	float SpeedErrorKmh = 0.0f;
+
+	// Brake value requested by policy before drive-side overrides.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	float RequestedBrake = 0.0f;
+
+	// Unsmooth throttle target resolved by drive control.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	float TargetThrottle = 0.0f;
+
+	// Unsmooth brake target resolved by drive control.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	float TargetBrake = 0.0f;
+
+	// Throttle target after hard speed-limit clipping.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	float LimitedThrottle = 0.0f;
+
+	// Hard speed limit used by the last drive input application.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	float SpeedLimitKmh = 0.0f;
+
+	// True when the hard speed limit, not target tracking, requested braking.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	bool bSpeedLimitBrakeApplied = false;
+
+	// True when the vehicle is over the target speed and coasting instead of braking.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	bool bTargetSpeedOverspeed = false;
+
+	// Handbrake state requested by the last drive input application.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
+	bool bHandbrake = false;
 };
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
@@ -82,6 +126,28 @@ protected:
 	float CurrentSteeringInput{ 0.f };
 	// Smoothed target speed used by the speed controller.
 	float CurrentTargetSpeedKmh{ 0.f };
+	// Last policy-requested target speed used for drive diagnostics.
+	float LastRequestedTargetSpeedKmh{ 0.f };
+	// Last signed Chaos forward speed used for drive diagnostics.
+	float LastCurrentForwardSpeedKmh{ 0.f };
+	// Last target-speed error used for drive diagnostics.
+	float LastSpeedErrorKmh{ 0.f };
+	// Last policy-requested brake value used for drive diagnostics.
+	float LastRequestedBrake{ 0.f };
+	// Last unsmoothed throttle target used for drive diagnostics.
+	float LastTargetThrottle{ 0.f };
+	// Last unsmoothed brake target used for drive diagnostics.
+	float LastTargetBrake{ 0.f };
+	// Last hard-limit-clipped throttle target used for drive diagnostics.
+	float LastLimitedThrottle{ 0.f };
+	// Last hard speed limit used for drive diagnostics.
+	float LastSpeedLimitKmh{ 0.f };
+	// Whether the last drive update applied a hard speed-limit brake.
+	bool bLastSpeedLimitBrakeApplied{ false };
+	// Whether the last drive update was over target speed and coasting.
+	bool bLastTargetSpeedOverspeed{ false };
+	// Whether the last drive update requested the handbrake.
+	bool bLastHandbrake{ false };
 
 private:
 	// Removes backward physics velocity introduced by braking or collision impulses.

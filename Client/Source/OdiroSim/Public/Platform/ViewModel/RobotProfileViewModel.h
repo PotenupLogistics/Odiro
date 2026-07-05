@@ -190,6 +190,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
 	float GetLidarStopDistanceM() const { return LidarStopDistanceM; }
 
+	// Updates the LiDAR obstacle warning distance input in meters.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
+	void SetLidarObstacleWarningDistanceM(float value);
+
+	// Returns the LiDAR obstacle warning distance input in meters.
+	UFUNCTION(BlueprintPure, Category = "Platform|RobotProfile")
+	float GetLidarObstacleWarningDistanceM() const { return LidarObstacleWarningDistanceM; }
+
 	// Updates the LiDAR slowdown distance input in meters.
 	UFUNCTION(BlueprintCallable, Category = "Platform|RobotProfile")
 	void SetLidarSlowDownDistanceM(float value);
@@ -341,6 +349,10 @@ private:
 	// robot.lidar.stop_distance_m input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
 	float LidarStopDistanceM = 2.00f;
+
+	// robot.lidar.obstacle_warning_distance_m input state.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))
+	float LidarObstacleWarningDistanceM = 8.00f;
 
 	// robot.lidar.slow_down_distance_m input state.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|RobotProfile", meta = (AllowPrivateAccess = "true"))

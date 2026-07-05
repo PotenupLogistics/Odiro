@@ -30,6 +30,9 @@ def get_front_lidar_min_distance_text(request: ScenarioDecideRequest, front_angl
 
 # LiDAR 정책 ray가 ground hit으로 무시되어야 하는지 판단한다.
 def is_ignored_lidar_policy_ray(ray) -> bool:
+    if not getattr(ray, "blocksPolicy", True):
+        return True
+
     actor_name = ray.actorName or ""
     actor_tags = ray.actorTags or []
     return actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0

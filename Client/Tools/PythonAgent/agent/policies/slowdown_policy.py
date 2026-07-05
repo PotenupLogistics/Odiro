@@ -31,6 +31,9 @@ class SlowDownPolicy:
             if not ray.hit:
                 continue
 
+            if not getattr(ray, "blocksPolicy", True):
+                continue
+
             if abs(normalize_angle_degree(ray.rayYawDegree)) > self.frontAngleDegree:
                 continue
 

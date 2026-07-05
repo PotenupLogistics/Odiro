@@ -200,6 +200,35 @@ bool FDeliveryBotProfileJsonCompileContractTest::RunTest(const FString& paramete
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDeliveryBotProfileJsonCompileOusterOS1Test,
+	"OdiroSim.DeliveryBot.Profile.Json.CompileOusterOS1",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDeliveryBotProfileJsonCompileOusterOS1Test::RunTest(const FString& parameters)
+{
+	const FString profileJson =
+		TEXT("{")
+		TEXT("\"schema\":\"simulation_profile\",")
+		TEXT("\"version\":1,")
+		TEXT("\"robot\":{")
+		TEXT("\"lidar\":{\"lidar_mode\":\"ouster_os1\",\"range_m\":15.0,\"scan_rate_hz\":10.0}")
+		TEXT("}")
+		TEXT("}");
+
+	const UDeliveryBotSetupCompiler* deliveryBotCompiler = NewObject<UDeliveryBotSetupCompiler>();
+	const FDeliveryBotSetupCompileResult result =
+		deliveryBotCompiler->CompileDeliveryBotSetupFromJsonString(profileJson);
+
+	TestTrue(TEXT("OS1 profile compiles"), result.bSuccess);
+	TestEqual(TEXT("OS1 diagnostics"), result.Diagnostics.Num(), 0);
+	TestEqual(
+		TEXT("OS1 lidar mode"),
+		result.SetupInfo.LidarSensorConfigInfo.LidarModeType,
+		EDeliveryBotLidarModeType::OusterOS1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSimulationSetupJsonValidationTest,
 	"OdiroSim.SimulationSetup.Json.Validation",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

@@ -12,7 +12,8 @@ enum class EDeliveryBotLidarModeType : uint8
 	ThreeD,
 	OneDAndTwoD,
 	TwoDAndThreeD,
-	All
+	All,
+	OusterOS1
 };
 
 // LiDAR ray가 어떤 scan 방식에서 생성됐는지 구분한다.(즉, Ray 구분)
@@ -127,6 +128,22 @@ public:
 	// 로봇 기준 ray의 수직 각도.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float RayPitchDegree{ 0.f };
+
+	// Vertical scan channel for model-specific 3D LiDAR patterns.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 ChannelIndex{ INDEX_NONE };
+
+	// Horizontal scan column for rotating 3D LiDAR patterns.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 ColumnIndex{ INDEX_NONE };
+
+	// Per-ray offset from the start of the simulated sensor frame.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float RelativeTimeSeconds{ 0.f };
+
+	// Sensor model that produced this ray when a concrete LiDAR preset is active.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName SensorModel{};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float DistanceM{ 0.f };

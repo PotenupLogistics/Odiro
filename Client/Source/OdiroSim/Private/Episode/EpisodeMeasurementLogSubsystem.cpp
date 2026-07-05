@@ -3,6 +3,8 @@
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/Component/DeliveryBot_DriveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Episode/EpisodeLidarRayReplayRecorder.h"
@@ -13,12 +15,33 @@
 #include "Misc/Guid.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "Shared/EpisodeJsonlMeasurementWriter.h"
 #include "Shared/EpisodeLogSubjectRegistry.h"
 #include "Shared/UserProjectDataTypes.h"
 
 namespace
 {
+	TArray<TSharedPtr<FJsonValue>> MakeDriveDebugVectorArray(const FVector& Value)
+	{
+		TArray<TSharedPtr<FJsonValue>> Array;
+		Array.Reserve(3);
+		Array.Add(MakeShared<FJsonValueNumber>(Value.X));
+		Array.Add(MakeShared<FJsonValueNumber>(Value.Y));
+		Array.Add(MakeShared<FJsonValueNumber>(Value.Z));
+		return Array;
+	}
+
+	bool TrySerializeDriveDebugLine(const TSharedRef<FJsonObject>& Object, FString& OutJsonLine)
+	{
+		OutJsonLine.Reset();
+		const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&OutJsonLine);
+		return FJsonSerializer::Serialize(Object, Writer);
+	}
+
 	bool IsKnownMeasurementEventKind(const FString& Kind)
 	{
 		return Kind == TEXT("pedestrian_near_miss")
@@ -510,6 +533,7 @@ bool UEpisodeMeasurementLogSubsystem::StartProjectTraceLogging(const FString& Tr
 	bReportedMissingRobot = false;
 	NextProjectTraceSampleIndex = 0;
 	CurrentProjectTracePath = TraceJsonlPath;
+	StartProjectDriveDebugLogging(TraceDirectory);
 	SubjectRegistry = NewObject<UEpisodeLogSubjectRegistry>(this);
 	if (!IsValid(SubjectRegistry))
 	{
@@ -518,6 +542,7 @@ bool UEpisodeMeasurementLogSubsystem::StartProjectTraceLogging(const FString& Tr
 			TEXT("subject_registry_create_failed"),
 			TEXT("Failed to create project trace subject registry."));
 		CurrentProjectTracePath.Reset();
+		StopProjectDriveDebugLogging();
 		return false;
 	}
 
@@ -633,9 +658,55 @@ void UEpisodeMeasurementLogSubsystem::StopProjectReplayRecording()
 	}
 }
 
+bool UEpisodeMeasurementLogSubsystem::StartProjectDriveDebugLogging(const FString& EpisodeDirectory)
+{
+	StopProjectDriveDebugLogging();
+
+	FString normalizedDirectory = EpisodeDirectory.TrimStartAndEnd();
+	if (normalizedDirectory.IsEmpty())
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Warning,
+			TEXT("empty_project_drive_debug_directory"),
+			TEXT("Drive debug logging requires an episode directory."));
+		return false;
+	}
+	FPaths::NormalizeDirectoryName(normalizedDirectory);
+
+	if (!IFileManager::Get().MakeDirectory(*normalizedDirectory, true))
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Warning,
+			TEXT("project_drive_debug_directory_create_failed"),
+			FString::Printf(TEXT("Drive debug directory create failed: %s"), *normalizedDirectory));
+		return false;
+	}
+
+	const FString driveDebugPath = FPaths::Combine(normalizedDirectory, TEXT("drive_debug.jsonl"));
+	if (!FFileHelper::SaveStringToFile(FString(), *driveDebugPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Warning,
+			TEXT("project_drive_debug_file_create_failed"),
+			FString::Printf(TEXT("Drive debug file create failed: %s"), *driveDebugPath));
+		return false;
+	}
+
+	CurrentProjectDriveDebugPath = driveDebugPath;
+	NextProjectDriveDebugSampleIndex = 0;
+	return true;
+}
+
+void UEpisodeMeasurementLogSubsystem::StopProjectDriveDebugLogging()
+{
+	CurrentProjectDriveDebugPath.Reset();
+	NextProjectDriveDebugSampleIndex = 0;
+}
+
 void UEpisodeMeasurementLogSubsystem::StopProjectTraceLogging()
 {
 	StopProjectReplayRecording();
+	StopProjectDriveDebugLogging();
 
 	if (!bProjectTraceLogging)
 	{
@@ -730,7 +801,8 @@ bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
 	const FEpisodeMeasurementLogTickRecord TickRecord = BuildTickRecord(DeltaTime);
 	const bool bReplayOpen = ReplayRecorder && ReplayRecorder->IsOpen();
 	const bool bLidarRayReplayOpen = LidarRayReplayRecorder && LidarRayReplayRecorder->IsOpen();
-	ADeliveryBot* RobotActor = (bReplayOpen || bLidarRayReplayOpen) ? FindRobotActor() : nullptr;
+	const bool bDriveDebugOpen = IsProjectDriveDebugLogging();
+	ADeliveryBot* RobotActor = (bReplayOpen || bLidarRayReplayOpen || bDriveDebugOpen) ? FindRobotActor() : nullptr;
 	if (bReplayOpen)
 	{
 		TArray<FString> ReplayDiagnostics;
@@ -767,6 +839,11 @@ bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
 		}
 	}
 
+	if (bDriveDebugOpen)
+	{
+		WriteProjectDriveDebugTick(TickRecord, RobotActor);
+	}
+
 	TArray<FString> TraceDiagnostics;
 	const bool bWrote = FUserProjectRunOutputJson::AppendEpisodeTraceRecordToFile(
 		CurrentProjectTracePath,
@@ -789,6 +866,99 @@ bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
 	}
 
 	return bWrote;
+}
+
+bool UEpisodeMeasurementLogSubsystem::WriteProjectDriveDebugTick(
+	const FEpisodeMeasurementLogTickRecord& TickRecord,
+	ADeliveryBot* RobotActor)
+{
+	if (CurrentProjectDriveDebugPath.IsEmpty())
+	{
+		return false;
+	}
+
+	TSharedRef<FJsonObject> RootObject = MakeShared<FJsonObject>();
+	RootObject->SetNumberField(TEXT("sampleIndex"), NextProjectDriveDebugSampleIndex);
+	RootObject->SetNumberField(TEXT("worldTimeSeconds"), TickRecord.WorldTimeSeconds);
+	RootObject->SetNumberField(TEXT("deltaSeconds"), TickRecord.DeltaSeconds);
+
+	TSharedRef<FJsonObject> TruthObject = MakeShared<FJsonObject>();
+	TruthObject->SetArrayField(TEXT("positionCm"), MakeDriveDebugVectorArray(TickRecord.Robot.Truth.PositionCm));
+	TruthObject->SetArrayField(TEXT("velocityCmPerSecond"), MakeDriveDebugVectorArray(TickRecord.Robot.Truth.VelocityCmPerSecond));
+	TruthObject->SetNumberField(TEXT("speedKmh"), TickRecord.Robot.Truth.VelocityCmPerSecond.Size() * 0.036);
+	RootObject->SetObjectField(TEXT("truth"), TruthObject);
+
+	TSharedRef<FJsonObject> PolicyObject = MakeShared<FJsonObject>();
+	PolicyObject->SetNumberField(TEXT("targetSpeedKmh"), TickRecord.Robot.Action.TargetSpeedKmh);
+	PolicyObject->SetNumberField(TEXT("steering"), TickRecord.Robot.Action.Steering);
+	PolicyObject->SetNumberField(TEXT("brake"), TickRecord.Robot.Action.Brake);
+	PolicyObject->SetBoolField(TEXT("brakeApplied"), TickRecord.Robot.Action.bBrakeApplied);
+	PolicyObject->SetStringField(TEXT("reason"), TickRecord.Robot.Action.Reason);
+	RootObject->SetObjectField(TEXT("policy"), PolicyObject);
+
+	if (IsValid(RobotActor))
+	{
+		if (const UDeliveryBot_DriveComponent* DriveComponent =
+			RobotActor->FindComponentByClass<UDeliveryBot_DriveComponent>())
+		{
+			const FDeliveryBotDriveRuntimeSnapshot DriveSnapshot = DriveComponent->GetRuntimeSnapshot();
+			TSharedRef<FJsonObject> DriveObject = MakeShared<FJsonObject>();
+			DriveObject->SetNumberField(TEXT("targetSpeedKmh"), DriveSnapshot.TargetSpeedKmh);
+			DriveObject->SetNumberField(TEXT("requestedTargetSpeedKmh"), DriveSnapshot.RequestedTargetSpeedKmh);
+			DriveObject->SetNumberField(TEXT("currentForwardSpeedKmh"), DriveSnapshot.CurrentForwardSpeedKmh);
+			DriveObject->SetNumberField(TEXT("speedErrorKmh"), DriveSnapshot.SpeedErrorKmh);
+			DriveObject->SetNumberField(TEXT("requestedBrake"), DriveSnapshot.RequestedBrake);
+			DriveObject->SetNumberField(TEXT("throttle"), DriveSnapshot.Throttle);
+			DriveObject->SetNumberField(TEXT("brake"), DriveSnapshot.Brake);
+			DriveObject->SetNumberField(TEXT("steering"), DriveSnapshot.Steering);
+			DriveObject->SetNumberField(TEXT("targetThrottle"), DriveSnapshot.TargetThrottle);
+			DriveObject->SetNumberField(TEXT("targetBrake"), DriveSnapshot.TargetBrake);
+			DriveObject->SetNumberField(TEXT("limitedThrottle"), DriveSnapshot.LimitedThrottle);
+			DriveObject->SetNumberField(TEXT("speedLimitKmh"), DriveSnapshot.SpeedLimitKmh);
+			DriveObject->SetBoolField(TEXT("speedLimitBrakeApplied"), DriveSnapshot.bSpeedLimitBrakeApplied);
+			DriveObject->SetBoolField(TEXT("targetSpeedOverspeed"), DriveSnapshot.bTargetSpeedOverspeed);
+			DriveObject->SetBoolField(TEXT("handbrake"), DriveSnapshot.bHandbrake);
+			RootObject->SetObjectField(TEXT("drive"), DriveObject);
+		}
+		else
+		{
+			RootObject->SetField(TEXT("drive"), MakeShared<FJsonValueNull>());
+		}
+	}
+	else
+	{
+		RootObject->SetField(TEXT("drive"), MakeShared<FJsonValueNull>());
+	}
+
+	FString JsonLine;
+	if (!TrySerializeDriveDebugLine(RootObject, JsonLine))
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Warning,
+			TEXT("project_drive_debug_serialize_failed"),
+			TEXT("Drive debug JSON serialization failed."),
+			TickRecord.WorldTimeSeconds);
+		return false;
+	}
+
+	const bool bWrote = FFileHelper::SaveStringToFile(
+		JsonLine + LINE_TERMINATOR,
+		*CurrentProjectDriveDebugPath,
+		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM,
+		&IFileManager::Get(),
+		FILEWRITE_Append);
+	if (!bWrote)
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Warning,
+			TEXT("project_drive_debug_write_failed"),
+			FString::Printf(TEXT("Drive debug write failed: %s"), *CurrentProjectDriveDebugPath),
+			TickRecord.WorldTimeSeconds);
+		return false;
+	}
+
+	++NextProjectDriveDebugSampleIndex;
+	return true;
 }
 
 void UEpisodeMeasurementLogSubsystem::HandleProjectTraceTimerTick()

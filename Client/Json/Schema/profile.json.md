@@ -77,12 +77,15 @@ runs/<RunId>/snapshot/profile.json
 
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
-| `mode` | string | 예 | LiDAR mode. `OneD`, `TwoD`, `ThreeD`, `OneDAndTwoD`, `TwoDAndThreeD`, `All`. |
+| `mode` | string | 예 | LiDAR mode. `OneD`, `TwoD`, `ThreeD`, `OusterOS1`, `OneDAndTwoD`, `TwoDAndThreeD`, `All`. |
 | `scan_range_m` | number | 예 | LiDAR 감지 거리. 단위 m. |
 | `range_m` | number | 예 | LiDAR 감지 거리. 단위 m. |
 | `angle_step_degree` | number | 예 | Ray 간 yaw 간격. 단위 degree. |
 | `height_m` | number | 예 | Ray 시작 높이. 단위 m. |
 | `front_half_angle_degree` | number | 예 | 전방 장애물 판정 half angle. 단위 degree. |
+| `stop_distance_m` | number | 예 | 정지 판정 거리. 단위 m. |
+| `obstacle_warning_distance_m` | number | 예 | RePath 전방 장애물 판정 거리. 단위 m. |
+| `slow_down_distance_m` | number | 예 | 감속 거리. 단위 m. |
 | `vertical_min_degree` | number | 3D mode면 예 | 3D LiDAR 최소 pitch. 단위 degree. |
 | `vertical_max_degree` | number | 3D mode면 예 | 3D LiDAR 최대 pitch. 단위 degree. |
 | `vertical_step_degree` | number | 3D mode면 예 | 3D LiDAR pitch 간격. 단위 degree. |
@@ -101,6 +104,8 @@ runs/<RunId>/snapshot/profile.json
 | `OneDAndTwoD` | 1D와 2D scan 함께 사용. |
 | `TwoDAndThreeD` | 2D와 3D scan 함께 사용. |
 | `All` | 1D, 2D, 3D scan 함께 사용. |
+
+`OusterOS1` is accepted as an Ouster OS1-style rotating 3D scan mode. It emits the existing 3D LiDAR ray contract.
 
 ## robot.lidar.point_cloud
 

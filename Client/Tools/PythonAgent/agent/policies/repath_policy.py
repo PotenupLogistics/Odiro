@@ -2,12 +2,7 @@ import math
 
 from ..action import BotAction, stop_action
 from ..contract import GoalLocation, GridCell, GridMap, LidarRay, ScenarioDecideRequest
-from ..lidar_selector import (
-    convert_lidar_ray_1d_to_policy_ray,
-    convert_lidar_ray_2d_to_policy_ray,
-    convert_lidar_ray_3d_to_policy_ray,
-    get_policy_lidar_family,
-)
+from ..lidar_selector import select_policy_lidar_rays_2d
 from ..pathfinding.astar import AStarPathfinder
 from ..state import AgentState
 
@@ -535,35 +530,15 @@ class RePathPolicy:
 
         return min(front_rays, key=lambda ray: ray.distanceM)
 
-    # RePath는 선택된 LiDAR 차원의 raw hit ray를 직접 검사한다.
+    # RePath는 Stop/SlowDown과 같은 정책용 LiDAR 투영 결과를 사용한다.
     def get_repath_candidate_lidar_rays(self, request: ScenarioDecideRequest) -> list[LidarRay]:
-        family = get_policy_lidar_family(request)
-
-        if family == "1d":
-            return [
-                convert_lidar_ray_1d_to_policy_ray(ray)
-                for ray in request.lidar.rays1d
-            ]
-
-        if family == "2d":
-            return [
-                convert_lidar_ray_2d_to_policy_ray(ray)
-                for ray in request.lidar.rays2d
-            ]
-
-        if family == "3d":
-            return [
-                convert_lidar_ray_3d_to_policy_ray(ray)
-                for ray in request.lidar.rays3d
-            ]
-
-        if family == "legacy2d":
-            return list(request.lidarRays)
-
-        return []
+        return select_policy_lidar_rays_2d(request)
 
     # actorTags가 없는 LiDAR hit은 바닥으로 보고 기본 RePath 장애물 후보에서 제외한다.
     def is_ignored_lidar_policy_ray(self, ray: LidarRay) -> bool:
+        if not getattr(ray, "blocksPolicy", True):
+            return True
+
         actor_tags = ray.actorTags or []
         return len(actor_tags) == 0
 

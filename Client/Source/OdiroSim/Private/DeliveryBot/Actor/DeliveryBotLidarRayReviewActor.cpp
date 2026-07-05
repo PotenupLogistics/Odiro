@@ -29,6 +29,8 @@ namespace
 		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_3D.MI_RobotPreview_LidarRay_3D'");
 	const TCHAR* PreviewLidarFrontBoundaryMaterialPath =
 		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_Front.MI_RobotPreview_LidarRay_Front'");
+	const TCHAR* PreviewLidarObstacleWarningRangeRayMaterialPath =
+		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRay_ObstacleWarning.MI_RobotPreview_LidarRay_ObstacleWarning'");
 	const TCHAR* PreviewLidarScanRangeMaterialPath =
 		TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_RobotPreview_LidarRange_Max.MI_RobotPreview_LidarRange_Max'");
 	const TCHAR* PreviewLidarSlowRangeMaterialPath =
@@ -48,6 +50,8 @@ namespace
 	constexpr int32 StandardVisible2DRayBeams = 180;
 	constexpr int32 StandardVisible3DYawSamplesPerLayer = 36;
 	constexpr int32 StandardVisible3DPitchLayers = 9;
+	constexpr float OusterOS1ReplayVisibleSweepAngleDegree = 45.0f;
+	constexpr float OusterOS1ReplayMaxVisibleSpinHz = 1.0f;
 
 	// Loads optional preview materials without warning when a specific layer asset does not exist yet.
 	UMaterialInterface* LoadOptionalMaterial(const TCHAR* MaterialPath)
@@ -82,6 +86,7 @@ namespace
 		Config.SensorRightOffsetM = FMath::Clamp(Config.SensorRightOffsetM, -10.0f, 10.0f);
 		Config.FrontHalfAngleDegree = FMath::Clamp(Config.FrontHalfAngleDegree, 0.0f, 180.0f);
 		Config.StopDistanceM = FMath::Max(Config.StopDistanceM, 0.0f);
+		Config.ObstacleWarningDistanceM = FMath::Max(Config.ObstacleWarningDistanceM, 0.0f);
 		Config.SlowDownDistanceM = FMath::Max(Config.SlowDownDistanceM, 0.0f);
 		Config.VerticalMinDegree = FMath::Clamp(Config.VerticalMinDegree, -89.0f, 89.0f);
 		Config.VerticalMaxDegree = FMath::Clamp(Config.VerticalMaxDegree, -89.0f, 89.0f);
@@ -105,6 +110,51 @@ namespace
 
 		return Config;
 	}
+
+	// Returns whether an OS1 ray column belongs to the replay-time rotating debug sweep.
+	bool ShouldRenderReplayOusterOS1Ray(
+		const FDeliveryBotLidarSensorConfigInfo& Config,
+		const FDeliveryBotLidarRaySample& RaySample,
+		const double ReplayTimeSeconds)
+	{
+		if (!FDeliveryBotLidarRayPattern::IsOusterOS1Mode(Config.LidarModeType)
+			|| RaySample.ColumnIndex == INDEX_NONE)
+		{
+			return true;
+		}
+
+		const int32 ColumnCount = FDeliveryBotLidarRayPattern::CountYawSamples(Config);
+		if (ColumnCount <= 1)
+		{
+			return true;
+		}
+
+		const float ColumnAngleDegree = 360.0f / static_cast<float>(ColumnCount);
+		const float VisibleSweepAngleDegree = FMath::Clamp(
+			OusterOS1ReplayVisibleSweepAngleDegree,
+			ColumnAngleDegree,
+			360.0f);
+		const int32 VisibleColumnHalfWindow =
+			FMath::Max(1, FMath::CeilToInt(VisibleSweepAngleDegree * 0.5f / ColumnAngleDegree));
+		const float MaxGapFreeSpinHz =
+			FMath::Max(Config.ScanRateHz, 0.1f) * VisibleSweepAngleDegree / 360.0f;
+		const float VisibleSpinHz = FMath::Clamp(
+			MaxGapFreeSpinHz,
+			0.01f,
+			OusterOS1ReplayMaxVisibleSpinHz);
+		const double SafeReplayTimeSeconds =
+			FMath::IsFinite(ReplayTimeSeconds)
+				? FMath::Max(0.0, ReplayTimeSeconds)
+				: 0.0;
+		const float ScanPhase = FMath::Fmod(
+			static_cast<float>(SafeReplayTimeSeconds) * VisibleSpinHz,
+			1.0f);
+		const int32 ActiveColumnIndex =
+			FMath::FloorToInt(ScanPhase * static_cast<float>(ColumnCount)) % ColumnCount;
+		const int32 RawColumnDistance = FMath::Abs(RaySample.ColumnIndex - ActiveColumnIndex);
+		const int32 WrappedColumnDistance = FMath::Min(RawColumnDistance, ColumnCount - RawColumnDistance);
+		return WrappedColumnDistance <= VisibleColumnHalfWindow;
+	}
 }
 
 ADeliveryBotLidarRayReviewActor::ADeliveryBotLidarRayReviewActor()
@@ -126,10 +176,14 @@ ADeliveryBotLidarRayReviewActor::ADeliveryBotLidarRayReviewActor()
 		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarSlowRangeRingInstances"));
 	LidarStopRangeRingInstances =
 		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarStopRangeRingInstances"));
+	LidarObstacleWarningRangeRingInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarObstacleWarningRangeRingInstances"));
 	LidarSlowRangeRayInstances =
 		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarSlowRangeRayInstances"));
 	LidarStopRangeRayInstances =
 		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarStopRangeRayInstances"));
+	LidarObstacleWarningRangeRayInstances =
+		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarObstacleWarningRangeRayInstances"));
 	LidarFrontBoundaryInstances =
 		CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LidarFrontBoundaryInstances"));
 
@@ -164,6 +218,8 @@ ADeliveryBotLidarRayReviewActor::ADeliveryBotLidarRayReviewActor()
 	UMaterialInterface* SecondaryRayMaterial = LoadOptionalMaterial(PreviewLidarSecondaryRayMaterialPath);
 	UMaterialInterface* ThreeDRayMaterial = LoadOptionalMaterial(PreviewLidarThreeDRayMaterialPath);
 	UMaterialInterface* FrontBoundaryMaterial = LoadOptionalMaterial(PreviewLidarFrontBoundaryMaterialPath);
+	UMaterialInterface* ObstacleWarningRangeRayMaterial =
+		LoadOptionalMaterial(PreviewLidarObstacleWarningRangeRayMaterialPath);
 	UMaterialInterface* ScanRangeMaterial = LoadOptionalMaterial(PreviewLidarScanRangeMaterialPath);
 	UMaterialInterface* SlowRangeMaterial = LoadOptionalMaterial(PreviewLidarSlowRangeMaterialPath);
 	UMaterialInterface* StopRangeMaterial = LoadOptionalMaterial(PreviewLidarStopRangeMaterialPath);
@@ -196,11 +252,17 @@ ADeliveryBotLidarRayReviewActor::ADeliveryBotLidarRayReviewActor()
 		LidarStopRangeRingInstances,
 		ResolveMaterial(StopRangeMaterial, RangeFallback));
 	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarObstacleWarningRangeRingInstances,
+		ResolveMaterial(ObstacleWarningRangeRayMaterial, RangeFallback));
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
 		LidarSlowRangeRayInstances,
 		ResolveMaterial(SlowRangeRayMaterial, ResolveMaterial(SlowRangeMaterial, RangeFallback)));
 	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
 		LidarStopRangeRayInstances,
 		ResolveMaterial(StopRangeRayMaterial, ResolveMaterial(StopRangeMaterial, RangeFallback)));
+	FDeliveryBotLidarRayBeamRendering::ApplyBeamMaterial(
+		LidarObstacleWarningRangeRayInstances,
+		ResolveMaterial(ObstacleWarningRangeRayMaterial, RangeFallback));
 }
 
 void ADeliveryBotLidarRayReviewActor::ApplyLidarRayFrame(
@@ -219,8 +281,11 @@ void ADeliveryBotLidarRayReviewActor::ApplyLidarRayFrame(
 		SanitizeReplayLidarConfig(LidarConfig, RayFrame);
 	const float ScanRangeCm = FMath::Max(SafeConfig.ScanRangeM, 0.01f) * 100.0f;
 	const float StopDistanceCm = FMath::Clamp(SafeConfig.StopDistanceM * 100.0f, 0.0f, ScanRangeCm);
+	const float ObstacleWarningDistanceCm =
+		FMath::Clamp(SafeConfig.ObstacleWarningDistanceM * 100.0f, 0.0f, ScanRangeCm);
 	const float SlowDistanceCm = FMath::Clamp(SafeConfig.SlowDownDistanceM * 100.0f, 0.0f, ScanRangeCm);
 	const float FrontHalfAngleDegree = SafeConfig.FrontHalfAngleDegree;
+	const double ReplayTimeSeconds = RobotFrame.TimeSeconds;
 	const FVector SensorLocationLocalCm(
 		SafeConfig.SensorForwardOffsetM * 100.0f,
 		SafeConfig.SensorRightOffsetM * 100.0f,
@@ -268,6 +333,22 @@ void ADeliveryBotLidarRayReviewActor::ApplyLidarRayFrame(
 			RobotWorldTransform,
 			SensorLocationLocalCm,
 			StopDistanceCm,
+			FrontHalfAngleDegree,
+			static_cast<float>(RangeRayBeamThicknessScale));
+	}
+	if (ObstacleWarningDistanceCm > UE_SMALL_NUMBER)
+	{
+		AddRangeRing(
+			LidarObstacleWarningRangeRingInstances,
+			RobotWorldTransform,
+			SensorLocationLocalCm,
+			ObstacleWarningDistanceCm,
+			static_cast<float>(RangeBeamThicknessScale));
+		AddRangeRaySet(
+			LidarObstacleWarningRangeRayInstances,
+			RobotWorldTransform,
+			SensorLocationLocalCm,
+			ObstacleWarningDistanceCm,
 			FrontHalfAngleDegree,
 			static_cast<float>(RangeRayBeamThicknessScale));
 	}
@@ -361,13 +442,30 @@ void ADeliveryBotLidarRayReviewActor::ApplyLidarRayFrame(
 			{
 				continue;
 			}
+			if (!ShouldRenderReplayOusterOS1Ray(SafeConfig, RaySample, ReplayTimeSeconds))
+			{
+				continue;
+			}
 
-			const int32 PitchIndex = RequestedYawRayCount > 0
-				? RaySample.RayIndex / RequestedYawRayCount
-				: 0;
-			const int32 YawRayIndex = RequestedYawRayCount > 0
-				? RaySample.RayIndex % RequestedYawRayCount
-				: RaySample.RayIndex;
+			int32 PitchIndex = 0;
+			int32 YawRayIndex = RaySample.RayIndex;
+			if (RaySample.ChannelIndex != INDEX_NONE)
+			{
+				PitchIndex = RaySample.ChannelIndex;
+			}
+			else if (RequestedYawRayCount > 0)
+			{
+				PitchIndex = RaySample.RayIndex / RequestedYawRayCount;
+			}
+
+			if (RaySample.ColumnIndex != INDEX_NONE)
+			{
+				YawRayIndex = RaySample.ColumnIndex;
+			}
+			else if (RequestedYawRayCount > 0)
+			{
+				YawRayIndex = RaySample.RayIndex % RequestedYawRayCount;
+			}
 			if ((PitchIndex % PitchLayerStride) != 0 || (YawRayIndex % YawRayStride) != 0)
 			{
 				continue;
@@ -426,8 +524,10 @@ void ADeliveryBotLidarRayReviewActor::ForEachLidarBeamComponent(
 	Operation(LidarRangeRingInstances.Get());
 	Operation(LidarSlowRangeRingInstances.Get());
 	Operation(LidarStopRangeRingInstances.Get());
+	Operation(LidarObstacleWarningRangeRingInstances.Get());
 	Operation(LidarSlowRangeRayInstances.Get());
 	Operation(LidarStopRangeRayInstances.Get());
+	Operation(LidarObstacleWarningRangeRayInstances.Get());
 	Operation(LidarFrontBoundaryInstances.Get());
 }
 

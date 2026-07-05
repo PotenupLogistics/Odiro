@@ -78,6 +78,12 @@ public:
 	// Returns the number of LiDAR rays represented by the current profile values.
 	int32 GetActualLidarPreviewRayCount() const { return ActualLidarPreviewRayCount; }
 
+	// Returns true when the current LiDAR preview should animate model-specific sweep motion.
+	bool ShouldAnimateLidarPreview() const;
+
+	// Advances preview-only LiDAR animation and rebuilds visual rays when needed.
+	void AdvanceLidarPreviewAnimation(double DeltaSeconds);
+
 	// Returns the world point the preview camera should look at.
 	FVector GetPreviewFocusLocation() const;
 
@@ -205,6 +211,10 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarThreeDRayInstances;
 
+	// Faint full-coverage beam instances for OS1 rotating 3D LiDAR preview.
+	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarThreeDGhostRayInstances;
+
 	// Beam instances for the full scan range ring.
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarRangeRingInstances;
@@ -217,6 +227,10 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarStopRangeRingInstances;
 
+	// Beam instances for the obstacle-warning distance ring.
+	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarObstacleWarningRangeRingInstances;
+
 	// Beam instances that draw the slowdown threshold as front-facing rays.
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarSlowRangeRayInstances;
@@ -224,6 +238,10 @@ private:
 	// Beam instances that draw the stop threshold as front-facing rays.
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarStopRangeRayInstances;
+
+	// Beam instances that draw the obstacle-warning threshold as front-facing rays.
+	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarObstacleWarningRangeRayInstances;
 
 	// Beam instances for front-half-angle boundary lines.
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
@@ -266,6 +284,9 @@ private:
 
 	// Last yaw applied to the preview robot root.
 	float CurrentYawDegrees = 0.0f;
+
+	// Preview-only elapsed time used for model-specific animated LiDAR sweeps.
+	double LidarPreviewAnimationTimeSeconds = 0.0;
 
 	// Default X-axis length in centimeters of the beam mesh used for LiDAR overlays.
 	float LidarBeamMeshLengthCm = 10.0f;

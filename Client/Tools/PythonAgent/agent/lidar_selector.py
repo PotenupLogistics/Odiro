@@ -8,6 +8,7 @@ def convert_lidar_ray_1d_to_policy_ray(ray: LidarRay1D) -> LidarRay:
     return LidarRay(
         hit=ray.hit,
         distanceM=ray.distanceM,
+        blocksPolicy=ray.blocksPolicy,
         rayIndex=ray.rayIndex,
         rayYawDegree=0.0,
         actorName=ray.actorName,
@@ -20,6 +21,7 @@ def convert_lidar_ray_2d_to_policy_ray(ray: LidarRay2D) -> LidarRay:
     return LidarRay(
         hit=ray.hit,
         distanceM=ray.distanceM,
+        blocksPolicy=ray.blocksPolicy,
         rayIndex=ray.rayIndex,
         rayYawDegree=ray.yawDegree,
         actorName=ray.actorName,
@@ -34,6 +36,7 @@ def convert_lidar_ray_3d_to_policy_ray(ray: LidarRay3D) -> LidarRay:
     return LidarRay(
         hit=ray.hit,
         distanceM=projected_distance_m,
+        blocksPolicy=ray.blocksPolicy,
         rayIndex=ray.rayIndex,
         rayYawDegree=ray.yawDegree,
         actorName=ray.actorName,
@@ -56,7 +59,7 @@ def get_policy_lidar_family(request: ScenarioDecideRequest) -> str:
     if mode in {"twod", "2d", "onedandtwod", "twodandthreed"}:
         return "2d"
 
-    if mode in {"threed", "3d"}:
+    if mode in {"threed", "3d", "ousteros1", "ouster_os1", "ouster os1", "os1"}:
         return "3d"
 
     if mode == "all":
@@ -109,6 +112,9 @@ def is_better_projected_3d_ray(
 ) -> bool:
     if candidate_ray.hit != current_ray.hit:
         return candidate_ray.hit
+
+    if candidate_ray.hit and candidate_ray.blocksPolicy != current_ray.blocksPolicy:
+        return candidate_ray.blocksPolicy
 
     if candidate_ray.hit:
         candidate_distance_m = candidate_ray.distanceM * max(0.0, math.cos(math.radians(candidate_ray.pitchDegree)))
@@ -221,6 +227,8 @@ def get_policy_lidar_ray_source(request: ScenarioDecideRequest) -> str:
 def build_lidar_input_debug(request: ScenarioDecideRequest) -> dict:
     selection = select_policy_lidar_selection(request)
     selected_rays = list(selection["rays"])
+    raw_rays_3d_count = getattr(request.lidar, "rawRays3dCount", None)
+    transmitted_rays_3d_count = getattr(request.lidar, "transmittedRays3dCount", None)
 
     return {
         "lidarMode": request.lidar.mode,
@@ -228,6 +236,13 @@ def build_lidar_input_debug(request: ScenarioDecideRequest) -> dict:
         "lidarRays1dCount": len(request.lidar.rays1d),
         "lidarRays2dCount": len(request.lidar.rays2d),
         "lidarRays3dCount": len(request.lidar.rays3d),
+        "lidarRays3dRawCount": raw_rays_3d_count if raw_rays_3d_count is not None else len(request.lidar.rays3d),
+        "lidarRays3dTransmittedCount": (
+            transmitted_rays_3d_count
+            if transmitted_rays_3d_count is not None
+            else len(request.lidar.rays3d)
+        ),
+        "bLidarRays3dCompacted": bool(getattr(request.lidar, "rays3dCompacted", False)),
         "legacyLidarRayCount": len(request.lidarRays),
         "selectedLidarRaySource": selection["source"],
         "selectedLidarRayCount": len(selected_rays),

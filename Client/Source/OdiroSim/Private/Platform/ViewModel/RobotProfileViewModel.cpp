@@ -50,6 +50,11 @@ namespace
 			outMode = TEXT("3D");
 			return true;
 		}
+		if (normalized == TEXT("ousteros1") || normalized == TEXT("os1"))
+		{
+			outMode = TEXT("Ouster OS1");
+			return true;
+		}
 		if (normalized == TEXT("1dand2d") || normalized == TEXT("onedandtwod"))
 		{
 			outMode = TEXT("1D+2D");
@@ -243,6 +248,11 @@ void URobotProfileViewModel::SetLidarStopDistanceM(const float value)
 	UE_MVVM_SET_PROPERTY_VALUE(LidarStopDistanceM, value);
 }
 
+void URobotProfileViewModel::SetLidarObstacleWarningDistanceM(const float value)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(LidarObstacleWarningDistanceM, value);
+}
+
 void URobotProfileViewModel::SetLidarSlowDownDistanceM(const float value)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(LidarSlowDownDistanceM, value);
@@ -338,7 +348,7 @@ bool URobotProfileViewModel::ValidateInputs(TArray<FString>& outDiagnostics) con
 	FString normalizedLidarMode;
 	if (!TryNormalizeRobotProfileLidarModeForUi(LidarMode, normalizedLidarMode))
 	{
-		outDiagnostics.Add(TEXT("LiDAR Mode must be 1D, 2D, or 3D."));
+		outDiagnostics.Add(TEXT("LiDAR Mode must be 1D, 2D, 3D, or Ouster OS1."));
 	}
 	if (LidarScanRangeM < 0.0f)
 	{
@@ -363,6 +373,10 @@ bool URobotProfileViewModel::ValidateInputs(TArray<FString>& outDiagnostics) con
 	if (LidarStopDistanceM < 0.0f)
 	{
 		outDiagnostics.Add(TEXT("LiDAR Stop Distance must be 0 m or greater."));
+	}
+	if (LidarObstacleWarningDistanceM < 0.0f)
+	{
+		outDiagnostics.Add(TEXT("LiDAR Obstacle Warning Distance must be 0 m or greater."));
 	}
 	if (LidarSlowDownDistanceM < 0.0f)
 	{
@@ -444,6 +458,7 @@ FRobotProfileSettings URobotProfileViewModel::MakeSettings() const
 	settings.Lidar.SensorRightOffsetM = LidarSensorRightOffsetM;
 	settings.Lidar.FrontHalfAngleDegree = LidarFrontHalfAngleDegree;
 	settings.Lidar.StopDistanceM = LidarStopDistanceM;
+	settings.Lidar.ObstacleWarningDistanceM = LidarObstacleWarningDistanceM;
 	settings.Lidar.SlowDownDistanceM = LidarSlowDownDistanceM;
 	settings.Lidar.AngleStepDegree = LidarAngleStepDegree;
 	settings.Lidar.VerticalMinDegree = LidarVerticalMinDegree;
@@ -474,6 +489,7 @@ void URobotProfileViewModel::ApplySettings(const FRobotProfileSettings& settings
 	SetLidarSensorRightOffsetM(settings.Lidar.SensorRightOffsetM);
 	SetLidarFrontHalfAngleDegree(settings.Lidar.FrontHalfAngleDegree);
 	SetLidarStopDistanceM(settings.Lidar.StopDistanceM);
+	SetLidarObstacleWarningDistanceM(settings.Lidar.ObstacleWarningDistanceM);
 	SetLidarSlowDownDistanceM(settings.Lidar.SlowDownDistanceM);
 	SetLidarAngleStepDegree(settings.Lidar.AngleStepDegree);
 	SetLidarVerticalMinDegree(settings.Lidar.VerticalMinDegree);

@@ -161,6 +161,7 @@ void URobotConfigEditorWidget::NativeConstruct()
 	BindProfileSlider(LidarSensorRightOffsetSlider.Get(), this);
 	BindProfileSlider(LidarFrontAngleSlider.Get(), this);
 	BindProfileSlider(LidarStopDistanceSlider.Get(), this);
+	BindProfileSlider(LidarObstacleWarningDistanceSlider.Get(), this);
 	BindProfileSlider(LidarSlowDownDistanceSlider.Get(), this);
 	BindProfileSlider(LidarAngleStepSlider.Get(), this);
 	BindProfileSlider(LidarVerticalMinSlider.Get(), this);
@@ -184,6 +185,7 @@ void URobotConfigEditorWidget::NativeConstruct()
 	BindProfileInput(LidarSensorRightOffsetInput.Get(), this);
 	BindProfileInput(LidarFrontAngleInput.Get(), this);
 	BindProfileInput(LidarStopDistanceInput.Get(), this);
+	BindProfileInput(LidarObstacleWarningDistanceInput.Get(), this);
 	BindProfileInput(LidarSlowDownDistanceInput.Get(), this);
 	BindProfileInput(LidarAngleStepInput.Get(), this);
 	BindProfileInput(LidarVerticalMinInput.Get(), this);
@@ -303,6 +305,7 @@ void URobotConfigEditorWidget::NativeDestruct()
 	UnbindProfileSlider(LidarSensorRightOffsetSlider.Get(), this);
 	UnbindProfileSlider(LidarFrontAngleSlider.Get(), this);
 	UnbindProfileSlider(LidarStopDistanceSlider.Get(), this);
+	UnbindProfileSlider(LidarObstacleWarningDistanceSlider.Get(), this);
 	UnbindProfileSlider(LidarSlowDownDistanceSlider.Get(), this);
 	UnbindProfileSlider(LidarAngleStepSlider.Get(), this);
 	UnbindProfileSlider(LidarVerticalMinSlider.Get(), this);
@@ -326,6 +329,7 @@ void URobotConfigEditorWidget::NativeDestruct()
 	UnbindProfileInput(LidarSensorRightOffsetInput.Get(), this);
 	UnbindProfileInput(LidarFrontAngleInput.Get(), this);
 	UnbindProfileInput(LidarStopDistanceInput.Get(), this);
+	UnbindProfileInput(LidarObstacleWarningDistanceInput.Get(), this);
 	UnbindProfileInput(LidarSlowDownDistanceInput.Get(), this);
 	UnbindProfileInput(LidarAngleStepInput.Get(), this);
 	UnbindProfileInput(LidarVerticalMinInput.Get(), this);
@@ -587,6 +591,10 @@ void URobotConfigEditorWidget::HandleProfileSliderChanged(UWidget* widget, const
 	{
 		SetInputText(LidarStopDistanceInput.Get(), value);
 	}
+	else if (widget == LidarObstacleWarningDistanceSlider.Get())
+	{
+		SetInputText(LidarObstacleWarningDistanceInput.Get(), value);
+	}
 	else if (widget == LidarSlowDownDistanceSlider.Get())
 	{
 		SetInputText(LidarSlowDownDistanceInput.Get(), value);
@@ -802,6 +810,7 @@ bool URobotConfigEditorWidget::ReadFieldsIntoViewModel()
 	float lidarSensorRightOffsetM = viewModel->GetLidarSensorRightOffsetM();
 	float lidarFrontHalfAngleDegree = 0.0f;
 	float lidarStopDistanceM = 0.0f;
+	float lidarObstacleWarningDistanceM = viewModel->GetLidarObstacleWarningDistanceM();
 	float lidarSlowDownDistanceM = 0.0f;
 	float lidarAngleStepDegree = 0.0f;
 	float lidarVerticalMinDegree = viewModel->GetLidarVerticalMinDegree();
@@ -837,6 +846,10 @@ bool URobotConfigEditorWidget::ReadFieldsIntoViewModel()
 			LidarSensorRightOffsetInput.Get(),
 			TEXT("LiDAR Sensor Right Offset"),
 			lidarSensorRightOffsetM)
+		|| !TryReadOptionalFloatField(
+			LidarObstacleWarningDistanceInput.Get(),
+			TEXT("LiDAR Obstacle Warning Distance"),
+			lidarObstacleWarningDistanceM)
 		|| !TryReadOptionalFloatField(
 			LidarVerticalMinInput.Get(),
 			TEXT("LiDAR Vertical Min"),
@@ -878,6 +891,7 @@ bool URobotConfigEditorWidget::ReadFieldsIntoViewModel()
 	viewModel->SetLidarSensorRightOffsetM(lidarSensorRightOffsetM);
 	viewModel->SetLidarFrontHalfAngleDegree(lidarFrontHalfAngleDegree);
 	viewModel->SetLidarStopDistanceM(lidarStopDistanceM);
+	viewModel->SetLidarObstacleWarningDistanceM(lidarObstacleWarningDistanceM);
 	viewModel->SetLidarSlowDownDistanceM(lidarSlowDownDistanceM);
 	viewModel->SetLidarAngleStepDegree(lidarAngleStepDegree);
 	viewModel->SetLidarVerticalMinDegree(lidarVerticalMinDegree);
@@ -953,6 +967,9 @@ bool URobotConfigEditorWidget::TryReadFieldsIntoPreviewSettings(FRobotProfileSet
 		|| !TryReadOptionalPreviewFloatField(
 			LidarSensorRightOffsetInput.Get(),
 			previewSettings.Lidar.SensorRightOffsetM)
+		|| !TryReadOptionalPreviewFloatField(
+			LidarObstacleWarningDistanceInput.Get(),
+			previewSettings.Lidar.ObstacleWarningDistanceM)
 		|| !TryReadOptionalPreviewFloatField(
 			LidarVerticalMinInput.Get(),
 			previewSettings.Lidar.VerticalMinDegree)
@@ -1060,6 +1077,10 @@ void URobotConfigEditorWidget::ApplyViewModelToFields()
 		LidarStopDistanceInput.Get(),
 		LidarStopDistanceSlider.Get(),
 		viewModel->GetLidarStopDistanceM());
+	SetLinkedSliderFieldValue(
+		LidarObstacleWarningDistanceInput.Get(),
+		LidarObstacleWarningDistanceSlider.Get(),
+		viewModel->GetLidarObstacleWarningDistanceM());
 	SetLinkedSliderFieldValue(
 		LidarSlowDownDistanceInput.Get(),
 		LidarSlowDownDistanceSlider.Get(),
@@ -1216,6 +1237,7 @@ void URobotConfigEditorWidget::SyncProfileSlidersFromValidInputFields() const
 	SyncLinkedSliderFromInput(LidarSensorRightOffsetInput.Get(), LidarSensorRightOffsetSlider.Get());
 	SyncLinkedSliderFromInput(LidarFrontAngleInput.Get(), LidarFrontAngleSlider.Get());
 	SyncLinkedSliderFromInput(LidarStopDistanceInput.Get(), LidarStopDistanceSlider.Get());
+	SyncLinkedSliderFromInput(LidarObstacleWarningDistanceInput.Get(), LidarObstacleWarningDistanceSlider.Get());
 	SyncLinkedSliderFromInput(LidarSlowDownDistanceInput.Get(), LidarSlowDownDistanceSlider.Get());
 	SyncLinkedSliderFromInput(LidarAngleStepInput.Get(), LidarAngleStepSlider.Get());
 	SyncLinkedSliderFromInput(LidarVerticalMinInput.Get(), LidarVerticalMinSlider.Get());

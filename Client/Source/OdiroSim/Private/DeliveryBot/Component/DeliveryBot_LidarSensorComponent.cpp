@@ -10,6 +10,12 @@ DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotLidarSensor, Log, All);
 
 namespace
 {
+	// Debug-only OS1 angular sweep shown at one time without changing scan data.
+	constexpr float OusterOS1DebugVisibleSweepAngleDegree = 45.0f;
+
+	// Debug-only spin rate cap avoids aliasing against full-frame scan snapshots.
+	constexpr float OusterOS1DebugMaxVisibleSpinHz = 1.0f;
+
 	// Returns the scenario-authored semantic id when the actor participates in scenario logging.
 	FString ResolveLidarScenarioTargetId(const AActor* actor)
 	{
@@ -117,6 +123,7 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar() const
 		return ScanLidar2D();
 
 	case EDeliveryBotLidarModeType::ThreeD:
+	case EDeliveryBotLidarModeType::OusterOS1:
 		return ScanLidar3D();
 
 	case EDeliveryBotLidarModeType::OneDAndTwoD:
@@ -374,7 +381,8 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugLidarRay(
 	const FVector& startLocationCm,
 	const FVector& endLocationCm,
 	const FHitResult* hitResult,
-	const TArray<FHitResult>& rawHitResults) const
+	const TArray<FHitResult>& rawHitResults,
+	const bool bDrawMissRayLine) const
 {
 	if (!LidarSensorConfigInfo.bDrawDebug) 
 		return;
@@ -397,7 +405,22 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugLidarRay(
 	}
 
 	const bool bHasHit = hitResult != nullptr && IsValid(hitResult->GetActor());
-	if (!bHasHit) return;
+	if (!bHasHit)
+	{
+		if (bDrawMissRayLine)
+		{
+			DrawDebugLine(
+				world,
+				startLocationCm,
+				endLocationCm,
+				FColor(0, 120, 255),
+				false,
+				lifeTimeSeconds,
+				0,
+				0.25f);
+		}
+		return;
+	}
 
 	if (ShouldSuppressDebugRayLine(hitResult->GetActor()))
 		return;
@@ -411,6 +434,54 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugLidarRay(
 		lifeTimeSeconds,
 		0,
 		0.75f);
+}
+
+// Filters OS1 debug beams to a visible rotating sweep while preserving scan payload.
+bool UDeliveryBot_LidarSensorComponent::ShouldDrawDebugLidarRay(
+	const FDeliveryBotLidarRaySample& raySample) const
+{
+	if (!LidarSensorConfigInfo.bDrawDebug)
+	{
+		return false;
+	}
+
+	if (!FDeliveryBotLidarRayPattern::IsOusterOS1Mode(LidarSensorConfigInfo.LidarModeType)
+		|| raySample.ColumnIndex == INDEX_NONE)
+	{
+		return true;
+	}
+
+	const int32 columnCount = FDeliveryBotLidarRayPattern::CountYawSamples(LidarSensorConfigInfo);
+	if (columnCount <= 1)
+	{
+		return true;
+	}
+
+	const UWorld* world = GetWorld();
+	if (world == nullptr)
+	{
+		return true;
+	}
+
+	const float columnAngleDegree = 360.0f / static_cast<float>(columnCount);
+	const float visibleSweepAngleDegree = FMath::Clamp(
+		OusterOS1DebugVisibleSweepAngleDegree,
+		columnAngleDegree,
+		360.0f);
+	const int32 visibleColumnHalfWindow =
+		FMath::Max(1, FMath::CeilToInt(visibleSweepAngleDegree * 0.5f / columnAngleDegree));
+	const float maxGapFreeSpinHz =
+		FMath::Max(LidarSensorConfigInfo.ScanRateHz, 0.1f) * visibleSweepAngleDegree / 360.0f;
+	const float visibleSpinHz = FMath::Clamp(
+		maxGapFreeSpinHz,
+		0.01f,
+		OusterOS1DebugMaxVisibleSpinHz);
+	const float scanPhase = FMath::Fmod(world->GetTimeSeconds() * visibleSpinHz, 1.0f);
+	const int32 activeColumnIndex =
+		FMath::FloorToInt(scanPhase * static_cast<float>(columnCount)) % columnCount;
+	const int32 rawColumnDistance = FMath::Abs(raySample.ColumnIndex - activeColumnIndex);
+	const int32 wrappedColumnDistance = FMath::Min(rawColumnDistance, columnCount - rawColumnDistance);
+	return wrappedColumnDistance <= visibleColumnHalfWindow;
 }
 
 // Python과 point cloud로 전달되는 LiDAR hit world location을 누적 점으로 표시한다.
@@ -864,17 +935,33 @@ void UDeliveryBot_LidarSensorComponent::AppendLidarRay(
 	TArray<FHitResult> rawHitResults;
 	const bool bHit = TraceLidarRay(sensorLocationCm, endLocationCm, hitResult, rawHitResults);
 
-	DrawDebugLidarRay(sensorLocationCm, endLocationCm, bHit ? &hitResult : nullptr, rawHitResults);
+	if (ShouldDrawDebugLidarRay(raySample))
+	{
+		const bool bDrawMissRayLine =
+			FDeliveryBotLidarRayPattern::IsOusterOS1Mode(LidarSensorConfigInfo.LidarModeType)
+			&& raySample.ColumnIndex != INDEX_NONE;
+		DrawDebugLidarRay(
+			sensorLocationCm,
+			endLocationCm,
+			bHit ? &hitResult : nullptr,
+			rawHitResults,
+			bDrawMissRayLine);
+	}
 	
 	if (bHit || LidarSensorConfigInfo.bStoreMissedRays)
 	{
-		scanInfo.RayInfos.Add(MakeRayInfo(
+		FDeliveryBotLidarRayInfo rayInfo = MakeRayInfo(
 			raySample.RayIndex,
 			raySample.YawDegree,
 			raySample.PitchDegree,
 			sensorLocationCm,
 			endLocationCm,
 			bHit ? &hitResult : nullptr,
-			raySample.DimensionType));
+			raySample.DimensionType);
+		rayInfo.ChannelIndex = raySample.ChannelIndex;
+		rayInfo.ColumnIndex = raySample.ColumnIndex;
+		rayInfo.RelativeTimeSeconds = raySample.RelativeTimeSeconds;
+		rayInfo.SensorModel = raySample.SensorModel;
+		scanInfo.RayInfos.Add(MoveTemp(rayInfo));
 	}
 }

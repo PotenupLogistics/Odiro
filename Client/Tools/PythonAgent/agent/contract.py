@@ -69,6 +69,7 @@ class RobotState:
 class LidarRay:
     hit: bool
     distanceM: float
+    blocksPolicy: bool = True
     rayIndex: int | None = None
     rayYawDegree: float = 0.0
     actorName: str | None = None
@@ -80,6 +81,7 @@ class LidarRay:
 class LidarRay1D:
     hit: bool
     distanceM: float
+    blocksPolicy: bool = True
     rayIndex: int | None = None
     actorName: str | None = None
     actorTags: list[str] = field(default_factory=list)
@@ -90,6 +92,7 @@ class LidarRay1D:
 class LidarRay2D:
     hit: bool
     distanceM: float
+    blocksPolicy: bool = True
     yawDegree: float = 0.0
     rayIndex: int | None = None
     actorName: str | None = None
@@ -101,9 +104,14 @@ class LidarRay2D:
 class LidarRay3D:
     hit: bool
     distanceM: float
+    blocksPolicy: bool = True
     yawDegree: float = 0.0
     pitchDegree: float = 0.0
     rayIndex: int | None = None
+    channelIndex: int | None = None
+    columnIndex: int | None = None
+    relativeTimeSeconds: float = 0.0
+    sensorModel: str = ""
     actorName: str | None = None
     actorTags: list[str] = field(default_factory=list)
     hitLocationCm: dict[str, float] | None = None
@@ -118,6 +126,9 @@ class LidarObservation:
     rays1d: list[LidarRay1D] = field(default_factory=list)
     rays2d: list[LidarRay2D] = field(default_factory=list)
     rays3d: list[LidarRay3D] = field(default_factory=list)
+    rawRays3dCount: int | None = None
+    transmittedRays3dCount: int | None = None
+    rays3dCompacted: bool = False
 
 
 # Scenario start request.

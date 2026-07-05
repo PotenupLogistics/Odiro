@@ -2,6 +2,10 @@
 
 namespace
 {
+	const FName OusterOS1SensorModelName(TEXT("Ouster OS1"));
+	constexpr int32 OusterOS1ChannelCount = 64;
+	constexpr float OusterOS1VerticalFovDegree = 45.0f;
+
 	// Local validated scan parameters shared by all pattern builders.
 	struct FNormalizedLidarPatternConfig
 	{
@@ -38,7 +42,11 @@ namespace
 		const int32 RayIndex,
 		const float YawDegree,
 		const float PitchDegree,
-		const EDeliveryBotLidarRayDimensionType DimensionType)
+		const EDeliveryBotLidarRayDimensionType DimensionType,
+		const int32 ChannelIndex = INDEX_NONE,
+		const int32 ColumnIndex = INDEX_NONE,
+		const float RelativeTimeSeconds = 0.0f,
+		const FName SensorModel = NAME_None)
 	{
 		FDeliveryBotLidarRaySample Sample;
 		Sample.RayIndex = RayIndex;
@@ -46,7 +54,47 @@ namespace
 		Sample.PitchDegree = PitchDegree;
 		Sample.DimensionType = DimensionType;
 		Sample.LocalDirection = FRotator(PitchDegree, YawDegree, 0.0f).Vector();
+		Sample.ChannelIndex = ChannelIndex;
+		Sample.ColumnIndex = ColumnIndex;
+		Sample.RelativeTimeSeconds = RelativeTimeSeconds;
+		Sample.SensorModel = SensorModel;
 		return Sample;
+	}
+
+	void AppendOusterOS1RaySamples(
+		const FDeliveryBotLidarSensorConfigInfo& Config,
+		TArray<FDeliveryBotLidarRaySample>& OutSamples)
+	{
+		const int32 ColumnCount = FDeliveryBotLidarRayPattern::CountYawSamples(Config);
+		const int32 ChannelCount = FDeliveryBotLidarRayPattern::GetOusterOS1ChannelCount();
+		const float ScanRateHz = FMath::Max(Config.ScanRateHz, 0.1f);
+		const float HalfVerticalFovDegree = FDeliveryBotLidarRayPattern::GetOusterOS1VerticalFovDegree() * 0.5f;
+
+		int32 RayIndex = 0;
+		for (int32 ColumnIndex = 0; ColumnIndex < ColumnCount; ++ColumnIndex)
+		{
+			const float YawDegree = static_cast<float>(ColumnIndex) * 360.0f / static_cast<float>(ColumnCount);
+			const float RelativeTimeSeconds =
+				static_cast<float>(ColumnIndex) / static_cast<float>(ColumnCount) / ScanRateHz;
+
+			for (int32 ChannelIndex = 0; ChannelIndex < ChannelCount; ++ChannelIndex)
+			{
+				const float ChannelAlpha = ChannelCount > 1
+					? static_cast<float>(ChannelIndex) / static_cast<float>(ChannelCount - 1)
+					: 0.5f;
+				const float PitchDegree = FMath::Lerp(-HalfVerticalFovDegree, HalfVerticalFovDegree, ChannelAlpha);
+				OutSamples.Add(MakeRaySample(
+					RayIndex,
+					YawDegree,
+					PitchDegree,
+					EDeliveryBotLidarRayDimensionType::ThreeD,
+					ChannelIndex,
+					ColumnIndex,
+					RelativeTimeSeconds,
+					OusterOS1SensorModelName));
+				++RayIndex;
+			}
+		}
 	}
 }
 
@@ -96,6 +144,12 @@ void FDeliveryBotLidarRayPattern::AppendRaySamplesForDimension(
 
 	case EDeliveryBotLidarRayDimensionType::ThreeD:
 	{
+		if (FDeliveryBotLidarRayPattern::IsOusterOS1Mode(Config.LidarModeType))
+		{
+			AppendOusterOS1RaySamples(Config, OutSamples);
+			return;
+		}
+
 		int32 RayIndex = 0;
 		for (float PitchDegree = NormalizedConfig.VerticalMinDegree;
 			PitchDegree <= NormalizedConfig.VerticalMaxDegree;
@@ -135,10 +189,27 @@ bool FDeliveryBotLidarRayPattern::DoesModeIncludeDimension(
 	case EDeliveryBotLidarRayDimensionType::ThreeD:
 		return Mode == EDeliveryBotLidarModeType::ThreeD
 			|| Mode == EDeliveryBotLidarModeType::TwoDAndThreeD
-			|| Mode == EDeliveryBotLidarModeType::All;
+			|| Mode == EDeliveryBotLidarModeType::All
+			|| Mode == EDeliveryBotLidarModeType::OusterOS1;
 
 	default:
 		return false;
+	}
+}
+
+bool FDeliveryBotLidarRayPattern::IsOusterOS1Mode(const EDeliveryBotLidarModeType Mode)
+{
+	return Mode == EDeliveryBotLidarModeType::OusterOS1;
+}
+
+FName FDeliveryBotLidarRayPattern::GetSensorModelName(const EDeliveryBotLidarModeType Mode)
+{
+	switch (Mode)
+	{
+	case EDeliveryBotLidarModeType::OusterOS1:
+		return OusterOS1SensorModelName;
+	default:
+		return NAME_None;
 	}
 }
 
@@ -157,6 +228,11 @@ int32 FDeliveryBotLidarRayPattern::CountYawSamples(const FDeliveryBotLidarSensor
 
 int32 FDeliveryBotLidarRayPattern::CountPitchSamples(const FDeliveryBotLidarSensorConfigInfo& Config)
 {
+	if (IsOusterOS1Mode(Config.LidarModeType))
+	{
+		return GetOusterOS1ChannelCount();
+	}
+
 	const FNormalizedLidarPatternConfig NormalizedConfig = NormalizePatternConfig(Config);
 
 	int32 PitchCount = 0;
@@ -168,6 +244,16 @@ int32 FDeliveryBotLidarRayPattern::CountPitchSamples(const FDeliveryBotLidarSens
 	}
 
 	return FMath::Max(1, PitchCount);
+}
+
+int32 FDeliveryBotLidarRayPattern::GetOusterOS1ChannelCount()
+{
+	return OusterOS1ChannelCount;
+}
+
+float FDeliveryBotLidarRayPattern::GetOusterOS1VerticalFovDegree()
+{
+	return OusterOS1VerticalFovDegree;
 }
 
 float FDeliveryBotLidarRayPattern::NormalizeSignedYawDegree(const float YawDegree)

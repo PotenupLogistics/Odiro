@@ -1,6 +1,7 @@
 #include "DeliveryBot/Component/DeliveryBot_HttpPolicyComponent.h"
 #include "DrawDebugHelpers.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
+#include "DeliveryBot/DeliveryBotLidarRayPattern.h"
 #include "DeliveryBot/Subsystem/DeliveryBotPythonProcessSubsystem.h"
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
 #include "Dom/JsonObject.h"
@@ -153,6 +154,8 @@ namespace
 			return TEXT("TwoDAndThreeD");
 		case EDeliveryBotLidarModeType::All:
 			return TEXT("All");
+		case EDeliveryBotLidarModeType::OusterOS1:
+			return TEXT("OusterOS1");
 		default:
 			return TEXT("TwoD");
 		}
@@ -167,35 +170,6 @@ namespace
 
 		targetObject->SetStringField(TEXT("targetId"), targetId);
 		targetObject->SetArrayField(TEXT("targetTags"), MakeJsonStringArrayFromNames(targetTags));
-	}
-
-	void AddJsonLidarRayTargetFields(
-		TArray<TSharedPtr<FJsonValue>>& rayValues,
-		const TArray<FDeliveryBotLidarRayInfo>& rayInfos,
-		EDeliveryBotLidarRayDimensionType rayDimensionType)
-	{
-		int32 valueIndex = 0;
-		for (const FDeliveryBotLidarRayInfo& rayInfo : rayInfos)
-		{
-			if (rayInfo.RayDimensionType != rayDimensionType)
-			{
-				continue;
-			}
-
-			if (!rayValues.IsValidIndex(valueIndex))
-			{
-				break;
-			}
-
-			const TSharedPtr<FJsonValue>& rayValue = rayValues[valueIndex];
-			++valueIndex;
-			if (!rayValue.IsValid() || rayValue->Type != EJson::Object)
-			{
-				continue;
-			}
-
-			SetJsonTargetFields(rayValue->AsObject(), rayInfo.TargetId, rayInfo.TargetTags);
-		}
 	}
 
 	// Python LiDAR family 선택 규칙과 맞춰 action log에 기록할 policy 입력을 계산한다.
@@ -215,6 +189,7 @@ namespace
 		case EDeliveryBotLidarModeType::TwoDAndThreeD:
 			return TEXT("2d");
 		case EDeliveryBotLidarModeType::ThreeD:
+		case EDeliveryBotLidarModeType::OusterOS1:
 			return TEXT("3d");
 		case EDeliveryBotLidarModeType::All:
 			if (ray2DCount > 0)
@@ -320,6 +295,124 @@ namespace
 		return bFoundRay;
 	}
 
+	// 3D ray hit 거리를 수평 정책 ray 기준 거리로 변환한다.
+	float CalculateProjectedHorizontalDistanceM(const FDeliveryBotLidarRayInfo& rayInfo)
+	{
+		return rayInfo.DistanceM * FMath::Max(0.0f, FMath::Cos(FMath::DegreesToRadians(rayInfo.RayPitchDegree)));
+	}
+
+	// 같은 yaw/column에서 Python 3D projection과 같은 우선순위로 대표 ray를 고른다.
+	bool IsBetterProjected3DRay(
+		const FDeliveryBotLidarRayInfo& candidateRayInfo,
+		const FDeliveryBotLidarRayInfo& currentRayInfo,
+		float horizontalPitchAbsDegree)
+	{
+		if (candidateRayInfo.bHit != currentRayInfo.bHit)
+		{
+			return candidateRayInfo.bHit;
+		}
+
+		if (candidateRayInfo.bHit && candidateRayInfo.bBlocksPolicy != currentRayInfo.bBlocksPolicy)
+		{
+			return candidateRayInfo.bBlocksPolicy;
+		}
+
+		if (candidateRayInfo.bHit)
+		{
+			const float candidateDistanceM = CalculateProjectedHorizontalDistanceM(candidateRayInfo);
+			const float currentDistanceM = CalculateProjectedHorizontalDistanceM(currentRayInfo);
+			if (!FMath::IsNearlyEqual(candidateDistanceM, currentDistanceM))
+			{
+				return candidateDistanceM < currentDistanceM;
+			}
+
+			return FMath::Abs(candidateRayInfo.RayPitchDegree) < FMath::Abs(currentRayInfo.RayPitchDegree);
+		}
+
+		const float candidatePitchGap = FMath::Abs(FMath::Abs(candidateRayInfo.RayPitchDegree) - horizontalPitchAbsDegree);
+		const float currentPitchGap = FMath::Abs(FMath::Abs(currentRayInfo.RayPitchDegree) - horizontalPitchAbsDegree);
+		if (!FMath::IsNearlyEqual(candidatePitchGap, currentPitchGap))
+		{
+			return candidatePitchGap < currentPitchGap;
+		}
+
+		return candidateRayInfo.DistanceM < currentRayInfo.DistanceM;
+	}
+
+	// 특정 LiDAR dimension의 raw ray 개수를 센다.
+	int32 CountLidarRaysForDimension(
+		const TArray<FDeliveryBotLidarRayInfo>& rayInfos,
+		EDeliveryBotLidarRayDimensionType dimensionType)
+	{
+		int32 rayCount = 0;
+		for (const FDeliveryBotLidarRayInfo& rayInfo : rayInfos)
+		{
+			if (rayInfo.RayDimensionType == dimensionType)
+			{
+				++rayCount;
+			}
+		}
+		return rayCount;
+	}
+
+	// OS1은 Python으로 보낼 3D ray를 column별 대표 ray로 줄이고, 기존 3D 모드는 원본을 유지한다.
+	void Build3DRayPayloadInfos(
+		EDeliveryBotLidarModeType lidarModeType,
+		const TArray<FDeliveryBotLidarRayInfo>& sourceRayInfos,
+		TArray<const FDeliveryBotLidarRayInfo*>& outRayInfos)
+	{
+		outRayInfos.Reset();
+
+		if (!FDeliveryBotLidarRayPattern::IsOusterOS1Mode(lidarModeType))
+		{
+			for (const FDeliveryBotLidarRayInfo& rayInfo : sourceRayInfos)
+			{
+				if (rayInfo.RayDimensionType == EDeliveryBotLidarRayDimensionType::ThreeD)
+				{
+					outRayInfos.Add(&rayInfo);
+				}
+			}
+			return;
+		}
+
+		float horizontalPitchAbsDegree = 0.f;
+		if (!TryCalculateHorizontalPitchDegree(sourceRayInfos, horizontalPitchAbsDegree))
+		{
+			return;
+		}
+
+		TMap<int32, const FDeliveryBotLidarRayInfo*> selectedRayByColumn;
+		for (const FDeliveryBotLidarRayInfo& rayInfo : sourceRayInfos)
+		{
+			if (rayInfo.RayDimensionType != EDeliveryBotLidarRayDimensionType::ThreeD)
+			{
+				continue;
+			}
+
+			const int32 columnKey = rayInfo.ColumnIndex != INDEX_NONE
+				? rayInfo.ColumnIndex
+				: FMath::RoundToInt(rayInfo.RayYawDegree * 100.f);
+			const FDeliveryBotLidarRayInfo* const* currentRayInfo = selectedRayByColumn.Find(columnKey);
+			if (currentRayInfo == nullptr ||
+				*currentRayInfo == nullptr ||
+				IsBetterProjected3DRay(rayInfo, **currentRayInfo, horizontalPitchAbsDegree))
+			{
+				selectedRayByColumn.Add(columnKey, &rayInfo);
+			}
+		}
+
+		selectedRayByColumn.GenerateValueArray(outRayInfos);
+		outRayInfos.Sort(
+			[](const FDeliveryBotLidarRayInfo& leftRayInfo, const FDeliveryBotLidarRayInfo& rightRayInfo)
+			{
+				if (!FMath::IsNearlyEqual(leftRayInfo.RayYawDegree, rightRayInfo.RayYawDegree))
+				{
+					return leftRayInfo.RayYawDegree < rightRayInfo.RayYawDegree;
+				}
+				return leftRayInfo.ColumnIndex < rightRayInfo.ColumnIndex;
+			});
+	}
+
 	// action log writer가 소비할 selection summary를 만든다.
 	TSharedRef<FJsonObject> MakeJsonPolicyRaySelectionObject(
 		EDeliveryBotLidarModeType lidarModeType,
@@ -381,6 +474,7 @@ namespace
 		rayObject->SetNumberField(TEXT("rayYawDegree"), rayInfo.RayYawDegree);
 		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
 		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
+		SetJsonTargetFields(rayObject, rayInfo.TargetId, rayInfo.TargetTags);
 		rayObject->SetBoolField(TEXT("blocksPolicy"), rayInfo.bBlocksPolicy);
 		return rayObject;
 	}
@@ -394,6 +488,7 @@ namespace
 		rayObject->SetNumberField(TEXT("rayIndex"), rayInfo.RayIndex);
 		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
 		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
+		SetJsonTargetFields(rayObject, rayInfo.TargetId, rayInfo.TargetTags);
 		rayObject->SetBoolField(TEXT("blocksPolicy"), rayInfo.bBlocksPolicy);
 		return rayObject;
 	}
@@ -412,6 +507,22 @@ namespace
 		TSharedRef<FJsonObject> rayObject = MakeJsonLidarRay2DObject(rayInfo);
 		rayObject->SetNumberField(TEXT("pitchDegree"), rayInfo.RayPitchDegree);
 		rayObject->SetObjectField(TEXT("hitLocationCm"), MakeJsonVectorObject(rayInfo.HitLocationCm));
+		if (rayInfo.ChannelIndex != INDEX_NONE)
+		{
+			rayObject->SetNumberField(TEXT("channelIndex"), rayInfo.ChannelIndex);
+		}
+		if (rayInfo.ColumnIndex != INDEX_NONE)
+		{
+			rayObject->SetNumberField(TEXT("columnIndex"), rayInfo.ColumnIndex);
+		}
+		if (rayInfo.ChannelIndex != INDEX_NONE || rayInfo.ColumnIndex != INDEX_NONE || !rayInfo.SensorModel.IsNone())
+		{
+			rayObject->SetNumberField(TEXT("relativeTimeSeconds"), rayInfo.RelativeTimeSeconds);
+		}
+		if (!rayInfo.SensorModel.IsNone())
+		{
+			rayObject->SetStringField(TEXT("sensorModel"), rayInfo.SensorModel.ToString());
+		}
 		return rayObject;
 	}
 }
@@ -1728,6 +1839,12 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 	requestObject->SetObjectField(TEXT("driveSpec"), driveSpecObject);
 
 	TSharedRef<FJsonObject> lidarSpecObject = MakeShared<FJsonObject>();
+	const FName lidarSensorModelName =
+		FDeliveryBotLidarRayPattern::GetSensorModelName(setupInfo.LidarSensorConfigInfo.LidarModeType);
+	if (!lidarSensorModelName.IsNone())
+	{
+		lidarSpecObject->SetStringField(TEXT("sensorModel"), lidarSensorModelName.ToString());
+	}
 	lidarSpecObject->SetNumberField(TEXT("scanRangeM"), setupInfo.LidarSensorConfigInfo.ScanRangeM);
 	lidarSpecObject->SetNumberField(TEXT("angleStepDegree"), setupInfo.LidarSensorConfigInfo.AngleStepDegree);
 	lidarSpecObject->SetNumberField(TEXT("sensorHeightM"), setupInfo.LidarSensorConfigInfo.SensorHeightM);
@@ -1738,6 +1855,18 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 	lidarSpecObject->SetNumberField(TEXT("collisionStopHalfAngleDegree"), setupInfo.LidarSensorConfigInfo.CollisionStopHalfAngleDegree);
 	lidarSpecObject->SetNumberField(TEXT("collisionStopDistanceM"), setupInfo.LidarSensorConfigInfo.CollisionStopDistanceM);
 	lidarSpecObject->SetNumberField(TEXT("scanRateHz"), setupInfo.LidarSensorConfigInfo.ScanRateHz);
+	if (FDeliveryBotLidarRayPattern::IsOusterOS1Mode(setupInfo.LidarSensorConfigInfo.LidarModeType))
+	{
+		lidarSpecObject->SetNumberField(
+			TEXT("channelCount"),
+			FDeliveryBotLidarRayPattern::GetOusterOS1ChannelCount());
+		lidarSpecObject->SetNumberField(
+			TEXT("horizontalColumns"),
+			FDeliveryBotLidarRayPattern::CountYawSamples(setupInfo.LidarSensorConfigInfo));
+		lidarSpecObject->SetNumberField(
+			TEXT("verticalFovDegree"),
+			FDeliveryBotLidarRayPattern::GetOusterOS1VerticalFovDegree());
+	}
 	const FDeliveryBotPointCloudCaptureConfigInfo pointCloudConfigInfo = BuildEffectivePointCloudCaptureConfigInfo(setupInfo.PointCloudCaptureConfigInfo);
 	LogPointCloudStartConfig(pointCloudConfigInfo);
 	lidarSpecObject->SetStringField(TEXT("observationProfile"), pointCloudConfigInfo.ObservationProfile);
@@ -1760,6 +1889,7 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 
 	const FDeliveryBotSetupInfo& setupInfo = deliveryBot->GetSetupInfo();
 	const FDeliveryBotObservationInfo observation = deliveryBot->BuildPolicyObservation();
+	const EDeliveryBotLidarModeType lidarModeType = setupInfo.LidarSensorConfigInfo.LidarModeType;
 	LastDecisionSequence = observation.Sequence;
 	LastDecisionRunTimeSeconds = observation.WorldTimeSeconds;
 	
@@ -1784,11 +1914,16 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 	TArray<TSharedPtr<FJsonValue>> lidarRay1DValues;
 	TArray<TSharedPtr<FJsonValue>> lidarRay2DValues;
 	TArray<TSharedPtr<FJsonValue>> lidarRay3DValues;
+	TArray<const FDeliveryBotLidarRayInfo*> lidarRay3DInfosForPayload;
+	Build3DRayPayloadInfos(lidarModeType, observation.LidarScanInfo.RayInfos, lidarRay3DInfosForPayload);
+	const int32 rawLidarRay3DCount = CountLidarRaysForDimension(
+		observation.LidarScanInfo.RayInfos,
+		EDeliveryBotLidarRayDimensionType::ThreeD);
 
 	legacyLidarRayValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
 	lidarRay1DValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
 	lidarRay2DValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
-	lidarRay3DValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
+	lidarRay3DValues.Reserve(lidarRay3DInfosForPayload.Num());
 
 	for (const FDeliveryBotLidarRayInfo& rayInfo : observation.LidarScanInfo.RayInfos)
 	{
@@ -1804,7 +1939,6 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 			break;
 
 		case EDeliveryBotLidarRayDimensionType::ThreeD:
-			lidarRay3DValues.Add(MakeShared<FJsonValueObject>(MakeJsonLidarRay3DObject(rayInfo)));
 			break;
 
 		default:
@@ -1812,15 +1946,29 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 		}
 	}
 
+	for (const FDeliveryBotLidarRayInfo* rayInfo : lidarRay3DInfosForPayload)
+	{
+		if (rayInfo != nullptr)
+		{
+			lidarRay3DValues.Add(MakeShared<FJsonValueObject>(MakeJsonLidarRay3DObject(*rayInfo)));
+		}
+	}
+
 	requestObject->SetArrayField(TEXT("lidarRays"), legacyLidarRayValues);
 
 	TSharedRef<FJsonObject> lidarObject = MakeShared<FJsonObject>();
-	lidarObject->SetStringField(TEXT("mode"), ToJsonLidarModeString(setupInfo.LidarSensorConfigInfo.LidarModeType));
+	lidarObject->SetStringField(TEXT("mode"), ToJsonLidarModeString(lidarModeType));
 	lidarObject->SetNumberField(TEXT("sensorSequence"), observation.SensorSequence);
 	lidarObject->SetNumberField(TEXT("sensorTimeSeconds"), observation.LidarScanInfo.SimulationTimeSeconds);
 	lidarObject->SetArrayField(TEXT("rays1d"), lidarRay1DValues);
 	lidarObject->SetArrayField(TEXT("rays2d"), lidarRay2DValues);
 	lidarObject->SetArrayField(TEXT("rays3d"), lidarRay3DValues);
+	lidarObject->SetNumberField(TEXT("rawRays3dCount"), rawLidarRay3DCount);
+	lidarObject->SetNumberField(TEXT("transmittedRays3dCount"), lidarRay3DValues.Num());
+	lidarObject->SetBoolField(
+		TEXT("rays3dCompacted"),
+		FDeliveryBotLidarRayPattern::IsOusterOS1Mode(lidarModeType) &&
+			rawLidarRay3DCount > lidarRay3DValues.Num());
 	requestObject->SetObjectField(TEXT("lidar"), lidarObject);
 
 	TArray<TSharedPtr<FJsonValue>> observedObjectValues;
@@ -1851,14 +1999,10 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 
 	robotStateObject->SetStringField(TEXT("collisionTargetId"), observation.RobotState.CollisionTargetId);
 	robotStateObject->SetArrayField(TEXT("collisionTargetTags"), MakeJsonStringArrayFromNames(observation.RobotState.CollisionTargetTags));
-	AddJsonLidarRayTargetFields(lidarRay1DValues, observation.LidarScanInfo.RayInfos, EDeliveryBotLidarRayDimensionType::OneD);
-	AddJsonLidarRayTargetFields(lidarRay2DValues, observation.LidarScanInfo.RayInfos, EDeliveryBotLidarRayDimensionType::TwoD);
-	AddJsonLidarRayTargetFields(lidarRay3DValues, observation.LidarScanInfo.RayInfos, EDeliveryBotLidarRayDimensionType::ThreeD);
-	AddJsonLidarRayTargetFields(legacyLidarRayValues, observation.LidarScanInfo.RayInfos, EDeliveryBotLidarRayDimensionType::TwoD);
 	lidarObject->SetObjectField(
 		TEXT("policyRaySelection"),
 		MakeJsonPolicyRaySelectionObject(
-			setupInfo.LidarSensorConfigInfo.LidarModeType,
+			lidarModeType,
 			observation.LidarScanInfo.RayInfos,
 			lidarRay1DValues.Num(),
 			lidarRay2DValues.Num(),

@@ -80,7 +80,7 @@ private:
 	// Returns the configured run row class.
 	TSubclassOf<UProjectExperimentRunRowWidget> ResolveRunRowWidgetClass() const;
 
-	// Reads a run state from runs/<id>/status.json when available.
+	// Resolves run state through the Platform file adapter.
 	static ESimulationRunState ResolveRunState(const FString& runDirectory);
 
 	// Removes row widgets and native event subscriptions.

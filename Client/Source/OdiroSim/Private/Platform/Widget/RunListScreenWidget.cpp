@@ -177,6 +177,17 @@ namespace
 		FString SuccessRateLabel = TEXT("-");
 		FString TotalDurationLabel = TEXT("-");
 		int32 EpisodeCount = 0;
+		bool bSummaryLoaded = false;
+	};
+
+	// Run row progress column에 적용할 표시값 묶음.
+	struct FRunListProgressPresentation
+	{
+		int32 CompletedCount = 0;
+		int32 TotalCount = 0;
+		float Percent = 0.0f;
+		FText Label;
+		EProjectExperimentRunRowProgressState State = EProjectExperimentRunRowProgressState::Default;
 	};
 
 	// 한 row를 그릴 때 필요한 파일 기반 결과 snapshot.
@@ -185,25 +196,12 @@ namespace
 		UOdiroListItemViewModel* Item = nullptr;
 		ESimulationRunState RunState = ESimulationRunState::Pending;
 		FRunListDashboardLabels DashboardLabels;
+		int32 ProgressCompletedCount = 0;
 		int32 ProgressTotalCount = 0;
+		float ProgressPercent = 0.0f;
+		FText ProgressLabel;
+		EProjectExperimentRunRowProgressState ProgressState = EProjectExperimentRunRowProgressState::Default;
 	};
-
-	// status.json과 summary.json을 기준으로 run state를 계산한다.
-	ESimulationRunState ResolveRunListState(const FString& runDirectory)
-	{
-		const FString normalizedRunDirectory = NormalizeRunListPath(runDirectory);
-		const FString statusPath = NormalizeRunListPath(FPaths::Combine(normalizedRunDirectory, TEXT("status.json")));
-		ESimulationRunState runState = ESimulationRunState::Pending;
-		if (UPlatformUiSubsystem::TryReadBridgeRunStatusState(statusPath, runState))
-		{
-			return runState;
-		}
-
-		const FString summaryPath = NormalizeRunListPath(FPaths::Combine(normalizedRunDirectory, TEXT("summary.json")));
-		return UPlatformUiSubsystem::DoesResolvedFileExist(summaryPath)
-			? ESimulationRunState::Completed
-			: ESimulationRunState::Pending;
-	}
 
 	// summary dashboard를 RunList row label 값으로 변환한다.
 	FRunListDashboardLabels MakeRunListDashboardLabels(const FString& runDirectory)
@@ -218,6 +216,7 @@ namespace
 			return labels;
 		}
 
+		labels.bSummaryLoaded = dashboardData.bSummaryLoaded;
 		if (dashboardData.EpisodeCount > 0)
 		{
 			labels.EpisodeCount = dashboardData.EpisodeCount;
@@ -229,10 +228,68 @@ namespace
 		return labels;
 	}
 
+	FText FormatRunListProgressCountLabel(const int32 completedCount, const int32 totalCount)
+	{
+		return FText::FromString(FString::Printf(
+			TEXT("%d/%d"),
+			FMath::Max(0, completedCount),
+			FMath::Max(0, totalCount)));
+	}
+
+	FRunListProgressPresentation MakeRunListProgressPresentation(
+		const FPlatformProjectRunProgressSnapshot& progressSnapshot)
+	{
+		FRunListProgressPresentation presentation;
+		presentation.CompletedCount = FMath::Max(0, progressSnapshot.CompletedCount);
+		presentation.TotalCount = FMath::Max(FMath::Max(0, progressSnapshot.TotalCount), presentation.CompletedCount);
+		presentation.Percent = FMath::Clamp(progressSnapshot.Percent, 0.0f, 100.0f);
+
+		switch (progressSnapshot.ProgressKind)
+		{
+		case EPlatformProjectRunProgressKind::Error:
+			presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusError", "오류");
+			presentation.State = EProjectExperimentRunRowProgressState::Error;
+			return presentation;
+		case EPlatformProjectRunProgressKind::Starting:
+			presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusStarting", "시작");
+			presentation.Percent = 0.0f;
+			presentation.State = EProjectExperimentRunRowProgressState::Loading;
+			return presentation;
+		case EPlatformProjectRunProgressKind::Running:
+			presentation.Label = FormatRunListProgressCountLabel(
+				presentation.CompletedCount,
+				presentation.TotalCount);
+			presentation.State = EProjectExperimentRunRowProgressState::Loading;
+			return presentation;
+		case EPlatformProjectRunProgressKind::Canceled:
+			presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusCanceled", "중단");
+			presentation.State = EProjectExperimentRunRowProgressState::Warning;
+			return presentation;
+		case EPlatformProjectRunProgressKind::Completed:
+			presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusCompletedFallback", "완료");
+			presentation.Percent = 100.0f;
+			presentation.State = EProjectExperimentRunRowProgressState::Success;
+			return presentation;
+		case EPlatformProjectRunProgressKind::Failed:
+			presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusFailedFallback", "실패");
+			presentation.State = EProjectExperimentRunRowProgressState::Error;
+			return presentation;
+		case EPlatformProjectRunProgressKind::Pending:
+		default:
+			break;
+		}
+
+		presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusPending", "대기");
+		presentation.Percent = 0.0f;
+		presentation.State = EProjectExperimentRunRowProgressState::Default;
+		return presentation;
+	}
+
 	// ViewModel item과 파일 기반 결과 snapshot을 render-ready row data로 결합한다.
 	TArray<FRunListRenderedRowData> BuildRunListRenderedRows(
 		const TArray<UOdiroListItemViewModel*>& runItems,
-		const UExperimentConfigViewModel* configViewModel)
+		const UExperimentConfigViewModel* configViewModel,
+		const UPlatformUiSubsystem* platformUiSubsystem)
 	{
 		const int32 configuredEpisodeCount = configViewModel ? FMath::Max(1, configViewModel->GetEpisodeCount()) : 0;
 		TArray<FRunListRenderedRowData> renderedRows;
@@ -247,11 +304,37 @@ namespace
 
 			FRunListRenderedRowData rowData;
 			rowData.Item = item;
-			rowData.RunState = ResolveRunListState(item->GetPayloadPath());
-			rowData.DashboardLabels = MakeRunListDashboardLabels(item->GetPayloadPath());
-			rowData.ProgressTotalCount = rowData.DashboardLabels.EpisodeCount > 0
-				? rowData.DashboardLabels.EpisodeCount
-				: configuredEpisodeCount;
+			const FString runDirectory = item->GetPayloadPath();
+			rowData.DashboardLabels = MakeRunListDashboardLabels(runDirectory);
+			FPlatformProjectRunProgressSnapshot progressSnapshot = platformUiSubsystem
+				? platformUiSubsystem->BuildProjectRunProgressSnapshot(runDirectory, configuredEpisodeCount)
+				: FPlatformProjectRunProgressSnapshot();
+			if (!platformUiSubsystem)
+			{
+				progressSnapshot.RunState = rowData.DashboardLabels.bSummaryLoaded
+					? ESimulationRunState::Completed
+					: ESimulationRunState::Pending;
+				progressSnapshot.ProgressKind = rowData.DashboardLabels.bSummaryLoaded
+					? EPlatformProjectRunProgressKind::Completed
+					: EPlatformProjectRunProgressKind::Pending;
+				progressSnapshot.CompletedCount = rowData.DashboardLabels.bSummaryLoaded
+					? rowData.DashboardLabels.EpisodeCount
+					: 0;
+				progressSnapshot.TotalCount = rowData.DashboardLabels.EpisodeCount > 0
+					? rowData.DashboardLabels.EpisodeCount
+					: configuredEpisodeCount;
+				progressSnapshot.Percent = progressSnapshot.ProgressKind == EPlatformProjectRunProgressKind::Completed
+					? 100.0f
+					: 0.0f;
+			}
+
+			rowData.RunState = progressSnapshot.RunState;
+			const FRunListProgressPresentation progressPresentation = MakeRunListProgressPresentation(progressSnapshot);
+			rowData.ProgressCompletedCount = progressPresentation.CompletedCount;
+			rowData.ProgressTotalCount = progressPresentation.TotalCount;
+			rowData.ProgressPercent = progressPresentation.Percent;
+			rowData.ProgressLabel = progressPresentation.Label;
+			rowData.ProgressState = progressPresentation.State;
 			renderedRows.Add(rowData);
 		}
 		return renderedRows;
@@ -271,14 +354,18 @@ namespace
 			}
 
 			signatureLines.Add(FString::Printf(
-				TEXT("%s|%s|%d|%s|%s|%d|%d|%d"),
+				TEXT("%s|%s|%d|%s|%s|%d|%d|%d|%.2f|%s|%d|%d"),
 				*item->GetItemId(),
 				*NormalizeRunListPath(item->GetPayloadPath()),
 				static_cast<int32>(rowData.RunState),
 				*rowData.DashboardLabels.SuccessRateLabel,
 				*rowData.DashboardLabels.TotalDurationLabel,
 				rowData.DashboardLabels.EpisodeCount,
+				rowData.ProgressCompletedCount,
 				rowData.ProgressTotalCount,
+				rowData.ProgressPercent,
+				*rowData.ProgressLabel.ToString(),
+				static_cast<int32>(rowData.ProgressState),
 				item->IsSelected() ? 1 : 0));
 		}
 		return FString::Join(signatureLines, TEXT("\n"));
@@ -515,6 +602,7 @@ void URunListScreenWidget::RebuildRunRows(const bool bForceRebuild)
 {
 	UProjectWorkspaceViewModel* workspaceViewModel = ResolveWorkspaceViewModel();
 	UExperimentConfigViewModel* configViewModel = ResolveExperimentConfigViewModel();
+	const UPlatformUiSubsystem* platformUiSubsystem = UPlatformUiSubsystem::ResolveForWorldContext(this);
 	const TSubclassOf<UProjectExperimentRunRowWidget> rowClass = ResolveRunRowWidgetClass();
 	if (!RunRowListBox || !workspaceViewModel || !rowClass)
 	{
@@ -528,7 +616,8 @@ void URunListScreenWidget::RebuildRunRows(const bool bForceRebuild)
 
 	const TArray<FRunListRenderedRowData> renderedRows = BuildRunListRenderedRows(
 		workspaceViewModel->GetRunItems(),
-		configViewModel);
+		configViewModel,
+		platformUiSubsystem);
 	const FString newSignature = BuildRunListResultsSignature(renderedRows);
 	if (!bForceRebuild && newSignature == RenderedRunResultsSignature && RunRows.Num() == renderedRows.Num())
 	{
@@ -561,6 +650,10 @@ void URunListScreenWidget::RebuildRunRows(const bool bForceRebuild)
 			rowData.DashboardLabels.SuccessRateLabel,
 			rowData.DashboardLabels.TotalDurationLabel,
 			rowData.RunState == ESimulationRunState::Completed);
+		rowWidget->SetProgressStatus(
+			rowData.ProgressPercent,
+			rowData.ProgressLabel,
+			rowData.ProgressState);
 		rowWidget->OnAnalyzeRequested.RemoveAll(this);
 		rowWidget->OnAnalyzeRequested.AddUObject(this, &URunListScreenWidget::HandleRunRowAnalyzeRequested);
 		RunRowListBox->AddChild(rowWidget);
@@ -575,7 +668,7 @@ TSubclassOf<UProjectExperimentRunRowWidget> URunListScreenWidget::ResolveRunRowW
 
 ESimulationRunState URunListScreenWidget::ResolveRunState(const FString& runDirectory)
 {
-	return ResolveRunListState(runDirectory);
+	return UPlatformUiSubsystem::ResolveProjectRunState(NormalizeRunListPath(runDirectory));
 }
 
 void URunListScreenWidget::ClearRunRows()

@@ -56,7 +56,7 @@ guardrails:
   - Project preset resource structure and manifest payload-copy rules are owned by contracts/specs/user-project-data.md and contracts/specs/bridge-ipc.md.
   - ExperimentConfigViewModel owns FieldNotify input state only; user-project setting.json file/JSON I/O stays behind PlatformUiSubsystem experiment setting APIs.
   - RobotProfileViewModel owns FieldNotify input state only; user-project profile.json robot.body, robot.drive, and robot.lidar file/JSON I/O stays behind PlatformUiSubsystem robot profile APIs.
-  - ExperimentResultViewModel owns dashboard display state only; project run summary/review JSON loading and AI request relay stay behind PlatformUiSubsystem APIs.
+  - ExperimentResultViewModel owns dashboard display state only; project run summary/review/progress JSON loading and AI request relay stay behind PlatformUiSubsystem APIs.
   - ProjectWorkspaceViewModel does not call OpenLevel directly; startup return navigation is mediated by PlatformUiSubsystem.
   - Platform widgets must not rebuild WBP layout with WidgetTree/ConstructWidget fallback UI; keep structural layout and empty states in WBP-owned surfaces.
   - Root `task-build.bat`, `task-run.bat`, and `task-dev.bat` are the user-facing Client task entrypoints.

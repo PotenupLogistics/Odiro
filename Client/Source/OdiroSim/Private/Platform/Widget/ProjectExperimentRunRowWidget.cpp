@@ -6,6 +6,8 @@
 #include "Platform/ViewModel/OdiroListItemViewModel.h"
 #include "UI/BaseButtonWidget.h"
 #include "UI/BaseProgressBarWidget.h"
+#include "UI/BaseStatusBadgeWidget.h"
+#include "UI/BaseWidgetTypes.h"
 
 namespace
 {
@@ -54,25 +56,44 @@ namespace
 		const int32 clampedTotal = FMath::Max(0, totalCount);
 		if (clampedTotal <= 0)
 		{
-			return NSLOCTEXT("ProjectExperimentRunRow", "ProgressCountUnavailable", "- / -");
+			return NSLOCTEXT("ProjectExperimentRunRow", "ProgressCountUnavailable", "-/-");
 		}
 
 		const int32 completedCount = bCompleted ? clampedTotal : 0;
-		return FText::FromString(FString::Printf(TEXT("%d / %d"), completedCount, clampedTotal));
+		return FText::FromString(FString::Printf(TEXT("%d/%d"), completedCount, clampedTotal));
 	}
 
-	EBaseWidgetState MakeProgressBarState(const ESimulationRunState state)
+	EProjectExperimentRunRowProgressState MakeProgressState(const ESimulationRunState state)
 	{
 		switch (state)
 		{
 		case ESimulationRunState::Completed:
-			return EBaseWidgetState::Success;
+			return EProjectExperimentRunRowProgressState::Success;
 		case ESimulationRunState::Failed:
+			return EProjectExperimentRunRowProgressState::Error;
 		case ESimulationRunState::Canceled:
-			return EBaseWidgetState::Error;
+			return EProjectExperimentRunRowProgressState::Warning;
 		case ESimulationRunState::Running:
-			return EBaseWidgetState::Loading;
+			return EProjectExperimentRunRowProgressState::Loading;
 		case ESimulationRunState::Pending:
+		default:
+			return EProjectExperimentRunRowProgressState::Default;
+		}
+	}
+
+	EBaseWidgetState ToBaseWidgetState(const EProjectExperimentRunRowProgressState state)
+	{
+		switch (state)
+		{
+		case EProjectExperimentRunRowProgressState::Loading:
+			return EBaseWidgetState::Loading;
+		case EProjectExperimentRunRowProgressState::Success:
+			return EBaseWidgetState::Success;
+		case EProjectExperimentRunRowProgressState::Warning:
+			return EBaseWidgetState::Warning;
+		case EProjectExperimentRunRowProgressState::Error:
+			return EBaseWidgetState::Error;
+		case EProjectExperimentRunRowProgressState::Default:
 		default:
 			return EBaseWidgetState::Default;
 		}
@@ -132,22 +153,15 @@ void UProjectExperimentRunRowWidget::InitializeRunRow(
 		ActionDisplayText);
 	SetProgressPresentation(true, true);
 	SetActionPresentation(false, true);
+	SetProgressStatus(
+		bCompleted ? 100.0f : 0.0f,
+		MakeProgressCountLabel(bCompleted, progressTotalCount),
+		MakeProgressState(state));
 
 	if (RunIdText)
 	{
 		const FString sourceRunId = runId.IsEmpty() ? FPaths::GetBaseFilename(runDirectory) : runId;
 		RunIdText->SetText(MakeProjectExperimentRunLabel(sourceRunId));
-	}
-
-	if (ProgressCountText)
-	{
-		ProgressCountText->SetText(MakeProgressCountLabel(bCompleted, progressTotalCount));
-	}
-
-	if (ProgressBar)
-	{
-		ProgressBar->SetProgressPercent(bCompleted ? 100.0f : 0.0f);
-		ProgressBar->SetBaseState(MakeProgressBarState(state));
 	}
 
 	if (SuccessRateText)
@@ -163,7 +177,7 @@ void UProjectExperimentRunRowWidget::InitializeRunRow(
 	if (AnalyzeButton)
 	{
 		AnalyzeButton->SetDisabled(!bAnalyzeEnabled);
-		AnalyzeButton->SetVisibility(bAnalyzeEnabled && bShowAnalyzeButton ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		AnalyzeButton->SetVisibility(ResolveAnalyzeButtonVisibility());
 	}
 	if (ActionLabelText)
 	{
@@ -221,6 +235,17 @@ void UProjectExperimentRunRowWidget::SetProgressPresentation(
 	ApplyDisplayTexts();
 }
 
+void UProjectExperimentRunRowWidget::SetProgressStatus(
+	const float progressPercent,
+	const FText progressLabel,
+	const EProjectExperimentRunRowProgressState progressState)
+{
+	ProgressPercent = FMath::Clamp(progressPercent, 0.0f, 100.0f);
+	ProgressCountDisplayText = progressLabel;
+	ProgressState = progressState;
+	ApplyProgressStatus();
+}
+
 void UProjectExperimentRunRowWidget::SetActionPresentation(
 	const bool bInShowActionText,
 	const bool bInShowAnalyzeButton)
@@ -250,11 +275,11 @@ void UProjectExperimentRunRowWidget::ApplyDisplayTexts() const
 	{
 		if (!ProgressCountDisplayText.IsEmpty())
 		{
-			ProgressCountText->SetText(ProgressCountDisplayText);
+			ProgressCountText->SetLabel(ProgressCountDisplayText);
 		}
 		else if (!ProgressDisplayText.IsEmpty())
 		{
-			ProgressCountText->SetText(ProgressDisplayText);
+			ProgressCountText->SetLabel(ProgressDisplayText);
 		}
 		ProgressCountText->SetVisibility(bShowProgressCountText ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	}
@@ -281,8 +306,39 @@ void UProjectExperimentRunRowWidget::ApplyDisplayTexts() const
 		{
 			AnalyzeButton->SetLabel(ActionDisplayText);
 		}
-		AnalyzeButton->SetVisibility(bShowAnalyzeButton ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		AnalyzeButton->SetDisabled(bHasRunData && !bAnalyzeEnabled);
+		AnalyzeButton->SetVisibility(ResolveAnalyzeButtonVisibility());
 	}
+	ApplyProgressStatus();
+}
+
+void UProjectExperimentRunRowWidget::ApplyProgressStatus() const
+{
+	if (ProgressBar)
+	{
+		ProgressBar->SetProgressPercent(ProgressPercent);
+		ProgressBar->SetBaseState(ToBaseWidgetState(ProgressState));
+	}
+	if (ProgressCountText)
+	{
+		if (!ProgressCountDisplayText.IsEmpty())
+		{
+			ProgressCountText->SetLabel(ProgressCountDisplayText);
+		}
+		ProgressCountText->SetBaseState(ToBaseWidgetState(ProgressState));
+	}
+}
+
+ESlateVisibility UProjectExperimentRunRowWidget::ResolveAnalyzeButtonVisibility() const
+{
+	if (!bShowAnalyzeButton)
+	{
+		return ESlateVisibility::Hidden;
+	}
+
+	return (!bHasRunData || bAnalyzeEnabled)
+		? ESlateVisibility::Visible
+		: ESlateVisibility::Hidden;
 }
 
 void UProjectExperimentRunRowWidget::RefreshStateVisibility(const ESimulationRunState state) const

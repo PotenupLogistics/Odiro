@@ -20,6 +20,18 @@ struct FProjectRunResultDashboardData;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiRunInfoChangedNative, const FSimulatorRunInfo&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiAnalysisCompletedNative, const FPlatformAnalysisAiResponse&);
+// Project run progress status kind consumed by Platform row widgets.
+UENUM(BlueprintType)
+enum class EPlatformProjectRunProgressKind : uint8
+{
+	Pending,
+	Starting,
+	Running,
+	Canceled,
+	Completed,
+	Failed,
+	Error
+};
 
 // Legacy report 목록 표시용 경량 item; 파일 파싱은 PlatformUiSubsystem이 소유한다.
 USTRUCT(BlueprintType)
@@ -34,6 +46,37 @@ struct ODIROSIM_API FExperimentResultReportItem
 	// Report가 나타내는 run index.
 	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
 	int32 RunIndex = INDEX_NONE;
+};
+
+// Render-ready progress snapshot for one user-project run directory.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FPlatformProjectRunProgressSnapshot
+{
+	GENERATED_BODY()
+
+	// Run lifecycle state resolved from status/summary artifacts.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	ESimulationRunState RunState = ESimulationRunState::Pending;
+
+	// Progress presentation state without depending on concrete widget classes.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	EPlatformProjectRunProgressKind ProgressKind = EPlatformProjectRunProgressKind::Pending;
+
+	// Number of completed episode results counted for the run.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	int32 CompletedCount = 0;
+
+	// Expected total episode count resolved from snapshot, summary, or current config.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	int32 TotalCount = 0;
+
+	// Completion percent in the 0-100 range.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	float Percent = 0.0f;
+
+	// Whether summary.json was loaded for this run.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	bool bSummaryLoaded = false;
 };
 
 // Platform UI의 ViewModel lifecycle/factory를 소유하는 GameInstance subsystem.
@@ -109,10 +152,18 @@ public:
 	// Project run directory 아래 episode result 파일 목록을 반환한다.
 	TArray<FString> ListProjectEpisodeResultFiles(const FString& runDirectory) const;
 
+	// Project run directory의 progress 표시 snapshot을 만든다.
+	FPlatformProjectRunProgressSnapshot BuildProjectRunProgressSnapshot(
+		const FString& runDirectory,
+		int32 configuredEpisodeCount) const;
+
 	// Project run directory의 summary/review JSON을 dashboard 데이터로 읽는다.
 	static bool LoadProjectRunDashboard(
 		const FString& runDirectory,
 		FProjectRunResultDashboardData& outDashboardData);
+
+	// Project run directory의 lifecycle state를 status/summary artifact에서 계산한다.
+	static ESimulationRunState ResolveProjectRunState(const FString& runDirectory);
 
 	// Project run AI 분석 요청을 model subsystem으로 위임한다.
 	bool RequestProjectRunAnalysis(

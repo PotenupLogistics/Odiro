@@ -74,6 +74,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|Workspace")
 	bool ReturnToStartup();
 
+	// active project setting.json의 project_id를 저장하고 ViewModel 상태를 갱신한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|Workspace")
+	bool SaveActiveProjectId(const FString& projectId, FString& outErrorText);
+
 	// active project root 절대 경로를 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|Workspace")
 	FString GetActiveProjectPath() const { return ActiveProjectPath; }

@@ -6,10 +6,9 @@
 
 class UBaseButtonWidget;
 class UBaseTextWidget;
+class UBaseTextInputWidget;
 class UProjectWorkspaceViewModel;
 class UImage;
-class UScrollBox;
-class USpacer;
 class UTexture2D;
 class UWidget;
 
@@ -54,10 +53,6 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Platform|Overview|Events")
 	FProjectOverviewScreenRequested OnExperimentRequested;
 
-protected:
-	// Keeps overlay scrollbars in sync with the WBP-owned overview content viewport.
-	virtual void NativeTick(const FGeometry& myGeometry, float inDeltaTime) override;
-
 private:
 	// Resolves and caches the workspace ViewModel.
 	UProjectWorkspaceViewModel* ResolveViewModel();
@@ -65,17 +60,26 @@ private:
 	// Loads active project preview.png into the overview thumbnail image.
 	bool ApplyScenarioThumbnail(const FString& projectPath);
 
-	// Binds overlay scrollbar delegates.
-	void BindOverviewScrollbars();
+	// Applies the project-name edit/display visibility state to bound WBP controls.
+	void UpdateProjectNameEditState();
 
-	// Releases overlay scrollbar delegates.
-	void UnbindOverviewScrollbars();
+	// Enters or exits project-name edit mode without changing WBP-authored layout or style.
+	void SetProjectNameEditMode(bool bEditing);
 
-	// Updates overlay scrollbar visibility and scroll ranges.
-	void UpdateOverviewOverlayScrollbars(const FVector2D& screenSize);
+	// Saves the current project-name edit field through the workspace ViewModel.
+	void SaveProjectNameEdit();
 
-	// Stores WBP-authored scroll child padding before runtime centering adjusts it.
-	bool CaptureOverviewAuthoredScrollPadding();
+	// Project name edit action click handler.
+	UFUNCTION()
+	void HandleEditProjectNameClicked(UBaseButtonWidget* button);
+
+	// Project name save action click handler.
+	UFUNCTION()
+	void HandleSaveProjectNameClicked(UBaseButtonWidget* button);
+
+	// Project name Enter-submit handler.
+	UFUNCTION()
+	void HandleProjectNameSubmitted(UBaseTextInputWidget* widget, const FText& text);
 
 	// Scenario guide click handler.
 	UFUNCTION()
@@ -93,25 +97,25 @@ private:
 	UFUNCTION()
 	void HandleExperimentButtonClicked(UBaseButtonWidget* button);
 
-	// 화면 하단 가로 scrollbar 입력을 실제 overview scroll viewport에 반영한다.
-	UFUNCTION()
-	void HandleOverviewStickyHorizontalScrolled(float currentOffset);
-
-	// 실제 overview scroll viewport의 가로 offset 변화를 화면 하단 scrollbar에 반영한다.
-	UFUNCTION()
-	void HandleOverviewContentHorizontalScrolled(float currentOffset);
-
-	// 화면 오른쪽 세로 scrollbar 입력을 실제 overview scroll viewport에 반영한다.
-	UFUNCTION()
-	void HandleOverviewStickyVerticalScrolled(float currentOffset);
-
-	// 실제 overview scroll viewport의 세로 offset 변화를 화면 오른쪽 scrollbar에 반영한다.
-	UFUNCTION()
-	void HandleOverviewContentVerticalScrolled(float currentOffset);
-
 	// ViewModel supplied by PlatformUiSubsystem.
 	UPROPERTY(Transient)
 	TObjectPtr<UProjectWorkspaceViewModel> ProjectWorkspaceViewModel;
+
+	// Active project id display.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ProjectNameTitle;
+
+	// Active project id edit field.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseTextInputWidget> ProjectNameInput;
+
+	// Action that switches the project id title into edit mode.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseButtonWidget> EditProjectNameButton;
+
+	// Action that saves the project id edit field.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseButtonWidget> SaveProjectNameButton;
 
 	// Active project root path display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -132,34 +136,6 @@ private:
 	// Active project scenario preview thumbnail image.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UImage> ScenarioThumbnailImage;
-
-	// WBP-owned vertical content scroll viewport.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UScrollBox> ProjectOverviewScrollBox;
-
-	// WBP-owned horizontal content scroll viewport.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UScrollBox> ProjectOverviewHorizontalScrollBox;
-
-	// WBP-owned main overview content stack used to size overlay scroll ranges.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UWidget> ProjectOverviewMainStack;
-
-	// WBP-owned optional bottom overlay scrollbar.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UScrollBox> ProjectOverviewStickyHorizontalScrollBox;
-
-	// WBP-owned optional bottom overlay scrollbar range spacer.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<USpacer> ProjectOverviewStickyHorizontalScrollSpacer;
-
-	// WBP-owned optional right overlay scrollbar.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UScrollBox> ProjectOverviewStickyVerticalScrollBox;
-
-	// WBP-owned optional right overlay scrollbar range spacer.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<USpacer> ProjectOverviewStickyVerticalScrollSpacer;
 
 	// Guide action that opens the scenario editor screen.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -185,39 +161,23 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> ScenarioThumbnailTexture;
 
-	// Last overlay scrollbar viewport size.
-	UPROPERTY(Transient)
-	FVector2D CachedOverviewScrollViewportSize = FVector2D::ZeroVector;
+	// ViewModel이 없을 때 표시할 WBP-owned 상태 문구.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Overview|Text", meta = (AllowPrivateAccess = "true"))
+	FText WorkspaceViewModelMissingText = NSLOCTEXT("OdiroPlatform", "OverviewWorkspaceViewModelMissingText", "Workspace ViewModel 없음");
 
-	// Last overlay scrollbar content desired size.
-	UPROPERTY(Transient)
-	FVector2D CachedOverviewScrollContentSize = FVector2D::ZeroVector;
+	// Project id 입력이 비어 있을 때 표시할 WBP-owned 오류 문구.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Overview|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProjectNameRequiredText = NSLOCTEXT("OdiroPlatform", "OverviewProjectNameRequiredText", "Project ID를 입력하세요.");
 
-	// WBP-authored padding for ProjectOverviewMainStack inside the horizontal scroll viewport.
-	UPROPERTY(Transient)
-	FMargin ProjectOverviewMainStackBasePadding;
+	// Project id 저장 실패 시 표시할 WBP-owned 오류 문구.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Overview|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProjectNameSaveFailedText = NSLOCTEXT("OdiroPlatform", "OverviewProjectNameSaveFailedText", "Project ID 저장 실패");
 
-	// WBP-authored padding for ProjectOverviewHorizontalScrollBox inside the vertical scroll viewport.
-	UPROPERTY(Transient)
-	FMargin ProjectOverviewHorizontalScrollBoxBasePadding;
+	// Project id 저장 성공 시 표시할 WBP-owned 상태 문구.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Overview|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProjectNameSavedText = NSLOCTEXT("OdiroPlatform", "OverviewProjectNameSavedText", "Project ID 저장됨");
 
-	// Last computed horizontal overflow state.
+	// Whether the project id title row is currently showing the editable field.
 	UPROPERTY(Transient)
-	uint8 bCachedOverviewNeedsHorizontalScroll : 1 = false;
-
-	// Last computed vertical overflow state.
-	UPROPERTY(Transient)
-	uint8 bCachedOverviewNeedsVerticalScroll : 1 = false;
-
-	// Project overview scroll child padding capture 완료 여부.
-	UPROPERTY(Transient)
-	uint8 bHasProjectOverviewScrollBasePadding : 1 = false;
-
-	// 가로 scroll offset 동기화 중 재진입을 막는다.
-	UPROPERTY(Transient)
-	bool bSyncingOverviewHorizontalScroll = false;
-
-	// 세로 scroll offset 동기화 중 재진입을 막는다.
-	UPROPERTY(Transient)
-	bool bSyncingOverviewVerticalScroll = false;
+	bool bEditingProjectName = false;
 };

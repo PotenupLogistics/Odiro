@@ -618,6 +618,11 @@ bool FBaseFormElementsTextInputTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("text wrap option stores"), input->IsTextWrapEnabled());
 	input->SetTextWrap(false);
 	TestFalse(TEXT("text wrap option clears"), input->IsTextWrapEnabled());
+	TestFalse(TEXT("move caret to end on focus defaults off"), input->ShouldMoveCaretToEndOnFocus());
+	input->SetMoveCaretToEndOnFocus(true);
+	TestTrue(TEXT("move caret to end on focus option stores"), input->ShouldMoveCaretToEndOnFocus());
+	input->SetMoveCaretToEndOnFocus(false);
+	TestFalse(TEXT("move caret to end on focus option clears"), input->ShouldMoveCaretToEndOnFocus());
 	input->SetInputMode(EBaseTextInputMode::Multiline);
 	TestEqual(TEXT("legacy multiline maps to text mode"), input->GetInputMode(), EBaseTextInputMode::Text);
 	TestTrue(TEXT("legacy multiline enables wrapping"), input->IsTextWrapEnabled());
@@ -629,8 +634,25 @@ bool FBaseFormElementsTextInputTest::RunTest(const FString& parameters)
 
 	input->SetValueRange(0.0f, 10.0f);
 	input->SetInputMode(EBaseTextInputMode::Number);
+	TestTrue(TEXT("unit text defaults empty"), input->GetUnitText().IsEmpty());
+	input->SetUnitText(FText::FromString(TEXT("kg/s")));
+	TestEqual(TEXT("unit text stores arbitrary suffix"), input->GetUnitText().ToString(), FString(TEXT("kg/s")));
+	TestFalse(TEXT("unit text color override defaults off"), input->HasUnitTextColorOverride());
+	input->SetUnitTextColorOverride(FLinearColor::Red);
+	TestTrue(TEXT("unit text color override enables"), input->HasUnitTextColorOverride());
+	TestTrue(TEXT("unit text color override stores color"), input->GetUnitTextColorOverride().Equals(FLinearColor::Red));
+	input->ClearUnitTextColorOverride();
+	TestFalse(TEXT("unit text color override clears"), input->HasUnitTextColorOverride());
+	TestEqual(TEXT("font size override defaults to data asset"), input->GetFontSizeOverride(), 0.0f);
+	input->SetFontSizeOverride(13.0f);
+	TestEqual(TEXT("font size override stores explicit value"), input->GetFontSizeOverride(), 13.0f);
+	input->SetFontSizeOverride(-1.0f);
+	TestEqual(TEXT("font size override clears on negative value"), input->GetFontSizeOverride(), 0.0f);
 	input->SetNumericValue(15.0f);
 	TestEqual(TEXT("numeric value clamps to max"), input->GetNumericValue(), 10.0f);
+	TestEqual(TEXT("current number text excludes unit suffix"), input->GetCurrentText().ToString(), FString(TEXT("10")));
+	TestFalse(TEXT("unit suffix is not parsed as numeric input"), input->CommitText(FText::FromString(TEXT("4.5kg/s"))));
+	TestEqual(TEXT("unit suffix commit preserves value"), input->GetNumericValue(), 10.0f);
 	TestFalse(TEXT("invalid number commit fails"), input->CommitText(FText::FromString(TEXT("bad"))));
 	TestEqual(TEXT("invalid number preserves value"), input->GetNumericValue(), 10.0f);
 	TestFalse(TEXT("invalid number sets error"), input->GetErrorText().IsEmpty());

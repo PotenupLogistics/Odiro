@@ -10,6 +10,10 @@ class UBaseTextWidget;
 class UTexture2D;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FRecentProjectCardSelectedNative, class URecentProjectCardWidget*);
+DECLARE_MULTICAST_DELEGATE_TwoParams(
+	FRecentProjectCardContextMenuNative,
+	class URecentProjectCardWidget*,
+	FVector2D);
 
 // StartupScreen의 최근 project 하나를 표시하는 thumbnail card.
 UCLASS(BlueprintType, Blueprintable)
@@ -33,6 +37,9 @@ public:
 	// Card 선택/open 요청을 parent widget에 알린다.
 	FRecentProjectCardSelectedNative OnSelectedRequested;
 
+	// Card context menu 요청을 parent widget에 알린다.
+	FRecentProjectCardContextMenuNative OnContextMenuRequested;
+
 protected:
 	// BaseThumbnailCard의 token 기반 surface 동기화를 그대로 사용한다.
 	virtual void SynchronizeBaseProperties() override;
@@ -42,6 +49,9 @@ protected:
 
 	// Runtime click delegate를 WBP-owned 버튼에서 해제한다.
 	virtual void NativeDestruct() override;
+
+	// Child button이 pointer event를 처리하기 전에 context menu 요청을 잡는다.
+	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& inGeometry, const FPointerEvent& inMouseEvent) override;
 
 	// Button이 없는 WBP에서도 카드 click을 선택 요청으로 처리한다.
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& inGeometry, const FPointerEvent& inMouseEvent) override;

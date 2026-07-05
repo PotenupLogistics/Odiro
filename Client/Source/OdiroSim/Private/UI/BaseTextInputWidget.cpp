@@ -2,9 +2,11 @@
 #include "UI/BaseFormElementPrivate.h"
 #include "Components/Border.h"
 #include "Components/EditableTextBox.h"
+#include "Components/HorizontalBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "InputCoreTypes.h"
 #include "UI/BaseButtonWidget.h"
 #include "UI/BaseWidgetPrivate.h"
 
@@ -22,6 +24,144 @@ namespace
 		}
 		return FText::FromString(FString::Printf(TEXT("%.*f"), decimals, value));
 	}
+
+	// Resolves BaseTextInput's editable value font from explicit override or DA typography.
+	FSlateFontInfo ResolveInputValueFont(const UBaseWidgetSizeCatalog* sizes, const float fontSizeOverride)
+	{
+		FSlateFontInfo valueFont;
+		if (sizes)
+		{
+			valueFont = sizes->GetTypography(EBaseTextRole::Body).Font;
+		}
+
+		if (fontSizeOverride > 0.0f)
+		{
+			valueFont.Size = fontSizeOverride;
+		}
+
+		return valueFont;
+	}
+
+	// Applies resolved DA font metrics while preserving a WBP-authored font face when only size is known.
+	FSlateFontInfo ResolveAppliedFont(const FSlateFontInfo& currentFont, const FSlateFontInfo& resolvedFont)
+	{
+		if (resolvedFont.Size <= 0.0f)
+		{
+			return currentFont;
+		}
+
+		FSlateFontInfo appliedFont = currentFont;
+		if (resolvedFont.FontObject || resolvedFont.CompositeFont.IsValid())
+		{
+			appliedFont = resolvedFont;
+		}
+		else if (!resolvedFont.TypefaceFontName.IsNone())
+		{
+			appliedFont.TypefaceFontName = resolvedFont.TypefaceFontName;
+		}
+
+		appliedFont.Size = resolvedFont.Size;
+		return appliedFont;
+	}
+
+	// Applies the resolved value style without replacing the WBP-authored field chrome.
+	void ApplyEditableTextBoxValueStyle(
+		UEditableTextBox* textBox,
+		const FSlateFontInfo& valueFont,
+		const FLinearColor& textColor,
+		const bool bApplyTextColor,
+		const bool bPreserveFocusedText)
+	{
+		if (!IsValid(textBox) || (valueFont.Size <= 0.0f && !bApplyTextColor))
+		{
+			return;
+		}
+
+		FEditableTextBoxStyle textBoxStyle = textBox->WidgetStyle;
+		FTextBlockStyle textStyle = textBoxStyle.TextStyle;
+		if (valueFont.Size > 0.0f)
+		{
+			const FSlateFontInfo font = ResolveAppliedFont(textStyle.Font, valueFont);
+			textStyle.SetFont(font);
+			textBoxStyle.SetFont(font);
+		}
+		if (bApplyTextColor)
+		{
+			const FSlateColor slateTextColor(textColor);
+			textStyle.SetColorAndOpacity(slateTextColor);
+			textBoxStyle
+				.SetForegroundColor(slateTextColor)
+				.SetReadOnlyForegroundColor(slateTextColor)
+				.SetFocusedForegroundColor(slateTextColor);
+		}
+		textBoxStyle.SetTextStyle(textStyle);
+		textBox->WidgetStyle = textBoxStyle;
+		if (!bPreserveFocusedText)
+		{
+			textBox->SynchronizeProperties();
+		}
+		if (bApplyTextColor)
+		{
+			textBox->SetForegroundColor(textColor);
+		}
+	}
+
+	// Returns true while focused edits should not be overwritten by visual synchronization.
+	bool ShouldPreserveFocusedEditableText(const UEditableTextBox* textBox, const bool bMoveCaretToEndOnFocus)
+	{
+		return !bMoveCaretToEndOnFocus
+			&& IsValid(textBox)
+			&& textBox->HasKeyboardFocus();
+	}
+
+	// Applies the resolved multiline value style without replacing the WBP-authored field chrome.
+	void ApplyMultiLineEditableTextBoxValueStyle(
+		UMultiLineEditableTextBox* textBox,
+		const FSlateFontInfo& valueFont,
+		const FLinearColor& textColor,
+		const bool bApplyTextColor)
+	{
+		if (!IsValid(textBox) || (valueFont.Size <= 0.0f && !bApplyTextColor))
+		{
+			return;
+		}
+
+		FEditableTextBoxStyle textBoxStyle = textBox->WidgetStyle;
+		FTextBlockStyle textStyle = textBoxStyle.TextStyle;
+		if (valueFont.Size > 0.0f)
+		{
+			const FSlateFontInfo font = ResolveAppliedFont(textStyle.Font, valueFont);
+			textStyle.SetFont(font);
+			textBoxStyle.SetFont(font);
+		}
+		if (bApplyTextColor)
+		{
+			const FSlateColor slateTextColor(textColor);
+			textStyle.SetColorAndOpacity(slateTextColor);
+			textBoxStyle
+				.SetForegroundColor(slateTextColor)
+				.SetReadOnlyForegroundColor(slateTextColor)
+				.SetFocusedForegroundColor(slateTextColor);
+		}
+		textBoxStyle.SetTextStyle(textStyle);
+		textBox->WidgetStyle = textBoxStyle;
+		textBox->SynchronizeProperties();
+		if (bApplyTextColor)
+		{
+			textBox->SetForegroundColor(textColor);
+		}
+	}
+
+	// Applies the resolved value font so helper labels can keep their semantic color role.
+	void ApplyTextBlockValueFont(UTextBlock* textBlock, const FSlateFontInfo& valueFont)
+	{
+		if (!IsValid(textBlock) || valueFont.Size <= 0.0f)
+		{
+			return;
+		}
+
+		textBlock->SetFont(ResolveAppliedFont(textBlock->GetFont(), valueFont));
+	}
 }
 
 void UBaseTextInputWidget::SynchronizeBaseProperties()
@@ -32,36 +172,66 @@ void UBaseTextInputWidget::SynchronizeBaseProperties()
 	const bool bHasError = !ErrorText.IsEmpty() || State == EBaseWidgetState::Error;
 	const bool bEnabled = !bDisabled && State != EBaseWidgetState::Disabled;
 	const bool bUsesWrappedText = UsesWrappedTextMode();
+	const bool bUsesSingleLineText = Mode == EBaseTextInputMode::Text && !bUsesWrappedText;
+	const bool bUsesNumber = Mode == EBaseTextInputMode::Number;
+	const bool bUsesNumberRange = Mode == EBaseTextInputMode::NumberRange;
+	const bool bShowsSingleLineField = bUsesSingleLineText || bUsesNumber;
 	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
 	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
+	const FSlateFontInfo inputValueFont = ResolveInputValueFont(sizes, FontSizeOverride);
+	const FLinearColor valueTextColor = colors
+		? (bEnabled ? colors->GetTextColor(EBaseTextRole::Body) : colors->TextFaintColor)
+		: FLinearColor();
+	const FLinearColor auxiliaryTextColor = colors
+		? (bEnabled ? colors->GetTextColor(EBaseTextRole::Caption) : colors->TextFaintColor)
+		: FLinearColor();
+	const FLinearColor unitTextColor = colors
+		? (bEnabled ? (bOverrideUnitTextColor ? UnitTextColorOverride : colors->TextSecondaryColor) : colors->TextFaintColor)
+		: FLinearColor();
+
+	if (TextHorizontalBox)
+	{
+		SetOptionalWidgetVisible(TextHorizontalBox.Get(), bShowsSingleLineField, ESlateVisibility::SelfHitTestInvisible);
+	}
 
 	if (TextBox)
 	{
+		const bool bPreserveFocusedText = ShouldPreserveFocusedEditableText(TextBox.Get(), bMoveCaretToEndOnFocus);
+		if (!bTextBoxDefaultJustificationCaptured)
+		{
+			TextBoxDefaultJustification = TextBox->GetJustification();
+			bTextBoxDefaultJustificationCaptured = true;
+		}
 		if (!PlaceholderText.IsEmpty())
 		{
 			TextBox->SetHintText(PlaceholderText);
 		}
 		TextBox->SetIsReadOnly(!bEnabled);
 		TextBox->SetIsEnabled(bEnabled);
+		TextBox->SetIsCaretMovedWhenGainFocus(bMoveCaretToEndOnFocus);
+		ApplyEditableTextBoxValueStyle(TextBox.Get(), inputValueFont, valueTextColor, colors != nullptr, bPreserveFocusedText);
+		TextBox->SetJustification(bUsesNumber
+			? ETextJustify::Right
+			: TextBoxDefaultJustification.GetValue());
 		// While in error, keep the user's raw text so an invalid value stays
 		// visible. Reverting it here would let the focus-clear re-commit (fired
 		// by ClearKeyboardFocusOnCommit on Enter) parse the reverted valid value
 		// and silently clear the warning.
-		if (Mode == EBaseTextInputMode::Number)
+		if (bUsesNumber)
 		{
-			if (!bHasError)
+			if (!bHasError && !bPreserveFocusedText)
 			{
 				TextBox->SetText(FormatNumberText(NumericValue, DisplayDecimals));
 			}
 		}
-		else if (Mode == EBaseTextInputMode::Text && !bUsesWrappedText)
+		else if (bUsesSingleLineText)
 		{
-			TextBox->SetText(Text);
+			if (!bPreserveFocusedText)
+			{
+				TextBox->SetText(Text);
+			}
 		}
-		SetOptionalWidgetVisible(
-			TextBox.Get(),
-			(Mode == EBaseTextInputMode::Text && !bUsesWrappedText) || Mode == EBaseTextInputMode::Number,
-			ESlateVisibility::Visible);
+		SetOptionalWidgetVisible(TextBox.Get(), bShowsSingleLineField, ESlateVisibility::Visible);
 	}
 	if (MultiLineTextBox)
 	{
@@ -72,47 +242,76 @@ void UBaseTextInputWidget::SynchronizeBaseProperties()
 		MultiLineTextBox->SetIsReadOnly(!bEnabled);
 		MultiLineTextBox->SetIsEnabled(bEnabled);
 		MultiLineTextBox->SetAutoWrapText(true);
+		ApplyMultiLineEditableTextBoxValueStyle(MultiLineTextBox.Get(), inputValueFont, valueTextColor, colors != nullptr);
 		MultiLineTextBox->SetText(Text);
 		SetOptionalWidgetVisible(MultiLineTextBox.Get(), bUsesWrappedText, ESlateVisibility::Visible);
 	}
+	if (RangeHorizontalBox)
+	{
+		SetOptionalWidgetVisible(RangeHorizontalBox.Get(), bUsesNumberRange, ESlateVisibility::SelfHitTestInvisible);
+	}
 	if (LowerTextBox)
 	{
+		const bool bPreserveFocusedText = ShouldPreserveFocusedEditableText(LowerTextBox.Get(), bMoveCaretToEndOnFocus);
 		LowerTextBox->SetIsReadOnly(!bEnabled);
 		LowerTextBox->SetIsEnabled(bEnabled);
-		if (!bHasError)
+		LowerTextBox->SetIsCaretMovedWhenGainFocus(bMoveCaretToEndOnFocus);
+		ApplyEditableTextBoxValueStyle(LowerTextBox.Get(), inputValueFont, valueTextColor, colors != nullptr, bPreserveFocusedText);
+		if (!bHasError && !bPreserveFocusedText)
 		{
 			LowerTextBox->SetText(FormatNumberText(LowerValue, DisplayDecimals));
 		}
-		SetOptionalWidgetVisible(LowerTextBox.Get(), Mode == EBaseTextInputMode::NumberRange, ESlateVisibility::Visible);
+		SetOptionalWidgetVisible(LowerTextBox.Get(), bUsesNumberRange, ESlateVisibility::Visible);
 	}
 	if (UpperTextBox)
 	{
+		const bool bPreserveFocusedText = ShouldPreserveFocusedEditableText(UpperTextBox.Get(), bMoveCaretToEndOnFocus);
 		UpperTextBox->SetIsReadOnly(!bEnabled);
 		UpperTextBox->SetIsEnabled(bEnabled);
-		if (!bHasError)
+		UpperTextBox->SetIsCaretMovedWhenGainFocus(bMoveCaretToEndOnFocus);
+		ApplyEditableTextBoxValueStyle(UpperTextBox.Get(), inputValueFont, valueTextColor, colors != nullptr, bPreserveFocusedText);
+		if (!bHasError && !bPreserveFocusedText)
 		{
 			UpperTextBox->SetText(FormatNumberText(UpperValue, DisplayDecimals));
 		}
-		SetOptionalWidgetVisible(UpperTextBox.Get(), Mode == EBaseTextInputMode::NumberRange, ESlateVisibility::Visible);
+		SetOptionalWidgetVisible(UpperTextBox.Get(), bUsesNumberRange, ESlateVisibility::Visible);
 	}
 	if (RangeSeparatorTextBlock)
 	{
-		SetOptionalWidgetVisible(RangeSeparatorTextBlock.Get(), Mode == EBaseTextInputMode::NumberRange);
+		ApplyTextStyle(RangeSeparatorTextBlock.Get(), EBaseTextRole::Caption);
+		ApplyTextBlockValueFont(RangeSeparatorTextBlock.Get(), inputValueFont);
+		if (colors)
+		{
+			ApplyTextColor(RangeSeparatorTextBlock.Get(), auxiliaryTextColor);
+		}
+		SetOptionalWidgetVisible(RangeSeparatorTextBlock.Get(), bUsesNumberRange);
+	}
+	if (UnitTextBlock)
+	{
+		SetTextBlockValue(UnitTextBlock.Get(), UnitText, false);
+		ApplyTextStyle(UnitTextBlock.Get(), EBaseTextRole::Caption);
+		ApplyTextBlockValueFont(UnitTextBlock.Get(), inputValueFont);
+		if (colors)
+		{
+			ApplyTextColor(UnitTextBlock.Get(), unitTextColor);
+		}
+		SetOptionalWidgetVisible(UnitTextBlock.Get(), bUsesNumber && !UnitText.IsEmpty());
 	}
 	if (StepperColumn)
 	{
-		SetOptionalWidgetVisible(StepperColumn.Get(), Mode == EBaseTextInputMode::Number);
+		SetOptionalWidgetVisible(StepperColumn.Get(), bUsesNumber, ESlateVisibility::Visible);
 	}
 	if (StepUpButton)
 	{
 		StepUpButton->SetDisabled(!bEnabled);
-		SetOptionalWidgetVisible(StepUpButton.Get(), Mode == EBaseTextInputMode::Number, ESlateVisibility::Visible);
+		SetOptionalWidgetVisible(StepUpButton.Get(), bUsesNumber, ESlateVisibility::Visible);
 	}
 	if (StepDownButton)
 	{
 		StepDownButton->SetDisabled(!bEnabled);
-		SetOptionalWidgetVisible(StepDownButton.Get(), Mode == EBaseTextInputMode::Number, ESlateVisibility::Visible);
+		SetOptionalWidgetVisible(StepDownButton.Get(), bUsesNumber, ESlateVisibility::Visible);
 	}
+	ApplyStepperIconOpacity(bEnabled);
 	if (ErrorTextBlock)
 	{
 		SetTextBlockValue(ErrorTextBlock.Get(), ErrorText);
@@ -169,14 +368,33 @@ void UBaseTextInputWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const
 {
 	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
 	bHoverActive = true;
+	bStepperHoverActive = IsStepperInteractionHovered();
 	SynchronizeBaseProperties();
 	NotifyBaseVisualStateChanged(EBaseWidgetState::Hovered);
+}
+
+FReply UBaseTextInputWidget::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	const FReply reply = Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+	SetStepperHoverActive(IsStepperInteractionHovered());
+	return reply;
+}
+
+FReply UBaseTextInputWidget::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (ShouldFocusTextBoxFromUnitClick(InMouseEvent))
+	{
+		return FReply::Handled().SetUserFocus(TextBox->TakeWidget(), EFocusCause::Mouse);
+	}
+
+	return Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
 }
 
 void UBaseTextInputWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
 {
 	Super::NativeOnMouseLeave(InMouseEvent);
 	bHoverActive = false;
+	bStepperHoverActive = false;
 	SynchronizeBaseProperties();
 	NotifyBaseVisualStateChanged(State);
 }
@@ -232,11 +450,19 @@ void UBaseTextInputWidget::NativeConstruct()
 	{
 		StepUpButton->OnBaseClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepUpClicked);
 		StepUpButton->OnBaseClicked.AddDynamic(this, &UBaseTextInputWidget::HandleStepUpClicked);
+		StepUpButton->OnBaseHovered.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepperHovered);
+		StepUpButton->OnBaseHovered.AddDynamic(this, &UBaseTextInputWidget::HandleStepperHovered);
+		StepUpButton->OnBaseUnhovered.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepperUnhovered);
+		StepUpButton->OnBaseUnhovered.AddDynamic(this, &UBaseTextInputWidget::HandleStepperUnhovered);
 	}
 	if (StepDownButton)
 	{
 		StepDownButton->OnBaseClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepDownClicked);
 		StepDownButton->OnBaseClicked.AddDynamic(this, &UBaseTextInputWidget::HandleStepDownClicked);
+		StepDownButton->OnBaseHovered.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepperHovered);
+		StepDownButton->OnBaseHovered.AddDynamic(this, &UBaseTextInputWidget::HandleStepperHovered);
+		StepDownButton->OnBaseUnhovered.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepperUnhovered);
+		StepDownButton->OnBaseUnhovered.AddDynamic(this, &UBaseTextInputWidget::HandleStepperUnhovered);
 	}
 }
 
@@ -263,10 +489,14 @@ void UBaseTextInputWidget::NativeDestruct()
 	if (StepUpButton)
 	{
 		StepUpButton->OnBaseClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepUpClicked);
+		StepUpButton->OnBaseHovered.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepperHovered);
+		StepUpButton->OnBaseUnhovered.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepperUnhovered);
 	}
 	if (StepDownButton)
 	{
 		StepDownButton->OnBaseClicked.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepDownClicked);
+		StepDownButton->OnBaseHovered.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepperHovered);
+		StepDownButton->OnBaseUnhovered.RemoveDynamic(this, &UBaseTextInputWidget::HandleStepperUnhovered);
 	}
 
 	Super::NativeDestruct();
@@ -289,6 +519,12 @@ void UBaseTextInputWidget::SetInputMode(const EBaseTextInputMode inMode)
 void UBaseTextInputWidget::SetTextWrap(const bool bInTextWrap)
 {
 	bTextWrap = bInTextWrap;
+	SynchronizeBaseProperties();
+}
+
+void UBaseTextInputWidget::SetMoveCaretToEndOnFocus(const bool bInMoveCaretToEndOnFocus)
+{
+	bMoveCaretToEndOnFocus = bInMoveCaretToEndOnFocus;
 	SynchronizeBaseProperties();
 }
 
@@ -327,6 +563,37 @@ FText UBaseTextInputWidget::GetCurrentText() const
 void UBaseTextInputWidget::SetPlaceholderText(const FText inPlaceholderText)
 {
 	PlaceholderText = inPlaceholderText;
+	SynchronizeBaseProperties();
+}
+
+void UBaseTextInputWidget::SetUnitText(const FText inUnitText)
+{
+	UnitText = inUnitText;
+	SynchronizeBaseProperties();
+}
+
+void UBaseTextInputWidget::SetUnitTextColorOverride(const FLinearColor inUnitTextColorOverride)
+{
+	UnitTextColorOverride = inUnitTextColorOverride;
+	bOverrideUnitTextColor = true;
+	SynchronizeBaseProperties();
+}
+
+void UBaseTextInputWidget::SetOverrideUnitTextColor(const bool bInOverrideUnitTextColor)
+{
+	bOverrideUnitTextColor = bInOverrideUnitTextColor;
+	SynchronizeBaseProperties();
+}
+
+void UBaseTextInputWidget::ClearUnitTextColorOverride()
+{
+	bOverrideUnitTextColor = false;
+	SynchronizeBaseProperties();
+}
+
+void UBaseTextInputWidget::SetFontSizeOverride(const float inFontSizeOverride)
+{
+	FontSizeOverride = FMath::Max(inFontSizeOverride, 0.0f);
 	SynchronizeBaseProperties();
 }
 
@@ -441,10 +708,13 @@ void UBaseTextInputWidget::SetDisabled(const bool bInDisabled)
 
 void UBaseTextInputWidget::HandleEditableTextCommitted(const FText& committedText, ETextCommit::Type commitMethod)
 {
-	(void)commitMethod;
 	if (!bSynchronizing)
 	{
-		CommitText(committedText);
+		const bool bCommitted = CommitText(committedText);
+		if (bCommitted && commitMethod == ETextCommit::OnEnter && Mode == EBaseTextInputMode::Text && !UsesWrappedTextMode())
+		{
+			OnTextSubmitted.Broadcast(this, Text);
+		}
 	}
 }
 
@@ -458,10 +728,13 @@ void UBaseTextInputWidget::HandleEditableTextChanged(const FText& changedText)
 
 void UBaseTextInputWidget::HandleMultiLineTextCommitted(const FText& committedText, ETextCommit::Type commitMethod)
 {
-	(void)commitMethod;
 	if (!bSynchronizing)
 	{
-		CommitText(committedText);
+		const bool bCommitted = CommitText(committedText);
+		if (bCommitted && commitMethod == ETextCommit::OnEnter && UsesWrappedTextMode())
+		{
+			OnTextSubmitted.Broadcast(this, Text);
+		}
 	}
 }
 
@@ -541,4 +814,78 @@ void UBaseTextInputWidget::HandleStepDownClicked(UBaseButtonWidget* button)
 
 	SetNumericValue(NumericValue - Step);
 	OnNumericValueCommitted.Broadcast(this, NumericValue);
+}
+
+void UBaseTextInputWidget::HandleStepperHovered(UBaseButtonWidget* button)
+{
+	(void)button;
+	SetStepperHoverActive(true);
+}
+
+void UBaseTextInputWidget::HandleStepperUnhovered(UBaseButtonWidget* button)
+{
+	(void)button;
+	SetStepperHoverActive(IsStepperInteractionHovered());
+}
+
+bool UBaseTextInputWidget::IsStepperInteractionHovered() const
+{
+	if (Mode != EBaseTextInputMode::Number)
+	{
+		return false;
+	}
+
+	return (StepperColumn && StepperColumn->IsHovered())
+		|| (StepUpButton && StepUpButton->IsHovered())
+		|| (StepDownButton && StepDownButton->IsHovered());
+}
+
+bool UBaseTextInputWidget::ShouldFocusTextBoxFromUnitClick(const FPointerEvent& InMouseEvent) const
+{
+	if (Mode != EBaseTextInputMode::Number
+		|| bDisabled
+		|| State == EBaseWidgetState::Disabled
+		|| InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton
+		|| UnitText.IsEmpty()
+		|| !TextBox
+		|| !UnitTextBlock
+		|| !TextBox->GetIsEnabled()
+		|| !TextBox->IsVisible()
+		|| !UnitTextBlock->IsVisible())
+	{
+		return false;
+	}
+
+	return UnitTextBlock->GetCachedGeometry().IsUnderLocation(InMouseEvent.GetScreenSpacePosition());
+}
+
+void UBaseTextInputWidget::SetStepperHoverActive(const bool bInStepperHoverActive)
+{
+	if (bStepperHoverActive == bInStepperHoverActive)
+	{
+		return;
+	}
+
+	bStepperHoverActive = bInStepperHoverActive;
+	SynchronizeBaseProperties();
+}
+
+void UBaseTextInputWidget::ApplyStepperIconOpacity(const bool bEnabled)
+{
+	const bool bShowsStepper = Mode == EBaseTextInputMode::Number;
+	const float idleOpacity = FMath::Clamp(StepperIconIdleOpacity, 0.0f, 1.0f);
+	const float hoveredOpacity = FMath::Clamp(StepperIconHoveredOpacity, 0.0f, 1.0f);
+	const float iconOpacity = bShowsStepper
+		? (bEnabled && bStepperHoverActive ? hoveredOpacity : idleOpacity)
+		: hoveredOpacity;
+	// Stepper buttons are icon-only in WBP_BaseTextInput, so their render opacity
+	// acts as the icon emphasis without adding a button-specific color override.
+	if (StepUpButton)
+	{
+		StepUpButton->SetRenderOpacity(iconOpacity);
+	}
+	if (StepDownButton)
+	{
+		StepDownButton->SetRenderOpacity(iconOpacity);
+	}
 }

@@ -16,6 +16,7 @@
 namespace
 {
 	const TCHAR* UserProjectScenarioSampleSchema = TEXT("scenario_sample");
+	const TCHAR* UserProjectRunStatusSchema = TEXT("run_status");
 	const int32 UserProjectJsonVersion = 1;
 
 	void AddUserProjectDiagnostic(
@@ -959,6 +960,35 @@ namespace
 		}
 
 		return TryWriteUtf8File(filePath, FString(), outDiagnostics);
+	}
+
+	FString ReadUserProjectRunStatusStringField(
+		const TSharedPtr<FJsonObject>& object,
+		const TCHAR* fieldName)
+	{
+		FString value;
+		return object.IsValid() && object->TryGetStringField(fieldName, value) ? value : FString();
+	}
+
+	int64 ReadUserProjectRunStatusIntegerField(
+		const TSharedPtr<FJsonObject>& object,
+		const TCHAR* fieldName,
+		const int64 defaultValue)
+	{
+		double value = 0.0;
+		return object.IsValid() && object->TryGetNumberField(fieldName, value)
+			? static_cast<int64>(value)
+			: defaultValue;
+	}
+
+	void AppendUserProjectRunStatusSerializationDiagnostics(
+		const TArray<FScenarioCompileDiagnostic>& sourceDiagnostics,
+		TArray<FString>& outDiagnostics)
+	{
+		for (const FScenarioCompileDiagnostic& diagnostic : sourceDiagnostics)
+		{
+			outDiagnostics.Add(diagnostic.Message);
+		}
 	}
 
 	TSharedPtr<FJsonObject> LoadJsonObjectOrEmpty(const FString& filePath)
@@ -2197,6 +2227,154 @@ namespace
 		(void)sourceObject;
 		return object;
 	}
+}
+
+FString FUserProjectRunStatusJson::MakeUtcTimestamp()
+{
+	return FDateTime::UtcNow().ToString(TEXT("%Y-%m-%dT%H:%M:%SZ"));
+}
+
+bool FUserProjectRunStatusJson::LoadFromFile(
+	const FString& statusPath,
+	FUserProjectRunStatusRecord& outStatus,
+	TArray<FString>& outDiagnostics)
+{
+	outStatus = FUserProjectRunStatusRecord{};
+	outDiagnostics.Reset();
+
+	FString statusJson;
+	if (!FFileHelper::LoadFileToString(statusJson, *statusPath))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("Run status file read failed: %s"), *statusPath));
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	TArray<FScenarioCompileDiagnostic> parseDiagnostics;
+	if (!TryParseJsonObject(statusJson, rootObject, parseDiagnostics) || !rootObject.IsValid())
+	{
+		AppendUserProjectRunStatusSerializationDiagnostics(parseDiagnostics, outDiagnostics);
+		return false;
+	}
+
+	FString schema;
+	if (!rootObject->TryGetStringField(TEXT("schema"), schema)
+		|| !schema.Equals(UserProjectRunStatusSchema, ESearchCase::CaseSensitive))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("Run status schema must be '%s'."), UserProjectRunStatusSchema));
+		return false;
+	}
+
+	double version = 0.0;
+	if (!rootObject->TryGetNumberField(TEXT("version"), version)
+		|| static_cast<int32>(version) != UserProjectJsonVersion)
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("Run status version must be %d."), UserProjectJsonVersion));
+		return false;
+	}
+
+	if (!rootObject->TryGetStringField(TEXT("state"), outStatus.State) || outStatus.State.TrimStartAndEnd().IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("Run status requires state."));
+		return false;
+	}
+	outStatus.State = outStatus.State.TrimStartAndEnd().ToLower();
+
+	const TSharedPtr<FJsonObject> runObject = TryGetObjectFieldOrNull(rootObject, TEXT("run"));
+	outStatus.ProjectPath = ReadUserProjectRunStatusStringField(runObject, TEXT("project_path"));
+	outStatus.RunId = ReadUserProjectRunStatusStringField(runObject, TEXT("run_id"));
+	outStatus.StatusPath = ReadUserProjectRunStatusStringField(runObject, TEXT("status_path"));
+
+	const TSharedPtr<FJsonObject> processObject = TryGetObjectFieldOrNull(rootObject, TEXT("process"));
+	outStatus.Executable = ReadUserProjectRunStatusStringField(processObject, TEXT("executable"));
+	outStatus.ProcessId = ReadUserProjectRunStatusIntegerField(processObject, TEXT("process_id"), 0);
+	outStatus.PolicyPort = static_cast<int32>(ReadUserProjectRunStatusIntegerField(processObject, TEXT("policy_port"), 0));
+	outStatus.ExitCode = static_cast<int32>(ReadUserProjectRunStatusIntegerField(processObject, TEXT("exit_code"), INDEX_NONE));
+
+	outStatus.StartedAt = ReadUserProjectRunStatusStringField(rootObject, TEXT("started_at"));
+	outStatus.UpdatedAt = ReadUserProjectRunStatusStringField(rootObject, TEXT("updated_at"));
+	outStatus.ExitedAt = ReadUserProjectRunStatusStringField(rootObject, TEXT("exited_at"));
+	outStatus.Error = ReadUserProjectRunStatusStringField(rootObject, TEXT("error"));
+	return true;
+}
+
+bool FUserProjectRunStatusJson::SaveToFile(
+	const FUserProjectRunStatusRecord& status,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	const FString statusPath = status.StatusPath.TrimStartAndEnd();
+	if (statusPath.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("Run status path must not be empty."));
+		return false;
+	}
+
+	const FString state = status.State.TrimStartAndEnd().ToLower();
+	if (state.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("Run status state must not be empty."));
+		return false;
+	}
+
+	const FString now = MakeUtcTimestamp();
+	const FString startedAt = status.StartedAt.TrimStartAndEnd().IsEmpty()
+		? now
+		: status.StartedAt.TrimStartAndEnd();
+	const FString updatedAt = status.UpdatedAt.TrimStartAndEnd().IsEmpty()
+		? now
+		: status.UpdatedAt.TrimStartAndEnd();
+
+	TSharedRef<FJsonObject> runObject = MakeShared<FJsonObject>();
+	runObject->SetStringField(TEXT("project_path"), status.ProjectPath);
+	runObject->SetStringField(TEXT("run_id"), status.RunId);
+	runObject->SetStringField(TEXT("status_path"), statusPath);
+
+	TSharedRef<FJsonObject> processObject = MakeShared<FJsonObject>();
+	if (!status.Executable.TrimStartAndEnd().IsEmpty())
+	{
+		processObject->SetStringField(TEXT("executable"), status.Executable);
+	}
+	if (status.ProcessId > 0)
+	{
+		processObject->SetNumberField(TEXT("process_id"), static_cast<double>(status.ProcessId));
+	}
+	if (status.PolicyPort > 0)
+	{
+		processObject->SetNumberField(TEXT("policy_port"), status.PolicyPort);
+	}
+	if (status.ExitCode != INDEX_NONE)
+	{
+		processObject->SetNumberField(TEXT("exit_code"), status.ExitCode);
+	}
+
+	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
+	rootObject->SetStringField(TEXT("schema"), UserProjectRunStatusSchema);
+	rootObject->SetNumberField(TEXT("version"), UserProjectJsonVersion);
+	rootObject->SetObjectField(TEXT("run"), runObject);
+	rootObject->SetObjectField(TEXT("process"), processObject);
+	rootObject->SetStringField(TEXT("state"), state);
+	rootObject->SetStringField(TEXT("started_at"), startedAt);
+	rootObject->SetStringField(TEXT("updated_at"), updatedAt);
+	if (!status.ExitedAt.TrimStartAndEnd().IsEmpty())
+	{
+		rootObject->SetStringField(TEXT("exited_at"), status.ExitedAt.TrimStartAndEnd());
+	}
+	if (!status.Error.TrimStartAndEnd().IsEmpty())
+	{
+		rootObject->SetStringField(TEXT("error"), status.Error.TrimStartAndEnd());
+	}
+
+	FString statusJson;
+	TArray<FScenarioCompileDiagnostic> serializationDiagnostics;
+	if (!TrySerializeJsonObject(rootObject, statusJson, serializationDiagnostics))
+	{
+		AppendUserProjectRunStatusSerializationDiagnostics(serializationDiagnostics, outDiagnostics);
+		return false;
+	}
+
+	return TryWriteUtf8File(statusPath, statusJson, outDiagnostics);
 }
 
 FString FUserProjectRunOutputJson::BuildEpisodeDirectory(

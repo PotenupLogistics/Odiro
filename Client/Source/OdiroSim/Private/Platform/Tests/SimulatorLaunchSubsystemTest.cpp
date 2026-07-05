@@ -355,6 +355,9 @@ bool FSimulatorLaunchProjectPresetsTest::RunTest(const FString& parameters)
 		createdSettingJson.Contains(FString::Printf(
 			TEXT("\"project_id\": \"%s\""),
 			*FPaths::GetCleanFilename(projectPath))));
+	const FString previewPath = FPaths::Combine(projectPath, TEXT("preview.png"));
+	TestTrue(TEXT("created initial preview exists"), FPaths::FileExists(previewPath));
+	TestTrue(TEXT("created initial preview is non-empty"), IFileManager::Get().FileSize(*previewPath) > 0);
 	TestTrue(TEXT("created demo policy exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/action.py"))));
 	TestFalse(TEXT("preset manifest not copied to project root"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("manifest.json"))));
 	TestFalse(TEXT("preset thumbnail not copied to project root"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("thumbnail.png"))));

@@ -2,16 +2,17 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Components/PanelWidget.h"
-#include "Components/ScrollBox.h"
-#include "Components/ScrollBoxSlot.h"
-#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/Paths.h"
+#include "Platform/PlatformUiSubsystem.h"
+#include "Platform/Widget/RecentProjectContextMenuWidget.h"
+#include "Platform/Widget/RecentProjectDeleteConfirmDialogWidget.h"
 #include "Platform/ViewModel/StartupScreenViewModel.h"
 #include "Platform/Widget/RecentProjectCardWidget.h"
 #include "UI/BaseButtonWidget.h"
+#include "Blueprint/SlateBlueprintLibrary.h"
 
 #if WITH_EDITOR
 #include "DesktopPlatformModule.h"
@@ -48,26 +49,6 @@ namespace
 		FPaths::NormalizeFilename(path);
 		return path;
 	}
-
-	// WBP-authored scroll style에서 가로 scrollbar가 차지하는 높이를 계산한다.
-	float ResolveStartupHorizontalScrollbarHeight(const UScrollBox& scrollBox)
-	{
-		const FVector2D scrollbarThickness = scrollBox.GetScrollbarThickness();
-		const FMargin scrollbarPadding = scrollBox.GetScrollbarPadding();
-		return FMath::Max(
-			scrollBox.GetWidgetBarStyle().Thickness,
-			scrollbarThickness.Y + scrollbarPadding.Top + scrollbarPadding.Bottom);
-	}
-
-	// WBP-authored scroll style에서 세로 scrollbar가 차지하는 너비를 계산한다.
-	float ResolveStartupVerticalScrollbarWidth(const UScrollBox& scrollBox)
-	{
-		const FVector2D scrollbarThickness = scrollBox.GetScrollbarThickness();
-		const FMargin scrollbarPadding = scrollBox.GetScrollbarPadding();
-		return FMath::Max(
-			scrollBox.GetWidgetBarStyle().Thickness,
-			scrollbarThickness.X + scrollbarPadding.Left + scrollbarPadding.Right);
-	}
 }
 
 void UStartupScreenWidget::NativePreConstruct()
@@ -81,84 +62,19 @@ void UStartupScreenWidget::NativeConstruct()
 	EnsureStartupScreenViewModel();
 	ApplyDiagnosticMessagesToViewModel();
 	BindControls();
-	if (StartupPanelHorizontalScrollBox)
-	{
-		StartupPanelHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentHorizontalScrolled);
-		StartupPanelHorizontalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentHorizontalScrolled);
-	}
-	if (StartupPanelVerticalScrollBox)
-	{
-		StartupPanelVerticalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentVerticalScrolled);
-		StartupPanelVerticalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentVerticalScrolled);
-	}
-	if (StartupPanelStickyHorizontalScrollBox)
-	{
-		StartupPanelStickyHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyHorizontalScrolled);
-		StartupPanelStickyHorizontalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyHorizontalScrolled);
-	}
-	if (StartupPanelStickyVerticalScrollBox)
-	{
-		StartupPanelStickyVerticalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyVerticalScrolled);
-		StartupPanelStickyVerticalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyVerticalScrolled);
-	}
-	CaptureStartupPanelAuthoredLayout();
 	RefreshFromViewModel();
-}
-
-void UStartupScreenWidget::NativeTick(const FGeometry& myGeometry, const float inDeltaTime)
-{
-	Super::NativeTick(myGeometry, inDeltaTime);
-	UpdateStartupPanelScrollPadding(myGeometry.GetLocalSize());
 }
 
 void UStartupScreenWidget::NativeDestruct()
 {
 	UnbindControls();
-	if (StartupPanelHorizontalScrollBox)
-	{
-		StartupPanelHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentHorizontalScrolled);
-	}
-	if (StartupPanelStickyHorizontalScrollBox)
-	{
-		StartupPanelStickyHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyHorizontalScrolled);
-	}
-	if (StartupPanelVerticalScrollBox)
-	{
-		StartupPanelVerticalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelContentVerticalScrolled);
-	}
-	if (StartupPanelStickyVerticalScrollBox)
-	{
-		StartupPanelStickyVerticalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UStartupScreenWidget::HandleStartupPanelStickyVerticalScrolled);
-	}
+	CloseTransientPopups();
 	for (URecentProjectCardWidget* cardWidget : RecentProjectCards)
 	{
 		if (cardWidget)
 		{
 			cardWidget->OnSelectedRequested.RemoveAll(this);
+			cardWidget->OnContextMenuRequested.RemoveAll(this);
 		}
 	}
 	RecentProjectCards.Reset();
@@ -181,6 +97,8 @@ void UStartupScreenWidget::RefreshFromViewModel()
 {
 	if (UStartupScreenViewModel* viewModel = EnsureStartupScreenViewModel())
 	{
+		viewModel->RefreshRecentProjects();
+
 		const FString diagnosticsText = viewModel->GetDiagnosticsText();
 		const ESlateVisibility diagnosticsVisibility = diagnosticsText.TrimStartAndEnd().IsEmpty()
 			? ESlateVisibility::Collapsed
@@ -196,6 +114,12 @@ void UStartupScreenWidget::RefreshFromViewModel()
 		}
 		RefreshRecentProjectCards();
 	}
+}
+
+void UStartupScreenWidget::CloseTransientPopups()
+{
+	CloseRecentProjectContextMenu();
+	CloseDeleteConfirmDialog();
 }
 
 bool UStartupScreenWidget::OpenSelectedProject()
@@ -295,6 +219,7 @@ void UStartupScreenWidget::RefreshRecentProjectCards()
 		if (cardWidget)
 		{
 			cardWidget->OnSelectedRequested.RemoveAll(this);
+			cardWidget->OnContextMenuRequested.RemoveAll(this);
 		}
 	}
 	RecentProjectCards.Reset();
@@ -336,6 +261,9 @@ void UStartupScreenWidget::RefreshRecentProjectCards()
 
 		cardWidget->InitializeCard(recentProject);
 		cardWidget->OnSelectedRequested.AddUObject(this, &UStartupScreenWidget::HandleRecentProjectCardSelected);
+		cardWidget->OnContextMenuRequested.AddUObject(
+			this,
+			&UStartupScreenWidget::HandleRecentProjectCardContextMenuRequested);
 		RecentProjectCardPanel->AddChild(cardWidget);
 		RecentProjectCards.Add(cardWidget);
 	}
@@ -346,166 +274,112 @@ TSubclassOf<URecentProjectCardWidget> UStartupScreenWidget::ResolveRecentProject
 	return RecentProjectCardWidgetClass;
 }
 
-void UStartupScreenWidget::UpdateStartupPanelScrollPadding(const FVector2D& screenSize)
+void UStartupScreenWidget::OpenRecentProjectContextMenu(
+	URecentProjectCardWidget* cardWidget,
+	const FVector2D& screenPosition)
 {
-	if (!StartupPanelVerticalScrollBox || !StartupPanelHorizontalScrollBox || !StartupPanelSurface)
-	{
-		return;
-	}
-	if (!bHasStartupPanelSurfaceBasePadding && !CaptureStartupPanelAuthoredLayout())
-	{
-		return;
-	}
+	CloseRecentProjectContextMenu();
 
-	FVector2D viewportSize = StartupPanelVerticalScrollBox->GetCachedGeometry().GetLocalSize();
-	if (viewportSize.IsNearlyZero())
-	{
-		viewportSize = screenSize;
-	}
-	if (viewportSize.X <= 0.0f || viewportSize.Y <= 0.0f)
+	if (!cardWidget || !RecentProjectContextMenuWidgetClass || !GetWorld())
 	{
 		return;
 	}
 
-	StartupPanelSurface->ForceLayoutPrepass();
-	const FVector2D panelDesiredSize = StartupPanelSurface->GetDesiredSize();
-	if (panelDesiredSize.X <= 0.0f || panelDesiredSize.Y <= 0.0f)
-	{
-		return;
-	}
-	const FVector2D basePaddingSize(
-		StartupPanelSurfaceBasePadding.Left + StartupPanelSurfaceBasePadding.Right,
-		StartupPanelSurfaceBasePadding.Top + StartupPanelSurfaceBasePadding.Bottom);
-	const float horizontalScrollbarHeight = ResolveStartupHorizontalScrollbarHeight(*StartupPanelHorizontalScrollBox);
-	const float verticalScrollbarWidth = ResolveStartupVerticalScrollbarWidth(*StartupPanelVerticalScrollBox);
-	const FVector2D paddedPanelSize = panelDesiredSize + basePaddingSize;
-
-	const bool bUsesStickyHorizontalScroll = StartupPanelStickyHorizontalScrollBox
-		&& StartupPanelStickyHorizontalScrollSpacer;
-	const bool bUsesStickyVerticalScroll = StartupPanelStickyVerticalScrollBox
-		&& StartupPanelStickyVerticalScrollSpacer;
-	bool bNeedsHorizontalScroll = false;
-	bool bNeedsVerticalScroll = false;
-	for (int32 passIndex = 0; passIndex < 2; ++passIndex)
-	{
-		const float availableWidth = viewportSize.X
-			- (!bUsesStickyVerticalScroll && bNeedsVerticalScroll ? verticalScrollbarWidth : 0.0f);
-		bNeedsHorizontalScroll = availableWidth + KINDA_SMALL_NUMBER < paddedPanelSize.X;
-		const float requiredHeight = paddedPanelSize.Y
-			+ (!bUsesStickyHorizontalScroll && bNeedsHorizontalScroll ? horizontalScrollbarHeight : 0.0f);
-		bNeedsVerticalScroll = viewportSize.Y + KINDA_SMALL_NUMBER < requiredHeight;
-	}
-
-	if (CachedStartupPanelPaddingInput.Equals(viewportSize, KINDA_SMALL_NUMBER)
-		&& CachedStartupPanelDesiredSize.Equals(panelDesiredSize, KINDA_SMALL_NUMBER)
-		&& bCachedStartupPanelNeedsHorizontalScroll == bNeedsHorizontalScroll
-		&& bCachedStartupPanelNeedsVerticalScroll == bNeedsVerticalScroll)
+	ContextMenuProjectPath = NormalizeStartupScreenWidgetPath(cardWidget->GetProjectPath());
+	if (ContextMenuProjectPath.IsEmpty())
 	{
 		return;
 	}
 
-	CachedStartupPanelPaddingInput = viewportSize;
-	CachedStartupPanelDesiredSize = panelDesiredSize;
-	bCachedStartupPanelNeedsHorizontalScroll = bNeedsHorizontalScroll;
-	bCachedStartupPanelNeedsVerticalScroll = bNeedsVerticalScroll;
-
-	StartupPanelHorizontalScrollBox->SetAlwaysShowScrollbar(false);
-	StartupPanelHorizontalScrollBox->SetScrollBarVisibility(
-		!bUsesStickyHorizontalScroll && bNeedsHorizontalScroll
-			? ESlateVisibility::Visible
-			: ESlateVisibility::Collapsed);
-	StartupPanelVerticalScrollBox->SetAlwaysShowScrollbar(false);
-	StartupPanelVerticalScrollBox->SetScrollBarVisibility(
-		!bUsesStickyVerticalScroll && bNeedsVerticalScroll
-			? ESlateVisibility::Visible
-			: ESlateVisibility::Collapsed);
-
-	const float availablePanelCenteringWidth = viewportSize.X
-		- (!bUsesStickyVerticalScroll && bNeedsVerticalScroll ? verticalScrollbarWidth : 0.0f);
-	const float horizontalExtraPadding = FMath::Max(0.0f, (availablePanelCenteringWidth - panelDesiredSize.X - basePaddingSize.X) * 0.5f);
-	const FMargin adjustedPanelPadding(
-		StartupPanelSurfaceBasePadding.Left + horizontalExtraPadding,
-		StartupPanelSurfaceBasePadding.Top,
-		StartupPanelSurfaceBasePadding.Right + horizontalExtraPadding,
-		StartupPanelSurfaceBasePadding.Bottom);
-
-	if (UScrollBoxSlot* panelSlot = Cast<UScrollBoxSlot>(StartupPanelSurface->Slot))
+	ActiveRecentProjectContextMenu = CreateWidget<URecentProjectContextMenuWidget>(
+		GetWorld(),
+		RecentProjectContextMenuWidgetClass);
+	if (!ActiveRecentProjectContextMenu)
 	{
-		panelSlot->SetPadding(adjustedPanelPadding);
+		ContextMenuProjectPath.Reset();
+		return;
 	}
 
-	if (StartupPanelStickyHorizontalScrollBox)
-	{
-		StartupPanelStickyHorizontalScrollBox->SetVisibility(
-			bUsesStickyHorizontalScroll && bNeedsHorizontalScroll
-				? ESlateVisibility::Visible
-				: ESlateVisibility::Collapsed);
+	ActiveRecentProjectContextMenu->OnRemoveFromListSelected.RemoveAll(this);
+	ActiveRecentProjectContextMenu->OnRemoveFromListSelected.AddUObject(
+		this,
+		&UStartupScreenWidget::HandleRemoveRecentProjectFromList);
+	ActiveRecentProjectContextMenu->OnDeleteProjectSelected.RemoveAll(this);
+	ActiveRecentProjectContextMenu->OnDeleteProjectSelected.AddUObject(
+		this,
+		&UStartupScreenWidget::HandleDeleteRecentProjectRequested);
+	ActiveRecentProjectContextMenu->OnDismissRequested.RemoveAll(this);
+	ActiveRecentProjectContextMenu->OnDismissRequested.AddUObject(
+		this,
+		&UStartupScreenWidget::HandleRecentProjectContextMenuDismissed);
+	ActiveRecentProjectContextMenu->AddToViewport(RecentProjectContextMenuZOrder);
 
-		if (StartupPanelStickyHorizontalScrollSpacer)
-		{
-			const float stickyRangeCompensation = bUsesStickyVerticalScroll && bNeedsVerticalScroll
-				? verticalScrollbarWidth
-				: 0.0f;
-			StartupPanelStickyHorizontalScrollSpacer->SetSize(FVector2D(
-				FMath::Max(1.0f, panelDesiredSize.X + adjustedPanelPadding.Left + adjustedPanelPadding.Right - stickyRangeCompensation),
-				1.0f));
-		}
-	}
+	FVector2D pixelPosition = FVector2D::ZeroVector;
+	FVector2D viewportPosition = FVector2D::ZeroVector;
+	USlateBlueprintLibrary::AbsoluteToViewport(this, screenPosition, pixelPosition, viewportPosition);
 
-	if (StartupPanelStickyVerticalScrollBox)
-	{
-		StartupPanelStickyVerticalScrollBox->SetVisibility(
-			bUsesStickyVerticalScroll && bNeedsVerticalScroll
-				? ESlateVisibility::Visible
-				: ESlateVisibility::Collapsed);
-
-		if (StartupPanelStickyVerticalScrollSpacer)
-		{
-			const float stickyRangeCompensation = bUsesStickyHorizontalScroll && bNeedsHorizontalScroll
-				? horizontalScrollbarHeight
-				: 0.0f;
-			StartupPanelStickyVerticalScrollSpacer->SetSize(FVector2D(
-				1.0f,
-				FMath::Max(1.0f, panelDesiredSize.Y + basePaddingSize.Y - stickyRangeCompensation)));
-		}
-	}
-
-	if (!bNeedsHorizontalScroll)
-	{
-		TGuardValue<bool> syncGuard(bSyncingStartupPanelHorizontalScroll, true);
-		StartupPanelHorizontalScrollBox->SetScrollOffset(0.0f);
-		if (StartupPanelStickyHorizontalScrollBox)
-		{
-			StartupPanelStickyHorizontalScrollBox->SetScrollOffset(0.0f);
-		}
-	}
-	if (!bNeedsVerticalScroll)
-	{
-		TGuardValue<bool> syncGuard(bSyncingStartupPanelVerticalScroll, true);
-		StartupPanelVerticalScrollBox->SetScrollOffset(0.0f);
-		if (StartupPanelStickyVerticalScrollBox)
-		{
-			StartupPanelStickyVerticalScrollBox->SetScrollOffset(0.0f);
-		}
-	}
+	ActiveRecentProjectContextMenu->OpenAtViewportPosition(viewportPosition);
 }
 
-bool UStartupScreenWidget::CaptureStartupPanelAuthoredLayout()
+void UStartupScreenWidget::CloseRecentProjectContextMenu()
 {
-	if (!StartupPanelSurface)
+	if (ActiveRecentProjectContextMenu)
 	{
-		return false;
+		ActiveRecentProjectContextMenu->OnRemoveFromListSelected.RemoveAll(this);
+		ActiveRecentProjectContextMenu->OnDeleteProjectSelected.RemoveAll(this);
+		ActiveRecentProjectContextMenu->OnDismissRequested.RemoveAll(this);
+		ActiveRecentProjectContextMenu->RemoveFromParent();
+		ActiveRecentProjectContextMenu = nullptr;
+	}
+	ContextMenuProjectPath.Reset();
+}
+
+void UStartupScreenWidget::OpenDeleteConfirmDialog(const FString& projectPath)
+{
+	CloseDeleteConfirmDialog();
+
+	if (!DeleteConfirmDialogWidgetClass || !GetWorld())
+	{
+		return;
 	}
 
-	const UScrollBoxSlot* panelSlot = Cast<UScrollBoxSlot>(StartupPanelSurface->Slot);
-	if (!panelSlot)
+	PendingDeleteProjectPath = NormalizeStartupScreenWidgetPath(projectPath);
+	if (PendingDeleteProjectPath.IsEmpty())
 	{
-		return false;
+		return;
 	}
 
-	StartupPanelSurfaceBasePadding = panelSlot->GetPadding();
-	bHasStartupPanelSurfaceBasePadding = true;
-	return true;
+	ActiveDeleteConfirmDialog = CreateWidget<URecentProjectDeleteConfirmDialogWidget>(
+		GetWorld(),
+		DeleteConfirmDialogWidgetClass);
+	if (!ActiveDeleteConfirmDialog)
+	{
+		PendingDeleteProjectPath.Reset();
+		return;
+	}
+
+	ActiveDeleteConfirmDialog->OnConfirmed.RemoveAll(this);
+	ActiveDeleteConfirmDialog->OnConfirmed.AddUObject(
+		this,
+		&UStartupScreenWidget::HandleDeleteConfirmAccepted);
+	ActiveDeleteConfirmDialog->OnCanceled.RemoveAll(this);
+	ActiveDeleteConfirmDialog->OnCanceled.AddUObject(
+		this,
+		&UStartupScreenWidget::HandleDeleteConfirmCanceled);
+	ActiveDeleteConfirmDialog->SetDeleteTarget(PendingDeleteProjectPath);
+	ActiveDeleteConfirmDialog->AddToViewport(DeleteConfirmDialogZOrder);
+}
+
+void UStartupScreenWidget::CloseDeleteConfirmDialog()
+{
+	if (ActiveDeleteConfirmDialog)
+	{
+		ActiveDeleteConfirmDialog->OnConfirmed.RemoveAll(this);
+		ActiveDeleteConfirmDialog->OnCanceled.RemoveAll(this);
+		ActiveDeleteConfirmDialog->RemoveFromParent();
+		ActiveDeleteConfirmDialog = nullptr;
+	}
+	PendingDeleteProjectPath.Reset();
 }
 
 bool UStartupScreenWidget::BrowseForExistingProjectFolder(FString& outFolder) const
@@ -564,50 +438,6 @@ void UStartupScreenWidget::HandleCreateProjectClicked(UBaseButtonWidget*)
 	OnCreateProjectRequested.Broadcast(this);
 }
 
-void UStartupScreenWidget::HandleStartupPanelStickyHorizontalScrolled(const float currentOffset)
-{
-	if (bSyncingStartupPanelHorizontalScroll || !StartupPanelHorizontalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingStartupPanelHorizontalScroll, true);
-	StartupPanelHorizontalScrollBox->SetScrollOffset(currentOffset);
-}
-
-void UStartupScreenWidget::HandleStartupPanelContentHorizontalScrolled(const float currentOffset)
-{
-	if (bSyncingStartupPanelHorizontalScroll || !StartupPanelStickyHorizontalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingStartupPanelHorizontalScroll, true);
-	StartupPanelStickyHorizontalScrollBox->SetScrollOffset(currentOffset);
-}
-
-void UStartupScreenWidget::HandleStartupPanelStickyVerticalScrolled(const float currentOffset)
-{
-	if (bSyncingStartupPanelVerticalScroll || !StartupPanelVerticalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingStartupPanelVerticalScroll, true);
-	StartupPanelVerticalScrollBox->SetScrollOffset(currentOffset);
-}
-
-void UStartupScreenWidget::HandleStartupPanelContentVerticalScrolled(const float currentOffset)
-{
-	if (bSyncingStartupPanelVerticalScroll || !StartupPanelStickyVerticalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingStartupPanelVerticalScroll, true);
-	StartupPanelStickyVerticalScrollBox->SetScrollOffset(currentOffset);
-}
-
 void UStartupScreenWidget::HandleRecentProjectCardSelected(URecentProjectCardWidget* cardWidget)
 {
 	if (!cardWidget)
@@ -615,5 +445,105 @@ void UStartupScreenWidget::HandleRecentProjectCardSelected(URecentProjectCardWid
 		return;
 	}
 
+	CloseRecentProjectContextMenu();
 	OpenProjectPath(cardWidget->GetProjectPath());
+}
+
+void UStartupScreenWidget::HandleRecentProjectCardContextMenuRequested(
+	URecentProjectCardWidget* cardWidget,
+	const FVector2D screenPosition)
+{
+	OpenRecentProjectContextMenu(cardWidget, screenPosition);
+}
+
+void UStartupScreenWidget::HandleRemoveRecentProjectFromList(URecentProjectContextMenuWidget*)
+{
+	const FString projectPath = ContextMenuProjectPath;
+	CloseRecentProjectContextMenu();
+
+	UStartupScreenViewModel* viewModel = EnsureStartupScreenViewModel();
+	if (!viewModel || projectPath.IsEmpty())
+	{
+		return;
+	}
+
+	viewModel->RemoveRecentProject(projectPath);
+	RefreshFromViewModel();
+}
+
+void UStartupScreenWidget::HandleDeleteRecentProjectRequested(URecentProjectContextMenuWidget*)
+{
+	const FString projectPath = ContextMenuProjectPath;
+	CloseRecentProjectContextMenu();
+
+	if (!projectPath.IsEmpty())
+	{
+		OpenDeleteConfirmDialog(projectPath);
+	}
+}
+
+void UStartupScreenWidget::HandleRecentProjectContextMenuDismissed(URecentProjectContextMenuWidget*)
+{
+	CloseRecentProjectContextMenu();
+}
+
+void UStartupScreenWidget::HandleDeleteConfirmAccepted(URecentProjectDeleteConfirmDialogWidget*)
+{
+	const FString projectPath = PendingDeleteProjectPath;
+	CloseDeleteConfirmDialog();
+
+	UStartupScreenViewModel* viewModel = EnsureStartupScreenViewModel();
+	if (!viewModel || projectPath.IsEmpty())
+	{
+		return;
+	}
+
+	UPlatformUiSubsystem* platformUiSubsystem = UPlatformUiSubsystem::ResolveForWorldContext(this);
+	if (!platformUiSubsystem)
+	{
+		viewModel->SetDiagnosticsText(DiagnosticMessages.ProjectDeleteFailed);
+		return;
+	}
+
+	const FString activeProjectPath = NormalizeStartupScreenWidgetPath(platformUiSubsystem->GetActiveProjectPath());
+	if (!activeProjectPath.IsEmpty() && projectPath.Equals(activeProjectPath, ESearchCase::IgnoreCase))
+	{
+		FString startupErrorText;
+		if (!platformUiSubsystem->ReturnToStartupMap(startupErrorText))
+		{
+			viewModel->SetDiagnosticsText(startupErrorText.IsEmpty()
+				? DiagnosticMessages.ProjectDeleteFailed
+				: startupErrorText);
+			RefreshFromViewModel();
+			return;
+		}
+	}
+
+	const EPlatformUserProjectDeleteResult deleteResult =
+		platformUiSubsystem->DeleteUserProjectDirectory(projectPath);
+	if (deleteResult == EPlatformUserProjectDeleteResult::Unsafe)
+	{
+		viewModel->SetDiagnosticsText(DiagnosticMessages.ProjectDeleteUnsafe);
+		RefreshFromViewModel();
+		return;
+	}
+	if (deleteResult == EPlatformUserProjectDeleteResult::Failed)
+	{
+		viewModel->SetDiagnosticsText(DiagnosticMessages.ProjectDeleteFailed);
+		RefreshFromViewModel();
+		return;
+	}
+
+	if (deleteResult == EPlatformUserProjectDeleteResult::Deleted
+		|| deleteResult == EPlatformUserProjectDeleteResult::Missing)
+	{
+		viewModel->RemoveRecentProject(projectPath);
+		viewModel->ClearDiagnostics();
+	}
+	RefreshFromViewModel();
+}
+
+void UStartupScreenWidget::HandleDeleteConfirmCanceled(URecentProjectDeleteConfirmDialogWidget*)
+{
+	CloseDeleteConfirmDialog();
 }

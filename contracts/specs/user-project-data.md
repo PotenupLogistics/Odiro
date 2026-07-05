@@ -321,6 +321,27 @@ Random 값 표현:
 - `corridor_pose.along_m`: 참조 segment의 `along_range_m` 범위 안
 - `allow_blocking` 없이 `min_clear_width_m` 계약 위반 시 error
 
+### Project Preview
+
+경로:
+
+```text
+<UserProject>/preview.png
+```
+
+형식:
+
+```text
+PNG 파일
+```
+
+규칙:
+
+- 선택 artifact다. 없거나 비어 있으면 UI는 placeholder/fallback을 사용한다.
+- Project preset 생성 시 scenario preset thumbnail을 초기 preview로 복사할 수 있다.
+- Scenario editor가 `<UserProject>/scenario.json` 저장에 성공한 뒤 현재 authored scenario 기준으로 갱신할 수 있다.
+- Episode preview인 `runs/<RunId>/episodes/<EpisodeId>/preview.png`와 의미가 다르다.
+
 ## 환경 어휘 목록
 
 `scenario.json` 작성용 공유 어휘.
@@ -532,7 +553,7 @@ schema:
 소유자:
 
 ```text
-Bridge
+Bridge, Simulator
 ```
 
 필수 root:
@@ -554,10 +575,11 @@ Bridge
 | 값         | 의미                                      |
 | ---------- | ----------------------------------------- |
 | `starting` | Bridge가 process 시작 전 status file 생성 |
-| `running`  | 자식 process 시작 성공                    |
+| `running`  | Simulator가 run 준비를 마치고 episode 실행을 시작할 수 있음 |
 | `stopping` | Bridge가 종료 요청 전송                   |
 | `exited`   | 자식 process가 exit code 0으로 종료       |
 | `failed`   | process 시작 또는 실행 실패               |
+| `cancelled` | Bridge 종료 요청 또는 Simulator cancellation으로 중단 |
 
 ### Run Summary
 

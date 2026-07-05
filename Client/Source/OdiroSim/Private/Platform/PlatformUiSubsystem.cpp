@@ -25,7 +25,32 @@ namespace
 {
 	const TCHAR* PlatformUiExperimentSettingFileName = TEXT("setting.json");
 	const TCHAR* PlatformUiRobotProfileFileName = TEXT("profile.json");
+	const TCHAR* PlatformUiScenarioFileName = TEXT("scenario.json");
+	const TCHAR* PlatformUiProjectIdFieldName = TEXT("project_id");
+	const TCHAR* PlatformUiRunStatusFileName = TEXT("status.json");
+	const TCHAR* PlatformUiRunSnapshotDirectoryName = TEXT("snapshot");
+	const TCHAR* PlatformUiRunStatusSchema = TEXT("run_status");
+	const TCHAR* PlatformUiRunStatusPending = TEXT("pending");
+	const TCHAR* PlatformUiRunStatusStarting = TEXT("starting");
+	const TCHAR* PlatformUiRunStatusRunning = TEXT("running");
+	const TCHAR* PlatformUiRunStatusStopping = TEXT("stopping");
+	const TCHAR* PlatformUiRunStatusCanceled = TEXT("canceled");
+	const TCHAR* PlatformUiRunStatusCancelled = TEXT("cancelled");
+	const TCHAR* PlatformUiRunStatusExited = TEXT("exited");
+	const TCHAR* PlatformUiRunStatusCompleted = TEXT("completed");
+	const TCHAR* PlatformUiRunStatusFailed = TEXT("failed");
 	const TCHAR* PlatformUiExperimentDefaultMapId = TEXT("ScenarioSimulationMap");
+
+	// Bridge status.json에서 읽은 process lifecycle 상태.
+	struct FPlatformUiRunStatusSnapshot
+	{
+		bool bStatusFileExists = false;
+		bool bValidStatus = false;
+		bool bStatusError = false;
+		FString RawState;
+		ESimulationRunState RunState = ESimulationRunState::Pending;
+		EPlatformProjectRunProgressKind ProgressKind = EPlatformProjectRunProgressKind::Pending;
+	};
 
 	// user project path 입력을 absolute normalized path로 맞춘다.
 	FString NormalizePlatformUiProjectPath(FString path)
@@ -41,6 +66,252 @@ namespace
 			: FPaths::ConvertRelativePathToFull(path);
 		FPaths::NormalizeFilename(path);
 		return path;
+	}
+
+	// 경로 비교 전 trailing slash 차이를 제거한다.
+	FString NormalizePlatformUiPathForCompare(const FString& path)
+	{
+		FString normalizedPath = NormalizePlatformUiProjectPath(path);
+		while (normalizedPath.Len() > 1 && normalizedPath.EndsWith(TEXT("/")))
+		{
+			normalizedPath.LeftChopInline(1);
+		}
+		return normalizedPath;
+	}
+
+	// candidate가 target과 같거나 target의 parent 경로인지 확인한다.
+	bool IsPlatformUiSameOrParentPath(const FString& candidate, const FString& target)
+	{
+		FString normalizedCandidate = NormalizePlatformUiPathForCompare(candidate);
+		FString normalizedTarget = NormalizePlatformUiPathForCompare(target);
+		if (normalizedCandidate.IsEmpty() || normalizedTarget.IsEmpty())
+		{
+			return false;
+		}
+		if (normalizedCandidate.Equals(normalizedTarget, ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+		normalizedCandidate += TEXT("/");
+		return normalizedTarget.StartsWith(normalizedCandidate, ESearchCase::IgnoreCase);
+	}
+
+	// Drive, Unix root, UNC share root처럼 폴더 삭제 대상으로 너무 넓은 경로를 막는다.
+	bool IsPlatformUiRootLikePath(const FString& normalizedProjectPath)
+	{
+		if (normalizedProjectPath.IsEmpty() || normalizedProjectPath.Equals(TEXT("/")))
+		{
+			return true;
+		}
+		if (FPaths::IsDrive(normalizedProjectPath))
+		{
+			return true;
+		}
+
+		const TCHAR driveSeparator = TEXT(":")[0];
+		const TCHAR pathSeparator = TEXT("/")[0];
+		if (normalizedProjectPath.Len() >= 2
+			&& FChar::IsAlpha(normalizedProjectPath[0])
+			&& normalizedProjectPath[1] == driveSeparator)
+		{
+			return normalizedProjectPath.Len() == 2
+				|| (normalizedProjectPath.Len() == 3 && normalizedProjectPath[2] == pathSeparator);
+		}
+
+		if (normalizedProjectPath.StartsWith(TEXT("//")))
+		{
+			TArray<FString> pathParts;
+			normalizedProjectPath.RightChop(2).ParseIntoArray(pathParts, TEXT("/"), true);
+			return pathParts.Num() <= 2;
+		}
+
+		return false;
+	}
+
+	// OS root, workspace root, project root, engine root 같은 위험한 경로를 막는다.
+	bool IsUnsafePlatformUiDeleteRoot(const FString& projectPath)
+	{
+		const FString normalizedProjectPath = NormalizePlatformUiPathForCompare(projectPath);
+		if (IsPlatformUiRootLikePath(normalizedProjectPath))
+		{
+			return true;
+		}
+
+		TArray<FString> protectedRoots;
+		protectedRoots.Add(FPaths::ProjectDir());
+		protectedRoots.Add(FPaths::RootDir());
+		protectedRoots.Add(FPaths::EngineDir());
+		protectedRoots.Add(FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT(".."))));
+
+		for (const FString& protectedRoot : protectedRoots)
+		{
+			if (IsPlatformUiSameOrParentPath(normalizedProjectPath, protectedRoot))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Core user-project files가 모두 있는 폴더만 실제 삭제 대상으로 인정한다.
+	bool HasPlatformUiUserProjectCoreFiles(const FString& projectPath)
+	{
+		const FString normalizedProjectPath = NormalizePlatformUiProjectPath(projectPath);
+		return FPaths::FileExists(FPaths::Combine(normalizedProjectPath, PlatformUiExperimentSettingFileName))
+			&& FPaths::FileExists(FPaths::Combine(normalizedProjectPath, PlatformUiRobotProfileFileName))
+			&& FPaths::FileExists(FPaths::Combine(normalizedProjectPath, PlatformUiScenarioFileName));
+	}
+
+	// Platform UI가 읽는 JSON 파일 root object를 best-effort로 읽는다.
+	bool TryReadPlatformUiJsonObject(const FString& jsonPath, TSharedPtr<FJsonObject>& outRootObject)
+	{
+		outRootObject.Reset();
+
+		FString jsonString;
+		if (!FFileHelper::LoadFileToString(jsonString, *jsonPath))
+		{
+			return false;
+		}
+
+		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
+		return FJsonSerializer::Deserialize(reader, outRootObject) && outRootObject.IsValid();
+	}
+
+	// Bridge raw status 값을 Platform run/progress 상태로 변환한다.
+	bool TryMapPlatformUiRunStatusState(
+		const FString& rawState,
+		ESimulationRunState& outRunState,
+		EPlatformProjectRunProgressKind& outProgressKind)
+	{
+		if (rawState == PlatformUiRunStatusPending)
+		{
+			outRunState = ESimulationRunState::Pending;
+			outProgressKind = EPlatformProjectRunProgressKind::Pending;
+			return true;
+		}
+		if (rawState == PlatformUiRunStatusStarting)
+		{
+			outRunState = ESimulationRunState::Running;
+			outProgressKind = EPlatformProjectRunProgressKind::Starting;
+			return true;
+		}
+		if (rawState == PlatformUiRunStatusRunning)
+		{
+			outRunState = ESimulationRunState::Running;
+			outProgressKind = EPlatformProjectRunProgressKind::Running;
+			return true;
+		}
+		if (rawState == PlatformUiRunStatusStopping
+			|| rawState == PlatformUiRunStatusCanceled
+			|| rawState == PlatformUiRunStatusCancelled)
+		{
+			outRunState = ESimulationRunState::Canceled;
+			outProgressKind = EPlatformProjectRunProgressKind::Canceled;
+			return true;
+		}
+		if (rawState == PlatformUiRunStatusExited || rawState == PlatformUiRunStatusCompleted)
+		{
+			outRunState = ESimulationRunState::Completed;
+			outProgressKind = EPlatformProjectRunProgressKind::Completed;
+			return true;
+		}
+		if (rawState == PlatformUiRunStatusFailed)
+		{
+			outRunState = ESimulationRunState::Failed;
+			outProgressKind = EPlatformProjectRunProgressKind::Failed;
+			return true;
+		}
+		return false;
+	}
+
+	// Bridge status.json을 raw/process state snapshot으로 읽는다.
+	FPlatformUiRunStatusSnapshot ReadPlatformUiRunStatusSnapshot(const FString& statusPath)
+	{
+		FPlatformUiRunStatusSnapshot snapshot;
+		if (!FPaths::FileExists(statusPath))
+		{
+			return snapshot;
+		}
+
+		snapshot.bStatusFileExists = true;
+		TSharedPtr<FJsonObject> rootObject;
+		if (!TryReadPlatformUiJsonObject(statusPath, rootObject))
+		{
+			snapshot.bStatusError = true;
+			snapshot.RunState = ESimulationRunState::Failed;
+			snapshot.ProgressKind = EPlatformProjectRunProgressKind::Error;
+			return snapshot;
+		}
+
+		FString schema;
+		FString stateText;
+		if (!rootObject->TryGetStringField(TEXT("schema"), schema)
+			|| !schema.Equals(PlatformUiRunStatusSchema, ESearchCase::CaseSensitive)
+			|| !rootObject->TryGetStringField(TEXT("state"), stateText))
+		{
+			snapshot.bStatusError = true;
+			snapshot.RunState = ESimulationRunState::Failed;
+			snapshot.ProgressKind = EPlatformProjectRunProgressKind::Error;
+			return snapshot;
+		}
+
+		snapshot.RawState = stateText.TrimStartAndEnd().ToLower();
+		if (!TryMapPlatformUiRunStatusState(snapshot.RawState, snapshot.RunState, snapshot.ProgressKind))
+		{
+			snapshot.bStatusError = true;
+			snapshot.RunState = ESimulationRunState::Failed;
+			snapshot.ProgressKind = EPlatformProjectRunProgressKind::Error;
+			return snapshot;
+		}
+
+		snapshot.bValidStatus = true;
+		return snapshot;
+	}
+
+	// Run snapshot setting.json에서 episode_count를 읽는다.
+	int32 ReadPlatformUiRunSnapshotEpisodeCount(const FString& runDirectory)
+	{
+		const FString settingPath = NormalizePlatformUiProjectPath(FPaths::Combine(
+			NormalizePlatformUiProjectPath(runDirectory),
+			PlatformUiRunSnapshotDirectoryName,
+			PlatformUiExperimentSettingFileName));
+		if (!FPaths::FileExists(settingPath))
+		{
+			return 0;
+		}
+
+		TSharedPtr<FJsonObject> rootObject;
+		if (!TryReadPlatformUiJsonObject(settingPath, rootObject))
+		{
+			return 0;
+		}
+
+		const TSharedPtr<FJsonObject>* samplingObject = nullptr;
+		double episodeCount = 0.0;
+		if (!rootObject->TryGetObjectField(TEXT("sampling"), samplingObject)
+			|| !samplingObject
+			|| !samplingObject->IsValid()
+			|| !(*samplingObject)->TryGetNumberField(TEXT("episode_count"), episodeCount))
+		{
+			return 0;
+		}
+
+		return episodeCount > 0.0 ? FMath::Max(1, FMath::RoundToInt(episodeCount)) : 0;
+	}
+
+	// Completed/total count를 0-100 percent로 변환한다.
+	float CalculatePlatformUiRunProgressPercent(const int32 completedCount, const int32 totalCount)
+	{
+		if (totalCount <= 0)
+		{
+			return 0.0f;
+		}
+
+		return FMath::Clamp(
+			100.0f * static_cast<float>(FMath::Max(0, completedCount)) / static_cast<float>(totalCount),
+			0.0f,
+			100.0f);
 	}
 
 	// Platform UI가 편집하는 JSON 파일 root object를 읽는다.
@@ -573,6 +844,32 @@ bool UPlatformUiSubsystem::ReturnToStartupMap(FString& outErrorText) const
 	return true;
 }
 
+EPlatformUserProjectDeleteResult UPlatformUiSubsystem::DeleteUserProjectDirectory(const FString& projectPath) const
+{
+	const FString normalizedProjectPath = NormalizePlatformUiProjectPath(projectPath);
+	if (IsUnsafePlatformUiDeleteRoot(normalizedProjectPath))
+	{
+		return EPlatformUserProjectDeleteResult::Unsafe;
+	}
+	const FString activeProjectPath = NormalizePlatformUiProjectPath(GetActiveProjectPath());
+	if (!activeProjectPath.IsEmpty() && normalizedProjectPath.Equals(activeProjectPath, ESearchCase::IgnoreCase))
+	{
+		return EPlatformUserProjectDeleteResult::Unsafe;
+	}
+	if (!FPaths::DirectoryExists(normalizedProjectPath))
+	{
+		return EPlatformUserProjectDeleteResult::Missing;
+	}
+	if (!HasPlatformUiUserProjectCoreFiles(normalizedProjectPath))
+	{
+		return EPlatformUserProjectDeleteResult::Unsafe;
+	}
+
+	return IFileManager::Get().DeleteDirectory(*normalizedProjectPath, false, true)
+		? EPlatformUserProjectDeleteResult::Deleted
+		: EPlatformUserProjectDeleteResult::Failed;
+}
+
 bool UPlatformUiSubsystem::StartLegacySimulationRun(
 	const FString& setupPath,
 	const FString& requestedRunId,
@@ -623,6 +920,73 @@ TArray<FString> UPlatformUiSubsystem::ListProjectEpisodeResultFiles(const FStrin
 	return subsystem ? subsystem->ListProjectEpisodeResultFiles(runDirectory) : TArray<FString>();
 }
 
+FPlatformProjectRunProgressSnapshot UPlatformUiSubsystem::BuildProjectRunProgressSnapshot(
+	const FString& runDirectory,
+	const int32 configuredEpisodeCount) const
+{
+	const FString normalizedRunDirectory = NormalizePlatformUiProjectPath(runDirectory);
+	FPlatformProjectRunProgressSnapshot snapshot;
+	if (normalizedRunDirectory.IsEmpty())
+	{
+		return snapshot;
+	}
+
+	const FString statusPath = NormalizePlatformUiProjectPath(FPaths::Combine(
+		normalizedRunDirectory,
+		PlatformUiRunStatusFileName));
+	const FPlatformUiRunStatusSnapshot statusSnapshot = ReadPlatformUiRunStatusSnapshot(statusPath);
+
+	FProjectRunResultDashboardData dashboardData;
+	const bool bDashboardLoaded = LoadProjectRunDashboard(normalizedRunDirectory, dashboardData);
+	snapshot.bSummaryLoaded = bDashboardLoaded && dashboardData.bSummaryLoaded;
+	snapshot.RunState = statusSnapshot.bStatusError
+		? ESimulationRunState::Failed
+		: (statusSnapshot.bValidStatus
+			? statusSnapshot.RunState
+			: (snapshot.bSummaryLoaded
+				? ESimulationRunState::Completed
+				: ESimulationRunState::Pending));
+	snapshot.ProgressKind = statusSnapshot.bStatusError
+		? EPlatformProjectRunProgressKind::Error
+		: (statusSnapshot.bValidStatus
+			? statusSnapshot.ProgressKind
+			: (snapshot.RunState == ESimulationRunState::Completed
+				? EPlatformProjectRunProgressKind::Completed
+				: EPlatformProjectRunProgressKind::Pending));
+
+	const int32 episodeResultCount = ListProjectEpisodeResultFiles(normalizedRunDirectory).Num();
+	snapshot.CompletedCount = snapshot.bSummaryLoaded
+		? dashboardData.EpisodeCount
+		: episodeResultCount;
+	snapshot.TotalCount = ReadPlatformUiRunSnapshotEpisodeCount(normalizedRunDirectory);
+	if (snapshot.TotalCount <= 0 && snapshot.bSummaryLoaded)
+	{
+		snapshot.TotalCount = dashboardData.EpisodeCount;
+	}
+	if (snapshot.TotalCount <= 0)
+	{
+		snapshot.TotalCount = configuredEpisodeCount;
+	}
+	if (snapshot.TotalCount <= 0)
+	{
+		snapshot.TotalCount = episodeResultCount;
+	}
+
+	snapshot.CompletedCount = FMath::Max(0, snapshot.CompletedCount);
+	snapshot.TotalCount = FMath::Max(FMath::Max(0, snapshot.TotalCount), snapshot.CompletedCount);
+	snapshot.Percent = CalculatePlatformUiRunProgressPercent(snapshot.CompletedCount, snapshot.TotalCount);
+	if (snapshot.ProgressKind == EPlatformProjectRunProgressKind::Starting
+		|| snapshot.ProgressKind == EPlatformProjectRunProgressKind::Pending)
+	{
+		snapshot.Percent = 0.0f;
+	}
+	if (snapshot.ProgressKind == EPlatformProjectRunProgressKind::Completed)
+	{
+		snapshot.Percent = 100.0f;
+	}
+	return snapshot;
+}
+
 bool UPlatformUiSubsystem::LoadProjectRunDashboard(
 	const FString& runDirectory,
 	FProjectRunResultDashboardData& outDashboardData)
@@ -644,6 +1008,33 @@ bool UPlatformUiSubsystem::LoadProjectRunDashboard(
 		outDashboardData.RunId = FPaths::GetCleanFilename(normalizedRunDirectory);
 	}
 	return bLoaded;
+}
+
+ESimulationRunState UPlatformUiSubsystem::ResolveProjectRunState(const FString& runDirectory)
+{
+	const FString normalizedRunDirectory = NormalizePlatformUiProjectPath(runDirectory);
+	if (normalizedRunDirectory.IsEmpty())
+	{
+		return ESimulationRunState::Pending;
+	}
+
+	const FString statusPath = NormalizePlatformUiProjectPath(FPaths::Combine(
+		normalizedRunDirectory,
+		PlatformUiRunStatusFileName));
+	const FPlatformUiRunStatusSnapshot statusSnapshot = ReadPlatformUiRunStatusSnapshot(statusPath);
+	if (statusSnapshot.bStatusError)
+	{
+		return ESimulationRunState::Failed;
+	}
+	if (statusSnapshot.bValidStatus)
+	{
+		return statusSnapshot.RunState;
+	}
+
+	FProjectRunResultDashboardData dashboardData;
+	return LoadProjectRunDashboard(normalizedRunDirectory, dashboardData) && dashboardData.bSummaryLoaded
+		? ESimulationRunState::Completed
+		: ESimulationRunState::Pending;
 }
 
 bool UPlatformUiSubsystem::RequestProjectRunAnalysis(
@@ -953,6 +1344,58 @@ bool UPlatformUiSubsystem::SaveExperimentSettingsForProject(
 	}
 
 	outStatusText = FString::Printf(TEXT("Experiment settings saved: %s"), *settingPath);
+	return true;
+}
+
+bool UPlatformUiSubsystem::SaveProjectIdForProject(
+	const FString& projectPath,
+	const FString& projectId,
+	FString& outStatusText)
+{
+	outStatusText.Reset();
+
+	const FString normalizedProjectPath = NormalizePlatformUiProjectPath(projectPath);
+	if (normalizedProjectPath.IsEmpty())
+	{
+		outStatusText = TEXT("Active project가 없습니다.");
+		return false;
+	}
+
+	const FString normalizedProjectId = projectId.TrimStartAndEnd();
+	if (normalizedProjectId.IsEmpty())
+	{
+		outStatusText = TEXT("Project ID를 입력하세요.");
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const FString settingPath = BuildPlatformUiExperimentSettingPath(normalizedProjectPath);
+	if (!LoadPlatformUiJsonRoot(settingPath, rootObject, outStatusText))
+	{
+		return false;
+	}
+
+	rootObject->SetStringField(PlatformUiProjectIdFieldName, normalizedProjectId);
+
+	FString updatedJson;
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&updatedJson);
+	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
+	{
+		outStatusText = TEXT("setting.json 직렬화 실패.");
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(
+		updatedJson,
+		*settingPath,
+		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outStatusText = FString::Printf(TEXT("setting.json 저장 실패: %s"), *settingPath);
+		return false;
+	}
+
+	outStatusText = FString::Printf(TEXT("Project ID saved: %s"), *settingPath);
 	return true;
 }
 
@@ -1283,6 +1726,15 @@ bool UPlatformUiSubsystem::RefreshActiveRunStatus() const
 	return subsystem ? subsystem->RefreshActiveRunStatus() : false;
 }
 
+void UPlatformUiSubsystem::NotifyProjectPreviewUpdated(const FString& projectPath)
+{
+	const FString normalizedProjectPath = NormalizePlatformUiProjectPath(projectPath);
+	if (!normalizedProjectPath.IsEmpty())
+	{
+		OnProjectPreviewUpdated.Broadcast(normalizedProjectPath);
+	}
+}
+
 FSimulatorRunInfo UPlatformUiSubsystem::GetActiveRunInfo() const
 {
 	const USimulatorLaunchSubsystem* subsystem = ResolveSimulatorLaunchSubsystem();
@@ -1300,65 +1752,14 @@ bool UPlatformUiSubsystem::TryReadBridgeRunStatusState(
 	ESimulationRunState& outState)
 {
 	outState = ESimulationRunState::Pending;
-	if (!FPaths::FileExists(statusPath))
+	const FPlatformUiRunStatusSnapshot snapshot = ReadPlatformUiRunStatusSnapshot(statusPath);
+	if (!snapshot.bValidStatus)
 	{
 		return false;
 	}
 
-	FString statusJson;
-	if (!FFileHelper::LoadFileToString(statusJson, *statusPath))
-	{
-		return false;
-	}
-
-	TSharedPtr<FJsonObject> rootObject;
-	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(statusJson);
-	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
-	{
-		return false;
-	}
-
-	FString schema;
-	if (!rootObject->TryGetStringField(TEXT("schema"), schema)
-		|| !schema.Equals(TEXT("run_status"), ESearchCase::CaseSensitive))
-	{
-		return false;
-	}
-
-	FString stateText;
-	if (!rootObject->TryGetStringField(TEXT("state"), stateText))
-	{
-		return false;
-	}
-
-	stateText = stateText.TrimStartAndEnd().ToLower();
-	if (stateText == TEXT("starting")
-		|| stateText == TEXT("running")
-		|| stateText == TEXT("stopping"))
-	{
-		outState = ESimulationRunState::Running;
-		return true;
-	}
-
-	if (stateText == TEXT("exited") || stateText == TEXT("completed"))
-	{
-		outState = ESimulationRunState::Completed;
-		return true;
-	}
-
-	if (stateText == TEXT("failed"))
-	{
-		outState = ESimulationRunState::Failed;
-		return true;
-	}
-
-	if (stateText == TEXT("canceled") || stateText == TEXT("cancelled"))
-	{
-		outState = ESimulationRunState::Canceled;
-		return true;
-	}
-
-	return false;
+	outState = snapshot.RunState;
+	return true;
 }
 
 FString UPlatformUiSubsystem::BuildLogPreview(const FString& logPath, const int32 edgeLineCount)

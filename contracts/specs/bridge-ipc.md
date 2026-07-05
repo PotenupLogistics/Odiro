@@ -335,7 +335,7 @@ OdiroSim.exe -OdiroProject="X:/Projects/DeliveryBotA" -RunId="000001" -PolicyPor
 }
 ```
 
-- `statusPath`: Bridge가 쓰는 run status 파일. 형식: [User Project Data Contract](./user-project-data.md)의 `run_status`
+- `statusPath`: Bridge와 Simulator가 갱신하는 run status 파일. 형식: [User Project Data Contract](./user-project-data.md)의 `run_status`
 - `runId`: `workspace.createRun`이 반환한 6자리 decimal string만 허용
 - `runId` 금지값: 경로 구분자, `..`, 임의 이름. 위반 시 `INVALID_REQUEST`
 - process 시작 전 검증 기준: 이미 생성된 run snapshot

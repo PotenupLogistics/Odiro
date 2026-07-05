@@ -7,9 +7,9 @@
 
 class UBaseButtonWidget;
 class UPanelWidget;
+class URecentProjectContextMenuWidget;
+class URecentProjectDeleteConfirmDialogWidget;
 class URecentProjectCardWidget;
-class UScrollBox;
-class USpacer;
 class UStartupScreenWidget;
 class UStartupScreenViewModel;
 class UTextBlock;
@@ -44,6 +44,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|StartupScreen")
 	void RefreshFromViewModel();
 
+	// Startup screen이 viewport에 띄운 일시 UI를 모두 닫는다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|StartupScreen")
+	void CloseTransientPopups();
+
 	// 현재 선택된 project를 연다.
 	UFUNCTION(BlueprintCallable, Category = "Platform|StartupScreen")
 	bool OpenSelectedProject();
@@ -67,9 +71,6 @@ protected:
 	// Runtime binding과 내부 ViewModel을 초기화한다.
 	virtual void NativeConstruct() override;
 
-	// Viewport 크기 변화에 맞춰 startup panel scroll padding을 갱신한다.
-	virtual void NativeTick(const FGeometry& myGeometry, float inDeltaTime) override;
-
 	// Runtime binding을 해제한다.
 	virtual void NativeDestruct() override;
 
@@ -92,11 +93,17 @@ private:
 	// 카드 class 설정을 해석한다.
 	TSubclassOf<URecentProjectCardWidget> ResolveRecentProjectCardWidgetClass() const;
 
-	// Startup panel이 여유 공간에서는 중앙에 있고 작은 viewport에서는 scroll 범위가 되도록 padding을 조정한다.
-	void UpdateStartupPanelScrollPadding(const FVector2D& screenSize);
+	// 최근 project context menu를 지정 viewport 위치에 표시한다.
+	void OpenRecentProjectContextMenu(URecentProjectCardWidget* cardWidget, const FVector2D& screenPosition);
 
-	// WBP-authored startup panel slot 값을 runtime 보정 기준으로 저장한다.
-	bool CaptureStartupPanelAuthoredLayout();
+	// 표시 중인 최근 project context menu를 닫는다.
+	void CloseRecentProjectContextMenu();
+
+	// 최근 project 삭제 확인 dialog를 표시한다.
+	void OpenDeleteConfirmDialog(const FString& projectPath);
+
+	// 표시 중인 최근 project 삭제 확인 dialog를 닫는다.
+	void CloseDeleteConfirmDialog();
 
 	// OS folder picker로 기존 project root를 고른다.
 	bool BrowseForExistingProjectFolder(FString& outFolder) const;
@@ -109,24 +116,28 @@ private:
 	UFUNCTION()
 	void HandleCreateProjectClicked(UBaseButtonWidget* button);
 
-	// 화면 하단 가로 scrollbar 입력을 실제 panel scroll viewport에 반영한다.
-	UFUNCTION()
-	void HandleStartupPanelStickyHorizontalScrolled(float currentOffset);
-
-	// 실제 panel scroll viewport의 가로 offset 변화를 화면 하단 scrollbar에 반영한다.
-	UFUNCTION()
-	void HandleStartupPanelContentHorizontalScrolled(float currentOffset);
-
-	// 화면 오른쪽 세로 scrollbar 입력을 실제 panel scroll viewport에 반영한다.
-	UFUNCTION()
-	void HandleStartupPanelStickyVerticalScrolled(float currentOffset);
-
-	// 실제 panel scroll viewport의 세로 offset 변화를 화면 오른쪽 scrollbar에 반영한다.
-	UFUNCTION()
-	void HandleStartupPanelContentVerticalScrolled(float currentOffset);
-
 	// 최근 project card click을 project open 요청으로 처리한다.
 	void HandleRecentProjectCardSelected(URecentProjectCardWidget* cardWidget);
+
+	// 최근 project card right click을 context menu 요청으로 처리한다.
+	void HandleRecentProjectCardContextMenuRequested(
+		URecentProjectCardWidget* cardWidget,
+		FVector2D screenPosition);
+
+	// 최근 project를 목록에서만 제거한다.
+	void HandleRemoveRecentProjectFromList(URecentProjectContextMenuWidget* menu);
+
+	// 최근 project 실제 삭제 confirm을 연다.
+	void HandleDeleteRecentProjectRequested(URecentProjectContextMenuWidget* menu);
+
+	// 최근 project context menu dismiss 요청을 처리한다.
+	void HandleRecentProjectContextMenuDismissed(URecentProjectContextMenuWidget* menu);
+
+	// 최근 project 삭제 확인을 실행한다.
+	void HandleDeleteConfirmAccepted(URecentProjectDeleteConfirmDialogWidget* dialog);
+
+	// 최근 project 삭제 confirm을 취소한다.
+	void HandleDeleteConfirmCanceled(URecentProjectDeleteConfirmDialogWidget* dialog);
 
 	// 최근 project 카드가 들어갈 WBP-owned panel.
 	UPROPERTY(Transient, meta = (BindWidget))
@@ -144,34 +155,6 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> DiagnosticsTextBox;
 
-	// Startup panel 세로 scroll을 content 영역 오른쪽에 고정하는 WBP-owned scroll box.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UScrollBox> StartupPanelVerticalScrollBox;
-
-	// Startup panel 가로 overflow를 처리하는 WBP-owned scroll box.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UScrollBox> StartupPanelHorizontalScrollBox;
-
-	// 고정 크기 startup panel surface.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UWidget> StartupPanelSurface;
-
-	// 작은 viewport에서 화면 하단에 고정되는 WBP-owned optional 가로 scrollbar.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UScrollBox> StartupPanelStickyHorizontalScrollBox;
-
-	// WBP-owned optional 가로 scrollbar의 scroll range를 만드는 spacer.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<USpacer> StartupPanelStickyHorizontalScrollSpacer;
-
-	// 작은 viewport에서 화면 오른쪽에 고정되는 WBP-owned optional 세로 scrollbar.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UScrollBox> StartupPanelStickyVerticalScrollBox;
-
-	// WBP-owned optional 세로 scrollbar의 scroll range를 만드는 spacer.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<USpacer> StartupPanelStickyVerticalScrollSpacer;
-
 	// 기존 project folder picker를 여는 WBP-owned button.
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UBaseButtonWidget> OpenProjectButton;
@@ -183,6 +166,22 @@ private:
 	// 반복 생성할 최근 project card Widget Blueprint class.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<URecentProjectCardWidget> RecentProjectCardWidgetClass;
+
+	// 최근 project context menu에 사용할 WBP-owned menu widget class.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Recent Projects", meta = (AllowPrivateAccess = "true"))
+	TSubclassOf<URecentProjectContextMenuWidget> RecentProjectContextMenuWidgetClass;
+
+	// 최근 project 삭제 confirm dialog에 사용할 WBP-owned widget class.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Recent Projects", meta = (AllowPrivateAccess = "true"))
+	TSubclassOf<URecentProjectDeleteConfirmDialogWidget> DeleteConfirmDialogWidgetClass;
+
+	// 최근 project context menu viewport layer.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Recent Projects", meta = (AllowPrivateAccess = "true"))
+	int32 RecentProjectContextMenuZOrder = 20;
+
+	// 최근 project 삭제 confirm dialog viewport layer.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Recent Projects", meta = (AllowPrivateAccess = "true"))
+	int32 DeleteConfirmDialogZOrder = 30;
 
 	// WBP에서 수정 가능한 오류 상황별 진단 문구.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Diagnostics", meta = (AllowPrivateAccess = "true"))
@@ -200,35 +199,19 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<URecentProjectCardWidget>> RecentProjectCards;
 
-	// WBP-authored StartupPanelSurface slot padding.
+	// 표시 중인 최근 project context menu.
 	UPROPERTY(Transient)
-	FMargin StartupPanelSurfaceBasePadding;
+	TObjectPtr<URecentProjectContextMenuWidget> ActiveRecentProjectContextMenu;
 
-	// 마지막으로 적용한 startup panel padding 계산 입력.
+	// context menu command가 대상으로 삼는 최근 project root 절대 경로.
 	UPROPERTY(Transient)
-	FVector2D CachedStartupPanelPaddingInput = FVector2D::ZeroVector;
+	FString ContextMenuProjectPath;
 
-	// 마지막으로 적용한 startup panel desired size.
+	// 표시 중인 삭제 확인 dialog.
 	UPROPERTY(Transient)
-	FVector2D CachedStartupPanelDesiredSize = FVector2D::ZeroVector;
+	TObjectPtr<URecentProjectDeleteConfirmDialogWidget> ActiveDeleteConfirmDialog;
 
-	// 마지막으로 적용한 startup panel 가로 scroll 필요 상태.
+	// 삭제 확인 dialog가 대상으로 삼는 최근 project root 절대 경로.
 	UPROPERTY(Transient)
-	uint8 bCachedStartupPanelNeedsHorizontalScroll : 1 = false;
-
-	// 마지막으로 적용한 startup panel 세로 scroll 필요 상태.
-	UPROPERTY(Transient)
-	uint8 bCachedStartupPanelNeedsVerticalScroll : 1 = false;
-
-	// StartupPanelSurfaceBasePadding capture 완료 여부.
-	UPROPERTY(Transient)
-	uint8 bHasStartupPanelSurfaceBasePadding : 1 = false;
-
-	// 가로 scroll offset 동기화 중 재진입을 막는다.
-	UPROPERTY(Transient)
-	bool bSyncingStartupPanelHorizontalScroll = false;
-
-	// 세로 scroll offset 동기화 중 재진입을 막는다.
-	UPROPERTY(Transient)
-	bool bSyncingStartupPanelVerticalScroll = false;
+	FString PendingDeleteProjectPath;
 };

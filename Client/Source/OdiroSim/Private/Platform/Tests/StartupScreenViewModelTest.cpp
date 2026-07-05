@@ -8,6 +8,7 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Platform/PlatformUiSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 
 namespace
@@ -30,13 +31,59 @@ namespace
 			FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 	}
 
-	// 최근 project 표시 이름 검증에 필요한 최소 setting.json을 쓴다.
-	bool WriteStartupScreenVmSettingJson(const FString& projectPath, const FString& projectId)
+	// 최근 project 표시와 삭제 검증에 필요한 core project file을 쓴다.
+	bool WriteStartupScreenVmProjectFiles(const FString& projectPath, const FString& projectId)
 	{
 		const FString settingJson = FString::Printf(
 			TEXT("{\"schema\":\"project_setting\",\"version\":1,\"project_id\":\"%s\"}"),
 			*projectId);
-		return FFileHelper::SaveStringToFile(settingJson, *FPaths::Combine(projectPath, TEXT("setting.json")));
+		const bool bSettingSaved = FFileHelper::SaveStringToFile(
+			settingJson,
+			*FPaths::Combine(projectPath, TEXT("setting.json")));
+		const bool bProfileSaved = FFileHelper::SaveStringToFile(
+			TEXT("{\"schema\":\"simulation_profile\",\"version\":1,\"profile_id\":\"startup_profile\",\"robot\":{}}"),
+			*FPaths::Combine(projectPath, TEXT("profile.json")));
+		const bool bScenarioSaved = FFileHelper::SaveStringToFile(
+			TEXT("{\"schema\":\"scenario\",\"version\":1,\"scenario_id\":\"startup_scenario\",\"intent\":\"test\",\"corridor\":{},\"obstacles\":{},\"pedestrians\":{},\"robot\":{}}"),
+			*FPaths::Combine(projectPath, TEXT("scenario.json")));
+		return bSettingSaved && bProfileSaved && bScenarioSaved;
+	}
+
+	// 최근 project path 목록에 지정 경로가 남아 있는지 확인한다.
+	bool StartupScreenVmRecentPathsContain(const TArray<FString>& projectPaths, const FString& projectPath)
+	{
+		FString normalizedProjectPath = FPaths::ConvertRelativePathToFull(projectPath);
+		FPaths::NormalizeFilename(normalizedProjectPath);
+		return projectPaths.ContainsByPredicate(
+			[&normalizedProjectPath](const FString& storedPath)
+			{
+				FString normalizedStoredPath = FPaths::ConvertRelativePathToFull(storedPath);
+				FPaths::NormalizeFilename(normalizedStoredPath);
+				return normalizedStoredPath.Equals(normalizedProjectPath, ESearchCase::IgnoreCase);
+			});
+	}
+
+	// 현재 project 위치에서 OS root/drive root로 해석되는 대표 경로를 만든다.
+	FString ResolveStartupScreenVmRootLikePath(const FString& projectPath)
+	{
+		FString currentPath = FPaths::ConvertRelativePathToFull(projectPath);
+		FPaths::NormalizeFilename(currentPath);
+		while (!currentPath.IsEmpty())
+		{
+			FString parentPath = FPaths::GetPath(currentPath);
+			FPaths::NormalizeFilename(parentPath);
+			if (parentPath.IsEmpty() || parentPath.Equals(currentPath, ESearchCase::IgnoreCase))
+			{
+				break;
+			}
+			currentPath = parentPath;
+		}
+
+		if (currentPath.Len() == 2 && currentPath[1] == TEXT(":")[0])
+		{
+			currentPath += TEXT("/");
+		}
+		return currentPath;
 	}
 
 	// 테스트 중 변경한 recent-project config를 원래 사용자 값으로 복원한다.
@@ -138,6 +185,8 @@ bool FStartupScreenViewModelRecentProjectsTest::RunTest(const FString& parameter
 	diagnosticMessages.ProjectRequired = TEXT("프로젝트를 선택하세요.");
 	diagnosticMessages.ProjectFolderNotProject = TEXT("프로젝트 폴더가 아닙니다.");
 	diagnosticMessages.ProjectConfigMissingFormat = TEXT("프로젝트 파일이 누락되었습니다. ({ConfigName})");
+	diagnosticMessages.ProjectDeleteUnsafe = TEXT("삭제할 수 없는 프로젝트입니다.");
+	diagnosticMessages.ProjectDeleteFailed = TEXT("프로젝트 삭제에 실패했습니다.");
 	viewModel->SetDiagnosticMessages(diagnosticMessages);
 
 	const FString testRoot = MakeStartupScreenVmTestRoot();
@@ -150,10 +199,10 @@ bool FStartupScreenViewModelRecentProjectsTest::RunTest(const FString& parameter
 	IFileManager::Get().MakeDirectory(*projectB, true);
 	IFileManager::Get().MakeDirectory(*projectC, true);
 	IFileManager::Get().MakeDirectory(*projectD, true);
-	TestTrue(TEXT("project A setting json created"), WriteStartupScreenVmSettingJson(projectA, TEXT("project-alpha")));
-	TestTrue(TEXT("project B setting json created"), WriteStartupScreenVmSettingJson(projectB, TEXT("project-beta")));
-	TestTrue(TEXT("project C setting json created"), WriteStartupScreenVmSettingJson(projectC, TEXT("project-gamma")));
-	TestTrue(TEXT("project D setting json created"), WriteStartupScreenVmSettingJson(projectD, TEXT("project-delta")));
+	TestTrue(TEXT("project A core files created"), WriteStartupScreenVmProjectFiles(projectA, TEXT("project-alpha")));
+	TestTrue(TEXT("project B core files created"), WriteStartupScreenVmProjectFiles(projectB, TEXT("project-beta")));
+	TestTrue(TEXT("project C core files created"), WriteStartupScreenVmProjectFiles(projectC, TEXT("project-gamma")));
+	TestTrue(TEXT("project D core files created"), WriteStartupScreenVmProjectFiles(projectD, TEXT("project-delta")));
 
 	TArray<FString> storedProjectPaths = { projectA, projectB, projectA };
 	if (GConfig)
@@ -211,6 +260,78 @@ bool FStartupScreenViewModelRecentProjectsTest::RunTest(const FString& parameter
 	{
 		TestTrue(TEXT("first visible recent project is newest"), visibleRecentProjects[0].ProjectPath.Equals(projectA, ESearchCase::IgnoreCase));
 		TestTrue(TEXT("third visible recent project is capped"), visibleRecentProjects[2].ProjectPath.Equals(projectC, ESearchCase::IgnoreCase));
+	}
+
+	TestTrue(TEXT("remove recent project only updates list"), viewModel->RemoveRecentProject(projectB));
+	TestTrue(TEXT("remove recent project keeps directory"), FPaths::DirectoryExists(projectB));
+	TestFalse(
+		TEXT("removed recent project no longer stored"),
+		StartupScreenVmRecentPathsContain(viewModel->GetRecentProjectPaths(), projectB));
+
+	UPlatformUiSubsystem* platformUiSubsystem = NewObject<UPlatformUiSubsystem>();
+	TestNotNull(TEXT("platform ui subsystem created"), platformUiSubsystem);
+	TestEqual(
+		TEXT("delete recent project removes folder"),
+		platformUiSubsystem ? platformUiSubsystem->DeleteUserProjectDirectory(projectC) : EPlatformUserProjectDeleteResult::Failed,
+		EPlatformUserProjectDeleteResult::Deleted);
+	TestTrue(TEXT("delete recent project removes list entry"), viewModel->RemoveRecentProject(projectC));
+	TestFalse(TEXT("deleted recent project directory removed"), FPaths::DirectoryExists(projectC));
+	TestFalse(
+		TEXT("deleted recent project no longer stored"),
+		StartupScreenVmRecentPathsContain(viewModel->GetRecentProjectPaths(), projectC));
+
+	TestTrue(TEXT("missing project directory removed before delete command"), IFileManager::Get().DeleteDirectory(*projectD, false, true));
+	TestEqual(
+		TEXT("delete missing recent project does not touch filesystem"),
+		platformUiSubsystem ? platformUiSubsystem->DeleteUserProjectDirectory(projectD) : EPlatformUserProjectDeleteResult::Failed,
+		EPlatformUserProjectDeleteResult::Missing);
+	TestTrue(TEXT("delete missing recent project removes only list entry"), viewModel->RemoveRecentProject(projectD));
+	TestFalse(
+		TEXT("missing recent project no longer stored"),
+		StartupScreenVmRecentPathsContain(viewModel->GetRecentProjectPaths(), projectD));
+
+	const FString unsafeProjectRoot = FPaths::ProjectDir();
+	storedProjectPaths = { unsafeProjectRoot };
+	if (GConfig)
+	{
+		GConfig->SetArray(
+			StartupScreenVmConfigSection,
+			StartupScreenVmRecentProjectPathsKey,
+			storedProjectPaths,
+			GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+	}
+	viewModel->RefreshRecentProjects();
+	TestEqual(
+		TEXT("unsafe project root is not deleted"),
+		platformUiSubsystem ? platformUiSubsystem->DeleteUserProjectDirectory(unsafeProjectRoot) : EPlatformUserProjectDeleteResult::Failed,
+		EPlatformUserProjectDeleteResult::Unsafe);
+	TestTrue(TEXT("unsafe project root directory remains"), FPaths::DirectoryExists(unsafeProjectRoot));
+	TestTrue(
+		TEXT("unsafe project root remains in recent list"),
+		StartupScreenVmRecentPathsContain(viewModel->GetRecentProjectPaths(), unsafeProjectRoot));
+
+	const FString rootLikePath = ResolveStartupScreenVmRootLikePath(unsafeProjectRoot);
+	if (!rootLikePath.IsEmpty())
+	{
+		storedProjectPaths = { rootLikePath };
+		if (GConfig)
+		{
+			GConfig->SetArray(
+				StartupScreenVmConfigSection,
+				StartupScreenVmRecentProjectPathsKey,
+				storedProjectPaths,
+				GGameUserSettingsIni);
+			GConfig->Flush(false, GGameUserSettingsIni);
+		}
+		viewModel->RefreshRecentProjects();
+		TestEqual(
+			TEXT("drive or root path is not deleted"),
+			platformUiSubsystem ? platformUiSubsystem->DeleteUserProjectDirectory(rootLikePath) : EPlatformUserProjectDeleteResult::Failed,
+			EPlatformUserProjectDeleteResult::Unsafe);
+		TestTrue(
+			TEXT("drive or root path remains in recent list"),
+			StartupScreenVmRecentPathsContain(viewModel->GetRecentProjectPaths(), rootLikePath));
 	}
 
 	TArray<FString> diagnostics;

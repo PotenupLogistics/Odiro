@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Input/Reply.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "CommonUserWidget.h"
 #include "Types/SlateEnums.h"
 #include "RobotConfigEditorWidget.generated.h"
 
@@ -21,7 +21,7 @@ struct FRobotProfileSettings;
 
 // Native adapter for WBP_RobotConfigEditor profile controls.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API URobotConfigEditorWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API URobotConfigEditorWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 

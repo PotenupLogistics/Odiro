@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Platform/ProjectRunResultDashboard.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "CommonUserWidget.h"
 #include "ProjectAiSuggestionRowWidget.generated.h"
 
 class UExperimentResultSuggestionViewModel;
@@ -10,7 +10,7 @@ class UWidget;
 
 // AI suggestion row adapter used by Platform run detail screens.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UProjectAiSuggestionRowWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API UProjectAiSuggestionRowWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 

@@ -115,6 +115,9 @@ private:
 	// Requests an abnormal process exit after a trust-boundary failure.
 	void RequestProcessExitWithError(const FString& error) const;
 
+	// Writes the canonical project run status file for this simulator process.
+	void WriteProjectRunStatus(const FString& statusState, const FString& errorMessage = FString()) const;
+
 	// Requests the process exit code used by the launcher to classify the run.
 	void RequestProjectRunProcessExit(bool bSuccess, const FString& reason);
 
@@ -188,6 +191,10 @@ private:
 	UPROPERTY(Transient)
 	// Six-digit run id for the current project run.
 	FString ActiveRunId;
+
+	UPROPERTY(Transient)
+	// Python policy server port assigned to the current project run.
+	int32 ActivePolicyPort = 0;
 
 	UPROPERTY(Transient)
 	// Runner subsystem currently bound to this process subsystem.

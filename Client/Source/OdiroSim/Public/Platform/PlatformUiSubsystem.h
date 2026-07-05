@@ -20,6 +20,30 @@ struct FProjectRunResultDashboardData;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiRunInfoChangedNative, const FSimulatorRunInfo&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiAnalysisCompletedNative, const FPlatformAnalysisAiResponse&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiProjectPreviewUpdatedNative, const FString&);
+
+// User project folder delete command result.
+UENUM(BlueprintType)
+enum class EPlatformUserProjectDeleteResult : uint8
+{
+	Deleted,
+	Missing,
+	Unsafe,
+	Failed
+};
+
+// Project run progress status kind consumed by Platform row widgets.
+UENUM(BlueprintType)
+enum class EPlatformProjectRunProgressKind : uint8
+{
+	Pending,
+	Starting,
+	Running,
+	Canceled,
+	Completed,
+	Failed,
+	Error
+};
 
 // Legacy report 목록 표시용 경량 item; 파일 파싱은 PlatformUiSubsystem이 소유한다.
 USTRUCT(BlueprintType)
@@ -34,6 +58,37 @@ struct ODIROSIM_API FExperimentResultReportItem
 	// Report가 나타내는 run index.
 	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
 	int32 RunIndex = INDEX_NONE;
+};
+
+// Render-ready progress snapshot for one user-project run directory.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FPlatformProjectRunProgressSnapshot
+{
+	GENERATED_BODY()
+
+	// Run lifecycle state resolved from status/summary artifacts.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	ESimulationRunState RunState = ESimulationRunState::Pending;
+
+	// Progress presentation state without depending on concrete widget classes.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	EPlatformProjectRunProgressKind ProgressKind = EPlatformProjectRunProgressKind::Pending;
+
+	// Number of completed episode results counted for the run.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	int32 CompletedCount = 0;
+
+	// Expected total episode count resolved from snapshot, summary, or current config.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	int32 TotalCount = 0;
+
+	// Completion percent in the 0-100 range.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	float Percent = 0.0f;
+
+	// Whether summary.json was loaded for this run.
+	UPROPERTY(BlueprintReadOnly, Category = "Platform|UI")
+	bool bSummaryLoaded = false;
 };
 
 // Platform UI의 ViewModel lifecycle/factory를 소유하는 GameInstance subsystem.
@@ -57,6 +112,9 @@ public:
 
 	// AI 분석 완료를 Platform UI adapter에 중계한다.
 	FPlatformUiAnalysisCompletedNative OnAnalysisCompleted;
+
+	// Project preview.png 갱신을 Platform UI adapter에 중계한다.
+	FPlatformUiProjectPreviewUpdatedNative OnProjectPreviewUpdated;
 
 	// Project workspace ViewModel을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|UI")
@@ -97,6 +155,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|UI")
 	bool ReturnToStartupMap(FString& outErrorText) const;
 
+	// User project root 폴더를 안전 검증 후 실제 삭제한다.
+	EPlatformUserProjectDeleteResult DeleteUserProjectDirectory(const FString& projectPath) const;
+
 	// Legacy simulation setup launch command를 subsystem으로 위임한다.
 	bool StartLegacySimulationRun(
 		const FString& setupPath,
@@ -109,10 +170,18 @@ public:
 	// Project run directory 아래 episode result 파일 목록을 반환한다.
 	TArray<FString> ListProjectEpisodeResultFiles(const FString& runDirectory) const;
 
+	// Project run directory의 progress 표시 snapshot을 만든다.
+	FPlatformProjectRunProgressSnapshot BuildProjectRunProgressSnapshot(
+		const FString& runDirectory,
+		int32 configuredEpisodeCount) const;
+
 	// Project run directory의 summary/review JSON을 dashboard 데이터로 읽는다.
 	static bool LoadProjectRunDashboard(
 		const FString& runDirectory,
 		FProjectRunResultDashboardData& outDashboardData);
+
+	// Project run directory의 lifecycle state를 status/summary artifact에서 계산한다.
+	static ESimulationRunState ResolveProjectRunState(const FString& runDirectory);
 
 	// Project run AI 분석 요청을 model subsystem으로 위임한다.
 	bool RequestProjectRunAnalysis(
@@ -188,6 +257,12 @@ public:
 		const FExperimentConfigSettings& settings,
 		FString& outStatusText);
 
+	// user project setting.json의 project_id를 저장한다.
+	static bool SaveProjectIdForProject(
+		const FString& projectPath,
+		const FString& projectId,
+		FString& outStatusText);
+
 	// Reads the robot.body subset from user-project profile.json.
 	static bool LoadRobotProfileBodyForProject(
 		const FString& projectPath,
@@ -226,6 +301,9 @@ public:
 
 	// Active simulator run status를 최신 상태로 갱신한다.
 	bool RefreshActiveRunStatus() const;
+
+	// Project preview.png가 갱신됐음을 Platform UI에 알린다.
+	void NotifyProjectPreviewUpdated(const FString& projectPath);
 
 	// Active simulator run 상태 snapshot을 반환한다.
 	FSimulatorRunInfo GetActiveRunInfo() const;

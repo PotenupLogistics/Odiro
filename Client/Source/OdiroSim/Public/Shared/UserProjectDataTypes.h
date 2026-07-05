@@ -136,6 +136,64 @@ struct ODIROSIM_API FUserProjectEpisodeScenarioJson
 	static FUserProjectEpisodeScenarioParseResult ParseFromFile(const FString& jsonFilePath);
 };
 
+// runs/<RunId>/status.json process lifecycle payload.
+struct ODIROSIM_API FUserProjectRunStatusRecord
+{
+	// 이 run이 속한 user project root path.
+	FString ProjectPath;
+
+	// 이 status가 나타내는 6자리 run id.
+	FString RunId;
+
+	// 이 run이 소유한 status.json absolute path.
+	FString StatusPath;
+
+	// 이 run에 사용된 simulator executable.
+	FString Executable;
+
+	// 확인 가능한 child simulator process id.
+	int64 ProcessId = 0;
+
+	// 이 run에 할당된 Python policy server port.
+	int32 PolicyPort = 0;
+
+	// Child process exit code. INDEX_NONE이면 아직 종료되지 않았거나 알 수 없다.
+	int32 ExitCode = INDEX_NONE;
+
+	// run_status 계약의 lifecycle state string.
+	FString State;
+
+	// 이 run status가 처음 생성된 UTC timestamp.
+	FString StartedAt;
+
+	// 이 run status가 마지막으로 갱신된 UTC timestamp.
+	FString UpdatedAt;
+
+	// 이 run이 terminal state에 도달한 UTC timestamp.
+	FString ExitedAt;
+
+	// failed state에서 사람이 읽을 수 있는 오류 메시지.
+	FString Error;
+};
+
+// Launcher와 simulator process가 공유하는 user project run_status reader/writer.
+struct ODIROSIM_API FUserProjectRunStatusJson
+{
+	// User project JSON 파일용 UTC timestamp를 만든다.
+	static FString MakeUtcTimestamp();
+
+	// run_status 파일을 읽는다. 모르는 optional field는 무시한다.
+	static bool LoadFromFile(
+		const FString& statusPath,
+		FUserProjectRunStatusRecord& outStatus,
+		TArray<FString>& outDiagnostics);
+
+	// run_status 파일을 쓴다.
+	static bool SaveToFile(
+		const FUserProjectRunStatusRecord& status,
+		TArray<FString>& outDiagnostics);
+};
+
 // user project run 결과 파일 writer.
 struct ODIROSIM_API FUserProjectRunOutputJson
 {

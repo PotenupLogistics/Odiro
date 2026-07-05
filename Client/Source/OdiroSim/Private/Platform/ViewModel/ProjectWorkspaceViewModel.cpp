@@ -364,6 +364,38 @@ bool UProjectWorkspaceViewModel::ReturnToStartup()
 	return true;
 }
 
+bool UProjectWorkspaceViewModel::SaveActiveProjectId(const FString& projectId, FString& outErrorText)
+{
+	outErrorText.Reset();
+
+	const FString normalizedProjectId = projectId.TrimStartAndEnd();
+	if (ActiveProjectPath.IsEmpty())
+	{
+		outErrorText = TEXT("Active project가 없습니다.");
+		SetDiagnosticsText(outErrorText);
+		return false;
+	}
+	if (normalizedProjectId.IsEmpty())
+	{
+		outErrorText = TEXT("Project ID를 입력하세요.");
+		SetDiagnosticsText(outErrorText);
+		return false;
+	}
+	if (normalizedProjectId.Equals(ActiveProjectId, ESearchCase::CaseSensitive))
+	{
+		return true;
+	}
+
+	if (!UPlatformUiSubsystem::SaveProjectIdForProject(ActiveProjectPath, normalizedProjectId, outErrorText))
+	{
+		SetDiagnosticsText(outErrorText);
+		return false;
+	}
+
+	SetActiveProjectId(normalizedProjectId);
+	return true;
+}
+
 TArray<UOdiroListItemViewModel*> UProjectWorkspaceViewModel::GetRunItems() const
 {
 	return CopyWorkspaceVmItems(RunItems);

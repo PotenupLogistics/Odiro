@@ -52,6 +52,19 @@ FReply URecentProjectCardWidget::NativeOnMouseButtonDown(
 	return Super::NativeOnMouseButtonDown(inGeometry, inMouseEvent);
 }
 
+FReply URecentProjectCardWidget::NativeOnPreviewMouseButtonDown(
+	const FGeometry& inGeometry,
+	const FPointerEvent& inMouseEvent)
+{
+	if (inMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+	{
+		OnContextMenuRequested.Broadcast(this, inMouseEvent.GetScreenSpacePosition());
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnPreviewMouseButtonDown(inGeometry, inMouseEvent);
+}
+
 void URecentProjectCardWidget::InitializeCard(const FStartupScreenRecentProjectItem& item)
 {
 	ProjectPath = item.ProjectPath;

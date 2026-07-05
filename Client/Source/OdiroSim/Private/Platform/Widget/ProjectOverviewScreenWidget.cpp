@@ -1,9 +1,6 @@
 #include "Platform/Widget/ProjectOverviewScreenWidget.h"
 
 #include "Components/Image.h"
-#include "Components/ScrollBox.h"
-#include "Components/ScrollBoxSlot.h"
-#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Engine/World.h"
 #include "HAL/PlatformMisc.h"
@@ -13,6 +10,7 @@
 #include "Platform/PlatformUiSubsystem.h"
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 #include "UI/BaseButtonWidget.h"
+#include "UI/BaseTextInputWidget.h"
 #include "UI/BaseTextWidget.h"
 
 namespace
@@ -165,25 +163,6 @@ bool TryLaunchPolicyWorkspaceEditor(
 	return false;
 }
 
-// WBP-authored scroll style에서 가로 scrollbar가 차지하는 높이를 계산한다.
-float ResolveHorizontalScrollbarHeight(const UScrollBox& scrollBox)
-{
-	const FVector2D scrollbarThickness = scrollBox.GetScrollbarThickness();
-	const FMargin scrollbarPadding = scrollBox.GetScrollbarPadding();
-	return FMath::Max(
-		scrollBox.GetWidgetBarStyle().Thickness,
-		scrollbarThickness.Y + scrollbarPadding.Top + scrollbarPadding.Bottom);
-}
-
-// WBP-authored scroll style에서 세로 scrollbar가 차지하는 너비를 계산한다.
-float ResolveVerticalScrollbarWidth(const UScrollBox& scrollBox)
-{
-	const FVector2D scrollbarThickness = scrollBox.GetScrollbarThickness();
-	const FMargin scrollbarPadding = scrollBox.GetScrollbarPadding();
-	return FMath::Max(
-		scrollBox.GetWidgetBarStyle().Thickness,
-		scrollbarThickness.X + scrollbarPadding.Left + scrollbarPadding.Right);
-}
 }
 
 void UProjectOverviewScreenWidget::NativeConstruct()
@@ -227,21 +206,39 @@ void UProjectOverviewScreenWidget::NativeConstruct()
 			this,
 			&UProjectOverviewScreenWidget::HandleExperimentButtonClicked);
 	}
+	if (EditProjectNameButton)
+	{
+		EditProjectNameButton->OnBaseClicked.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleEditProjectNameClicked);
+		EditProjectNameButton->OnBaseClicked.AddDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleEditProjectNameClicked);
+	}
+	if (SaveProjectNameButton)
+	{
+		SaveProjectNameButton->OnBaseClicked.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleSaveProjectNameClicked);
+		SaveProjectNameButton->OnBaseClicked.AddDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleSaveProjectNameClicked);
+	}
+	if (ProjectNameInput)
+	{
+		ProjectNameInput->OnTextSubmitted.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleProjectNameSubmitted);
+		ProjectNameInput->OnTextSubmitted.AddDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleProjectNameSubmitted);
+	}
 
-	BindOverviewScrollbars();
-	CaptureOverviewAuthoredScrollPadding();
 	RefreshFromViewModel();
-}
-
-void UProjectOverviewScreenWidget::NativeTick(const FGeometry& myGeometry, const float inDeltaTime)
-{
-	Super::NativeTick(myGeometry, inDeltaTime);
-	UpdateOverviewOverlayScrollbars(myGeometry.GetLocalSize());
 }
 
 void UProjectOverviewScreenWidget::NativeDestruct()
 {
-	UnbindOverviewScrollbars();
 	if (OpenScenarioButton)
 	{
 		OpenScenarioButton->OnBaseClicked.RemoveDynamic(
@@ -268,6 +265,24 @@ void UProjectOverviewScreenWidget::NativeDestruct()
 			this,
 			&UProjectOverviewScreenWidget::HandleExperimentButtonClicked);
 	}
+	if (EditProjectNameButton)
+	{
+		EditProjectNameButton->OnBaseClicked.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleEditProjectNameClicked);
+	}
+	if (SaveProjectNameButton)
+	{
+		SaveProjectNameButton->OnBaseClicked.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleSaveProjectNameClicked);
+	}
+	if (ProjectNameInput)
+	{
+		ProjectNameInput->OnTextSubmitted.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleProjectNameSubmitted);
+	}
 
 	Super::NativeDestruct();
 }
@@ -284,17 +299,21 @@ void UProjectOverviewScreenWidget::RefreshFromViewModel()
 		}
 		if (StatusText)
 		{
-			SetOverviewWidgetText(
-				StatusText,
-				NSLOCTEXT("OdiroPlatform", "OverviewViewModelMissing", "Workspace ViewModel 없음"));
+			SetOverviewWidgetText(StatusText, WorkspaceViewModelMissingText);
 		}
 		return;
 	}
 
 	viewModel->RefreshFromProjectSession();
-	if (UWidget* projectNameWidget = GetWidgetFromName(TEXT("ProjectNameTitle")))
+	const FText activeProjectIdText = FText::FromString(viewModel->GetActiveProjectId());
+	if (ProjectNameTitle)
 	{
-		SetOverviewWidgetText(projectNameWidget, FText::FromString(viewModel->GetActiveProjectId()));
+		SetOverviewWidgetText(ProjectNameTitle.Get(), activeProjectIdText);
+	}
+	if (ProjectNameInput && !bEditingProjectName)
+	{
+		ProjectNameInput->ClearError();
+		ProjectNameInput->SetText(activeProjectIdText);
 	}
 	if (ProjectPathText)
 	{
@@ -317,6 +336,7 @@ void UProjectOverviewScreenWidget::RefreshFromViewModel()
 	{
 		SetOverviewWidgetText(StatusText, FText::FromString(viewModel->GetStatusText()));
 	}
+	UpdateProjectNameEditState();
 }
 
 UProjectWorkspaceViewModel* UProjectOverviewScreenWidget::ResolveViewModel()
@@ -361,266 +381,125 @@ bool UProjectOverviewScreenWidget::ApplyScenarioThumbnail(const FString& project
 	return true;
 }
 
-void UProjectOverviewScreenWidget::BindOverviewScrollbars()
+void UProjectOverviewScreenWidget::UpdateProjectNameEditState()
 {
-	if (ProjectOverviewHorizontalScrollBox)
+	if (ProjectNameTitle)
 	{
-		ProjectOverviewHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewContentHorizontalScrolled);
-		ProjectOverviewHorizontalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewContentHorizontalScrolled);
+		ProjectNameTitle->SetVisibility(bEditingProjectName
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
 	}
-	if (ProjectOverviewScrollBox)
+	if (ProjectNameInput)
 	{
-		ProjectOverviewScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewContentVerticalScrolled);
-		ProjectOverviewScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewContentVerticalScrolled);
-	}
-	if (ProjectOverviewStickyHorizontalScrollBox)
-	{
-		ProjectOverviewStickyHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewStickyHorizontalScrolled);
-		ProjectOverviewStickyHorizontalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewStickyHorizontalScrolled);
-	}
-	if (ProjectOverviewStickyVerticalScrollBox)
-	{
-		ProjectOverviewStickyVerticalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewStickyVerticalScrolled);
-		ProjectOverviewStickyVerticalScrollBox->OnUserScrolled.AddDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewStickyVerticalScrolled);
-	}
-}
-
-void UProjectOverviewScreenWidget::UnbindOverviewScrollbars()
-{
-	if (ProjectOverviewHorizontalScrollBox)
-	{
-		ProjectOverviewHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewContentHorizontalScrolled);
-	}
-	if (ProjectOverviewScrollBox)
-	{
-		ProjectOverviewScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewContentVerticalScrolled);
-	}
-	if (ProjectOverviewStickyHorizontalScrollBox)
-	{
-		ProjectOverviewStickyHorizontalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewStickyHorizontalScrolled);
-	}
-	if (ProjectOverviewStickyVerticalScrollBox)
-	{
-		ProjectOverviewStickyVerticalScrollBox->OnUserScrolled.RemoveDynamic(
-			this,
-			&UProjectOverviewScreenWidget::HandleOverviewStickyVerticalScrolled);
-	}
-}
-
-void UProjectOverviewScreenWidget::UpdateOverviewOverlayScrollbars(const FVector2D& screenSize)
-{
-	if (!ProjectOverviewScrollBox || !ProjectOverviewHorizontalScrollBox || !ProjectOverviewMainStack)
-	{
-		return;
-	}
-	if (!bHasProjectOverviewScrollBasePadding && !CaptureOverviewAuthoredScrollPadding())
-	{
-		return;
-	}
-
-	FVector2D verticalViewportSize = ProjectOverviewScrollBox->GetCachedGeometry().GetLocalSize();
-	if (verticalViewportSize.IsNearlyZero())
-	{
-		verticalViewportSize = screenSize;
-	}
-	FVector2D horizontalViewportSize = ProjectOverviewHorizontalScrollBox->GetCachedGeometry().GetLocalSize();
-	if (horizontalViewportSize.IsNearlyZero())
-	{
-		horizontalViewportSize = screenSize;
-	}
-	const FVector2D viewportSize(horizontalViewportSize.X, verticalViewportSize.Y);
-	if (viewportSize.X <= 0.0f || viewportSize.Y <= 0.0f)
-	{
-		return;
-	}
-
-	ProjectOverviewMainStack->ForceLayoutPrepass();
-	const FVector2D contentDesiredSize = ProjectOverviewMainStack->GetDesiredSize();
-	if (contentDesiredSize.X <= 0.0f || contentDesiredSize.Y <= 0.0f)
-	{
-		return;
-	}
-
-	const bool bUsesStickyHorizontalScroll = ProjectOverviewStickyHorizontalScrollBox
-		&& ProjectOverviewStickyHorizontalScrollSpacer;
-	const bool bUsesStickyVerticalScroll = ProjectOverviewStickyVerticalScrollBox
-		&& ProjectOverviewStickyVerticalScrollSpacer;
-	const float horizontalScrollbarHeight = bUsesStickyHorizontalScroll
-		? 0.0f
-		: ResolveHorizontalScrollbarHeight(*ProjectOverviewHorizontalScrollBox);
-	const float verticalScrollbarWidth = bUsesStickyVerticalScroll
-		? 0.0f
-		: ResolveVerticalScrollbarWidth(*ProjectOverviewScrollBox);
-	const float baseContentWidth = contentDesiredSize.X
-		+ ProjectOverviewMainStackBasePadding.Left
-		+ ProjectOverviewMainStackBasePadding.Right;
-	const float baseContentHeight = contentDesiredSize.Y
-		+ ProjectOverviewMainStackBasePadding.Top
-		+ ProjectOverviewMainStackBasePadding.Bottom
-		+ ProjectOverviewHorizontalScrollBoxBasePadding.Top
-		+ ProjectOverviewHorizontalScrollBoxBasePadding.Bottom;
-	bool bNeedsHorizontalScroll = false;
-	bool bNeedsVerticalScroll = false;
-	for (int32 passIndex = 0; passIndex < 2; ++passIndex)
-	{
-		const float availableWidth = viewportSize.X - (bNeedsVerticalScroll ? verticalScrollbarWidth : 0.0f);
-		bNeedsHorizontalScroll = availableWidth + KINDA_SMALL_NUMBER < baseContentWidth;
-		const float requiredHeight = baseContentHeight + (bNeedsHorizontalScroll ? horizontalScrollbarHeight : 0.0f);
-		bNeedsVerticalScroll = viewportSize.Y + KINDA_SMALL_NUMBER < requiredHeight;
-	}
-
-	if (CachedOverviewScrollViewportSize.Equals(viewportSize, KINDA_SMALL_NUMBER)
-		&& CachedOverviewScrollContentSize.Equals(contentDesiredSize, KINDA_SMALL_NUMBER)
-		&& bCachedOverviewNeedsHorizontalScroll == bNeedsHorizontalScroll
-		&& bCachedOverviewNeedsVerticalScroll == bNeedsVerticalScroll)
-	{
-		return;
-	}
-
-	CachedOverviewScrollViewportSize = viewportSize;
-	CachedOverviewScrollContentSize = contentDesiredSize;
-	bCachedOverviewNeedsHorizontalScroll = bNeedsHorizontalScroll;
-	bCachedOverviewNeedsVerticalScroll = bNeedsVerticalScroll;
-
-	ProjectOverviewHorizontalScrollBox->SetAlwaysShowScrollbar(false);
-	ProjectOverviewHorizontalScrollBox->SetScrollBarVisibility(
-		!bUsesStickyHorizontalScroll && bNeedsHorizontalScroll
+		ProjectNameInput->SetVisibility(bEditingProjectName
 			? ESlateVisibility::Visible
 			: ESlateVisibility::Collapsed);
-	ProjectOverviewScrollBox->SetAlwaysShowScrollbar(false);
-	ProjectOverviewScrollBox->SetScrollBarVisibility(
-		!bUsesStickyVerticalScroll && bNeedsVerticalScroll
+	}
+	if (EditProjectNameButton)
+	{
+		EditProjectNameButton->SetVisibility(bEditingProjectName
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::Visible);
+	}
+	if (SaveProjectNameButton)
+	{
+		SaveProjectNameButton->SetVisibility(bEditingProjectName
 			? ESlateVisibility::Visible
 			: ESlateVisibility::Collapsed);
-
-	const float availableCenteringWidth = viewportSize.X - (bNeedsVerticalScroll ? verticalScrollbarWidth : 0.0f);
-	const float horizontalExtraPadding = FMath::Max(0.0f, (availableCenteringWidth - baseContentWidth) * 0.5f);
-	const FMargin adjustedMainStackPadding(
-		ProjectOverviewMainStackBasePadding.Left + horizontalExtraPadding,
-		ProjectOverviewMainStackBasePadding.Top,
-		ProjectOverviewMainStackBasePadding.Right + horizontalExtraPadding,
-		ProjectOverviewMainStackBasePadding.Bottom);
-	if (UScrollBoxSlot* mainStackSlot = Cast<UScrollBoxSlot>(ProjectOverviewMainStack->Slot))
-	{
-		mainStackSlot->SetPadding(adjustedMainStackPadding);
-	}
-
-	const float availableCenteringHeight = viewportSize.Y - (bNeedsHorizontalScroll ? horizontalScrollbarHeight : 0.0f);
-	const float verticalExtraPadding = FMath::Max(0.0f, (availableCenteringHeight - baseContentHeight) * 0.5f);
-	const FMargin adjustedHorizontalScrollBoxPadding(
-		ProjectOverviewHorizontalScrollBoxBasePadding.Left,
-		ProjectOverviewHorizontalScrollBoxBasePadding.Top + verticalExtraPadding,
-		ProjectOverviewHorizontalScrollBoxBasePadding.Right,
-		ProjectOverviewHorizontalScrollBoxBasePadding.Bottom + verticalExtraPadding);
-	if (UScrollBoxSlot* horizontalScrollBoxSlot = Cast<UScrollBoxSlot>(ProjectOverviewHorizontalScrollBox->Slot))
-	{
-		horizontalScrollBoxSlot->SetPadding(adjustedHorizontalScrollBoxPadding);
-	}
-
-	if (ProjectOverviewStickyHorizontalScrollBox)
-	{
-		ProjectOverviewStickyHorizontalScrollBox->SetVisibility(
-			bUsesStickyHorizontalScroll && bNeedsHorizontalScroll
-				? ESlateVisibility::Visible
-				: ESlateVisibility::Collapsed);
-
-		if (ProjectOverviewStickyHorizontalScrollSpacer)
-		{
-			const float stickyRangeCompensation = bUsesStickyVerticalScroll && bNeedsVerticalScroll
-				? ResolveVerticalScrollbarWidth(*ProjectOverviewStickyVerticalScrollBox)
-				: 0.0f;
-			ProjectOverviewStickyHorizontalScrollSpacer->SetSize(FVector2D(
-				FMath::Max(1.0f, contentDesiredSize.X
-					+ adjustedMainStackPadding.Left
-					+ adjustedMainStackPadding.Right
-					- stickyRangeCompensation),
-				1.0f));
-		}
-	}
-
-	if (ProjectOverviewStickyVerticalScrollBox)
-	{
-		ProjectOverviewStickyVerticalScrollBox->SetVisibility(
-			bUsesStickyVerticalScroll && bNeedsVerticalScroll
-				? ESlateVisibility::Visible
-				: ESlateVisibility::Collapsed);
-
-		if (ProjectOverviewStickyVerticalScrollSpacer)
-		{
-			const float stickyRangeCompensation = bUsesStickyHorizontalScroll && bNeedsHorizontalScroll
-				? ResolveHorizontalScrollbarHeight(*ProjectOverviewStickyHorizontalScrollBox)
-				: 0.0f;
-			ProjectOverviewStickyVerticalScrollSpacer->SetSize(FVector2D(
-				1.0f,
-				FMath::Max(1.0f, contentDesiredSize.Y
-					+ adjustedMainStackPadding.Top
-					+ adjustedMainStackPadding.Bottom
-					+ adjustedHorizontalScrollBoxPadding.Top
-					+ adjustedHorizontalScrollBoxPadding.Bottom
-					- stickyRangeCompensation)));
-		}
-	}
-
-	if (!bNeedsHorizontalScroll)
-	{
-		TGuardValue<bool> syncGuard(bSyncingOverviewHorizontalScroll, true);
-		ProjectOverviewHorizontalScrollBox->SetScrollOffset(0.0f);
-		if (ProjectOverviewStickyHorizontalScrollBox)
-		{
-			ProjectOverviewStickyHorizontalScrollBox->SetScrollOffset(0.0f);
-		}
-	}
-	if (!bNeedsVerticalScroll)
-	{
-		TGuardValue<bool> syncGuard(bSyncingOverviewVerticalScroll, true);
-		ProjectOverviewScrollBox->SetScrollOffset(0.0f);
-		if (ProjectOverviewStickyVerticalScrollBox)
-		{
-			ProjectOverviewStickyVerticalScrollBox->SetScrollOffset(0.0f);
-		}
 	}
 }
 
-bool UProjectOverviewScreenWidget::CaptureOverviewAuthoredScrollPadding()
+void UProjectOverviewScreenWidget::SetProjectNameEditMode(const bool bEditing)
 {
-	if (!ProjectOverviewHorizontalScrollBox || !ProjectOverviewMainStack)
+	bEditingProjectName = bEditing;
+	UpdateProjectNameEditState();
+}
+
+void UProjectOverviewScreenWidget::SaveProjectNameEdit()
+{
+	UProjectWorkspaceViewModel* viewModel = ResolveViewModel();
+	if (!viewModel)
 	{
-		return false;
+		SetOverviewWidgetText(StatusText, WorkspaceViewModelMissingText);
+		return;
 	}
 
-	const UScrollBoxSlot* mainStackSlot = Cast<UScrollBoxSlot>(ProjectOverviewMainStack->Slot);
-	const UScrollBoxSlot* horizontalScrollBoxSlot = Cast<UScrollBoxSlot>(ProjectOverviewHorizontalScrollBox->Slot);
-	if (!mainStackSlot || !horizontalScrollBoxSlot)
+	const FString projectId = ProjectNameInput
+		? ProjectNameInput->GetCurrentText().ToString().TrimStartAndEnd()
+		: FString();
+	if (projectId.IsEmpty())
 	{
-		return false;
+		if (ProjectNameInput)
+		{
+			ProjectNameInput->SetErrorText(ProjectNameRequiredText);
+		}
+		SetOverviewWidgetText(StatusText, ProjectNameRequiredText);
+		return;
 	}
 
-	ProjectOverviewMainStackBasePadding = mainStackSlot->GetPadding();
-	ProjectOverviewHorizontalScrollBoxBasePadding = horizontalScrollBoxSlot->GetPadding();
-	bHasProjectOverviewScrollBasePadding = true;
-	return true;
+	FString errorText;
+	if (!viewModel->SaveActiveProjectId(projectId, errorText))
+	{
+		if (ProjectNameInput)
+		{
+			ProjectNameInput->SetErrorText(ProjectNameSaveFailedText);
+		}
+		SetOverviewWidgetText(StatusText, ProjectNameSaveFailedText);
+		return;
+	}
+
+	if (ProjectNameInput)
+	{
+		ProjectNameInput->ClearError();
+		ProjectNameInput->SetText(FText::FromString(viewModel->GetActiveProjectId()));
+	}
+	SetProjectNameEditMode(false);
+	RefreshFromViewModel();
+	SetOverviewWidgetText(StatusText, ProjectNameSavedText);
+}
+
+void UProjectOverviewScreenWidget::HandleEditProjectNameClicked(UBaseButtonWidget* button)
+{
+	if (!IsValid(button) || button != EditProjectNameButton)
+	{
+		return;
+	}
+
+	UProjectWorkspaceViewModel* viewModel = ResolveViewModel();
+	if (!viewModel)
+	{
+		SetOverviewWidgetText(StatusText, WorkspaceViewModelMissingText);
+		return;
+	}
+
+	viewModel->RefreshFromProjectSession();
+	if (ProjectNameInput)
+	{
+		ProjectNameInput->ClearError();
+		ProjectNameInput->SetText(FText::FromString(viewModel->GetActiveProjectId()));
+	}
+	SetProjectNameEditMode(true);
+}
+
+void UProjectOverviewScreenWidget::HandleSaveProjectNameClicked(UBaseButtonWidget* button)
+{
+	if (!IsValid(button) || button != SaveProjectNameButton)
+	{
+		return;
+	}
+
+	SaveProjectNameEdit();
+}
+
+void UProjectOverviewScreenWidget::HandleProjectNameSubmitted(UBaseTextInputWidget* widget, const FText& text)
+{
+	(void)text;
+	if (!IsValid(widget) || widget != ProjectNameInput || !bEditingProjectName)
+	{
+		return;
+	}
+
+	SaveProjectNameEdit();
 }
 
 void UProjectOverviewScreenWidget::HandleScenarioButtonClicked(UBaseButtonWidget* button)
@@ -697,48 +576,4 @@ void UProjectOverviewScreenWidget::HandleExperimentButtonClicked(UBaseButtonWidg
 	{
 		OnExperimentRequested.Broadcast(this);
 	}
-}
-
-void UProjectOverviewScreenWidget::HandleOverviewStickyHorizontalScrolled(const float currentOffset)
-{
-	if (bSyncingOverviewHorizontalScroll || !ProjectOverviewHorizontalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingOverviewHorizontalScroll, true);
-	ProjectOverviewHorizontalScrollBox->SetScrollOffset(currentOffset);
-}
-
-void UProjectOverviewScreenWidget::HandleOverviewContentHorizontalScrolled(const float currentOffset)
-{
-	if (bSyncingOverviewHorizontalScroll || !ProjectOverviewStickyHorizontalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingOverviewHorizontalScroll, true);
-	ProjectOverviewStickyHorizontalScrollBox->SetScrollOffset(currentOffset);
-}
-
-void UProjectOverviewScreenWidget::HandleOverviewStickyVerticalScrolled(const float currentOffset)
-{
-	if (bSyncingOverviewVerticalScroll || !ProjectOverviewScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingOverviewVerticalScroll, true);
-	ProjectOverviewScrollBox->SetScrollOffset(currentOffset);
-}
-
-void UProjectOverviewScreenWidget::HandleOverviewContentVerticalScrolled(const float currentOffset)
-{
-	if (bSyncingOverviewVerticalScroll || !ProjectOverviewStickyVerticalScrollBox)
-	{
-		return;
-	}
-
-	TGuardValue<bool> syncGuard(bSyncingOverviewVerticalScroll, true);
-	ProjectOverviewStickyVerticalScrollBox->SetScrollOffset(currentOffset);
 }

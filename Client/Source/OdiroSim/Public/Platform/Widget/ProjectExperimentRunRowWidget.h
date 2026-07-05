@@ -1,12 +1,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "Components/SlateWrapperTypes.h"
+#include "CommonUserWidget.h"
 #include "Shared/SimulationSetupTypes.h"
 #include "ProjectExperimentRunRowWidget.generated.h"
 
 class UBaseButtonWidget;
 class UBaseProgressBarWidget;
+class UBaseStatusBadgeWidget;
 class UOdiroListItemViewModel;
 class UTextBlock;
 class UWidget;
@@ -16,9 +18,20 @@ class UProjectExperimentRunRowWidget;
 // Project experiment status table row에서 분석 요청을 상위 화면으로 전달한다.
 DECLARE_MULTICAST_DELEGATE_OneParam(FProjectExperimentRunRowAnalyzeRequestedNative, UProjectExperimentRunRowWidget*);
 
+// Project run row progress visual state independent from Base widget internals.
+UENUM(BlueprintType)
+enum class EProjectExperimentRunRowProgressState : uint8
+{
+	Default,
+	Loading,
+	Success,
+	Warning,
+	Error
+};
+
 // Project run 한 줄의 UMG-owned layout과 state visual을 데이터로 갱신하는 widget.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UProjectExperimentRunRowWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API UProjectExperimentRunRowWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 
@@ -67,6 +80,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|RunRow")
 	void SetProgressPresentation(bool bInShowProgressBar, bool bInShowProgressCountText);
 
+	// Progress bar와 status badge에 현재 진행 상태 표시값을 반영한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|RunRow")
+	void SetProgressStatus(
+		float progressPercent,
+		FText progressLabel,
+		EProjectExperimentRunRowProgressState progressState);
+
 	// Action column에서 label과 analyze button 중 어느 쪽을 표시할지 설정한다.
 	UFUNCTION(BlueprintCallable, Category = "Platform|RunRow")
 	void SetActionPresentation(bool bInShowActionText, bool bInShowAnalyzeButton);
@@ -90,6 +110,12 @@ private:
 
 	// 현재 display property를 WBP text/button에 적용한다.
 	void ApplyDisplayTexts() const;
+
+	// Progress bar와 status badge에 저장된 progress 상태를 적용한다.
+	void ApplyProgressStatus() const;
+
+	// AnalyzeButton을 layout에 남긴 채 표시 가능 여부를 계산한다.
+	ESlateVisibility ResolveAnalyzeButtonVisibility() const;
 
 	// project run directory 원본 경로.
 	FString RunDirectory;
@@ -115,6 +141,14 @@ private:
 	// Progress column에서 진행 횟수/총 횟수로 표시할 기본 텍스트.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
 	FText ProgressCountDisplayText;
+
+	// Progress bar percent 값. 0~100 범위로 표시한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", ClampMax = "100.0"))
+	float ProgressPercent = 0.0f;
+
+	// Progress bar와 status badge가 공유하는 semantic visual state.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	EProjectExperimentRunRowProgressState ProgressState = EProjectExperimentRunRowProgressState::Default;
 
 	// 세 번째 success rate 컬럼 기본 텍스트.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
@@ -150,7 +184,7 @@ private:
 
 	// 진행 횟수/총 횟수 표시 텍스트.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> ProgressCountText;
+	TObjectPtr<UBaseStatusBadgeWidget> ProgressCountText;
 
 	// 진행률을 표시하는 base progress bar.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

@@ -142,6 +142,10 @@ struct ODIROSIM_API FSimulatorRunInfo
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	bool bProcessRunning = false;
 
+	// Active child process id for project-run status reporting.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
+	int32 ProcessId = 0;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	int32 ProcessReturnCode = INDEX_NONE;
 

@@ -40,6 +40,7 @@ namespace
 	const TCHAR* UserProjectSettingFileName = TEXT("setting.json");
 	const TCHAR* UserProjectProfileFileName = TEXT("profile.json");
 	const TCHAR* UserProjectScenarioFileName = TEXT("scenario.json");
+	const TCHAR* UserProjectPreviewFileName = TEXT("preview.png");
 	const TCHAR* UserProjectPolicyDirectory = TEXT("policy");
 	const TCHAR* UserProjectRunsDirectory = TEXT("runs");
 	const TCHAR* UserProjectSnapshotDirectory = TEXT("snapshot");
@@ -53,6 +54,14 @@ namespace
 	const TCHAR* ProjectPresetThumbnailFileName = TEXT("thumbnail.png");
 	const TCHAR* ProjectPresetManifestSchema = TEXT("project_preset_manifest");
 	const int32 ProjectPresetManifestVersion = 1;
+	const TCHAR* ProjectRunStatusStarting = TEXT("starting");
+	const TCHAR* ProjectRunStatusRunning = TEXT("running");
+	const TCHAR* ProjectRunStatusStopping = TEXT("stopping");
+	const TCHAR* ProjectRunStatusCanceled = TEXT("canceled");
+	const TCHAR* ProjectRunStatusCancelled = TEXT("cancelled");
+	const TCHAR* ProjectRunStatusExited = TEXT("exited");
+	const TCHAR* ProjectRunStatusCompleted = TEXT("completed");
+	const TCHAR* ProjectRunStatusFailed = TEXT("failed");
 
 	FString ToProjectRelativePath(FString filePath)
 	{
@@ -75,6 +84,144 @@ namespace
 			: FPaths::ConvertRelativePathToFull(path);
 		FPaths::NormalizeFilename(path);
 		return path;
+	}
+
+	bool TryMapProjectRunStatusState(
+		const FString& statusState,
+		ESimulationRunState& outState)
+	{
+		const FString normalizedState = statusState.TrimStartAndEnd().ToLower();
+		if (normalizedState == ProjectRunStatusStarting || normalizedState == ProjectRunStatusRunning)
+		{
+			outState = ESimulationRunState::Running;
+			return true;
+		}
+		if (normalizedState == ProjectRunStatusStopping
+			|| normalizedState == ProjectRunStatusCanceled
+			|| normalizedState == ProjectRunStatusCancelled)
+		{
+			outState = ESimulationRunState::Canceled;
+			return true;
+		}
+		if (normalizedState == ProjectRunStatusExited || normalizedState == ProjectRunStatusCompleted)
+		{
+			outState = ESimulationRunState::Completed;
+			return true;
+		}
+		if (normalizedState == ProjectRunStatusFailed)
+		{
+			outState = ESimulationRunState::Failed;
+			return true;
+		}
+		return false;
+	}
+
+	bool IsProjectRunStatusTerminal(const FString& statusState)
+	{
+		const FString normalizedState = statusState.TrimStartAndEnd().ToLower();
+		return normalizedState == ProjectRunStatusCanceled
+			|| normalizedState == ProjectRunStatusCancelled
+			|| normalizedState == ProjectRunStatusExited
+			|| normalizedState == ProjectRunStatusCompleted
+			|| normalizedState == ProjectRunStatusFailed;
+	}
+
+	bool IsCancellationProjectRunStatus(const FString& statusState)
+	{
+		const FString normalizedState = statusState.TrimStartAndEnd().ToLower();
+		return normalizedState == ProjectRunStatusStopping
+			|| normalizedState == ProjectRunStatusCanceled
+			|| normalizedState == ProjectRunStatusCancelled;
+	}
+
+	bool DidProjectRunExitBeforeAllEpisodesFinished(const FSimulatorRunInfo& runInfo)
+	{
+		if (runInfo.ProjectPath.IsEmpty() || runInfo.RunId.IsEmpty())
+		{
+			return false;
+		}
+
+		const FUserProjectRunSnapshotParseResult parseResult =
+			FUserProjectRunSnapshot::Parse(runInfo.ProjectPath, runInfo.RunId);
+		if (!parseResult.bSuccess || parseResult.Setting.EpisodeCount <= 0)
+		{
+			return false;
+		}
+
+		TArray<FString> resultFiles;
+		IFileManager::Get().FindFilesRecursive(
+			resultFiles,
+			*parseResult.Paths.EpisodesPath,
+			TEXT("result.json"),
+			true,
+			false);
+		return resultFiles.Num() < parseResult.Setting.EpisodeCount;
+	}
+
+	FUserProjectRunStatusRecord MakeProjectRunStatusRecord(
+		const FSimulatorRunInfo& runInfo,
+		const FUserProjectRunStatusRecord& previousStatus,
+		const FString& statusState,
+		const FString& errorMessage,
+		const bool bTerminal)
+	{
+		const FString normalizedState = statusState.TrimStartAndEnd().ToLower();
+		const FString now = FUserProjectRunStatusJson::MakeUtcTimestamp();
+		FUserProjectRunStatusRecord status;
+		status.ProjectPath = runInfo.ProjectPath.IsEmpty() ? previousStatus.ProjectPath : runInfo.ProjectPath;
+		status.RunId = runInfo.RunId.IsEmpty() ? previousStatus.RunId : runInfo.RunId;
+		status.StatusPath = runInfo.StatusPath.IsEmpty() ? previousStatus.StatusPath : runInfo.StatusPath;
+		status.Executable = runInfo.LaunchExecutable.IsEmpty() ? previousStatus.Executable : runInfo.LaunchExecutable;
+		status.ProcessId = runInfo.ProcessId > 0 ? runInfo.ProcessId : previousStatus.ProcessId;
+		status.PolicyPort = runInfo.PolicyPort > 0 ? runInfo.PolicyPort : previousStatus.PolicyPort;
+		status.ExitCode = runInfo.ProcessReturnCode != INDEX_NONE
+			? runInfo.ProcessReturnCode
+			: previousStatus.ExitCode;
+		status.State = normalizedState;
+		status.StartedAt = previousStatus.StartedAt.IsEmpty() ? now : previousStatus.StartedAt;
+		status.UpdatedAt = now;
+		status.ExitedAt = bTerminal ? now : FString();
+		status.Error = errorMessage;
+		return status;
+	}
+
+	bool WriteProjectRunStatus(
+		const FSimulatorRunInfo& runInfo,
+		const FString& statusState,
+		const FString& errorMessage = FString())
+	{
+		if (!runInfo.bProjectRun || runInfo.StatusPath.IsEmpty())
+		{
+			return false;
+		}
+
+		TArray<FString> diagnostics;
+		FUserProjectRunStatusRecord previousStatus;
+		if (FPaths::FileExists(runInfo.StatusPath)
+			&& FUserProjectRunStatusJson::LoadFromFile(runInfo.StatusPath, previousStatus, diagnostics)
+			&& IsCancellationProjectRunStatus(previousStatus.State)
+			&& !IsCancellationProjectRunStatus(statusState))
+		{
+			return true;
+		}
+
+		diagnostics.Reset();
+		const bool bTerminal = IsProjectRunStatusTerminal(statusState);
+		if (!FUserProjectRunStatusJson::SaveToFile(
+				MakeProjectRunStatusRecord(runInfo, previousStatus, statusState, errorMessage, bTerminal),
+				diagnostics))
+		{
+			UE_LOG(
+				LogSimulatorLaunch,
+				Warning,
+				TEXT("Project run status write failed | Path: %s | State: %s | Diagnostics: %s"),
+				*runInfo.StatusPath,
+				*statusState,
+				*FString::Join(diagnostics, TEXT(" | ")));
+			return false;
+		}
+
+		return true;
 	}
 
 	bool IsDirectory(const FString& path)
@@ -848,6 +995,21 @@ namespace
 		}
 
 		return true;
+	}
+
+	// Scenario preset thumbnail을 새 project의 최근 목록 preview로 초기화한다.
+	bool CopyInitialUserProjectPreview(
+		const FProjectPresetInfo& scenarioPresetInfo,
+		const FString& projectPath,
+		TArray<FString>& outDiagnostics)
+	{
+		if (scenarioPresetInfo.ThumbnailPath.TrimStartAndEnd().IsEmpty())
+		{
+			return true;
+		}
+
+		const FString previewTargetPath = NormalizeAbsolutePath(FPaths::Combine(projectPath, UserProjectPreviewFileName));
+		return CopyUserProjectFile(scenarioPresetInfo.ThumbnailPath, previewTargetPath, outDiagnostics);
 	}
 
 	bool WriteUserProjectSettingProjectId(
@@ -2026,6 +2188,12 @@ bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, cons
 	ActiveRunInfo.Status.SetupPath = snapshotParseResult.Paths.SnapshotPath;
 	ActiveRunInfo.Status.State = ESimulationRunState::Pending;
 
+	if (!WriteProjectRunStatus(ActiveRunInfo, ProjectRunStatusStarting))
+	{
+		MarkActiveRunFailed(TEXT("Project run status file could not be written."));
+		return false;
+	}
+
 	uint32 processId = 0;
 	const FString workingDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 	ActiveProcessHandle = FPlatformProcess::CreateProc(
@@ -2046,9 +2214,11 @@ bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, cons
 		return false;
 	}
 
+	ActiveRunInfo.ProcessId = static_cast<int32>(processId);
 	ActiveRunInfo.bProcessStarted = true;
 	ActiveRunInfo.bProcessRunning = true;
 	ActiveRunInfo.Status.State = ESimulationRunState::Running;
+	WriteProjectRunStatus(ActiveRunInfo, ProjectRunStatusStarting);
 	StartPolling();
 	BroadcastRunInfoChanged();
 
@@ -2206,6 +2376,10 @@ bool USimulatorLaunchSubsystem::CreateProjectFromPresets(
 		}
 	}
 	if (!WriteUserProjectSettingProjectId(settingTargetPath, projectId, outDiagnostics))
+	{
+		return false;
+	}
+	if (!CopyInitialUserProjectPreview(scenarioPresetInfo, resolvedProjectPath, outDiagnostics))
 	{
 		return false;
 	}
@@ -2424,23 +2598,92 @@ bool USimulatorLaunchSubsystem::RefreshActiveRunStatus()
 	{
 		RefreshActiveProcessState();
 
+		FUserProjectRunStatusRecord statusRecord;
+		TArray<FString> statusDiagnostics;
+		const bool bStatusRead = FUserProjectRunStatusJson::LoadFromFile(
+			ActiveRunInfo.StatusPath,
+			statusRecord,
+			statusDiagnostics);
+		ESimulationRunState statusFileState = ESimulationRunState::Pending;
+		const bool bHasStatusFileState = bStatusRead
+			&& TryMapProjectRunStatusState(statusRecord.State, statusFileState);
+		const bool bHasTerminalStatusFile = bHasStatusFileState
+			&& IsProjectRunStatusTerminal(statusRecord.State);
+		if (bHasStatusFileState)
+		{
+			ActiveRunInfo.Status.State = statusFileState;
+			ActiveRunInfo.LastError = statusFileState == ESimulationRunState::Failed
+				? statusRecord.Error
+				: FString();
+			if (statusRecord.ProcessId > 0)
+			{
+				ActiveRunInfo.ProcessId = static_cast<int32>(statusRecord.ProcessId);
+			}
+			if (statusRecord.ExitCode != INDEX_NONE)
+			{
+				ActiveRunInfo.ProcessReturnCode = statusRecord.ExitCode;
+			}
+		}
+
+		if (statusFileState == ESimulationRunState::Completed
+			&& DidProjectRunExitBeforeAllEpisodesFinished(ActiveRunInfo))
+		{
+			statusFileState = ESimulationRunState::Canceled;
+			ActiveRunInfo.Status.State = ESimulationRunState::Canceled;
+			WriteProjectRunStatus(ActiveRunInfo, ProjectRunStatusCancelled);
+		}
+
+		if (bHasTerminalStatusFile)
+		{
+			if (ActiveRunInfo.bProcessRunning && ActiveProcessHandle.IsValid())
+			{
+				FPlatformProcess::TerminateProc(ActiveProcessHandle, true);
+				ActiveRunInfo.bProcessRunning = false;
+			}
+
+			StopPolling();
+			CloseActiveProcessHandle();
+			BroadcastRunInfoChanged();
+			return statusFileState != ESimulationRunState::Failed;
+		}
+
 		if (ActiveRunInfo.bProcessStarted && !ActiveRunInfo.bProcessRunning)
 		{
-			ActiveRunInfo.Status.State = ActiveRunInfo.ProcessReturnCode == 0
-				? ESimulationRunState::Completed
-				: ESimulationRunState::Failed;
+			const bool bCanceledBeforeExit = ActiveRunInfo.Status.State == ESimulationRunState::Canceled;
+			const bool bExitedBeforeAllEpisodesFinished = ActiveRunInfo.ProcessReturnCode == 0
+				&& DidProjectRunExitBeforeAllEpisodesFinished(ActiveRunInfo);
+			ActiveRunInfo.Status.State = bCanceledBeforeExit || bExitedBeforeAllEpisodesFinished
+				? ESimulationRunState::Canceled
+				: (ActiveRunInfo.ProcessReturnCode == 0
+					? ESimulationRunState::Completed
+					: ESimulationRunState::Failed);
 			if (ActiveRunInfo.Status.State == ESimulationRunState::Failed && ActiveRunInfo.LastError.IsEmpty())
 			{
 				ActiveRunInfo.LastError = FString::Printf(
 					TEXT("Project run process exited with code %d."),
 					ActiveRunInfo.ProcessReturnCode);
 			}
+			if (ActiveRunInfo.Status.State == ESimulationRunState::Completed)
+			{
+				WriteProjectRunStatus(ActiveRunInfo, ProjectRunStatusExited);
+			}
+			else if (ActiveRunInfo.Status.State == ESimulationRunState::Canceled)
+			{
+				WriteProjectRunStatus(ActiveRunInfo, ProjectRunStatusCancelled);
+			}
+			else
+			{
+				WriteProjectRunStatus(ActiveRunInfo, ProjectRunStatusFailed, ActiveRunInfo.LastError);
+			}
 			StopPolling();
 			CloseActiveProcessHandle();
 		}
 		else if (ActiveRunInfo.bProcessStarted)
 		{
-			ActiveRunInfo.Status.State = ESimulationRunState::Running;
+			if (!bStatusRead)
+			{
+				WriteProjectRunStatus(ActiveRunInfo, ProjectRunStatusStarting);
+			}
 		}
 
 		BroadcastRunInfoChanged();
@@ -2507,6 +2750,11 @@ bool USimulatorLaunchSubsystem::RefreshActiveRunStatus()
 
 void USimulatorLaunchSubsystem::StopActiveRun()
 {
+	if (!ActiveRunInfo.RunId.IsEmpty() && ActiveRunInfo.bProjectRun && !IsTerminalRunState(ActiveRunInfo.Status.State))
+	{
+		WriteProjectRunStatus(ActiveRunInfo, ProjectRunStatusStopping);
+	}
+
 	if (ActiveProcessHandle.IsValid())
 	{
 		if (FPlatformProcess::IsProcRunning(ActiveProcessHandle))
@@ -2521,6 +2769,7 @@ void USimulatorLaunchSubsystem::StopActiveRun()
 	{
 		ActiveRunInfo.Status.State = ESimulationRunState::Canceled;
 		ActiveRunInfo.bProcessRunning = false;
+		WriteProjectRunStatus(ActiveRunInfo, ProjectRunStatusCancelled);
 		BroadcastRunInfoChanged();
 	}
 
@@ -2879,6 +3128,7 @@ void USimulatorLaunchSubsystem::MarkActiveRunFailed(const FString& error)
 	ActiveRunInfo.Status.State = ESimulationRunState::Failed;
 	ActiveRunInfo.LastError = error;
 	ActiveRunInfo.bProcessRunning = false;
+	WriteProjectRunStatus(ActiveRunInfo, ProjectRunStatusFailed, error);
 	StopPolling();
 	CloseActiveProcessHandle();
 	BroadcastRunInfoChanged();

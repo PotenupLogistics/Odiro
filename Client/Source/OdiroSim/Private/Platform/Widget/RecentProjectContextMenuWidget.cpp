@@ -31,15 +31,6 @@ void URecentProjectContextMenuWidget::NativeConstruct()
 
 	PlatformWidgetRuntime::ApplyFullscreenViewportSlot(this);
 
-	if (DismissButton)
-	{
-		DismissButton->OnBaseClicked.RemoveDynamic(
-			this,
-			&URecentProjectContextMenuWidget::HandleDismissSelected);
-		DismissButton->OnBaseClicked.AddDynamic(
-			this,
-			&URecentProjectContextMenuWidget::HandleDismissSelected);
-	}
 	if (RemoveFromListButton)
 	{
 		RemoveFromListButton->OnBaseClicked.RemoveDynamic(
@@ -62,12 +53,6 @@ void URecentProjectContextMenuWidget::NativeConstruct()
 
 void URecentProjectContextMenuWidget::NativeDestruct()
 {
-	if (DismissButton)
-	{
-		DismissButton->OnBaseClicked.RemoveDynamic(
-			this,
-			&URecentProjectContextMenuWidget::HandleDismissSelected);
-	}
 	if (RemoveFromListButton)
 	{
 		RemoveFromListButton->OnBaseClicked.RemoveDynamic(
@@ -98,19 +83,6 @@ FReply URecentProjectContextMenuWidget::NativeOnPreviewMouseButtonDown(
 	return Super::NativeOnPreviewMouseButtonDown(inGeometry, inMouseEvent);
 }
 
-FReply URecentProjectContextMenuWidget::NativeOnMouseButtonDown(
-	const FGeometry& inGeometry,
-	const FPointerEvent& inMouseEvent)
-{
-	if (MenuSurface && !MenuSurface->GetCachedGeometry().IsUnderLocation(inMouseEvent.GetScreenSpacePosition()))
-	{
-		OnDismissRequested.Broadcast(this);
-		return FReply::Handled();
-	}
-
-	return Super::NativeOnMouseButtonDown(inGeometry, inMouseEvent);
-}
-
 void URecentProjectContextMenuWidget::HandleRemoveFromListSelected(UBaseButtonWidget*)
 {
 	OnRemoveFromListSelected.Broadcast(this);
@@ -119,9 +91,4 @@ void URecentProjectContextMenuWidget::HandleRemoveFromListSelected(UBaseButtonWi
 void URecentProjectContextMenuWidget::HandleDeleteProjectSelected(UBaseButtonWidget*)
 {
 	OnDeleteProjectSelected.Broadcast(this);
-}
-
-void URecentProjectContextMenuWidget::HandleDismissSelected(UBaseButtonWidget*)
-{
-	OnDismissRequested.Broadcast(this);
 }

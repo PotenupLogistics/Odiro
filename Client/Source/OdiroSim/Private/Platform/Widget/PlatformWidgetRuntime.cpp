@@ -76,9 +76,18 @@ void PlatformWidgetRuntime::ApplyFullscreenViewportSlot(UUserWidget* Widget)
 		return;
 	}
 
+	const float viewportScale = UWidgetLayoutLibrary::GetViewportScale(Widget);
+	if (viewportScale <= 0.0f)
+	{
+		return;
+	}
+
+	// GetViewportSize returns pixels, while the viewport slot size is in DPI-scaled Slate units.
+	const FVector2D viewportSlotSize = viewportSize / viewportScale;
+
 	Widget->SetAlignmentInViewport(FVector2D::ZeroVector);
 	Widget->SetPositionInViewport(FVector2D::ZeroVector, false);
-	Widget->SetDesiredSizeInViewport(viewportSize);
+	Widget->SetDesiredSizeInViewport(viewportSlotSize);
 }
 
 void PlatformWidgetRuntime::ClearRuntimeTransactionFlags(UUserWidget* Widget)

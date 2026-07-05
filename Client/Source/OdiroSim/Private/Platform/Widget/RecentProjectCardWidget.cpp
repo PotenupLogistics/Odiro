@@ -43,12 +43,6 @@ FReply URecentProjectCardWidget::NativeOnMouseButtonDown(
 	const FGeometry& inGeometry,
 	const FPointerEvent& inMouseEvent)
 {
-	if (inMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
-	{
-		OnContextMenuRequested.Broadcast(this, inMouseEvent.GetScreenSpacePosition());
-		return FReply::Handled();
-	}
-
 	if (!CardButton && inMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
 		OnSelectedRequested.Broadcast(this);

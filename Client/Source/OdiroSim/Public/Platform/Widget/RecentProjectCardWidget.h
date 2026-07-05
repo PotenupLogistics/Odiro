@@ -53,7 +53,7 @@ protected:
 	// Child button이 pointer event를 처리하기 전에 context menu 요청을 잡는다.
 	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& inGeometry, const FPointerEvent& inMouseEvent) override;
 
-	// Button이 없는 WBP에서도 카드 click/context menu를 처리한다.
+	// Button이 없는 WBP에서도 카드 click을 선택 요청으로 처리한다.
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& inGeometry, const FPointerEvent& inMouseEvent) override;
 
 private:

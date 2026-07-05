@@ -44,9 +44,6 @@ protected:
 		const FGeometry& inGeometry,
 		const FPointerEvent& inMouseEvent) override;
 
-	// Converts clicks outside the menu surface into a dismiss request.
-	virtual FReply NativeOnMouseButtonDown(const FGeometry& inGeometry, const FPointerEvent& inMouseEvent) override;
-
 private:
 	// Converts the remove-from-list button click to a native event.
 	UFUNCTION()
@@ -56,10 +53,6 @@ private:
 	UFUNCTION()
 	void HandleDeleteProjectSelected(UBaseButtonWidget* button);
 
-	// Converts the dismiss-area button click to a native event.
-	UFUNCTION()
-	void HandleDismissSelected(UBaseButtonWidget* button);
-
 	// WBP-owned menu surface positioned over the full-viewport dismiss overlay.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> MenuSurface;
@@ -67,10 +60,6 @@ private:
 	// WBP-owned container that owns the menu surface hit-test bounds.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> MenuAnchor;
-
-	// WBP-owned transparent button that receives clicks outside the menu.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseButtonWidget> DismissButton;
 
 	// WBP-owned button for removing the project only from the recent list.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

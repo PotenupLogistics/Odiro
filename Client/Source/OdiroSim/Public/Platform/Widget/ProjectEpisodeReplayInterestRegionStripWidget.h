@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "CommonUserWidget.h"
 #include "Scenario/Replay/ScenarioReplaySubsystem.h"
 #include "ProjectEpisodeReplayInterestRegionStripWidget.generated.h"
 
@@ -19,7 +19,7 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(
 
 // Horizontal replay interest-region strip driven by WBP_ReplayInterestRegionStrip.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UProjectEpisodeReplayInterestRegionStripWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API UProjectEpisodeReplayInterestRegionStripWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 

@@ -3,6 +3,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/HorizontalBox.h"
 #include "Components/Widget.h"
+#include "Platform/Widget/PlatformWidgetRuntime.h"
 #include "UI/BaseButtonWidget.h"
 
 namespace
@@ -153,7 +154,7 @@ void UWindowActionBarWidget::RebuildActionButtons()
 		}
 
 		ActionButtonContainer->AddChild(actionButton);
-		ClearRuntimeTransactionFlagsForWidget(actionButton);
+		PlatformWidgetRuntime::ClearRuntimeTransactionFlags(actionButton);
 		ActionButtonsById.Add(config.ActionId, actionButton);
 		ConfigureActionButton(actionButton, config);
 	}

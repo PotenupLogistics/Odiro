@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "CommonUserWidget.h"
 #include "ProjectEpisodeReplayCardWidget.generated.h"
 
 class UButton;
@@ -16,7 +16,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(
 
 // Project result episode card의 replay 요청 데이터와 클릭 전달을 소유하는 native base.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UProjectEpisodeReplayCardWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API UProjectEpisodeReplayCardWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 

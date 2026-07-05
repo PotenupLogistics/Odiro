@@ -4,6 +4,7 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
+#include "Platform/Widget/PlatformWidgetRuntime.h"
 #include "Platform/Widget/ProjectEpisodeReplayInterestEventCardWidget.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -68,7 +69,7 @@ void UProjectEpisodeReplayInterestRegionStripWidget::SetEventMarkers(
 			CardSlot->SetVerticalAlignment(VAlign_Center);
 		}
 
-		ClearRuntimeTransactionFlagsForWidget(CardWidget);
+		PlatformWidgetRuntime::ClearRuntimeTransactionFlags(CardWidget);
 		CardWidget->InitializeFromEventMarker(
 			EventMarkers[EventIndex],
 			EventIndex == InitialSelectedCardIndex);

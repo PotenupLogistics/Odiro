@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "CommonUserWidget.h"
 #include "UI/BaseWidgetTypes.h"
 #include "WindowActionBarWidget.generated.h"
 
@@ -80,7 +80,7 @@ struct ODIROSIM_API FWindowActionButtonConfig
 
 // Screen별 icon-only action button 목록을 구성하는 standalone action bar widget.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UWindowActionBarWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API UWindowActionBarWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 

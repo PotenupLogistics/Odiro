@@ -1,6 +1,7 @@
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "Platform/Widget/PlatformWidgetRuntime.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/PanelSlot.h"
 #include "Components/Widget.h"
@@ -8,7 +9,7 @@
 
 namespace
 {
-	bool ShouldClearRuntimeTransactionFlags(const UUserWidget* widget)
+	bool IsRuntimeWidgetContext(const UUserWidget* widget)
 	{
 		if (!widget || widget->IsDesignTime())
 		{
@@ -43,7 +44,7 @@ namespace
 		}
 
 		UUserWidget* userWidget = Cast<UUserWidget>(object);
-		if (!userWidget || !ShouldClearRuntimeTransactionFlags(userWidget))
+		if (!userWidget || !IsRuntimeWidgetContext(userWidget))
 		{
 			return;
 		}
@@ -62,25 +63,31 @@ namespace
 	}
 }
 
-void UOdiroCommonUserWidget::NativeOnInitialized()
+void PlatformWidgetRuntime::ApplyFullscreenViewportSlot(UUserWidget* Widget)
 {
-	Super::NativeOnInitialized();
-	ClearRuntimeTransactionFlagsForWidget(this);
+	if (!IsRuntimeWidgetContext(Widget))
+	{
+		return;
+	}
+
+	const FVector2D viewportSize = UWidgetLayoutLibrary::GetViewportSize(Widget);
+	if (viewportSize.X <= 0.0f || viewportSize.Y <= 0.0f)
+	{
+		return;
+	}
+
+	Widget->SetAlignmentInViewport(FVector2D::ZeroVector);
+	Widget->SetPositionInViewport(FVector2D::ZeroVector, false);
+	Widget->SetDesiredSizeInViewport(viewportSize);
 }
 
-void UOdiroCommonUserWidget::NativeConstruct()
+void PlatformWidgetRuntime::ClearRuntimeTransactionFlags(UUserWidget* Widget)
 {
-	Super::NativeConstruct();
-	ClearRuntimeTransactionFlagsForWidget(this);
-}
-
-void UOdiroCommonUserWidget::ClearRuntimeTransactionFlagsForWidget(UUserWidget* widget)
-{
-	if (!ShouldClearRuntimeTransactionFlags(widget))
+	if (!IsRuntimeWidgetContext(Widget))
 	{
 		return;
 	}
 
 	TSet<UObject*> visitedObjects;
-	ClearTransactionFlagsRecursive(widget, visitedObjects);
+	ClearTransactionFlagsRecursive(Widget, visitedObjects);
 }

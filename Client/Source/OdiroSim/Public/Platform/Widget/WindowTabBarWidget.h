@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "CommonUserWidget.h"
 #include "UI/BaseWidgetTypes.h"
 #include "WindowTabBarWidget.generated.h"
 
@@ -68,7 +68,7 @@ struct ODIROSIM_API FWindowFixedTabConfig
 
 // 고정 platform tab과 실험 결과 tab을 구성하는 standalone tab bar widget.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UWindowTabBarWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API UWindowTabBarWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 

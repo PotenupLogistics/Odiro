@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "CommonUserWidget.h"
 #include "Shared/SimulationSetupTypes.h"
 #include "ProjectExperimentRunRowWidget.generated.h"
 
@@ -18,7 +18,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FProjectExperimentRunRowAnalyzeRequestedNati
 
 // Project run 한 줄의 UMG-owned layout과 state visual을 데이터로 갱신하는 widget.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UProjectExperimentRunRowWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API UProjectExperimentRunRowWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 

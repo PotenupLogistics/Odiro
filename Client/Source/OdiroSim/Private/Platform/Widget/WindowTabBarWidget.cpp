@@ -4,6 +4,7 @@
 #include "Components/HorizontalBox.h"
 #include "Components/PanelWidget.h"
 #include "Components/Widget.h"
+#include "Platform/Widget/PlatformWidgetRuntime.h"
 #include "UI/BaseButtonWidget.h"
 #include "UI/BaseTabWidget.h"
 
@@ -312,7 +313,7 @@ void UWindowTabBarWidget::RebuildResultTabs()
 		}
 
 		ResultTabContainer->AddChild(tabWidget);
-		ClearRuntimeTransactionFlagsForWidget(tabWidget);
+		PlatformWidgetRuntime::ClearRuntimeTransactionFlags(tabWidget);
 		ResultTabsById.Add(tabId, tabWidget);
 		ConfigureTab(tabWidget, *config);
 		BindResultTabClose(tabWidget);

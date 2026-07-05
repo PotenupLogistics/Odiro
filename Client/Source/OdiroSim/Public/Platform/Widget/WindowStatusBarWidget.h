@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "CommonUserWidget.h"
 #include "Platform/Widget/WindowActionBarWidget.h"
 #include "Platform/Widget/WindowTabBarWidget.h"
 #include "WindowStatusBarWidget.generated.h"
@@ -39,7 +39,7 @@ enum class EWindowStatusBarActionSlot : uint8
 
 // Window title/status bar 조합 WBP의 tab, action, window control event를 연결하는 widget.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UWindowStatusBarWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API UWindowStatusBarWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 

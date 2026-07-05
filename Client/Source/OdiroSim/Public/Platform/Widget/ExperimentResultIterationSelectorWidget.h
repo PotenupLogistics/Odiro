@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "CommonUserWidget.h"
 #include "ExperimentResultIterationSelectorWidget.generated.h"
 
 class UButton;
@@ -17,7 +17,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(
 
 // Project result episode selector row/card adapter; layout and style live in WBP.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UExperimentResultIterationSelectorWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API UExperimentResultIterationSelectorWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 

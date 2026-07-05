@@ -23,7 +23,7 @@ entry:
       - Client/Source/OdiroSim/Public/Platform
       - Client/Source/OdiroSim/Private/Platform
   - id: platform-ui-mvvm
-    description: Platform root shell, Common UI native bases, PlatformUiSubsystem, and MVVM ViewModel state/command layer.
+    description: Platform root shell, Common UI adapters, PlatformUiSubsystem, and MVVM ViewModel state/command layer.
     read:
       - Client/Source/OdiroSim/Public/Platform/Widget/PlatformRootWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/PlatformRootWidget.cpp
@@ -33,8 +33,7 @@ entry:
       - Client/Source/OdiroSim/Private/Platform/PlatformUiDeveloperSettings.cpp
       - Client/Source/OdiroSim/Public/Platform/ViewModel
       - Client/Source/OdiroSim/Private/Platform/ViewModel
-      - Client/Source/OdiroSim/Public/Platform/Widget/Odiro*Widget.h
-      - Client/Source/OdiroSim/Private/Platform/Widget/Odiro*Widget.cpp
+      - Client/Source/OdiroSim/Private/Platform/Widget/PlatformWidgetRuntime.*
       - Client/Docs/RobotPreviewAgent.local.md
   - id: ui-and-tools
     description: Platform widgets, unified UE MCP tooling plugin, and preview scripts.
@@ -51,6 +50,7 @@ guardrails:
   - PlatformUiSubsystem owns ViewModel lifecycle only; it must not store widget pointers.
   - Platform widgets resolve PlatformUiSubsystem/ViewModels only; ProjectSession, SimulatorLaunch, and AnalysisAI lookup or event relay stays behind PlatformUiSubsystem/ViewModels except explicit test seams.
   - UUserWidget/Common UI classes are view adapters; project/file/run/AI command logic belongs in ViewModels or Platform subsystems.
+  - Platform widgets inherit UE/Common UI bases directly; repeated runtime widget transaction cleanup and popup viewport-overlay sizing are explicit PlatformWidgetRuntime utility calls, not hidden shared base side effects.
   - ViewModel repeatable UI data uses UObject item ViewModels for ListView/TileView-style rows/cards, including project result iteration selectors.
   - StartupScreenViewModel and ProjectCreateScreenViewModel own open/create form state, persisted project-open options, and recent-project list state; project path existence checks go through PlatformUiSubsystem path helpers.
   - Project preset resource structure and manifest payload-copy rules are owned by contracts/specs/user-project-data.md and contracts/specs/bridge-ipc.md.

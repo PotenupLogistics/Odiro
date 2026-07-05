@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Platform/Widget/OdiroCommonUserWidget.h"
+#include "CommonUserWidget.h"
 #include "Scenario/Replay/ScenarioReplaySubsystem.h"
 #include "ProjectEpisodeReplayInterestEventCardWidget.generated.h"
 
@@ -18,7 +18,7 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(
 
 // Reusable replay interest-event card driven by WBP_ReplayInterestEventCard.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UProjectEpisodeReplayInterestEventCardWidget : public UOdiroCommonUserWidget
+class ODIROSIM_API UProjectEpisodeReplayInterestEventCardWidget : public UCommonUserWidget
 {
 	GENERATED_BODY()
 

@@ -22,6 +22,16 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiRunInfoChangedNative, const FSimu
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiAnalysisCompletedNative, const FPlatformAnalysisAiResponse&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiProjectPreviewUpdatedNative, const FString&);
 
+// User project folder delete command result.
+UENUM(BlueprintType)
+enum class EPlatformUserProjectDeleteResult : uint8
+{
+	Deleted,
+	Missing,
+	Unsafe,
+	Failed
+};
+
 // Project run progress status kind consumed by Platform row widgets.
 UENUM(BlueprintType)
 enum class EPlatformProjectRunProgressKind : uint8
@@ -144,6 +154,9 @@ public:
 	// Active project를 비우고 ScenarioEditorMap의 startup screen으로 전환한다.
 	UFUNCTION(BlueprintCallable, Category = "Platform|UI")
 	bool ReturnToStartupMap(FString& outErrorText) const;
+
+	// User project root 폴더를 안전 검증 후 실제 삭제한다.
+	EPlatformUserProjectDeleteResult DeleteUserProjectDirectory(const FString& projectPath) const;
 
 	// Legacy simulation setup launch command를 subsystem으로 위임한다.
 	bool StartLegacySimulationRun(

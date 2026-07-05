@@ -6,9 +6,13 @@
 #include "Engine/GameInstance.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/Paths.h"
+#include "Platform/PlatformUiSubsystem.h"
+#include "Platform/Widget/RecentProjectContextMenuWidget.h"
+#include "Platform/Widget/RecentProjectDeleteConfirmDialogWidget.h"
 #include "Platform/ViewModel/StartupScreenViewModel.h"
 #include "Platform/Widget/RecentProjectCardWidget.h"
 #include "UI/BaseButtonWidget.h"
+#include "Blueprint/SlateBlueprintLibrary.h"
 
 #if WITH_EDITOR
 #include "DesktopPlatformModule.h"
@@ -64,11 +68,13 @@ void UStartupScreenWidget::NativeConstruct()
 void UStartupScreenWidget::NativeDestruct()
 {
 	UnbindControls();
+	CloseTransientPopups();
 	for (URecentProjectCardWidget* cardWidget : RecentProjectCards)
 	{
 		if (cardWidget)
 		{
 			cardWidget->OnSelectedRequested.RemoveAll(this);
+			cardWidget->OnContextMenuRequested.RemoveAll(this);
 		}
 	}
 	RecentProjectCards.Reset();
@@ -91,6 +97,8 @@ void UStartupScreenWidget::RefreshFromViewModel()
 {
 	if (UStartupScreenViewModel* viewModel = EnsureStartupScreenViewModel())
 	{
+		viewModel->RefreshRecentProjects();
+
 		const FString diagnosticsText = viewModel->GetDiagnosticsText();
 		const ESlateVisibility diagnosticsVisibility = diagnosticsText.TrimStartAndEnd().IsEmpty()
 			? ESlateVisibility::Collapsed
@@ -106,6 +114,12 @@ void UStartupScreenWidget::RefreshFromViewModel()
 		}
 		RefreshRecentProjectCards();
 	}
+}
+
+void UStartupScreenWidget::CloseTransientPopups()
+{
+	CloseRecentProjectContextMenu();
+	CloseDeleteConfirmDialog();
 }
 
 bool UStartupScreenWidget::OpenSelectedProject()
@@ -205,6 +219,7 @@ void UStartupScreenWidget::RefreshRecentProjectCards()
 		if (cardWidget)
 		{
 			cardWidget->OnSelectedRequested.RemoveAll(this);
+			cardWidget->OnContextMenuRequested.RemoveAll(this);
 		}
 	}
 	RecentProjectCards.Reset();
@@ -246,6 +261,9 @@ void UStartupScreenWidget::RefreshRecentProjectCards()
 
 		cardWidget->InitializeCard(recentProject);
 		cardWidget->OnSelectedRequested.AddUObject(this, &UStartupScreenWidget::HandleRecentProjectCardSelected);
+		cardWidget->OnContextMenuRequested.AddUObject(
+			this,
+			&UStartupScreenWidget::HandleRecentProjectCardContextMenuRequested);
 		RecentProjectCardPanel->AddChild(cardWidget);
 		RecentProjectCards.Add(cardWidget);
 	}
@@ -254,6 +272,114 @@ void UStartupScreenWidget::RefreshRecentProjectCards()
 TSubclassOf<URecentProjectCardWidget> UStartupScreenWidget::ResolveRecentProjectCardWidgetClass() const
 {
 	return RecentProjectCardWidgetClass;
+}
+
+void UStartupScreenWidget::OpenRecentProjectContextMenu(
+	URecentProjectCardWidget* cardWidget,
+	const FVector2D& screenPosition)
+{
+	CloseRecentProjectContextMenu();
+
+	if (!cardWidget || !RecentProjectContextMenuWidgetClass || !GetWorld())
+	{
+		return;
+	}
+
+	ContextMenuProjectPath = NormalizeStartupScreenWidgetPath(cardWidget->GetProjectPath());
+	if (ContextMenuProjectPath.IsEmpty())
+	{
+		return;
+	}
+
+	ActiveRecentProjectContextMenu = CreateWidget<URecentProjectContextMenuWidget>(
+		GetWorld(),
+		RecentProjectContextMenuWidgetClass);
+	if (!ActiveRecentProjectContextMenu)
+	{
+		ContextMenuProjectPath.Reset();
+		return;
+	}
+
+	ActiveRecentProjectContextMenu->OnRemoveFromListSelected.RemoveAll(this);
+	ActiveRecentProjectContextMenu->OnRemoveFromListSelected.AddUObject(
+		this,
+		&UStartupScreenWidget::HandleRemoveRecentProjectFromList);
+	ActiveRecentProjectContextMenu->OnDeleteProjectSelected.RemoveAll(this);
+	ActiveRecentProjectContextMenu->OnDeleteProjectSelected.AddUObject(
+		this,
+		&UStartupScreenWidget::HandleDeleteRecentProjectRequested);
+	ActiveRecentProjectContextMenu->OnDismissRequested.RemoveAll(this);
+	ActiveRecentProjectContextMenu->OnDismissRequested.AddUObject(
+		this,
+		&UStartupScreenWidget::HandleRecentProjectContextMenuDismissed);
+	ActiveRecentProjectContextMenu->AddToViewport(RecentProjectContextMenuZOrder);
+
+	FVector2D pixelPosition = FVector2D::ZeroVector;
+	FVector2D viewportPosition = FVector2D::ZeroVector;
+	USlateBlueprintLibrary::AbsoluteToViewport(this, screenPosition, pixelPosition, viewportPosition);
+
+	ActiveRecentProjectContextMenu->OpenAtViewportPosition(viewportPosition);
+}
+
+void UStartupScreenWidget::CloseRecentProjectContextMenu()
+{
+	if (ActiveRecentProjectContextMenu)
+	{
+		ActiveRecentProjectContextMenu->OnRemoveFromListSelected.RemoveAll(this);
+		ActiveRecentProjectContextMenu->OnDeleteProjectSelected.RemoveAll(this);
+		ActiveRecentProjectContextMenu->OnDismissRequested.RemoveAll(this);
+		ActiveRecentProjectContextMenu->RemoveFromParent();
+		ActiveRecentProjectContextMenu = nullptr;
+	}
+	ContextMenuProjectPath.Reset();
+}
+
+void UStartupScreenWidget::OpenDeleteConfirmDialog(const FString& projectPath)
+{
+	CloseDeleteConfirmDialog();
+
+	if (!DeleteConfirmDialogWidgetClass || !GetWorld())
+	{
+		return;
+	}
+
+	PendingDeleteProjectPath = NormalizeStartupScreenWidgetPath(projectPath);
+	if (PendingDeleteProjectPath.IsEmpty())
+	{
+		return;
+	}
+
+	ActiveDeleteConfirmDialog = CreateWidget<URecentProjectDeleteConfirmDialogWidget>(
+		GetWorld(),
+		DeleteConfirmDialogWidgetClass);
+	if (!ActiveDeleteConfirmDialog)
+	{
+		PendingDeleteProjectPath.Reset();
+		return;
+	}
+
+	ActiveDeleteConfirmDialog->OnConfirmed.RemoveAll(this);
+	ActiveDeleteConfirmDialog->OnConfirmed.AddUObject(
+		this,
+		&UStartupScreenWidget::HandleDeleteConfirmAccepted);
+	ActiveDeleteConfirmDialog->OnCanceled.RemoveAll(this);
+	ActiveDeleteConfirmDialog->OnCanceled.AddUObject(
+		this,
+		&UStartupScreenWidget::HandleDeleteConfirmCanceled);
+	ActiveDeleteConfirmDialog->SetDeleteTarget(PendingDeleteProjectPath);
+	ActiveDeleteConfirmDialog->AddToViewport(DeleteConfirmDialogZOrder);
+}
+
+void UStartupScreenWidget::CloseDeleteConfirmDialog()
+{
+	if (ActiveDeleteConfirmDialog)
+	{
+		ActiveDeleteConfirmDialog->OnConfirmed.RemoveAll(this);
+		ActiveDeleteConfirmDialog->OnCanceled.RemoveAll(this);
+		ActiveDeleteConfirmDialog->RemoveFromParent();
+		ActiveDeleteConfirmDialog = nullptr;
+	}
+	PendingDeleteProjectPath.Reset();
 }
 
 bool UStartupScreenWidget::BrowseForExistingProjectFolder(FString& outFolder) const
@@ -319,5 +445,91 @@ void UStartupScreenWidget::HandleRecentProjectCardSelected(URecentProjectCardWid
 		return;
 	}
 
+	CloseRecentProjectContextMenu();
 	OpenProjectPath(cardWidget->GetProjectPath());
+}
+
+void UStartupScreenWidget::HandleRecentProjectCardContextMenuRequested(
+	URecentProjectCardWidget* cardWidget,
+	const FVector2D screenPosition)
+{
+	OpenRecentProjectContextMenu(cardWidget, screenPosition);
+}
+
+void UStartupScreenWidget::HandleRemoveRecentProjectFromList(URecentProjectContextMenuWidget*)
+{
+	const FString projectPath = ContextMenuProjectPath;
+	CloseRecentProjectContextMenu();
+
+	UStartupScreenViewModel* viewModel = EnsureStartupScreenViewModel();
+	if (!viewModel || projectPath.IsEmpty())
+	{
+		return;
+	}
+
+	viewModel->RemoveRecentProject(projectPath);
+	RefreshFromViewModel();
+}
+
+void UStartupScreenWidget::HandleDeleteRecentProjectRequested(URecentProjectContextMenuWidget*)
+{
+	const FString projectPath = ContextMenuProjectPath;
+	CloseRecentProjectContextMenu();
+
+	if (!projectPath.IsEmpty())
+	{
+		OpenDeleteConfirmDialog(projectPath);
+	}
+}
+
+void UStartupScreenWidget::HandleRecentProjectContextMenuDismissed(URecentProjectContextMenuWidget*)
+{
+	CloseRecentProjectContextMenu();
+}
+
+void UStartupScreenWidget::HandleDeleteConfirmAccepted(URecentProjectDeleteConfirmDialogWidget*)
+{
+	const FString projectPath = PendingDeleteProjectPath;
+	CloseDeleteConfirmDialog();
+
+	UStartupScreenViewModel* viewModel = EnsureStartupScreenViewModel();
+	if (!viewModel || projectPath.IsEmpty())
+	{
+		return;
+	}
+
+	UPlatformUiSubsystem* platformUiSubsystem = UPlatformUiSubsystem::ResolveForWorldContext(this);
+	if (!platformUiSubsystem)
+	{
+		viewModel->SetDiagnosticsText(DiagnosticMessages.ProjectDeleteFailed);
+		return;
+	}
+
+	const EPlatformUserProjectDeleteResult deleteResult =
+		platformUiSubsystem->DeleteUserProjectDirectory(projectPath);
+	if (deleteResult == EPlatformUserProjectDeleteResult::Unsafe)
+	{
+		viewModel->SetDiagnosticsText(DiagnosticMessages.ProjectDeleteUnsafe);
+		RefreshFromViewModel();
+		return;
+	}
+	if (deleteResult == EPlatformUserProjectDeleteResult::Failed)
+	{
+		viewModel->SetDiagnosticsText(DiagnosticMessages.ProjectDeleteFailed);
+		RefreshFromViewModel();
+		return;
+	}
+
+	if (deleteResult == EPlatformUserProjectDeleteResult::Deleted
+		|| deleteResult == EPlatformUserProjectDeleteResult::Missing)
+	{
+		viewModel->RemoveRecentProject(projectPath);
+		viewModel->ClearDiagnostics();
+	}
+	RefreshFromViewModel();
+}
+
+void UStartupScreenWidget::HandleDeleteConfirmCanceled(URecentProjectDeleteConfirmDialogWidget*)
+{
+	CloseDeleteConfirmDialog();
 }

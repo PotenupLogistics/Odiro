@@ -47,7 +47,7 @@ guardrails:
   - Platform UI reads ProjectSession state and canonical user-project run artifacts, not simulator world objects.
   - ProjectSessionSubsystem is the runtime source of truth for the active user project root.
   - PlatformRootWidget is the runtime root shell for Startup/Create and the project workspace.
-  - PlatformUiSubsystem owns ViewModel lifecycle only; it must not store widget pointers.
+  - PlatformUiSubsystem owns ViewModel lifecycle, Platform UI file/command adapters, and native UI events only; it must not store widget pointers.
   - Platform widgets resolve PlatformUiSubsystem/ViewModels only; ProjectSession, SimulatorLaunch, and AnalysisAI lookup or event relay stays behind PlatformUiSubsystem/ViewModels except explicit test seams.
   - UUserWidget/Common UI classes are view adapters; project/file/run/AI command logic belongs in ViewModels or Platform subsystems.
   - Platform widgets inherit UE/Common UI bases directly; repeated runtime widget transaction cleanup and popup viewport-overlay sizing are explicit PlatformWidgetRuntime utility calls, not hidden shared base side effects.

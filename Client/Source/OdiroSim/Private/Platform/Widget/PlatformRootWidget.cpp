@@ -166,6 +166,12 @@ void UPlatformRootWidget::SetActiveScreen(const EPlatformRootScreen screen)
 		? EPlatformRootScreen::Startup
 		: screen;
 
+	if (PreviousScreen == EPlatformRootScreen::Startup
+		&& ActiveScreen != EPlatformRootScreen::Startup
+		&& StartupScreen)
+	{
+		StartupScreen->CloseTransientPopups();
+	}
 
 	if (PreviousScreen == EPlatformRootScreen::RobotConfig && ActiveScreen != EPlatformRootScreen::RobotConfig)
 	{

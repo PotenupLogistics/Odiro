@@ -64,11 +64,11 @@ struct ODIROSIM_API FStartupScreenDiagnosticMessages
 
 	// 필수 project config가 모두 없을 때 표시할 문구.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Diagnostics")
-	FString ProjectFolderNotProject = TEXT("프로젝트 폴더가 아닙니다.");
+	FString ProjectFolderNotProject;
 
 	// 일부 필수 project file만 없을 때 표시할 문구. {ConfigName} 또는 {0}을 누락 파일 이름으로 바꾼다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Diagnostics")
-	FString ProjectConfigMissingFormat = TEXT("프로젝트 파일이 누락되었습니다. ({ConfigName})");
+	FString ProjectConfigMissingFormat;
 
 	// Project session 또는 scenario editor launch subsystem을 사용할 수 없을 때 표시할 문구.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Diagnostics")
@@ -77,6 +77,14 @@ struct ODIROSIM_API FStartupScreenDiagnosticMessages
 	// Scenario editor map 열기에 실패했을 때 표시할 문구.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Diagnostics")
 	FString ScenarioEditorOpenFailed;
+
+	// 최근 project 실제 폴더 삭제가 안전하지 않을 때 표시할 문구.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Diagnostics")
+	FString ProjectDeleteUnsafe;
+
+	// 최근 project 실제 폴더 삭제에 실패했을 때 표시할 문구.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Diagnostics")
+	FString ProjectDeleteFailed;
 };
 
 // Master Widget 안에 들어가는 StartupScreen content panel의 상태와 command를 소유한다.

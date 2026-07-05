@@ -7,6 +7,8 @@
 
 class UBaseButtonWidget;
 class UPanelWidget;
+class URecentProjectContextMenuWidget;
+class URecentProjectDeleteConfirmDialogWidget;
 class URecentProjectCardWidget;
 class UStartupScreenWidget;
 class UStartupScreenViewModel;
@@ -41,6 +43,10 @@ public:
 	// ViewModel 상태를 다시 읽어 카드/진단 표시를 갱신한다.
 	UFUNCTION(BlueprintCallable, Category = "Platform|StartupScreen")
 	void RefreshFromViewModel();
+
+	// Startup screen이 viewport에 띄운 일시 UI를 모두 닫는다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|StartupScreen")
+	void CloseTransientPopups();
 
 	// 현재 선택된 project를 연다.
 	UFUNCTION(BlueprintCallable, Category = "Platform|StartupScreen")
@@ -87,6 +93,18 @@ private:
 	// 카드 class 설정을 해석한다.
 	TSubclassOf<URecentProjectCardWidget> ResolveRecentProjectCardWidgetClass() const;
 
+	// 최근 project context menu를 지정 viewport 위치에 표시한다.
+	void OpenRecentProjectContextMenu(URecentProjectCardWidget* cardWidget, const FVector2D& screenPosition);
+
+	// 표시 중인 최근 project context menu를 닫는다.
+	void CloseRecentProjectContextMenu();
+
+	// 최근 project 삭제 확인 dialog를 표시한다.
+	void OpenDeleteConfirmDialog(const FString& projectPath);
+
+	// 표시 중인 최근 project 삭제 확인 dialog를 닫는다.
+	void CloseDeleteConfirmDialog();
+
 	// OS folder picker로 기존 project root를 고른다.
 	bool BrowseForExistingProjectFolder(FString& outFolder) const;
 
@@ -100,6 +118,26 @@ private:
 
 	// 최근 project card click을 project open 요청으로 처리한다.
 	void HandleRecentProjectCardSelected(URecentProjectCardWidget* cardWidget);
+
+	// 최근 project card right click을 context menu 요청으로 처리한다.
+	void HandleRecentProjectCardContextMenuRequested(
+		URecentProjectCardWidget* cardWidget,
+		FVector2D screenPosition);
+
+	// 최근 project를 목록에서만 제거한다.
+	void HandleRemoveRecentProjectFromList(URecentProjectContextMenuWidget* menu);
+
+	// 최근 project 실제 삭제 confirm을 연다.
+	void HandleDeleteRecentProjectRequested(URecentProjectContextMenuWidget* menu);
+
+	// 최근 project context menu dismiss 요청을 처리한다.
+	void HandleRecentProjectContextMenuDismissed(URecentProjectContextMenuWidget* menu);
+
+	// 최근 project 삭제 확인을 실행한다.
+	void HandleDeleteConfirmAccepted(URecentProjectDeleteConfirmDialogWidget* dialog);
+
+	// 최근 project 삭제 confirm을 취소한다.
+	void HandleDeleteConfirmCanceled(URecentProjectDeleteConfirmDialogWidget* dialog);
 
 	// 최근 project 카드가 들어갈 WBP-owned panel.
 	UPROPERTY(Transient, meta = (BindWidget))
@@ -129,6 +167,22 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<URecentProjectCardWidget> RecentProjectCardWidgetClass;
 
+	// 최근 project context menu에 사용할 WBP-owned menu widget class.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Recent Projects", meta = (AllowPrivateAccess = "true"))
+	TSubclassOf<URecentProjectContextMenuWidget> RecentProjectContextMenuWidgetClass;
+
+	// 최근 project 삭제 confirm dialog에 사용할 WBP-owned widget class.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Recent Projects", meta = (AllowPrivateAccess = "true"))
+	TSubclassOf<URecentProjectDeleteConfirmDialogWidget> DeleteConfirmDialogWidgetClass;
+
+	// 최근 project context menu viewport layer.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Recent Projects", meta = (AllowPrivateAccess = "true"))
+	int32 RecentProjectContextMenuZOrder = 20;
+
+	// 최근 project 삭제 confirm dialog viewport layer.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Recent Projects", meta = (AllowPrivateAccess = "true"))
+	int32 DeleteConfirmDialogZOrder = 30;
+
 	// WBP에서 수정 가능한 오류 상황별 진단 문구.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|StartupScreen|Diagnostics", meta = (AllowPrivateAccess = "true"))
 	FStartupScreenDiagnosticMessages DiagnosticMessages;
@@ -144,4 +198,20 @@ private:
 	// 현재 생성된 최근 project card 인스턴스.
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<URecentProjectCardWidget>> RecentProjectCards;
+
+	// 표시 중인 최근 project context menu.
+	UPROPERTY(Transient)
+	TObjectPtr<URecentProjectContextMenuWidget> ActiveRecentProjectContextMenu;
+
+	// context menu command가 대상으로 삼는 최근 project root 절대 경로.
+	UPROPERTY(Transient)
+	FString ContextMenuProjectPath;
+
+	// 표시 중인 삭제 확인 dialog.
+	UPROPERTY(Transient)
+	TObjectPtr<URecentProjectDeleteConfirmDialogWidget> ActiveDeleteConfirmDialog;
+
+	// 삭제 확인 dialog가 대상으로 삼는 최근 project root 절대 경로.
+	UPROPERTY(Transient)
+	FString PendingDeleteProjectPath;
 };

@@ -25,6 +25,7 @@ namespace
 {
 	const TCHAR* PlatformUiExperimentSettingFileName = TEXT("setting.json");
 	const TCHAR* PlatformUiRobotProfileFileName = TEXT("profile.json");
+	const TCHAR* PlatformUiScenarioFileName = TEXT("scenario.json");
 	const TCHAR* PlatformUiRunStatusFileName = TEXT("status.json");
 	const TCHAR* PlatformUiRunSnapshotDirectoryName = TEXT("snapshot");
 	const TCHAR* PlatformUiRunStatusSchema = TEXT("run_status");
@@ -64,6 +65,101 @@ namespace
 			: FPaths::ConvertRelativePathToFull(path);
 		FPaths::NormalizeFilename(path);
 		return path;
+	}
+
+	// 경로 비교 전 trailing slash 차이를 제거한다.
+	FString NormalizePlatformUiPathForCompare(const FString& path)
+	{
+		FString normalizedPath = NormalizePlatformUiProjectPath(path);
+		while (normalizedPath.Len() > 1 && normalizedPath.EndsWith(TEXT("/")))
+		{
+			normalizedPath.LeftChopInline(1);
+		}
+		return normalizedPath;
+	}
+
+	// candidate가 target과 같거나 target의 parent 경로인지 확인한다.
+	bool IsPlatformUiSameOrParentPath(const FString& candidate, const FString& target)
+	{
+		FString normalizedCandidate = NormalizePlatformUiPathForCompare(candidate);
+		FString normalizedTarget = NormalizePlatformUiPathForCompare(target);
+		if (normalizedCandidate.IsEmpty() || normalizedTarget.IsEmpty())
+		{
+			return false;
+		}
+		if (normalizedCandidate.Equals(normalizedTarget, ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+		normalizedCandidate += TEXT("/");
+		return normalizedTarget.StartsWith(normalizedCandidate, ESearchCase::IgnoreCase);
+	}
+
+	// Drive, Unix root, UNC share root처럼 폴더 삭제 대상으로 너무 넓은 경로를 막는다.
+	bool IsPlatformUiRootLikePath(const FString& normalizedProjectPath)
+	{
+		if (normalizedProjectPath.IsEmpty() || normalizedProjectPath.Equals(TEXT("/")))
+		{
+			return true;
+		}
+		if (FPaths::IsDrive(normalizedProjectPath))
+		{
+			return true;
+		}
+
+		const TCHAR driveSeparator = TEXT(":")[0];
+		const TCHAR pathSeparator = TEXT("/")[0];
+		if (normalizedProjectPath.Len() >= 2
+			&& FChar::IsAlpha(normalizedProjectPath[0])
+			&& normalizedProjectPath[1] == driveSeparator)
+		{
+			return normalizedProjectPath.Len() == 2
+				|| (normalizedProjectPath.Len() == 3 && normalizedProjectPath[2] == pathSeparator);
+		}
+
+		if (normalizedProjectPath.StartsWith(TEXT("//")))
+		{
+			TArray<FString> pathParts;
+			normalizedProjectPath.RightChop(2).ParseIntoArray(pathParts, TEXT("/"), true);
+			return pathParts.Num() <= 2;
+		}
+
+		return false;
+	}
+
+	// OS root, workspace root, project root, engine root 같은 위험한 경로를 막는다.
+	bool IsUnsafePlatformUiDeleteRoot(const FString& projectPath)
+	{
+		const FString normalizedProjectPath = NormalizePlatformUiPathForCompare(projectPath);
+		if (IsPlatformUiRootLikePath(normalizedProjectPath))
+		{
+			return true;
+		}
+
+		TArray<FString> protectedRoots;
+		protectedRoots.Add(FPaths::ProjectDir());
+		protectedRoots.Add(FPaths::RootDir());
+		protectedRoots.Add(FPaths::EngineDir());
+		protectedRoots.Add(FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT(".."))));
+
+		for (const FString& protectedRoot : protectedRoots)
+		{
+			if (IsPlatformUiSameOrParentPath(normalizedProjectPath, protectedRoot))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Core user-project files가 모두 있는 폴더만 실제 삭제 대상으로 인정한다.
+	bool HasPlatformUiUserProjectCoreFiles(const FString& projectPath)
+	{
+		const FString normalizedProjectPath = NormalizePlatformUiProjectPath(projectPath);
+		return FPaths::FileExists(FPaths::Combine(normalizedProjectPath, PlatformUiExperimentSettingFileName))
+			&& FPaths::FileExists(FPaths::Combine(normalizedProjectPath, PlatformUiRobotProfileFileName))
+			&& FPaths::FileExists(FPaths::Combine(normalizedProjectPath, PlatformUiScenarioFileName));
 	}
 
 	// Platform UI가 읽는 JSON 파일 root object를 best-effort로 읽는다.
@@ -745,6 +841,32 @@ bool UPlatformUiSubsystem::ReturnToStartupMap(FString& outErrorText) const
 
 	UGameplayStatics::OpenLevel(world, FName(*mapId));
 	return true;
+}
+
+EPlatformUserProjectDeleteResult UPlatformUiSubsystem::DeleteUserProjectDirectory(const FString& projectPath) const
+{
+	const FString normalizedProjectPath = NormalizePlatformUiProjectPath(projectPath);
+	if (IsUnsafePlatformUiDeleteRoot(normalizedProjectPath))
+	{
+		return EPlatformUserProjectDeleteResult::Unsafe;
+	}
+	const FString activeProjectPath = NormalizePlatformUiProjectPath(GetActiveProjectPath());
+	if (!activeProjectPath.IsEmpty() && normalizedProjectPath.Equals(activeProjectPath, ESearchCase::IgnoreCase))
+	{
+		return EPlatformUserProjectDeleteResult::Unsafe;
+	}
+	if (!FPaths::DirectoryExists(normalizedProjectPath))
+	{
+		return EPlatformUserProjectDeleteResult::Missing;
+	}
+	if (!HasPlatformUiUserProjectCoreFiles(normalizedProjectPath))
+	{
+		return EPlatformUserProjectDeleteResult::Unsafe;
+	}
+
+	return IFileManager::Get().DeleteDirectory(*normalizedProjectPath, false, true)
+		? EPlatformUserProjectDeleteResult::Deleted
+		: EPlatformUserProjectDeleteResult::Failed;
 }
 
 bool UPlatformUiSubsystem::StartLegacySimulationRun(

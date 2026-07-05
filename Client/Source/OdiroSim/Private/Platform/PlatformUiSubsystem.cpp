@@ -26,6 +26,7 @@ namespace
 	const TCHAR* PlatformUiExperimentSettingFileName = TEXT("setting.json");
 	const TCHAR* PlatformUiRobotProfileFileName = TEXT("profile.json");
 	const TCHAR* PlatformUiScenarioFileName = TEXT("scenario.json");
+	const TCHAR* PlatformUiProjectIdFieldName = TEXT("project_id");
 	const TCHAR* PlatformUiRunStatusFileName = TEXT("status.json");
 	const TCHAR* PlatformUiRunSnapshotDirectoryName = TEXT("snapshot");
 	const TCHAR* PlatformUiRunStatusSchema = TEXT("run_status");
@@ -1343,6 +1344,58 @@ bool UPlatformUiSubsystem::SaveExperimentSettingsForProject(
 	}
 
 	outStatusText = FString::Printf(TEXT("Experiment settings saved: %s"), *settingPath);
+	return true;
+}
+
+bool UPlatformUiSubsystem::SaveProjectIdForProject(
+	const FString& projectPath,
+	const FString& projectId,
+	FString& outStatusText)
+{
+	outStatusText.Reset();
+
+	const FString normalizedProjectPath = NormalizePlatformUiProjectPath(projectPath);
+	if (normalizedProjectPath.IsEmpty())
+	{
+		outStatusText = TEXT("Active project가 없습니다.");
+		return false;
+	}
+
+	const FString normalizedProjectId = projectId.TrimStartAndEnd();
+	if (normalizedProjectId.IsEmpty())
+	{
+		outStatusText = TEXT("Project ID를 입력하세요.");
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const FString settingPath = BuildPlatformUiExperimentSettingPath(normalizedProjectPath);
+	if (!LoadPlatformUiJsonRoot(settingPath, rootObject, outStatusText))
+	{
+		return false;
+	}
+
+	rootObject->SetStringField(PlatformUiProjectIdFieldName, normalizedProjectId);
+
+	FString updatedJson;
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&updatedJson);
+	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
+	{
+		outStatusText = TEXT("setting.json 직렬화 실패.");
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(
+		updatedJson,
+		*settingPath,
+		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outStatusText = FString::Printf(TEXT("setting.json 저장 실패: %s"), *settingPath);
+		return false;
+	}
+
+	outStatusText = FString::Printf(TEXT("Project ID saved: %s"), *settingPath);
 	return true;
 }
 

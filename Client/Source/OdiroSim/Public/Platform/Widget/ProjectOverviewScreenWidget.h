@@ -6,6 +6,7 @@
 
 class UBaseButtonWidget;
 class UBaseTextWidget;
+class UBaseTextInputWidget;
 class UProjectWorkspaceViewModel;
 class UImage;
 class UTexture2D;
@@ -59,6 +60,27 @@ private:
 	// Loads active project preview.png into the overview thumbnail image.
 	bool ApplyScenarioThumbnail(const FString& projectPath);
 
+	// Applies the project-name edit/display visibility state to bound WBP controls.
+	void UpdateProjectNameEditState();
+
+	// Enters or exits project-name edit mode without changing WBP-authored layout or style.
+	void SetProjectNameEditMode(bool bEditing);
+
+	// Saves the current project-name edit field through the workspace ViewModel.
+	void SaveProjectNameEdit();
+
+	// Project name edit action click handler.
+	UFUNCTION()
+	void HandleEditProjectNameClicked(UBaseButtonWidget* button);
+
+	// Project name save action click handler.
+	UFUNCTION()
+	void HandleSaveProjectNameClicked(UBaseButtonWidget* button);
+
+	// Project name Enter-submit handler.
+	UFUNCTION()
+	void HandleProjectNameSubmitted(UBaseTextInputWidget* widget, const FText& text);
+
 	// Scenario guide click handler.
 	UFUNCTION()
 	void HandleScenarioButtonClicked(UBaseButtonWidget* button);
@@ -78,6 +100,22 @@ private:
 	// ViewModel supplied by PlatformUiSubsystem.
 	UPROPERTY(Transient)
 	TObjectPtr<UProjectWorkspaceViewModel> ProjectWorkspaceViewModel;
+
+	// Active project id display.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ProjectNameTitle;
+
+	// Active project id edit field.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseTextInputWidget> ProjectNameInput;
+
+	// Action that switches the project id title into edit mode.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseButtonWidget> EditProjectNameButton;
+
+	// Action that saves the project id edit field.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseButtonWidget> SaveProjectNameButton;
 
 	// Active project root path display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -122,4 +160,24 @@ private:
 	// Runtime-loaded preview.png texture kept alive for the overview thumbnail.
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> ScenarioThumbnailTexture;
+
+	// ViewModel이 없을 때 표시할 WBP-owned 상태 문구.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Overview|Text", meta = (AllowPrivateAccess = "true"))
+	FText WorkspaceViewModelMissingText = NSLOCTEXT("OdiroPlatform", "OverviewWorkspaceViewModelMissingText", "Workspace ViewModel 없음");
+
+	// Project id 입력이 비어 있을 때 표시할 WBP-owned 오류 문구.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Overview|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProjectNameRequiredText = NSLOCTEXT("OdiroPlatform", "OverviewProjectNameRequiredText", "Project ID를 입력하세요.");
+
+	// Project id 저장 실패 시 표시할 WBP-owned 오류 문구.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Overview|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProjectNameSaveFailedText = NSLOCTEXT("OdiroPlatform", "OverviewProjectNameSaveFailedText", "Project ID 저장 실패");
+
+	// Project id 저장 성공 시 표시할 WBP-owned 상태 문구.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Overview|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProjectNameSavedText = NSLOCTEXT("OdiroPlatform", "OverviewProjectNameSavedText", "Project ID 저장됨");
+
+	// Whether the project id title row is currently showing the editable field.
+	UPROPERTY(Transient)
+	bool bEditingProjectName = false;
 };

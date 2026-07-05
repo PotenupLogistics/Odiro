@@ -193,6 +193,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseTextInputTextEvent OnTextCommitted;
 
+	// Broadcasts after text or multiline input is submitted with Enter.
+	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
+	FBaseTextInputTextEvent OnTextSubmitted;
+
 	// Broadcasts while text or multiline input changes before commit.
 	UPROPERTY(BlueprintAssignable, Category = "UI|Events")
 	FBaseTextInputTextChangedEvent OnTextChanged;

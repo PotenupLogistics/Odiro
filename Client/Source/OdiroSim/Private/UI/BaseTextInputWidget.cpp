@@ -708,10 +708,13 @@ void UBaseTextInputWidget::SetDisabled(const bool bInDisabled)
 
 void UBaseTextInputWidget::HandleEditableTextCommitted(const FText& committedText, ETextCommit::Type commitMethod)
 {
-	(void)commitMethod;
 	if (!bSynchronizing)
 	{
-		CommitText(committedText);
+		const bool bCommitted = CommitText(committedText);
+		if (bCommitted && commitMethod == ETextCommit::OnEnter && Mode == EBaseTextInputMode::Text && !UsesWrappedTextMode())
+		{
+			OnTextSubmitted.Broadcast(this, Text);
+		}
 	}
 }
 
@@ -725,10 +728,13 @@ void UBaseTextInputWidget::HandleEditableTextChanged(const FText& changedText)
 
 void UBaseTextInputWidget::HandleMultiLineTextCommitted(const FText& committedText, ETextCommit::Type commitMethod)
 {
-	(void)commitMethod;
 	if (!bSynchronizing)
 	{
-		CommitText(committedText);
+		const bool bCommitted = CommitText(committedText);
+		if (bCommitted && commitMethod == ETextCommit::OnEnter && UsesWrappedTextMode())
+		{
+			OnTextSubmitted.Broadcast(this, Text);
+		}
 	}
 }
 

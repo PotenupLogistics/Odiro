@@ -257,6 +257,12 @@ public:
 		const FExperimentConfigSettings& settings,
 		FString& outStatusText);
 
+	// user project setting.json의 project_id를 저장한다.
+	static bool SaveProjectIdForProject(
+		const FString& projectPath,
+		const FString& projectId,
+		FString& outStatusText);
+
 	// Reads the robot.body subset from user-project profile.json.
 	static bool LoadRobotProfileBodyForProject(
 		const FString& projectPath,

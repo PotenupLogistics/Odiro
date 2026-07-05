@@ -10,6 +10,7 @@
 #include "Platform/PlatformUiSubsystem.h"
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 #include "UI/BaseButtonWidget.h"
+#include "UI/BaseTextInputWidget.h"
 #include "UI/BaseTextWidget.h"
 
 namespace
@@ -205,6 +206,33 @@ void UProjectOverviewScreenWidget::NativeConstruct()
 			this,
 			&UProjectOverviewScreenWidget::HandleExperimentButtonClicked);
 	}
+	if (EditProjectNameButton)
+	{
+		EditProjectNameButton->OnBaseClicked.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleEditProjectNameClicked);
+		EditProjectNameButton->OnBaseClicked.AddDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleEditProjectNameClicked);
+	}
+	if (SaveProjectNameButton)
+	{
+		SaveProjectNameButton->OnBaseClicked.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleSaveProjectNameClicked);
+		SaveProjectNameButton->OnBaseClicked.AddDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleSaveProjectNameClicked);
+	}
+	if (ProjectNameInput)
+	{
+		ProjectNameInput->OnTextSubmitted.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleProjectNameSubmitted);
+		ProjectNameInput->OnTextSubmitted.AddDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleProjectNameSubmitted);
+	}
 
 	RefreshFromViewModel();
 }
@@ -237,6 +265,24 @@ void UProjectOverviewScreenWidget::NativeDestruct()
 			this,
 			&UProjectOverviewScreenWidget::HandleExperimentButtonClicked);
 	}
+	if (EditProjectNameButton)
+	{
+		EditProjectNameButton->OnBaseClicked.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleEditProjectNameClicked);
+	}
+	if (SaveProjectNameButton)
+	{
+		SaveProjectNameButton->OnBaseClicked.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleSaveProjectNameClicked);
+	}
+	if (ProjectNameInput)
+	{
+		ProjectNameInput->OnTextSubmitted.RemoveDynamic(
+			this,
+			&UProjectOverviewScreenWidget::HandleProjectNameSubmitted);
+	}
 
 	Super::NativeDestruct();
 }
@@ -253,17 +299,21 @@ void UProjectOverviewScreenWidget::RefreshFromViewModel()
 		}
 		if (StatusText)
 		{
-			SetOverviewWidgetText(
-				StatusText,
-				NSLOCTEXT("OdiroPlatform", "OverviewViewModelMissing", "Workspace ViewModel 없음"));
+			SetOverviewWidgetText(StatusText, WorkspaceViewModelMissingText);
 		}
 		return;
 	}
 
 	viewModel->RefreshFromProjectSession();
-	if (UWidget* projectNameWidget = GetWidgetFromName(TEXT("ProjectNameTitle")))
+	const FText activeProjectIdText = FText::FromString(viewModel->GetActiveProjectId());
+	if (ProjectNameTitle)
 	{
-		SetOverviewWidgetText(projectNameWidget, FText::FromString(viewModel->GetActiveProjectId()));
+		SetOverviewWidgetText(ProjectNameTitle.Get(), activeProjectIdText);
+	}
+	if (ProjectNameInput && !bEditingProjectName)
+	{
+		ProjectNameInput->ClearError();
+		ProjectNameInput->SetText(activeProjectIdText);
 	}
 	if (ProjectPathText)
 	{
@@ -286,6 +336,7 @@ void UProjectOverviewScreenWidget::RefreshFromViewModel()
 	{
 		SetOverviewWidgetText(StatusText, FText::FromString(viewModel->GetStatusText()));
 	}
+	UpdateProjectNameEditState();
 }
 
 UProjectWorkspaceViewModel* UProjectOverviewScreenWidget::ResolveViewModel()
@@ -328,6 +379,127 @@ bool UProjectOverviewScreenWidget::ApplyScenarioThumbnail(const FString& project
 	ScenarioThumbnailImage->SetBrushFromTexture(ScenarioThumbnailTexture.Get(), false);
 	ScenarioThumbnailImage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	return true;
+}
+
+void UProjectOverviewScreenWidget::UpdateProjectNameEditState()
+{
+	if (ProjectNameTitle)
+	{
+		ProjectNameTitle->SetVisibility(bEditingProjectName
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (ProjectNameInput)
+	{
+		ProjectNameInput->SetVisibility(bEditingProjectName
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+	}
+	if (EditProjectNameButton)
+	{
+		EditProjectNameButton->SetVisibility(bEditingProjectName
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::Visible);
+	}
+	if (SaveProjectNameButton)
+	{
+		SaveProjectNameButton->SetVisibility(bEditingProjectName
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+	}
+}
+
+void UProjectOverviewScreenWidget::SetProjectNameEditMode(const bool bEditing)
+{
+	bEditingProjectName = bEditing;
+	UpdateProjectNameEditState();
+}
+
+void UProjectOverviewScreenWidget::SaveProjectNameEdit()
+{
+	UProjectWorkspaceViewModel* viewModel = ResolveViewModel();
+	if (!viewModel)
+	{
+		SetOverviewWidgetText(StatusText, WorkspaceViewModelMissingText);
+		return;
+	}
+
+	const FString projectId = ProjectNameInput
+		? ProjectNameInput->GetCurrentText().ToString().TrimStartAndEnd()
+		: FString();
+	if (projectId.IsEmpty())
+	{
+		if (ProjectNameInput)
+		{
+			ProjectNameInput->SetErrorText(ProjectNameRequiredText);
+		}
+		SetOverviewWidgetText(StatusText, ProjectNameRequiredText);
+		return;
+	}
+
+	FString errorText;
+	if (!viewModel->SaveActiveProjectId(projectId, errorText))
+	{
+		if (ProjectNameInput)
+		{
+			ProjectNameInput->SetErrorText(ProjectNameSaveFailedText);
+		}
+		SetOverviewWidgetText(StatusText, ProjectNameSaveFailedText);
+		return;
+	}
+
+	if (ProjectNameInput)
+	{
+		ProjectNameInput->ClearError();
+		ProjectNameInput->SetText(FText::FromString(viewModel->GetActiveProjectId()));
+	}
+	SetProjectNameEditMode(false);
+	RefreshFromViewModel();
+	SetOverviewWidgetText(StatusText, ProjectNameSavedText);
+}
+
+void UProjectOverviewScreenWidget::HandleEditProjectNameClicked(UBaseButtonWidget* button)
+{
+	if (!IsValid(button) || button != EditProjectNameButton)
+	{
+		return;
+	}
+
+	UProjectWorkspaceViewModel* viewModel = ResolveViewModel();
+	if (!viewModel)
+	{
+		SetOverviewWidgetText(StatusText, WorkspaceViewModelMissingText);
+		return;
+	}
+
+	viewModel->RefreshFromProjectSession();
+	if (ProjectNameInput)
+	{
+		ProjectNameInput->ClearError();
+		ProjectNameInput->SetText(FText::FromString(viewModel->GetActiveProjectId()));
+	}
+	SetProjectNameEditMode(true);
+}
+
+void UProjectOverviewScreenWidget::HandleSaveProjectNameClicked(UBaseButtonWidget* button)
+{
+	if (!IsValid(button) || button != SaveProjectNameButton)
+	{
+		return;
+	}
+
+	SaveProjectNameEdit();
+}
+
+void UProjectOverviewScreenWidget::HandleProjectNameSubmitted(UBaseTextInputWidget* widget, const FText& text)
+{
+	(void)text;
+	if (!IsValid(widget) || widget != ProjectNameInput || !bEditingProjectName)
+	{
+		return;
+	}
+
+	SaveProjectNameEdit();
 }
 
 void UProjectOverviewScreenWidget::HandleScenarioButtonClicked(UBaseButtonWidget* button)

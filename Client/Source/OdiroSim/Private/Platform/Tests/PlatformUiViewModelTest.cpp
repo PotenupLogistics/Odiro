@@ -92,6 +92,19 @@ bool FPlatformUiViewModelProjectWorkspaceTest::RunTest(const FString& parameters
 	viewModel->InitializeForGameInstance(gameInstance);
 	TestEqual(TEXT("active project from session"), viewModel->GetActiveProjectPath(), projectSessionSubsystem->GetActiveProjectPath());
 
+	FString projectIdError;
+	TestTrue(TEXT("save active project id through workspace viewmodel"), viewModel->SaveActiveProjectId(TEXT(" Renamed Workspace "), projectIdError));
+	TestEqual(TEXT("active project id updated"), viewModel->GetActiveProjectId(), FString(TEXT("Renamed Workspace")));
+	FString settingJson;
+	TestTrue(
+		TEXT("renamed setting loads"),
+		FFileHelper::LoadFileToString(settingJson, *FPaths::Combine(projectPath, TEXT("setting.json"))));
+	TestTrue(
+		TEXT("setting project_id round trip"),
+		settingJson.Contains(TEXT("\"project_id\": \"Renamed Workspace\"")));
+	TestTrue(TEXT("same project id is accepted without rewrite"), viewModel->SaveActiveProjectId(TEXT("Renamed Workspace"), projectIdError));
+	TestFalse(TEXT("empty project id is rejected"), viewModel->SaveActiveProjectId(TEXT("  "), projectIdError));
+
 	FString runId;
 	TestTrue(TEXT("create run through workspace viewmodel"), viewModel->CreateRun(runId));
 	TestEqual(TEXT("first run id selected"), runId, FString(TEXT("000001")));

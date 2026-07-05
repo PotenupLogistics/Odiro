@@ -90,6 +90,13 @@ void UPlatformRootWidget::NativeConstruct()
 	SetIsFocusable(true);
 	const bool bHasActiveProject = HasActiveProject();
 	BindControls();
+	if (UPlatformUiSubsystem* platformUiSubsystem = UPlatformUiSubsystem::ResolveForWorldContext(this))
+	{
+		platformUiSubsystem->OnProjectPreviewUpdated.RemoveAll(this);
+		platformUiSubsystem->OnProjectPreviewUpdated.AddUObject(
+			this,
+			&UPlatformRootWidget::HandleProjectPreviewUpdated);
+	}
 	if (!bHasActiveProject)
 	{
 		ActiveScreen = EPlatformRootScreen::Startup;
@@ -105,6 +112,10 @@ void UPlatformRootWidget::NativeConstruct()
 void UPlatformRootWidget::NativeDestruct()
 {
 	UpdateRobotPreviewActivation(ActiveScreen, EPlatformRootScreen::Startup);
+	if (UPlatformUiSubsystem* platformUiSubsystem = UPlatformUiSubsystem::ResolveForWorldContext(this))
+	{
+		platformUiSubsystem->OnProjectPreviewUpdated.RemoveAll(this);
+	}
 	UnbindControls();
 	OnActiveScreenChangedNative.Clear();
 	Super::NativeDestruct();
@@ -154,6 +165,7 @@ void UPlatformRootWidget::SetActiveScreen(const EPlatformRootScreen screen)
 		&& screen != EPlatformRootScreen::ProjectCreate)
 		? EPlatformRootScreen::Startup
 		: screen;
+
 
 	if (PreviousScreen == EPlatformRootScreen::RobotConfig && ActiveScreen != EPlatformRootScreen::RobotConfig)
 	{
@@ -624,6 +636,14 @@ void UPlatformRootWidget::HandleRunDetailRequested(URunListScreenWidget* runList
 	if (IsValid(runListScreen) && runListScreen == RunListScreen)
 	{
 		ShowRunDetailScreen(runId);
+	}
+}
+
+void UPlatformRootWidget::HandleProjectPreviewUpdated(const FString&)
+{
+	if (StartupScreen)
+	{
+		StartupScreen->RefreshFromViewModel();
 	}
 }
 

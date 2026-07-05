@@ -154,6 +154,9 @@ private:
 	UFUNCTION()
 	void HandleRunDetailRequested(URunListScreenWidget* runListScreen, const FString& runId);
 
+	// Project preview update event를 Startup screen refresh로 반영한다.
+	void HandleProjectPreviewUpdated(const FString& projectPath);
+
 	// Status bar tab 선택 요청을 screen 전환으로 처리한다.
 	void HandleStatusBarTabSelected(FName tabId);
 

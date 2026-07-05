@@ -6,6 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Shared/ScenarioCoreTypes.h"
 #include "Shared/ScenarioSpecTypes.h"
+#include "Engine/TimerHandle.h"
 #include "ScenarioEditorController.generated.h"
 
 class AScenarioEditorPawn;
@@ -171,6 +172,10 @@ public:
 	// Fallback save path used when the draft was not opened from a user project scenario.json.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
 	FString DefaultScenarioDraftSavePath = TEXT("Saved/UserProjects/ScenarioEditor/scenario.json");
+
+	// Delay before writing the project preview.png after a successful scenario save.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Preview", meta = (ClampMin = "0.0"))
+	double ScenarioPreviewCaptureDelaySeconds = 0.5;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
 	void SetObserverMode();
@@ -389,7 +394,13 @@ private:
 	bool IsEditorSelectablePlaceable(const UScenarioPlaceableComponent* placeableComponent) const;
 	UScenarioPlaceableComponent* FindSelectablePlaceableByInstanceId(const FString& instanceId) const;
 	FString ResolveCurrentScenarioDraftSavePath() const;
-	// 저장된 scenario.json과 현재 Editor Preview로 프로젝트 대표 PNG를 생성한다.
+	// Schedules deferred project preview capture after a successful save.
+	void ScheduleScenarioPreviewCaptureAfterSave(const FString& resolvedJsonFilePath);
+	// Schedules project preview capture for loaded project scenarios that do not have a preview yet.
+	void ScheduleScenarioPreviewCaptureIfMissing(const FString& resolvedJsonFilePath);
+	// Runs the previously scheduled project preview capture.
+	void CaptureDelayedScenarioPreviewAfterSave(FString resolvedJsonFilePath);
+	// Captures the project preview PNG from the saved scenario and current editor preview.
 	void CaptureScenarioPreviewAfterSave(
 		const FString& resolvedJsonFilePath,
 		UScenarioAuthoringSubsystem* authoringSubsystem);
@@ -517,6 +528,8 @@ private:
 	bool bEditorViewFitQueued = false;
 	// Tracks active PlatformRoot screen state so selection UI refreshes do not re-fit the viewport.
 	bool bPlatformRootScenarioEditorActive = false;
+	// Pending timer for deferred project preview capture after saving scenario.json.
+	FTimerHandle ScenarioPreviewCaptureTimerHandle;
 	FVector RegionDragStartWorld = FVector::ZeroVector;
 	bool bIsTransformGizmoDragging = false;
 	EScenarioTransformGizmoHandle ActiveTransformGizmoHandle = EScenarioTransformGizmoHandle::None;

@@ -298,6 +298,10 @@ void AScenarioEditorController::BeginPlay()
 
 void AScenarioEditorController::EndPlay(const EEndPlayReason::Type endPlayReason)
 {
+	if (UWorld* world = GetWorld())
+	{
+		world->GetTimerManager().ClearTimer(ScenarioPreviewCaptureTimerHandle);
+	}
 	RemoveEditorRootWidget();
 	RemovePlatformRootWidget();
 	Super::EndPlay(endPlayReason);
@@ -964,6 +968,7 @@ bool AScenarioEditorController::LoadProjectScenarioJsonFile(
 	if (bLoaded)
 	{
 		RequestFitEditorViewToScenario();
+		ScheduleScenarioPreviewCaptureIfMissing(outResolvedJsonFilePath);
 	}
 	return bLoaded;
 }
@@ -1009,10 +1014,8 @@ bool AScenarioEditorController::SaveProjectScenarioJsonFile(
 		return false;
 	}
 
-	// JSON 저장 성공과 분리된 파생 artifact로 Preview를 생성한다.
-	CaptureScenarioPreviewAfterSave(
-		outResolvedJsonFilePath,
-		authoringSubsystem);
+	// Generate preview.png as a derived artifact after the JSON save succeeds.
+	ScheduleScenarioPreviewCaptureAfterSave(outResolvedJsonFilePath);
 
 	return true;
 }

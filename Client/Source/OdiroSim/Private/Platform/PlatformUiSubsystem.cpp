@@ -1551,6 +1551,15 @@ bool UPlatformUiSubsystem::RefreshActiveRunStatus() const
 	return subsystem ? subsystem->RefreshActiveRunStatus() : false;
 }
 
+void UPlatformUiSubsystem::NotifyProjectPreviewUpdated(const FString& projectPath)
+{
+	const FString normalizedProjectPath = NormalizePlatformUiProjectPath(projectPath);
+	if (!normalizedProjectPath.IsEmpty())
+	{
+		OnProjectPreviewUpdated.Broadcast(normalizedProjectPath);
+	}
+}
+
 FSimulatorRunInfo UPlatformUiSubsystem::GetActiveRunInfo() const
 {
 	const USimulatorLaunchSubsystem* subsystem = ResolveSimulatorLaunchSubsystem();

@@ -20,6 +20,8 @@ struct FProjectRunResultDashboardData;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiRunInfoChangedNative, const FSimulatorRunInfo&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiAnalysisCompletedNative, const FPlatformAnalysisAiResponse&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformUiProjectPreviewUpdatedNative, const FString&);
+
 // Project run progress status kind consumed by Platform row widgets.
 UENUM(BlueprintType)
 enum class EPlatformProjectRunProgressKind : uint8
@@ -100,6 +102,9 @@ public:
 
 	// AI 분석 완료를 Platform UI adapter에 중계한다.
 	FPlatformUiAnalysisCompletedNative OnAnalysisCompleted;
+
+	// Project preview.png 갱신을 Platform UI adapter에 중계한다.
+	FPlatformUiProjectPreviewUpdatedNative OnProjectPreviewUpdated;
 
 	// Project workspace ViewModel을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|UI")
@@ -277,6 +282,9 @@ public:
 
 	// Active simulator run status를 최신 상태로 갱신한다.
 	bool RefreshActiveRunStatus() const;
+
+	// Project preview.png가 갱신됐음을 Platform UI에 알린다.
+	void NotifyProjectPreviewUpdated(const FString& projectPath);
 
 	// Active simulator run 상태 snapshot을 반환한다.
 	FSimulatorRunInfo GetActiveRunInfo() const;

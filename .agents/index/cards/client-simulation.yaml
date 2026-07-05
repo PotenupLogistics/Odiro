@@ -174,7 +174,7 @@ guardrails:
   - Scenario save preview uses the same authored-scenario bounds and fit margin as the editor viewport fit, rendered into the preview image's own aspect ratio.
   - ScenarioPreviewCaptureSubsystem owns transient SceneCapture2D, render-target cleanup, alpha normalization, and episode warmup lifecycle for top-view orthographic FinalColorLDR PNG capture.
   - ScenarioEditorMap and ScenarioSimulationMap keep matching directional-light intensity and rotation; preview capture avoids temporary lighting and pixel-level RGB correction for episode thumbnails.
-  - ScenarioEditorController requests the project preview only after scenario.json saves successfully; capture failure removes stale preview.png without changing the save result.
+  - ScenarioEditorController requests the project preview only after scenario.json saves successfully; capture failure removes stale preview.png without changing the save result, and preview refresh is announced through PlatformUiSubsystem instead of direct PlatformRootWidget calls.
   - ScenarioRunnerSubsystem schedules project episode preview.png after evaluation starts; capture failure must not change episode outcome.
   - Robot profile preview is a configurator visualization only; it must not run policy, physics, replay playback, or write profile.json during live slider edits.
   - DeliveryBotLidarRayPattern owns shared LiDAR yaw/pitch sample generation for runtime tracing and Robot profile preview rendering, including concrete 3D model presets such as Ouster OS1 while preserving the rays3d contract.

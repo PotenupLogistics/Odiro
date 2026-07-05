@@ -40,6 +40,7 @@ namespace
 	const TCHAR* UserProjectSettingFileName = TEXT("setting.json");
 	const TCHAR* UserProjectProfileFileName = TEXT("profile.json");
 	const TCHAR* UserProjectScenarioFileName = TEXT("scenario.json");
+	const TCHAR* UserProjectPreviewFileName = TEXT("preview.png");
 	const TCHAR* UserProjectPolicyDirectory = TEXT("policy");
 	const TCHAR* UserProjectRunsDirectory = TEXT("runs");
 	const TCHAR* UserProjectSnapshotDirectory = TEXT("snapshot");
@@ -848,6 +849,21 @@ namespace
 		}
 
 		return true;
+	}
+
+	// Scenario preset thumbnail을 새 project의 최근 목록 preview로 초기화한다.
+	bool CopyInitialUserProjectPreview(
+		const FProjectPresetInfo& scenarioPresetInfo,
+		const FString& projectPath,
+		TArray<FString>& outDiagnostics)
+	{
+		if (scenarioPresetInfo.ThumbnailPath.TrimStartAndEnd().IsEmpty())
+		{
+			return true;
+		}
+
+		const FString previewTargetPath = NormalizeAbsolutePath(FPaths::Combine(projectPath, UserProjectPreviewFileName));
+		return CopyUserProjectFile(scenarioPresetInfo.ThumbnailPath, previewTargetPath, outDiagnostics);
 	}
 
 	bool WriteUserProjectSettingProjectId(
@@ -2206,6 +2222,10 @@ bool USimulatorLaunchSubsystem::CreateProjectFromPresets(
 		}
 	}
 	if (!WriteUserProjectSettingProjectId(settingTargetPath, projectId, outDiagnostics))
+	{
+		return false;
+	}
+	if (!CopyInitialUserProjectPreview(scenarioPresetInfo, resolvedProjectPath, outDiagnostics))
 	{
 		return false;
 	}

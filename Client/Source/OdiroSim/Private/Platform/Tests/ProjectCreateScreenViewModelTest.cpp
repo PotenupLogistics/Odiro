@@ -212,6 +212,9 @@ bool FProjectCreateScreenViewModelCreateProjectTest::RunTest(const FString& para
 	TestTrue(
 		TEXT("created setting project_id uses project name"),
 		settingJson.Contains(FString::Printf(TEXT("\"project_id\": \"%s\""), *projectName)));
+	const FString previewPath = FPaths::Combine(projectPath, TEXT("preview.png"));
+	TestTrue(TEXT("created initial preview exists"), FPaths::FileExists(previewPath));
+	TestTrue(TEXT("created initial preview is non-empty"), IFileManager::Get().FileSize(*previewPath) > 0);
 	TestTrue(TEXT("created policy exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/action.py"))));
 	TestFalse(TEXT("policy manifest not copied"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/manifest.json"))));
 	TestFalse(TEXT("policy thumbnail not copied"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/thumbnail.png"))));

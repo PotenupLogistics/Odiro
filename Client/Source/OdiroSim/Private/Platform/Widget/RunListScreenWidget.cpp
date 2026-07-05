@@ -192,6 +192,21 @@ namespace
 		return FText::Format(format, args);
 	}
 
+	FText ResolveRunListPreparingText(const FText& authoredText)
+	{
+		const FString authoredString = authoredText.ToString().TrimStartAndEnd();
+		if (authoredString.IsEmpty() || authoredString.Equals(TEXT("시작"), ESearchCase::CaseSensitive))
+		{
+			return NSLOCTEXT("RunListScreen", "ProgressStatusPreparing", "준비");
+		}
+		return authoredText;
+	}
+
+	FText GetRunListFinishingText()
+	{
+		return NSLOCTEXT("RunListScreen", "ProgressStatusFinishing", "마무리");
+	}
+
 	struct FRunListTextOptions
 	{
 		FText EmptyRunMetricText;
@@ -284,6 +299,19 @@ namespace
 		presentation.TotalCount = FMath::Max(FMath::Max(0, progressSnapshot.TotalCount), presentation.CompletedCount);
 		presentation.Percent = FMath::Clamp(progressSnapshot.Percent, 0.0f, 100.0f);
 
+		const bool bFinishing =
+			(progressSnapshot.ProgressKind == EPlatformProjectRunProgressKind::Starting
+				|| progressSnapshot.ProgressKind == EPlatformProjectRunProgressKind::Running)
+			&& presentation.TotalCount > 0
+			&& presentation.CompletedCount >= presentation.TotalCount;
+		if (bFinishing)
+		{
+			presentation.Label = GetRunListFinishingText();
+			presentation.Percent = 100.0f;
+			presentation.State = EProjectExperimentRunRowProgressState::Loading;
+			return presentation;
+		}
+
 		switch (progressSnapshot.ProgressKind)
 		{
 		case EPlatformProjectRunProgressKind::Error:
@@ -291,7 +319,7 @@ namespace
 			presentation.State = EProjectExperimentRunRowProgressState::Error;
 			return presentation;
 		case EPlatformProjectRunProgressKind::Starting:
-			presentation.Label = textOptions.ProgressStartingText;
+			presentation.Label = ResolveRunListPreparingText(textOptions.ProgressStartingText);
 			presentation.Percent = 0.0f;
 			presentation.State = EProjectExperimentRunRowProgressState::Loading;
 			return presentation;
@@ -451,6 +479,10 @@ void URunListScreenWidget::RefreshFromViewModels()
 	{
 		workspaceViewModel->RefreshFromProjectSession();
 	}
+	if (UPlatformUiSubsystem* platformUiSubsystem = UPlatformUiSubsystem::ResolveForWorldContext(this))
+	{
+		platformUiSubsystem->RefreshActiveRunStatus();
+	}
 
 	if (configViewModel && configViewModel->LoadFromActiveProject())
 	{
@@ -556,6 +588,10 @@ void URunListScreenWidget::RefreshRunResults()
 		return;
 	}
 
+	if (UPlatformUiSubsystem* platformUiSubsystem = UPlatformUiSubsystem::ResolveForWorldContext(this))
+	{
+		platformUiSubsystem->RefreshActiveRunStatus();
+	}
 	workspaceViewModel->RefreshProjectRuns();
 	RebuildRunRows();
 }

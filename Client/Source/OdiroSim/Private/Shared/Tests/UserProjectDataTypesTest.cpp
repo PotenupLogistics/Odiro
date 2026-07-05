@@ -455,6 +455,54 @@ bool FUserProjectDataRootContractTest::RunTest(const FString& parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUserProjectRunStatusJsonTest,
+	"OdiroSim.UserProjectData.RunStatusJson",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUserProjectRunStatusJsonTest::RunTest(const FString& parameters)
+{
+	const FString projectPath = MakeUserProjectDataTestRoot();
+	const FString statusPath = FPaths::Combine(projectPath, TEXT("runs/000001/status.json"));
+
+	FUserProjectRunStatusRecord status;
+	status.ProjectPath = projectPath;
+	status.RunId = TEXT("000001");
+	status.StatusPath = statusPath;
+	status.Executable = TEXT("OdiroSim.exe");
+	status.ProcessId = 1234;
+	status.PolicyPort = 18145;
+	status.ExitCode = 1;
+	status.State = TEXT("cancelled");
+	status.StartedAt = TEXT("2026-07-06T00:00:00Z");
+	status.UpdatedAt = TEXT("2026-07-06T00:00:01Z");
+	status.ExitedAt = TEXT("2026-07-06T00:00:02Z");
+
+	TArray<FString> diagnostics;
+	TestTrue(TEXT("write run_status"), FUserProjectRunStatusJson::SaveToFile(status, diagnostics));
+	if (!diagnostics.IsEmpty())
+	{
+		AddInfo(FString::Printf(TEXT("RunStatus write diagnostics: %s"), *FString::Join(diagnostics, TEXT("\n"))));
+	}
+
+	FString statusJson;
+	TestTrue(TEXT("status file loads"), FFileHelper::LoadFileToString(statusJson, *statusPath));
+	TestTrue(TEXT("status schema written"), statusJson.Contains(TEXT("\"schema\": \"run_status\"")));
+	TestTrue(TEXT("status state written"), statusJson.Contains(TEXT("\"state\": \"cancelled\"")));
+
+	FUserProjectRunStatusRecord loadedStatus;
+	TestTrue(TEXT("read run_status"), FUserProjectRunStatusJson::LoadFromFile(statusPath, loadedStatus, diagnostics));
+	TestEqual(TEXT("loaded project path"), loadedStatus.ProjectPath, projectPath);
+	TestEqual(TEXT("loaded run id"), loadedStatus.RunId, FString(TEXT("000001")));
+	TestEqual(TEXT("loaded state"), loadedStatus.State, FString(TEXT("cancelled")));
+	TestEqual(TEXT("loaded process id"), loadedStatus.ProcessId, static_cast<int64>(1234));
+	TestEqual(TEXT("loaded policy port"), loadedStatus.PolicyPort, 18145);
+	TestEqual(TEXT("loaded exit code"), loadedStatus.ExitCode, 1);
+
+	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUserProjectEpisodeScenarioWriteTest,
 	"OdiroSim.UserProjectData.EpisodeScenario.Write",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

@@ -4,6 +4,8 @@
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
 #include "HAL/PlatformMisc.h"
+#include "HAL/PlatformProcess.h"
+#include "Misc/Paths.h"
 #include "Scenario/ScenarioRunnerSubsystem.h"
 #include "Shared/ScenarioViewportPresentation.h"
 #include "Shared/UserProjectDataTypes.h"
@@ -14,6 +16,29 @@ DEFINE_LOG_CATEGORY_STATIC(LogSimulatorProcess, Log, All);
 namespace
 {
 	const TCHAR* DefaultSimulationMapId = TEXT("ScenarioSimulationMap");
+	const TCHAR* ProjectRunStatusRunning = TEXT("running");
+	const TCHAR* ProjectRunStatusStopping = TEXT("stopping");
+	const TCHAR* ProjectRunStatusCanceled = TEXT("canceled");
+	const TCHAR* ProjectRunStatusCancelled = TEXT("cancelled");
+	const TCHAR* ProjectRunStatusExited = TEXT("exited");
+	const TCHAR* ProjectRunStatusFailed = TEXT("failed");
+
+	bool IsTerminalProjectRunStatus(const FString& statusState)
+	{
+		const FString normalizedState = statusState.TrimStartAndEnd().ToLower();
+		return normalizedState == ProjectRunStatusCanceled
+			|| normalizedState == ProjectRunStatusCancelled
+			|| normalizedState == ProjectRunStatusExited
+			|| normalizedState == ProjectRunStatusFailed;
+	}
+
+	bool IsCancellationProjectRunStatus(const FString& statusState)
+	{
+		const FString normalizedState = statusState.TrimStartAndEnd().ToLower();
+		return normalizedState == ProjectRunStatusStopping
+			|| normalizedState == ProjectRunStatusCanceled
+			|| normalizedState == ProjectRunStatusCancelled;
+	}
 
 	FString TrimMapId(const FString& mapId)
 	{
@@ -63,6 +88,7 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	ActiveRunId = commandLineResult.Options.RunId.IsEmpty()
 		? FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens)
 		: commandLineResult.Options.RunId;
+	ActivePolicyPort = commandLineResult.Options.PolicyPort;
 
 	ActiveProjectPath = commandLineResult.Options.ProjectPath;
 	const FUserProjectRunSnapshotParseResult projectRunParseResult =
@@ -118,6 +144,8 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	ActiveTimeScale = projectRunParseResult.Setting.TimeScale;
 	ActiveMeasurementLogSettings = FEpisodeMeasurementLogSettings{};
 	ActiveMeasurementLogSettings.bEnabled = false;
+
+	WriteProjectRunStatus(ProjectRunStatusRunning);
 
 	ApplyFixedStep();
 
@@ -711,7 +739,65 @@ void USimulatorProcessSubsystem::LogProjectRunDiagnostics(const FUserProjectRunS
 void USimulatorProcessSubsystem::RequestProcessExitWithError(const FString& error) const
 {
 	UE_LOG(LogSimulatorProcess, Error, TEXT("%s"), *error);
+	WriteProjectRunStatus(ProjectRunStatusFailed, error);
 	FPlatformMisc::RequestExitWithStatus(false, 1, TEXT("USimulatorProcessSubsystem::RequestProcessExitWithError"));
+}
+
+void USimulatorProcessSubsystem::WriteProjectRunStatus(const FString& statusState, const FString& errorMessage) const
+{
+	if (!bProjectRunMode || ActiveProjectRunPaths.StatusPath.IsEmpty())
+	{
+		return;
+	}
+
+	FUserProjectRunStatusRecord previousStatus;
+	TArray<FString> diagnostics;
+	if (FPaths::FileExists(ActiveProjectRunPaths.StatusPath))
+	{
+		FUserProjectRunStatusJson::LoadFromFile(ActiveProjectRunPaths.StatusPath, previousStatus, diagnostics);
+	}
+
+	const FString normalizedState = statusState.TrimStartAndEnd().ToLower();
+	if (IsCancellationProjectRunStatus(previousStatus.State)
+		&& !IsCancellationProjectRunStatus(normalizedState))
+	{
+		return;
+	}
+
+	const FString now = FUserProjectRunStatusJson::MakeUtcTimestamp();
+	FUserProjectRunStatusRecord status;
+	status.ProjectPath = ActiveProjectRunPaths.ProjectPath;
+	status.RunId = ActiveProjectRunPaths.RunId;
+	status.StatusPath = ActiveProjectRunPaths.StatusPath;
+	status.Executable = FPlatformProcess::ExecutablePath();
+	status.ProcessId = static_cast<int64>(FPlatformProcess::GetCurrentProcessId());
+	status.PolicyPort = ActivePolicyPort;
+	status.ExitCode = previousStatus.ExitCode;
+	if (normalizedState == ProjectRunStatusExited)
+	{
+		status.ExitCode = 0;
+	}
+	else if (normalizedState == ProjectRunStatusFailed || normalizedState == ProjectRunStatusCancelled)
+	{
+		status.ExitCode = 1;
+	}
+	status.State = normalizedState;
+	status.StartedAt = previousStatus.StartedAt.IsEmpty() ? now : previousStatus.StartedAt;
+	status.UpdatedAt = now;
+	status.ExitedAt = IsTerminalProjectRunStatus(normalizedState) ? now : FString();
+	status.Error = normalizedState == ProjectRunStatusFailed ? errorMessage : FString();
+
+	diagnostics.Reset();
+	if (!FUserProjectRunStatusJson::SaveToFile(status, diagnostics))
+	{
+		UE_LOG(
+			LogSimulatorProcess,
+			Warning,
+			TEXT("ProjectRun status 저장 실패 | Path: %s | State: %s | Diagnostics: %s"),
+			*ActiveProjectRunPaths.StatusPath,
+			*normalizedState,
+			*FString::Join(diagnostics, TEXT(" | ")));
+	}
 }
 
 void USimulatorProcessSubsystem::RequestProjectRunProcessExit(bool bSuccess, const FString& reason)
@@ -728,6 +814,19 @@ void USimulatorProcessSubsystem::RequestProjectRunProcessExit(bool bSuccess, con
 		TEXT("Project run process 종료 요청 | Success: %s, Reason: %s"),
 		bSuccess ? TEXT("true") : TEXT("false"),
 		*reason);
+	const FString normalizedReason = reason.TrimStartAndEnd().ToLower();
+	if (bSuccess)
+	{
+		WriteProjectRunStatus(ProjectRunStatusExited);
+	}
+	else if (normalizedReason == TEXT("cancelled") || normalizedReason == TEXT("canceled"))
+	{
+		WriteProjectRunStatus(ProjectRunStatusCancelled);
+	}
+	else
+	{
+		WriteProjectRunStatus(ProjectRunStatusFailed, reason);
+	}
 	FPlatformMisc::RequestExitWithStatus(
 		false,
 		bSuccess ? 0 : 1,

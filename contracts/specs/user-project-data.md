@@ -553,7 +553,7 @@ schema:
 소유자:
 
 ```text
-Bridge
+Bridge, Simulator
 ```
 
 필수 root:
@@ -575,10 +575,11 @@ Bridge
 | 값         | 의미                                      |
 | ---------- | ----------------------------------------- |
 | `starting` | Bridge가 process 시작 전 status file 생성 |
-| `running`  | 자식 process 시작 성공                    |
+| `running`  | Simulator가 run 준비를 마치고 episode 실행을 시작할 수 있음 |
 | `stopping` | Bridge가 종료 요청 전송                   |
 | `exited`   | 자식 process가 exit code 0으로 종료       |
 | `failed`   | process 시작 또는 실행 실패               |
+| `cancelled` | Bridge 종료 요청 또는 Simulator cancellation으로 중단 |
 
 ### Run Summary
 

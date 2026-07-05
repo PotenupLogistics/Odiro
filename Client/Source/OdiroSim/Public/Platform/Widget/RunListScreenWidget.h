@@ -148,9 +148,9 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
 	FText ProgressErrorText = NSLOCTEXT("RunListScreen", "ProgressStatusError", "오류");
 
-	// Progress label for starting state.
+	// Progress label for active run preparation before simulator running status is confirmed.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
-	FText ProgressStartingText = NSLOCTEXT("RunListScreen", "ProgressStatusStarting", "시작");
+	FText ProgressStartingText = NSLOCTEXT("RunListScreen", "ProgressStatusStarting", "준비");
 
 	// Progress label for canceled state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))

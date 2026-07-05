@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Input/Reply.h"
 #include "UI/BaseFormElementTypes.h"
 #include "UI/BaseWidget.h"
 #include "Types/SlateEnums.h"
@@ -9,6 +10,7 @@
 class UBorder;
 class UBaseButtonWidget;
 class UEditableTextBox;
+class UHorizontalBox;
 class UMultiLineEditableTextBox;
 class UTextBlock;
 class UVerticalBox;
@@ -39,6 +41,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
 	bool IsTextWrapEnabled() const { return bTextWrap; }
 
+	// Updates whether single-line fields move the caret to the end on focus.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
+	void SetMoveCaretToEndOnFocus(bool bInMoveCaretToEndOnFocus);
+
+	// Returns whether single-line fields move the caret to the end on focus.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
+	bool ShouldMoveCaretToEndOnFocus() const { return bMoveCaretToEndOnFocus; }
+
 	// Updates the string value used by text and multiline modes.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
 	void SetText(FText inText);
@@ -58,6 +68,42 @@ public:
 	// Returns the placeholder text used by editable controls.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
 	FText GetPlaceholderText() const { return PlaceholderText; }
+
+	// Updates the display-only unit suffix shown by number mode.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
+	void SetUnitText(FText inUnitText);
+
+	// Returns the display-only unit suffix shown by number mode.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
+	FText GetUnitText() const { return UnitText; }
+
+	// Updates the optional explicit unit suffix color and enables the override.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
+	void SetUnitTextColorOverride(FLinearColor inUnitTextColorOverride);
+
+	// Updates whether the unit suffix uses an explicit color override.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
+	void SetOverrideUnitTextColor(bool bInOverrideUnitTextColor);
+
+	// Clears the explicit unit suffix color so the resolved color Data Asset token is used.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
+	void ClearUnitTextColorOverride();
+
+	// Returns whether the unit suffix uses an explicit color override.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
+	bool HasUnitTextColorOverride() const { return bOverrideUnitTextColor; }
+
+	// Returns the explicit unit suffix color used when the override is enabled.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
+	FLinearColor GetUnitTextColorOverride() const { return UnitTextColorOverride; }
+
+	// Updates the optional font size override; 0 uses the resolved size Data Asset typography.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
+	void SetFontSizeOverride(float inFontSizeOverride);
+
+	// Returns the optional font size override; 0 means the resolved size Data Asset typography is used.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
+	float GetFontSizeOverride() const { return FontSizeOverride; }
 
 	// Updates the accepted numeric value range.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
@@ -157,6 +203,8 @@ protected:
 
 	// Forwards pointer hover state to the Widget Blueprint visual event.
 	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
 	// Forwards focus state from this widget or a child field to the Widget Blueprint visual event.
@@ -201,8 +249,28 @@ protected:
 	UFUNCTION()
 	void HandleStepDownClicked(UBaseButtonWidget* button);
 
+	// Handles pointer entry into either stepper button.
+	UFUNCTION()
+	void HandleStepperHovered(UBaseButtonWidget* button);
+
+	// Handles pointer exit from either stepper button.
+	UFUNCTION()
+	void HandleStepperUnhovered(UBaseButtonWidget* button);
+
 	// Returns true when text mode should render through the multiline field.
 	bool UsesWrappedTextMode() const;
+
+	// Returns true when the pointer is currently over stepper-owned controls.
+	bool IsStepperInteractionHovered() const;
+
+	// Returns true when the display-only unit suffix click should focus the number field.
+	bool ShouldFocusTextBoxFromUnitClick(const FPointerEvent& InMouseEvent) const;
+
+	// Updates the cached stepper hover state and refreshes visuals on change.
+	void SetStepperHoverActive(bool bInStepperHoverActive);
+
+	// Applies the current hover-driven visibility affordance to stepper icons.
+	void ApplyStepperIconOpacity(bool bEnabled);
 
 	// Input behavior mode.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetInputMode", Setter = "SetInputMode", BlueprintGetter = "GetInputMode", BlueprintSetter = "SetInputMode", Category = "UI|Behavior", meta = (ExposeOnSpawn = "true"))
@@ -212,6 +280,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsTextWrapEnabled", Setter = "SetTextWrap", BlueprintGetter = "IsTextWrapEnabled", BlueprintSetter = "SetTextWrap", Category = "UI|Behavior", meta = (ExposeOnSpawn = "true", EditCondition = "Mode == EBaseTextInputMode::Text"))
 	bool bTextWrap = false;
 
+	// Whether single-line fields move the caret to the end when focus is gained.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "ShouldMoveCaretToEndOnFocus", Setter = "SetMoveCaretToEndOnFocus", BlueprintGetter = "ShouldMoveCaretToEndOnFocus", BlueprintSetter = "SetMoveCaretToEndOnFocus", Category = "UI|Behavior", meta = (ExposeOnSpawn = "true"))
+	bool bMoveCaretToEndOnFocus = false;
+
 	// Text value for text-like modes.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetText", Setter = "SetText", BlueprintGetter = "GetText", BlueprintSetter = "SetText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText Text;
@@ -219,6 +291,30 @@ protected:
 	// Placeholder text for editable controls.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetPlaceholderText", Setter = "SetPlaceholderText", BlueprintGetter = "GetPlaceholderText", BlueprintSetter = "SetPlaceholderText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText PlaceholderText;
+
+	// Display-only unit suffix rendered next to number input values.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetUnitText", Setter = "SetUnitText", BlueprintGetter = "GetUnitText", BlueprintSetter = "SetUnitText", Category = "UI|Contents", meta = (ExposeOnSpawn = "true", EditCondition = "Mode == EBaseTextInputMode::Number"))
+	FText UnitText;
+
+	// Enables an explicit unit suffix color instead of the resolved TextSecondaryColor token.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "HasUnitTextColorOverride", Setter = "SetOverrideUnitTextColor", BlueprintGetter = "HasUnitTextColorOverride", BlueprintSetter = "SetOverrideUnitTextColor", Category = "UI|Style", meta = (ExposeOnSpawn = "true", InlineEditConditionToggle))
+	bool bOverrideUnitTextColor = false;
+
+	// Explicit unit suffix color used only when bOverrideUnitTextColor is enabled.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetUnitTextColorOverride", Setter = "SetUnitTextColorOverride", BlueprintGetter = "GetUnitTextColorOverride", BlueprintSetter = "SetUnitTextColorOverride", Category = "UI|Style", meta = (ExposeOnSpawn = "true", EditCondition = "bOverrideUnitTextColor"))
+	FLinearColor UnitTextColorOverride = FLinearColor::White;
+
+	// Optional TextBox and unit suffix font size override; 0 uses Body typography from the resolved size Data Asset.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetFontSizeOverride", Setter = "SetFontSizeOverride", BlueprintGetter = "GetFontSizeOverride", BlueprintSetter = "SetFontSizeOverride", Category = "UI|Style", meta = (ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	float FontSizeOverride = 0.0f;
+
+	// Number stepper opacity when idle; WBP can tune discoverability per surface.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Style", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0", ExposeOnSpawn = "true"))
+	float StepperIconIdleOpacity = 0.28f;
+
+	// Number stepper opacity while hovered or outside number mode.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Style", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0", ExposeOnSpawn = "true"))
+	float StepperIconHoveredOpacity = 1.0f;
 
 	// Minimum accepted numeric value.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Range", meta = (ExposeOnSpawn = "true"))
@@ -280,9 +376,25 @@ protected:
 	UPROPERTY(Transient)
 	bool bFocusActive = false;
 
+	// Current pointer hover state for number-mode stepper icon emphasis.
+	UPROPERTY(Transient)
+	bool bStepperHoverActive = false;
+
+	// WBP-authored single-line text alignment restored outside number mode.
+	UPROPERTY(Transient)
+	TEnumAsByte<ETextJustify::Type> TextBoxDefaultJustification = ETextJustify::Left;
+
+	// Whether the WBP-authored TextBox alignment has been captured.
+	UPROPERTY(Transient)
+	bool bTextBoxDefaultJustificationCaptured = false;
+
 	// Rounded input surface owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> SurfaceBorder;
+
+	// Optional layout wrapper for the single-line field and its display-only unit label.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UHorizontalBox> TextHorizontalBox;
 
 	// Single-line and number editable field owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -300,9 +412,17 @@ protected:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableTextBox> UpperTextBox;
 
+	// Optional layout wrapper for lower and upper range controls.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UHorizontalBox> RangeHorizontalBox;
+
 	// Optional visual separator between range fields.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> RangeSeparatorTextBlock;
+
+	// Optional display-only unit label for number mode.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> UnitTextBlock;
 
 	// Optional number stepper column containing increment and decrement buttons.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

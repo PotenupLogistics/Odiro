@@ -505,6 +505,20 @@ void UStartupScreenWidget::HandleDeleteConfirmAccepted(URecentProjectDeleteConfi
 		return;
 	}
 
+	const FString activeProjectPath = NormalizeStartupScreenWidgetPath(platformUiSubsystem->GetActiveProjectPath());
+	if (!activeProjectPath.IsEmpty() && projectPath.Equals(activeProjectPath, ESearchCase::IgnoreCase))
+	{
+		FString startupErrorText;
+		if (!platformUiSubsystem->ReturnToStartupMap(startupErrorText))
+		{
+			viewModel->SetDiagnosticsText(startupErrorText.IsEmpty()
+				? DiagnosticMessages.ProjectDeleteFailed
+				: startupErrorText);
+			RefreshFromViewModel();
+			return;
+		}
+	}
+
 	const EPlatformUserProjectDeleteResult deleteResult =
 		platformUiSubsystem->DeleteUserProjectDirectory(projectPath);
 	if (deleteResult == EPlatformUserProjectDeleteResult::Unsafe)

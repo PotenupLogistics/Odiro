@@ -109,6 +109,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
 	void SetValueRange(float inMinValue, float inMaxValue);
 
+	// Returns the minimum accepted numeric value.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
+	float GetMinValue() const { return MinValue; }
+
+	// Returns the maximum accepted numeric value.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Text Input")
+	float GetMaxValue() const { return MaxValue; }
+
 	// Updates the current numeric value and clamps it to the accepted range.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Text Input")
 	void SetNumericValue(float inValue);

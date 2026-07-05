@@ -12,12 +12,10 @@
 #include "Platform/Widget/ProjectExperimentRunRowWidget.h"
 #include "UI/BaseButtonWidget.h"
 #include "UI/BaseTextInputWidget.h"
+#include "Components/TextBlock.h"
 
 namespace
 {
-	// RunList 화면이 열려 있는 동안 결과 목록을 다시 읽는 간격.
-	constexpr float RunListResultsPollingIntervalSeconds = 2.5f;
-
 	FString NormalizeRunListPath(FString path)
 	{
 		path = path.TrimStartAndEnd();
@@ -38,144 +36,183 @@ namespace
 		return input ? input->GetCurrentText().ToString().TrimStartAndEnd() : FString();
 	}
 
-	void ConfigureNumberInput(
-		UBaseTextInputWidget* input,
-		const float minValue,
-		const float maxValue,
-		const int32 displayDecimals)
+	FText GetInputLabelText(const UTextBlock* labelWidget)
 	{
-		if (!input)
-		{
-			return;
-		}
-
-		input->SetInputMode(EBaseTextInputMode::Number);
-		input->SetValueRange(minValue, maxValue);
-		input->SetDisplayDecimals(displayDecimals);
+		return labelWidget ? labelWidget->GetText() : FText::GetEmpty();
 	}
 
-	void SetNumberInputValue(
-		UBaseTextInputWidget* input,
-		const float value,
-		const float minValue,
-		const float maxValue,
-		const int32 displayDecimals)
+	FText FormatNumberForDisplay(const double value, const int32 displayDecimals)
+	{
+		if (displayDecimals < 0)
+		{
+			return FText::AsNumber(value);
+		}
+
+		FNumberFormattingOptions options;
+		options.MinimumFractionalDigits = displayDecimals;
+		options.MaximumFractionalDigits = displayDecimals;
+		return FText::AsNumber(value, &options);
+	}
+
+	FText FormatRangeBoundaryForDiagnostics(const double value)
+	{
+		FString text = FString::SanitizeFloat(value);
+		text.RemoveFromEnd(TEXT(".0"));
+		return FText::FromString(text);
+	}
+
+	void AddFormattedDiagnostic(
+		TArray<FString>& outDiagnostics,
+		const FText& format,
+		const FText& field)
+	{
+		FFormatNamedArguments args;
+		args.Add(TEXT("Field"), field);
+		outDiagnostics.Add(FText::Format(format, args).ToString());
+	}
+
+	void AddRangeDiagnostic(
+		TArray<FString>& outDiagnostics,
+		const UBaseTextInputWidget* input,
+		const FText& label,
+		const FText& format)
+	{
+		FFormatNamedArguments args;
+		args.Add(TEXT("Field"), label);
+		args.Add(TEXT("Min"), FormatRangeBoundaryForDiagnostics(input ? input->GetMinValue() : 0.0));
+		args.Add(TEXT("Max"), FormatRangeBoundaryForDiagnostics(input ? input->GetMaxValue() : 0.0));
+		outDiagnostics.Add(FText::Format(format, args).ToString());
+	}
+
+	bool IsWithinInputRange(const UBaseTextInputWidget* input, const double value)
+	{
+		return !input || (value >= input->GetMinValue() && value <= input->GetMaxValue());
+	}
+
+	void SetNumberInputValue(UBaseTextInputWidget* input, const float value)
 	{
 		if (!input)
 		{
 			return;
 		}
 
-		ConfigureNumberInput(input, minValue, maxValue, displayDecimals);
 		input->SetNumericValue(value);
 	}
 
-	void SetNumberInputValue(
-		UBaseTextInputWidget* input,
-		const int32 value,
-		const float minValue,
-		const float maxValue)
+	void SetNumberInputValue(UBaseTextInputWidget* input, const int32 value)
 	{
-		SetNumberInputValue(input, static_cast<float>(value), minValue, maxValue, 0);
+		SetNumberInputValue(input, static_cast<float>(value));
 	}
 
-	void SetNumberInputValue(
-		UBaseTextInputWidget* input,
-		const int64 value,
-		const float minValue,
-		const float maxValue)
+	void SetNumberInputValue(UBaseTextInputWidget* input, const int64 value)
 	{
-		SetNumberInputValue(input, static_cast<float>(value), minValue, maxValue, 0);
+		SetNumberInputValue(input, static_cast<float>(value));
 	}
 
-	bool TryParsePositiveIntInput(
+	bool TryParseIntegerInput(
 		const UBaseTextInputWidget* input,
-		const FString& label,
+		const UTextBlock* labelWidget,
+		const FText& integerErrorFormat,
+		const FText& rangeErrorFormat,
 		int32& outValue,
 		TArray<FString>& outDiagnostics)
 	{
 		const FString text = GetInputText(input);
-		if (!LexTryParseString(outValue, *text) || outValue <= 0)
-		{
-			outDiagnostics.Add(FString::Printf(TEXT("%s은 1 이상의 정수여야 합니다."), *label));
-			return false;
-		}
-		return true;
-	}
-
-	bool TryParsePositiveNumberInput(
-		const UBaseTextInputWidget* input,
-		const FString& label,
-		float& outValue,
-		TArray<FString>& outDiagnostics)
-	{
-		const FString text = GetInputText(input);
-		if (!LexTryParseString(outValue, *text) || outValue <= 0.0f)
-		{
-			outDiagnostics.Add(FString::Printf(TEXT("%s은 0보다 큰 숫자여야 합니다."), *label));
-			return false;
-		}
-		return true;
-	}
-
-	bool TryParseNonNegativeNumberInput(
-		const UBaseTextInputWidget* input,
-		const FString& label,
-		float& outValue,
-		TArray<FString>& outDiagnostics)
-	{
-		const FString text = GetInputText(input);
-		if (!LexTryParseString(outValue, *text) || outValue < 0.0f)
-		{
-			outDiagnostics.Add(FString::Printf(TEXT("%s은 0 이상의 숫자여야 합니다."), *label));
-			return false;
-		}
-		return true;
-	}
-
-	bool TryParseRangedNumberInput(
-		const UBaseTextInputWidget* input,
-		const FString& label,
-		const float minValue,
-		const float maxValue,
-		float& outValue,
-		TArray<FString>& outDiagnostics)
-	{
-		const FString text = GetInputText(input);
+		const FText label = GetInputLabelText(labelWidget);
 		if (!LexTryParseString(outValue, *text))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("%s은 숫자여야 합니다."), *label));
+			AddFormattedDiagnostic(outDiagnostics, integerErrorFormat, label);
 			return false;
 		}
 
-		if (outValue < minValue || outValue > maxValue)
+		if (!IsWithinInputRange(input, outValue))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("%s은 %.0f~%.0f 범위여야 합니다."), *label, minValue, maxValue));
+			AddRangeDiagnostic(outDiagnostics, input, label, rangeErrorFormat);
 			return false;
 		}
 		return true;
 	}
 
-	bool TryParseInt64Input(
+	bool TryParseNumberInput(
 		const UBaseTextInputWidget* input,
-		const FString& label,
+		const UTextBlock* labelWidget,
+		const FText& numberErrorFormat,
+		const FText& rangeErrorFormat,
+		float& outValue,
+		TArray<FString>& outDiagnostics)
+	{
+		const FString text = GetInputText(input);
+		const FText label = GetInputLabelText(labelWidget);
+		if (!LexTryParseString(outValue, *text))
+		{
+			AddFormattedDiagnostic(outDiagnostics, numberErrorFormat, label);
+			return false;
+		}
+
+		if (!IsWithinInputRange(input, outValue))
+		{
+			AddRangeDiagnostic(outDiagnostics, input, label, rangeErrorFormat);
+			return false;
+		}
+		return true;
+	}
+
+	bool TryParseInteger64Input(
+		const UBaseTextInputWidget* input,
+		const UTextBlock* labelWidget,
+		const FText& integerErrorFormat,
 		int64& outValue,
 		TArray<FString>& outDiagnostics)
 	{
 		const FString text = GetInputText(input);
+		const FText label = GetInputLabelText(labelWidget);
 		if (!LexTryParseString(outValue, *text))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("%s은 정수여야 합니다."), *label));
+			AddFormattedDiagnostic(outDiagnostics, integerErrorFormat, label);
 			return false;
 		}
 		return true;
 	}
 
+	FString FormatRunListText(const FText& format, const TCHAR* key, const FText& value)
+	{
+		FFormatNamedArguments args;
+		args.Add(key, value);
+		return FText::Format(format, args).ToString();
+	}
+
+	FText FormatRunListProgressCountLabel(
+		const int32 completedCount,
+		const int32 totalCount,
+		const FText& format)
+	{
+		FFormatNamedArguments args;
+		args.Add(TEXT("Completed"), FText::AsNumber(FMath::Max(0, completedCount)));
+		args.Add(TEXT("Total"), FText::AsNumber(FMath::Max(0, totalCount)));
+		return FText::Format(format, args);
+	}
+
+	struct FRunListTextOptions
+	{
+		FText EmptyRunMetricText;
+		FText SuccessRateFormat;
+		int32 SuccessRateDisplayDecimals = 0;
+		FText TotalDurationFormat;
+		int32 TotalDurationDisplayDecimals = 1;
+		FText ProgressCountFormat;
+		FText ProgressErrorText;
+		FText ProgressStartingText;
+		FText ProgressCanceledText;
+		FText ProgressCompletedText;
+		FText ProgressFailedText;
+		FText ProgressPendingText;
+	};
+
 	// run summary dashboard에서 row에 표시할 문자열 묶음.
 	struct FRunListDashboardLabels
 	{
-		FString SuccessRateLabel = TEXT("-");
-		FString TotalDurationLabel = TEXT("-");
+		FString SuccessRateLabel;
+		FString TotalDurationLabel;
 		int32 EpisodeCount = 0;
 		bool bSummaryLoaded = false;
 	};
@@ -204,9 +241,13 @@ namespace
 	};
 
 	// summary dashboard를 RunList row label 값으로 변환한다.
-	FRunListDashboardLabels MakeRunListDashboardLabels(const FString& runDirectory)
+	FRunListDashboardLabels MakeRunListDashboardLabels(
+		const FString& runDirectory,
+		const FRunListTextOptions& textOptions)
 	{
 		FRunListDashboardLabels labels;
+		labels.SuccessRateLabel = textOptions.EmptyRunMetricText.ToString();
+		labels.TotalDurationLabel = textOptions.EmptyRunMetricText.ToString();
 
 		FProjectRunResultDashboardData dashboardData;
 		if (!UPlatformUiSubsystem::LoadProjectRunDashboard(
@@ -220,24 +261,23 @@ namespace
 		if (dashboardData.EpisodeCount > 0)
 		{
 			labels.EpisodeCount = dashboardData.EpisodeCount;
-			labels.SuccessRateLabel = FString::Printf(
-				TEXT("%.0f%%"),
-				100.0 * static_cast<double>(dashboardData.SuccessCount) / dashboardData.EpisodeCount);
+			labels.SuccessRateLabel = FormatRunListText(
+				textOptions.SuccessRateFormat,
+				TEXT("Percent"),
+				FormatNumberForDisplay(
+					100.0 * static_cast<double>(dashboardData.SuccessCount) / dashboardData.EpisodeCount,
+					textOptions.SuccessRateDisplayDecimals));
 		}
-		labels.TotalDurationLabel = FString::Printf(TEXT("%.1f s"), dashboardData.TotalDurationSeconds);
+		labels.TotalDurationLabel = FormatRunListText(
+			textOptions.TotalDurationFormat,
+			TEXT("Seconds"),
+			FormatNumberForDisplay(dashboardData.TotalDurationSeconds, textOptions.TotalDurationDisplayDecimals));
 		return labels;
 	}
 
-	FText FormatRunListProgressCountLabel(const int32 completedCount, const int32 totalCount)
-	{
-		return FText::FromString(FString::Printf(
-			TEXT("%d/%d"),
-			FMath::Max(0, completedCount),
-			FMath::Max(0, totalCount)));
-	}
-
 	FRunListProgressPresentation MakeRunListProgressPresentation(
-		const FPlatformProjectRunProgressSnapshot& progressSnapshot)
+		const FPlatformProjectRunProgressSnapshot& progressSnapshot,
+		const FRunListTextOptions& textOptions)
 	{
 		FRunListProgressPresentation presentation;
 		presentation.CompletedCount = FMath::Max(0, progressSnapshot.CompletedCount);
@@ -247,31 +287,32 @@ namespace
 		switch (progressSnapshot.ProgressKind)
 		{
 		case EPlatformProjectRunProgressKind::Error:
-			presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusError", "오류");
+			presentation.Label = textOptions.ProgressErrorText;
 			presentation.State = EProjectExperimentRunRowProgressState::Error;
 			return presentation;
 		case EPlatformProjectRunProgressKind::Starting:
-			presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusStarting", "시작");
+			presentation.Label = textOptions.ProgressStartingText;
 			presentation.Percent = 0.0f;
 			presentation.State = EProjectExperimentRunRowProgressState::Loading;
 			return presentation;
 		case EPlatformProjectRunProgressKind::Running:
 			presentation.Label = FormatRunListProgressCountLabel(
 				presentation.CompletedCount,
-				presentation.TotalCount);
+				presentation.TotalCount,
+				textOptions.ProgressCountFormat);
 			presentation.State = EProjectExperimentRunRowProgressState::Loading;
 			return presentation;
 		case EPlatformProjectRunProgressKind::Canceled:
-			presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusCanceled", "중단");
+			presentation.Label = textOptions.ProgressCanceledText;
 			presentation.State = EProjectExperimentRunRowProgressState::Warning;
 			return presentation;
 		case EPlatformProjectRunProgressKind::Completed:
-			presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusCompletedFallback", "완료");
+			presentation.Label = textOptions.ProgressCompletedText;
 			presentation.Percent = 100.0f;
 			presentation.State = EProjectExperimentRunRowProgressState::Success;
 			return presentation;
 		case EPlatformProjectRunProgressKind::Failed:
-			presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusFailedFallback", "실패");
+			presentation.Label = textOptions.ProgressFailedText;
 			presentation.State = EProjectExperimentRunRowProgressState::Error;
 			return presentation;
 		case EPlatformProjectRunProgressKind::Pending:
@@ -279,7 +320,7 @@ namespace
 			break;
 		}
 
-		presentation.Label = NSLOCTEXT("RunListScreen", "ProgressStatusPending", "대기");
+		presentation.Label = textOptions.ProgressPendingText;
 		presentation.Percent = 0.0f;
 		presentation.State = EProjectExperimentRunRowProgressState::Default;
 		return presentation;
@@ -289,7 +330,8 @@ namespace
 	TArray<FRunListRenderedRowData> BuildRunListRenderedRows(
 		const TArray<UOdiroListItemViewModel*>& runItems,
 		const UExperimentConfigViewModel* configViewModel,
-		const UPlatformUiSubsystem* platformUiSubsystem)
+		const UPlatformUiSubsystem* platformUiSubsystem,
+		const FRunListTextOptions& textOptions)
 	{
 		const int32 configuredEpisodeCount = configViewModel ? FMath::Max(1, configViewModel->GetEpisodeCount()) : 0;
 		TArray<FRunListRenderedRowData> renderedRows;
@@ -305,7 +347,7 @@ namespace
 			FRunListRenderedRowData rowData;
 			rowData.Item = item;
 			const FString runDirectory = item->GetPayloadPath();
-			rowData.DashboardLabels = MakeRunListDashboardLabels(runDirectory);
+			rowData.DashboardLabels = MakeRunListDashboardLabels(runDirectory, textOptions);
 			FPlatformProjectRunProgressSnapshot progressSnapshot = platformUiSubsystem
 				? platformUiSubsystem->BuildProjectRunProgressSnapshot(runDirectory, configuredEpisodeCount)
 				: FPlatformProjectRunProgressSnapshot();
@@ -329,7 +371,9 @@ namespace
 			}
 
 			rowData.RunState = progressSnapshot.RunState;
-			const FRunListProgressPresentation progressPresentation = MakeRunListProgressPresentation(progressSnapshot);
+			const FRunListProgressPresentation progressPresentation = MakeRunListProgressPresentation(
+				progressSnapshot,
+				textOptions);
 			rowData.ProgressCompletedCount = progressPresentation.CompletedCount;
 			rowData.ProgressTotalCount = progressPresentation.TotalCount;
 			rowData.ProgressPercent = progressPresentation.Percent;
@@ -412,35 +456,35 @@ void URunListScreenWidget::RefreshFromViewModels()
 	{
 		if (FixedFpsInput)
 		{
-			SetNumberInputValue(FixedFpsInput.Get(), configViewModel->GetFixedFps(), 1.0f, 1000.0f);
+			SetNumberInputValue(FixedFpsInput.Get(), configViewModel->GetFixedFps());
 		}
 		if (TimeScaleInput)
 		{
-			SetNumberInputValue(TimeScaleInput.Get(), configViewModel->GetTimeScale(), UE_SMALL_NUMBER, 100.0f, 2);
+			SetNumberInputValue(TimeScaleInput.Get(), configViewModel->GetTimeScale());
 		}
 		if (MaxDurationInput)
 		{
-			SetNumberInputValue(MaxDurationInput.Get(), configViewModel->GetMaxDurationSeconds(), 0.0f, 86400.0f, 1);
+			SetNumberInputValue(MaxDurationInput.Get(), configViewModel->GetMaxDurationSeconds());
 		}
 		if (EpisodeCountInput)
 		{
-			SetNumberInputValue(EpisodeCountInput.Get(), configViewModel->GetEpisodeCount(), 1.0f, 100000.0f);
+			SetNumberInputValue(EpisodeCountInput.Get(), configViewModel->GetEpisodeCount());
 		}
 		if (BaseSeedInput)
 		{
-			SetNumberInputValue(BaseSeedInput.Get(), configViewModel->GetBaseSeed(), -1000000000000.0f, 1000000000000.0f);
+			SetNumberInputValue(BaseSeedInput.Get(), configViewModel->GetBaseSeed());
 		}
 		if (TipOverAngleInput)
 		{
-			SetNumberInputValue(TipOverAngleInput.Get(), configViewModel->GetTipOverAngleDegrees(), 10.0f, 120.0f, 0);
+			SetNumberInputValue(TipOverAngleInput.Get(), configViewModel->GetTipOverAngleDegrees());
 		}
 		if (NearMissDistanceInput)
 		{
-			SetNumberInputValue(NearMissDistanceInput.Get(), configViewModel->GetNearMissDistanceMeters(), 0.0f, 1000.0f, 2);
+			SetNumberInputValue(NearMissDistanceInput.Get(), configViewModel->GetNearMissDistanceMeters());
 		}
 		if (GoalAcceptanceRadiusInput)
 		{
-			SetNumberInputValue(GoalAcceptanceRadiusInput.Get(), configViewModel->GetGoalAcceptanceRadiusMeters(), UE_SMALL_NUMBER, 1000.0f, 2);
+			SetNumberInputValue(GoalAcceptanceRadiusInput.Get(), configViewModel->GetGoalAcceptanceRadiusMeters());
 		}
 	}
 
@@ -525,13 +569,14 @@ void URunListScreenWidget::StartRunResultsPolling()
 	}
 
 	world->GetTimerManager().ClearTimer(RunResultsPollingTimerHandle);
+	const float pollingInterval = FMath::Max(RunResultsPollingIntervalSeconds, UE_SMALL_NUMBER);
 	world->GetTimerManager().SetTimer(
 		RunResultsPollingTimerHandle,
 		this,
 		&URunListScreenWidget::HandleRunResultsPollingTick,
-		RunListResultsPollingIntervalSeconds,
+		pollingInterval,
 		true,
-		RunListResultsPollingIntervalSeconds);
+		pollingInterval);
 }
 
 void URunListScreenWidget::StopRunResultsPolling()
@@ -571,14 +616,61 @@ bool URunListScreenWidget::SaveExperimentSettings()
 	float nearMissDistanceMeters = 0.0f;
 	float goalAcceptanceRadiusMeters = 0.0f;
 	const bool bInputsValid =
-		TryParsePositiveIntInput(FixedFpsInput.Get(), TEXT("FPS"), fixedFps, diagnostics)
-		& TryParsePositiveNumberInput(TimeScaleInput.Get(), TEXT("배속"), timeScale, diagnostics)
-		& TryParseNonNegativeNumberInput(MaxDurationInput.Get(), TEXT("제한 시간"), maxDurationSeconds, diagnostics)
-		& TryParsePositiveIntInput(EpisodeCountInput.Get(), TEXT("반복 횟수"), episodeCount, diagnostics)
-		& TryParseInt64Input(BaseSeedInput.Get(), TEXT("랜덤 상수"), baseSeed, diagnostics)
-		& TryParseRangedNumberInput(TipOverAngleInput.Get(), TEXT("전복 각도"), 10.0f, 120.0f, tipOverAngleDegrees, diagnostics)
-		& TryParseNonNegativeNumberInput(NearMissDistanceInput.Get(), TEXT("근접 허용"), nearMissDistanceMeters, diagnostics)
-		& TryParsePositiveNumberInput(GoalAcceptanceRadiusInput.Get(), TEXT("도착 판정 거리"), goalAcceptanceRadiusMeters, diagnostics);
+		TryParseIntegerInput(
+			FixedFpsInput.Get(),
+			FixedFpsLabel.Get(),
+			IntegerValidationErrorFormat,
+			RangeValidationErrorFormat,
+			fixedFps,
+			diagnostics)
+		& TryParseNumberInput(
+			TimeScaleInput.Get(),
+			TimeScaleLabel.Get(),
+			NumberValidationErrorFormat,
+			RangeValidationErrorFormat,
+			timeScale,
+			diagnostics)
+		& TryParseNumberInput(
+			MaxDurationInput.Get(),
+			MaxDurationLabel.Get(),
+			NumberValidationErrorFormat,
+			RangeValidationErrorFormat,
+			maxDurationSeconds,
+			diagnostics)
+		& TryParseIntegerInput(
+			EpisodeCountInput.Get(),
+			EpisodeCountLabel.Get(),
+			IntegerValidationErrorFormat,
+			RangeValidationErrorFormat,
+			episodeCount,
+			diagnostics)
+		& TryParseInteger64Input(
+			BaseSeedInput.Get(),
+			BaseSeedLabel.Get(),
+			IntegerValidationErrorFormat,
+			baseSeed,
+			diagnostics)
+		& TryParseNumberInput(
+			TipOverAngleInput.Get(),
+			TipOverAngleLabel.Get(),
+			NumberValidationErrorFormat,
+			RangeValidationErrorFormat,
+			tipOverAngleDegrees,
+			diagnostics)
+		& TryParseNumberInput(
+			NearMissDistanceInput.Get(),
+			NearMissDistanceLabel.Get(),
+			NumberValidationErrorFormat,
+			RangeValidationErrorFormat,
+			nearMissDistanceMeters,
+			diagnostics)
+		& TryParseNumberInput(
+			GoalAcceptanceRadiusInput.Get(),
+			GoalAcceptanceRadiusLabel.Get(),
+			NumberValidationErrorFormat,
+			RangeValidationErrorFormat,
+			goalAcceptanceRadiusMeters,
+			diagnostics);
 	if (!bInputsValid)
 	{
 		configViewModel->SetDiagnosticsText(FString::Join(diagnostics, TEXT("\n")));
@@ -617,7 +709,21 @@ void URunListScreenWidget::RebuildRunRows(const bool bForceRebuild)
 	const TArray<FRunListRenderedRowData> renderedRows = BuildRunListRenderedRows(
 		workspaceViewModel->GetRunItems(),
 		configViewModel,
-		platformUiSubsystem);
+		platformUiSubsystem,
+		FRunListTextOptions{
+			EmptyRunMetricText,
+			SuccessRateFormat,
+			SuccessRateDisplayDecimals,
+			TotalDurationFormat,
+			TotalDurationDisplayDecimals,
+			ProgressCountFormat,
+			ProgressErrorText,
+			ProgressStartingText,
+			ProgressCanceledText,
+			ProgressCompletedText,
+			ProgressFailedText,
+			ProgressPendingText
+		});
 	const FString newSignature = BuildRunListResultsSignature(renderedRows);
 	if (!bForceRebuild && newSignature == RenderedRunResultsSignature && RunRows.Num() == renderedRows.Num())
 	{

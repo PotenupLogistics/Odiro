@@ -11,6 +11,7 @@ class UBaseTextInputWidget;
 class UExperimentConfigViewModel;
 class UProjectExperimentRunRowWidget;
 class UProjectWorkspaceViewModel;
+class UTextBlock;
 class UVerticalBox;
 
 class URunListScreenWidget;
@@ -115,33 +116,129 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UProjectExperimentRunRowWidget> RunRowWidgetClass;
 
+	// Seconds between run result list refreshes while this screen is visible.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Behavior", meta = (AllowPrivateAccess = "true", ClampMin = "0.1", UIMin = "0.1"))
+	float RunResultsPollingIntervalSeconds = 2.5f;
+
+	// Text used when a run metric has not been loaded.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
+	FText EmptyRunMetricText = NSLOCTEXT("RunListScreen", "EmptyRunMetricText", "-");
+
+	// Format used for run success rate. Tokens: {Percent}.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
+	FText SuccessRateFormat = NSLOCTEXT("RunListScreen", "SuccessRateFormat", "{Percent}%");
+
+	// Decimal places used for run success rate.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true", ClampMin = "0", ClampMax = "6", UIMin = "0", UIMax = "6"))
+	int32 SuccessRateDisplayDecimals = 0;
+
+	// Format used for total run duration. Tokens: {Seconds}.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
+	FText TotalDurationFormat = NSLOCTEXT("RunListScreen", "TotalDurationFormat", "{Seconds} s");
+
+	// Decimal places used for total run duration.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true", ClampMin = "0", ClampMax = "6", UIMin = "0", UIMax = "6"))
+	int32 TotalDurationDisplayDecimals = 1;
+
+	// Format used for running progress count. Tokens: {Completed}, {Total}.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProgressCountFormat = NSLOCTEXT("RunListScreen", "ProgressCountFormat", "{Completed}/{Total}");
+
+	// Progress label for error state.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProgressErrorText = NSLOCTEXT("RunListScreen", "ProgressStatusError", "오류");
+
+	// Progress label for starting state.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProgressStartingText = NSLOCTEXT("RunListScreen", "ProgressStatusStarting", "시작");
+
+	// Progress label for canceled state.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProgressCanceledText = NSLOCTEXT("RunListScreen", "ProgressStatusCanceled", "중단");
+
+	// Progress label for completed state when count text is unavailable.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProgressCompletedText = NSLOCTEXT("RunListScreen", "ProgressStatusCompletedFallback", "완료");
+
+	// Progress label for failed state.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProgressFailedText = NSLOCTEXT("RunListScreen", "ProgressStatusFailedFallback", "실패");
+
+	// Progress label for pending state.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
+	FText ProgressPendingText = NSLOCTEXT("RunListScreen", "ProgressStatusPending", "대기");
+
+	// Validation message for integer fields. Tokens: {Field}.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Validation", meta = (AllowPrivateAccess = "true"))
+	FText IntegerValidationErrorFormat = NSLOCTEXT("RunListScreen", "IntegerValidationErrorFormat", "{Field}은 정수여야 합니다.");
+
+	// Validation message for numeric fields. Tokens: {Field}.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Validation", meta = (AllowPrivateAccess = "true"))
+	FText NumberValidationErrorFormat = NSLOCTEXT("RunListScreen", "NumberValidationErrorFormat", "{Field}은 숫자여야 합니다.");
+
+	// Validation message for values outside the WBP-authored input range. Tokens: {Field}, {Min}, {Max}.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Validation", meta = (AllowPrivateAccess = "true"))
+	FText RangeValidationErrorFormat = NSLOCTEXT("RunListScreen", "RangeValidationErrorFormat", "{Field}은 {Min}~{Max} 범위여야 합니다.");
+
+	// Fixed FPS label.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> FixedFpsLabel;
+
 	// Fixed FPS input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextInputWidget> FixedFpsInput;
+
+	// Runtime time scale label.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TimeScaleLabel;
 
 	// Runtime time scale input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextInputWidget> TimeScaleInput;
 
+	// Runtime max duration seconds label.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> MaxDurationLabel;
+
 	// Runtime max duration seconds input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextInputWidget> MaxDurationInput;
+
+	// Episode count label.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EpisodeCountLabel;
 
 	// Episode count input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextInputWidget> EpisodeCountInput;
 
+	// Base seed label.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> BaseSeedLabel;
+
 	// Base seed input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextInputWidget> BaseSeedInput;
+
+	// Tip-over angle degrees label.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TipOverAngleLabel;
 
 	// Tip-over angle degrees input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextInputWidget> TipOverAngleInput;
 
+	// Near-miss distance label.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> NearMissDistanceLabel;
+
 	// Near-miss distance input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseTextInputWidget> NearMissDistanceInput;
+
+	// Goal acceptance radius label.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> GoalAcceptanceRadiusLabel;
 
 	// Goal acceptance radius input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

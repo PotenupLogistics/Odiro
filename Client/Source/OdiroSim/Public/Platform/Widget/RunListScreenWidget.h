@@ -132,11 +132,11 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true", ClampMin = "0", ClampMax = "6", UIMin = "0", UIMax = "6"))
 	int32 SuccessRateDisplayDecimals = 0;
 
-	// Format used for total run duration. Tokens: {Seconds}.
+	// Format used for total run duration. Tokens: {Minutes}, {Seconds}, {TotalSeconds}.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true"))
-	FText TotalDurationFormat = NSLOCTEXT("RunListScreen", "TotalDurationFormat", "{Seconds} s");
+	FText TotalDurationFormat = NSLOCTEXT("RunListScreen", "TotalDurationFormat", "{Minutes}:{Seconds}");
 
-	// Decimal places used for total run duration.
+	// Decimal places used by the legacy {TotalSeconds} duration token.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunList|Text", meta = (AllowPrivateAccess = "true", ClampMin = "0", ClampMax = "6", UIMin = "0", UIMax = "6"))
 	int32 TotalDurationDisplayDecimals = 1;
 

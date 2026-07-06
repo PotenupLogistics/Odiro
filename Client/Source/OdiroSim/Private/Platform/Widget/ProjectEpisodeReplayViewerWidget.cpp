@@ -447,6 +447,12 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 		FullscreenRayToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked);
 	}
 
+	if (FullscreenLidarDistanceToggleButton)
+	{
+		FullscreenLidarDistanceToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenLidarDistanceToggleClicked);
+		FullscreenLidarDistanceToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenLidarDistanceToggleClicked);
+	}
+
 	if (ExitFullscreenButton)
 	{
 		ExitFullscreenButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleExitFullscreenClicked);
@@ -581,6 +587,12 @@ void UProjectEpisodeReplayViewerWidget::RefreshReplayControlBindings()
 		FullscreenRayToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked);
 	}
 
+	if (FullscreenLidarDistanceToggleButton)
+	{
+		FullscreenLidarDistanceToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenLidarDistanceToggleClicked);
+		FullscreenLidarDistanceToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenLidarDistanceToggleClicked);
+	}
+
 	if (ExitFullscreenButton)
 	{
 		ExitFullscreenButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleExitFullscreenClicked);
@@ -694,6 +706,11 @@ void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 	if (FullscreenRayToggleButton)
 	{
 		FullscreenRayToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked);
+	}
+
+	if (FullscreenLidarDistanceToggleButton)
+	{
+		FullscreenLidarDistanceToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenLidarDistanceToggleClicked);
 	}
 
 	if (ExitFullscreenButton)
@@ -1225,7 +1242,7 @@ void UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked(
 	RequestReplayInputFocus();
 }
 
-// Toggles replay LiDAR ray visibility in fullscreen mode.
+// Toggles replay LiDAR sensor ray visibility in fullscreen mode.
 void UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked()
 {
 	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
@@ -1247,6 +1264,31 @@ void UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked()
 	SetDiagnosticsText(bNewVisible
 		? TEXT("Replay LiDAR rays visible.")
 		: TEXT("Replay LiDAR rays hidden."));
+	RequestReplayInputFocus();
+}
+
+// Toggles replay LiDAR distance overlay visibility in fullscreen mode.
+void UProjectEpisodeReplayViewerWidget::HandleFullscreenLidarDistanceToggleClicked()
+{
+	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioReplaySubsystem is unavailable."));
+		return;
+	}
+
+	if (!ReplaySubsystem->HasReplayLidarRays())
+	{
+		SetDiagnosticsText(TEXT("Replay LiDAR distance overlays are unavailable."));
+		RequestReplayInputFocus();
+		return;
+	}
+
+	const bool bNewVisible = !ReplaySubsystem->IsReplayLidarDistanceVisible();
+	ReplaySubsystem->SetReplayLidarDistanceVisible(bNewVisible);
+	SetDiagnosticsText(bNewVisible
+		? TEXT("Replay LiDAR distance overlays visible.")
+		: TEXT("Replay LiDAR distance overlays hidden."));
 	RequestReplayInputFocus();
 }
 
@@ -1411,6 +1453,12 @@ void UProjectEpisodeReplayViewerWidget::ResolveFullscreenLayerToggleWidgets()
 	{
 		FullscreenRayToggleButton =
 			Cast<UButton>(GetWidgetFromName(TEXT("FullscreenRayToggleButton")));
+	}
+
+	if (!FullscreenLidarDistanceToggleButton)
+	{
+		FullscreenLidarDistanceToggleButton =
+			Cast<UButton>(GetWidgetFromName(TEXT("FullscreenLidarDistanceToggleButton")));
 	}
 
 	if (!ExitFullscreenButton)
@@ -1916,6 +1964,11 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 	if (FullscreenRayToggleButton)
 	{
 		FullscreenRayToggleButton->SetIsEnabled(
+			ReplaySubsystem && ReplaySubsystem->HasReplayLidarRays());
+	}
+	if (FullscreenLidarDistanceToggleButton)
+	{
+		FullscreenLidarDistanceToggleButton->SetIsEnabled(
 			ReplaySubsystem && ReplaySubsystem->HasReplayLidarRays());
 	}
 }

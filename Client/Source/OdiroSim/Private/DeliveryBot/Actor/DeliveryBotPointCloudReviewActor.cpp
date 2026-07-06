@@ -316,6 +316,25 @@ void ADeliveryBotPointCloudReviewActor::ConfigureReviewVisualStyle(
 	ApplyReviewRenderMode();
 }
 
+// Offsets only the mesh fallback so overlapped review layers do not fight in the depth buffer.
+void ADeliveryBotPointCloudReviewActor::SetReviewTopDownSphereZOffset(const float InZOffsetCm)
+{
+	TopDownSphereZOffsetCm = InZOffsetCm;
+
+	if (!LoadedPoints.IsEmpty())
+	{
+		BuildTopDownSphereInstances();
+		ApplyReviewRenderMode();
+	}
+}
+
+// Controls whether plugin sprites are rendered in addition to the mesh fallback.
+void ADeliveryBotPointCloudReviewActor::SetReviewPluginRendererEnabled(const bool bEnabled)
+{
+	bReviewPluginRendererEnabled = bEnabled;
+	ApplyReviewRenderMode();
+}
+
 FString ADeliveryBotPointCloudReviewActor::BuildScenarioCaptureDirectory() const
 {
 	const FString scenarioFolderName = FString::Printf(
@@ -851,10 +870,11 @@ void ADeliveryBotPointCloudReviewActor::ApplyReviewRenderMode()
 {
 	const bool bVisible = IsPointCloudVisible();
 	const bool bShowPlugin3D =
-		bVisible && ReviewRenderMode == EDeliveryBotPointCloudReviewRenderMode::Plugin3D;
+		bReviewPluginRendererEnabled
+		&& bVisible
+		&& ReviewRenderMode == EDeliveryBotPointCloudReviewRenderMode::Plugin3D;
 
-	// SceneCapture can fail to present the LidarPointCloud plugin path in perspective replay views.
-	// Keep the mesh fallback visible in every replay mode so the loaded cloud never disappears.
+	// Replay SceneCapture does not reliably present the plugin renderer, so keep a mesh fallback in 3D views.
 	const bool bShowTopDownSpheres =
 		bVisible && (
 			ReviewRenderMode == EDeliveryBotPointCloudReviewRenderMode::TopDownProjection

@@ -208,13 +208,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
 	bool IsReplayPointCloudVisible() const { return bReplayPointCloudVisible; }
 
-	// Shows or hides the replay LiDAR ray actor in the replay capture.
+	// Shows or hides replay LiDAR sensor rays in the replay capture.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Replay")
 	void SetReplayLidarRaysVisible(bool bVisible);
 
-	// Returns whether replay LiDAR rays are visible in the replay capture.
+	// Returns whether replay LiDAR sensor rays are visible in the replay capture.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
 	bool IsReplayLidarRaysVisible() const { return bReplayLidarRaysVisible; }
+
+	// Shows or hides replay LiDAR distance and range overlays in the replay capture.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Replay")
+	void SetReplayLidarDistanceVisible(bool bVisible);
+
+	// Returns whether replay LiDAR distance and range overlays are visible in the replay capture.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	bool IsReplayLidarDistanceVisible() const { return bReplayLidarDistanceVisible; }
 
 	// Returns whether the current replay has a loaded point cloud actor.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
@@ -441,6 +449,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ADeliveryBotPointCloudReviewActor> ReplayPointCloudFrameHighlightActor;
 
+	// Hidden frame highlight actor used as a swap buffer and one-frame cache.
+	UPROPERTY(Transient)
+	TObjectPtr<ADeliveryBotPointCloudReviewActor> ReplayPointCloudFrameHighlightBackBufferActor;
+
 	// Replay-only actor that renders currently selected LiDAR ray frame lines.
 	UPROPERTY(Transient)
 	TObjectPtr<ADeliveryBotLidarRayReviewActor> ReplayLidarRayActor;
@@ -484,9 +496,13 @@ private:
 	UPROPERTY(Transient)
 	bool bReplayPointCloudVisible = true;
 
-	// Whether the replay LiDAR ray actor is included in the replay capture.
+	// Whether replay LiDAR sensor ray beams are included in the replay capture.
 	UPROPERTY(Transient)
 	bool bReplayLidarRaysVisible = false;
+
+	// Whether replay LiDAR distance and range overlays are included in the replay capture.
+	UPROPERTY(Transient)
+	bool bReplayLidarDistanceVisible = false;
 
 	// True when camera input is allowed while replay playback is paused.
 	bool bAllowCameraInputWhilePaused = true;
@@ -502,6 +518,9 @@ private:
 
 	// Point cloud frame index currently loaded into the highlight overlay actor.
 	int32 CurrentPointCloudFrameHighlightIndex = INDEX_NONE;
+
+	// Point cloud frame index currently retained in the hidden highlight swap buffer.
+	int32 BackBufferPointCloudFrameHighlightIndex = INDEX_NONE;
 
 	// Robot speed currently represented in UI and diagnostics.
 	double CurrentRobotSpeedKmh = 0.0;

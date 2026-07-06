@@ -164,9 +164,13 @@ private:
 	UFUNCTION()
 	void HandleFullscreenPointCloudToggleClicked();
 
-	// Toggles replay LiDAR ray visibility in fullscreen mode.
+	// Toggles replay LiDAR sensor ray visibility in fullscreen mode.
 	UFUNCTION()
 	void HandleFullscreenRayToggleClicked();
+
+	// Toggles replay LiDAR distance overlay visibility in fullscreen mode.
+	UFUNCTION()
+	void HandleFullscreenLidarDistanceToggleClicked();
 
 	// Seeks replay playback to the selected interest event.
 	void HandleReplayInterestEventSelected(
@@ -407,9 +411,13 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> FullscreenPointCloudToggleButton;
 
-	// Fullscreen button that toggles replay LiDAR ray visibility.
+	// Fullscreen button that toggles replay LiDAR sensor ray visibility.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> FullscreenRayToggleButton;
+
+	// Fullscreen button that toggles replay LiDAR distance overlays.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FullscreenLidarDistanceToggleButton;
 
 	// Button that hides the fullscreen replay overlay.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

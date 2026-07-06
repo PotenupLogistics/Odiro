@@ -525,6 +525,7 @@ void ADeliveryBotLidarRayReviewActor::ApplyLidarRayFrame(
 		{
 			FDeliveryBotLidarRayBeamRendering::MarkBeamRenderStateDirty(Component);
 		});
+	ApplyLidarLayerVisibility();
 }
 
 void ADeliveryBotLidarRayReviewActor::ClearLidarRays()
@@ -540,14 +541,35 @@ void ADeliveryBotLidarRayReviewActor::ClearLidarRays()
 void ADeliveryBotLidarRayReviewActor::SetLidarRaysVisible(const bool bVisible)
 {
 	bLidarRaysVisible = bVisible;
-	SetActorHiddenInGame(!bVisible);
-	ForEachLidarBeamComponent(
-		[bVisible](UInstancedStaticMeshComponent* Component)
-		{
-			FDeliveryBotLidarRayBeamRendering::SetBeamComponentVisible(Component, bVisible);
-		});
+	bLidarSensorRaysVisible = bVisible;
+	bLidarDistanceOverlayVisible = bVisible;
+	ApplyLidarLayerVisibility();
 
 	if (!bVisible)
+	{
+		ClearLidarRays();
+	}
+}
+
+void ADeliveryBotLidarRayReviewActor::SetLidarSensorRaysVisible(const bool bVisible)
+{
+	bLidarSensorRaysVisible = bVisible;
+	bLidarRaysVisible = bLidarSensorRaysVisible || bLidarDistanceOverlayVisible;
+	ApplyLidarLayerVisibility();
+
+	if (!bLidarRaysVisible)
+	{
+		ClearLidarRays();
+	}
+}
+
+void ADeliveryBotLidarRayReviewActor::SetLidarDistanceOverlayVisible(const bool bVisible)
+{
+	bLidarDistanceOverlayVisible = bVisible;
+	bLidarRaysVisible = bLidarSensorRaysVisible || bLidarDistanceOverlayVisible;
+	ApplyLidarLayerVisibility();
+
+	if (!bLidarRaysVisible)
 	{
 		ClearLidarRays();
 	}
@@ -556,10 +578,22 @@ void ADeliveryBotLidarRayReviewActor::SetLidarRaysVisible(const bool bVisible)
 void ADeliveryBotLidarRayReviewActor::ForEachLidarBeamComponent(
 	TFunctionRef<void(UInstancedStaticMeshComponent*)> Operation) const
 {
+	ForEachSensorRayComponent(Operation);
+	ForEachDistanceOverlayComponent(Operation);
+}
+
+void ADeliveryBotLidarRayReviewActor::ForEachSensorRayComponent(
+	TFunctionRef<void(UInstancedStaticMeshComponent*)> Operation) const
+{
 	Operation(LidarPrimaryRayInstances.Get());
 	Operation(LidarSecondaryRayInstances.Get());
 	Operation(LidarThreeDRayInstances.Get());
 	Operation(LidarThreeDFullRayInstances.Get());
+}
+
+void ADeliveryBotLidarRayReviewActor::ForEachDistanceOverlayComponent(
+	TFunctionRef<void(UInstancedStaticMeshComponent*)> Operation) const
+{
 	Operation(LidarRangeRingInstances.Get());
 	Operation(LidarSlowRangeRingInstances.Get());
 	Operation(LidarStopRangeRingInstances.Get());
@@ -568,6 +602,27 @@ void ADeliveryBotLidarRayReviewActor::ForEachLidarBeamComponent(
 	Operation(LidarStopRangeRayInstances.Get());
 	Operation(LidarObstacleWarningRangeRayInstances.Get());
 	Operation(LidarFrontBoundaryInstances.Get());
+}
+
+void ADeliveryBotLidarRayReviewActor::ApplyLidarLayerVisibility()
+{
+	const bool bAnyVisible = bLidarSensorRaysVisible || bLidarDistanceOverlayVisible;
+	bLidarRaysVisible = bAnyVisible;
+	SetActorHiddenInGame(!bAnyVisible);
+
+	const bool bSensorRaysVisible = bLidarSensorRaysVisible;
+	ForEachSensorRayComponent(
+		[bSensorRaysVisible](UInstancedStaticMeshComponent* Component)
+		{
+			FDeliveryBotLidarRayBeamRendering::SetBeamComponentVisible(Component, bSensorRaysVisible);
+		});
+
+	const bool bDistanceOverlayVisible = bLidarDistanceOverlayVisible;
+	ForEachDistanceOverlayComponent(
+		[bDistanceOverlayVisible](UInstancedStaticMeshComponent* Component)
+		{
+			FDeliveryBotLidarRayBeamRendering::SetBeamComponentVisible(Component, bDistanceOverlayVisible);
+		});
 }
 
 bool ADeliveryBotLidarRayReviewActor::AddWorldBeam(

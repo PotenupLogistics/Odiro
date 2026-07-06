@@ -31,13 +31,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Replay|LiDAR")
 	void ClearLidarRays();
 
-	// Shows or hides replay LiDAR range beams and clears stale instances when hidden.
+	// Shows or hides all replay LiDAR beams and clears stale instances when hidden.
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Replay|LiDAR")
 	void SetLidarRaysVisible(bool bVisible);
 
-	// Returns whether replay LiDAR range beams are currently visible.
+	// Returns whether any replay LiDAR beams are currently visible.
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Replay|LiDAR")
 	bool IsLidarRaysVisible() const { return bLidarRaysVisible; }
+
+	// Shows or hides replay LiDAR sensor ray beams without affecting distance overlays.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Replay|LiDAR")
+	void SetLidarSensorRaysVisible(bool bVisible);
+
+	// Returns whether replay LiDAR sensor ray beams are currently visible.
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Replay|LiDAR")
+	bool AreLidarSensorRaysVisible() const { return bLidarSensorRaysVisible; }
+
+	// Shows or hides replay LiDAR distance and range overlays without affecting sensor rays.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Replay|LiDAR")
+	void SetLidarDistanceOverlayVisible(bool bVisible);
+
+	// Returns whether replay LiDAR distance and range overlays are currently visible.
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Replay|LiDAR")
+	bool IsLidarDistanceOverlayVisible() const { return bLidarDistanceOverlayVisible; }
 
 	// Returns the number of preview-style beam instances rendered for the current frame.
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Replay|LiDAR")
@@ -46,6 +62,15 @@ public:
 private:
 	// Applies one operation to every preview-style beam component owned by this actor.
 	void ForEachLidarBeamComponent(TFunctionRef<void(UInstancedStaticMeshComponent*)> Operation) const;
+
+	// Applies one operation to every actual LiDAR sensor ray component.
+	void ForEachSensorRayComponent(TFunctionRef<void(UInstancedStaticMeshComponent*)> Operation) const;
+
+	// Applies one operation to every LiDAR distance and range overlay component.
+	void ForEachDistanceOverlayComponent(TFunctionRef<void(UInstancedStaticMeshComponent*)> Operation) const;
+
+	// Synchronizes actor and component visibility with the split replay LiDAR layer flags.
+	void ApplyLidarLayerVisibility();
 
 	// Draws one world-space beam and updates the rendered counter when it succeeds.
 	bool AddWorldBeam(
@@ -153,9 +178,17 @@ private:
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Replay|LiDAR", meta = (ClampMin = "0.001"))
 	double RangeRayBeamThicknessScale = 0.54;
 
-	// Whether replay LiDAR range beams are visible when a frame is applied.
+	// Whether any replay LiDAR beams are visible when a frame is applied.
 	UPROPERTY(Transient)
 	bool bLidarRaysVisible = false;
+
+	// Whether actual replay LiDAR sensor ray beams are visible when a frame is applied.
+	UPROPERTY(Transient)
+	bool bLidarSensorRaysVisible = false;
+
+	// Whether replay LiDAR distance and range overlay beams are visible when a frame is applied.
+	UPROPERTY(Transient)
+	bool bLidarDistanceOverlayVisible = false;
 
 	// Number of preview-style beam instances currently stored in all components.
 	int32 RenderedRayCount = 0;

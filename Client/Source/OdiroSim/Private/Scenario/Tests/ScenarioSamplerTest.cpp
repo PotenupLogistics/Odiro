@@ -225,6 +225,65 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSamplerZeroWidthSideLanesTest,
+	"OdiroSim.Scenario.Sampler.ZeroWidthSideLanes",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSamplerZeroWidthSideLanesTest::RunTest(const FString& Parameters)
+{
+	FScenarioDocument ScenarioDocument = MakeSamplerTestScenario();
+	ScenarioDocument.Corridor.BuildingSide[0].WidthMeters = MakeSamplerTestFixedNumber(0.0);
+	ScenarioDocument.Corridor.CurbSide[0].WidthMeters = MakeSamplerTestFixedNumber(0.0);
+	ScenarioDocument.Obstacles.Placements.Reset();
+
+	const FScenarioSamplerResult Result =
+		FScenarioSampler::GenerateSample(ScenarioDocument, MakeSamplerTestRequest());
+
+	TestTrue(TEXT("sampler succeeds"), Result.bSuccess);
+	TestTrue(TEXT("building-side zero width param captured"), Result.Document.Scenario.Params.Contains(TEXT("corridor.building_side[0].width_m")));
+	TestTrue(TEXT("curb-side zero width param captured"), Result.Document.Scenario.Params.Contains(TEXT("corridor.curb_side[0].width_m")));
+	TestEqual(TEXT("layout count"), Result.Document.Scenario.Semantic.Layout.Num(), 1);
+	if (Result.Document.Scenario.Semantic.Layout.IsEmpty())
+	{
+		return false;
+	}
+
+	const TArray<FScenarioSampleLayoutLane>& Lanes = Result.Document.Scenario.Semantic.Layout[0].Lanes;
+	TestEqual(TEXT("only walkway lane remains"), Lanes.Num(), 1);
+	TestTrue(TEXT("walkway lane remains"), Lanes.ContainsByPredicate(
+		[](const FScenarioSampleLayoutLane& Lane)
+		{
+			return Lane.LaneId == TEXT("walkway");
+		}));
+	TestFalse(TEXT("building expansion lane omitted"), Lanes.ContainsByPredicate(
+		[](const FScenarioSampleLayoutLane& Lane)
+		{
+			return Lane.LaneId == TEXT("building_walkway_extension");
+		}));
+	TestFalse(TEXT("building edge lane omitted"), Lanes.ContainsByPredicate(
+		[](const FScenarioSampleLayoutLane& Lane)
+		{
+			return Lane.LaneId == TEXT("building_edge");
+		}));
+	TestFalse(TEXT("curb edge lane omitted"), Lanes.ContainsByPredicate(
+		[](const FScenarioSampleLayoutLane& Lane)
+		{
+			return Lane.LaneId == TEXT("curb_edge");
+		}));
+	TestFalse(TEXT("road lane omitted"), Lanes.ContainsByPredicate(
+		[](const FScenarioSampleLayoutLane& Lane)
+		{
+			return Lane.LaneId == TEXT("road_2lane");
+		}));
+
+	const FScenarioCompileResult CompileResult =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Result.Document);
+	TestTrue(TEXT("sample adapts to world spec"), CompileResult.bSuccess);
+	TestEqual(TEXT("generated side ground regions omitted"), CompileResult.WorldSpec.GroundRegions.Num(), 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FScenarioSamplerSegmentReplacementSurfaceTypeTest,
 	"OdiroSim.Scenario.Sampler.SegmentReplacementSurfaceType",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

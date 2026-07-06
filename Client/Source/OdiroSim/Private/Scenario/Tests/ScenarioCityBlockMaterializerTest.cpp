@@ -1036,7 +1036,15 @@ bool FScenarioCityBlockMaterializerBuildingCollisionProxyTest::RunTest(const FSt
 			TestEqual(
 				TEXT("building proxy participates in grid queries"),
 				static_cast<int32>(boxComponent->GetCollisionEnabled()),
-				static_cast<int32>(ECollisionEnabled::QueryAndPhysics));
+				static_cast<int32>(ECollisionEnabled::QueryOnly));
+			TestEqual(
+				TEXT("building proxy ignores LiDAR visibility"),
+				static_cast<int32>(boxComponent->GetCollisionResponseToChannel(ECC_Visibility)),
+				static_cast<int32>(ECR_Ignore));
+			TestEqual(
+				TEXT("building proxy blocks grid trace"),
+				static_cast<int32>(boxComponent->GetCollisionResponseToChannel(ECC_GameTraceChannel8)),
+				static_cast<int32>(ECR_Block));
 			const FVector proxyExtent = boxComponent->GetScaledBoxExtent();
 			TestEqual(
 				TEXT("building proxy length comes from authored bounds"),
@@ -1060,7 +1068,7 @@ bool FScenarioCityBlockMaterializerBuildingCollisionProxyTest::RunTest(const FSt
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FScenarioCityBlockMaterializerBuildingStaticMeshCollisionTest,
-	"OdiroSim.Scenario.CityBlockMaterializer.BuildingFrontageUsesStaticMeshCollision",
+	"OdiroSim.Scenario.CityBlockMaterializer.BuildingFrontageUsesStaticMeshForLidar",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FScenarioCityBlockMaterializerBuildingStaticMeshCollisionTest::RunTest(const FString& Parameters)
@@ -1157,7 +1165,7 @@ bool FScenarioCityBlockMaterializerBuildingStaticMeshCollisionTest::RunTest(cons
 	}
 
 	TestEqual(TEXT("building actors spawn"), result.SpawnedActorCount, 3);
-	TestEqual(TEXT("building static mesh collision sources are counted"), result.SpawnedBuildingCollisionProxyCount, 3);
+	TestEqual(TEXT("building navigation collision proxies spawn"), result.SpawnedBuildingCollisionProxyCount, 3);
 	TestEqual(TEXT("three building actors remain owned by the materializer"), spawnedActors.Num(), 3);
 
 	int32 blockingStaticMeshCount = 0;
@@ -1184,17 +1192,17 @@ bool FScenarioCityBlockMaterializerBuildingStaticMeshCollisionTest::RunTest(cons
 				staticMeshComponent->GetCollisionProfileName(),
 				FName(TEXT("Blocked")));
 			TestEqual(
-				TEXT("building static mesh participates in grid queries"),
+				TEXT("building static mesh participates in LiDAR queries only"),
 				static_cast<int32>(staticMeshComponent->GetCollisionEnabled()),
-				static_cast<int32>(ECollisionEnabled::QueryAndPhysics));
+				static_cast<int32>(ECollisionEnabled::QueryOnly));
 			TestEqual(
 				TEXT("building static mesh blocks LiDAR visibility"),
 				static_cast<int32>(staticMeshComponent->GetCollisionResponseToChannel(ECC_Visibility)),
 				static_cast<int32>(ECR_Block));
 			TestEqual(
-				TEXT("building static mesh blocks grid trace"),
+				TEXT("building static mesh ignores grid trace"),
 				static_cast<int32>(staticMeshComponent->GetCollisionResponseToChannel(ECC_GameTraceChannel8)),
-				static_cast<int32>(ECR_Block));
+				static_cast<int32>(ECR_Ignore));
 			TestTrue(TEXT("building static mesh remains visible"), staticMeshComponent->IsVisible());
 		}
 
@@ -1210,8 +1218,8 @@ bool FScenarioCityBlockMaterializerBuildingStaticMeshCollisionTest::RunTest(cons
 		}
 	}
 
-	TestEqual(TEXT("one static mesh collision source is preserved for each building actor"), blockingStaticMeshCount, 3);
-	TestEqual(TEXT("fallback bounds proxies are skipped when static mesh collision is present"), fallbackProxyCount, 0);
+	TestEqual(TEXT("one static mesh LiDAR source is preserved for each building actor"), blockingStaticMeshCount, 3);
+	TestEqual(TEXT("fallback bounds proxies are kept for grid navigation"), fallbackProxyCount, 3);
 
 	spawnedActors.Reset();
 	return true;

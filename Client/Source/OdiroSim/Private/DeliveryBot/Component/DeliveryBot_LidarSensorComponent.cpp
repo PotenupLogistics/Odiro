@@ -159,6 +159,7 @@ bool UDeliveryBot_LidarSensorComponent::TraceLidarRay(
 
 	FCollisionQueryParams queryParams;
 	queryParams.AddIgnoredActor(owner);
+	queryParams.bTraceComplex = true;
 
 	TArray<FHitResult> hitResults;
 	const bool bTraceHit = world->LineTraceMultiByChannel(

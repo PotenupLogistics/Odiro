@@ -19,6 +19,8 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "EngineUtils.h"
+#include "GameFramework/PlayerStart.h"
+#include "GameFramework/PawnMovementComponent.h"
 #include "InputCoreTypes.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -971,6 +973,79 @@ bool AScenarioEditorController::LoadProjectScenarioJsonFile(
 		ScheduleScenarioPreviewCaptureIfMissing(outResolvedJsonFilePath);
 	}
 	return bLoaded;
+}
+
+// Defers PlayerStart reset so load-time viewport fit can finish first.
+void AScenarioEditorController::RequestMoveEditorViewToPlayerStart()
+{
+	UWorld* world = GetWorld();
+	if (!IsValid(world))
+	{
+		MoveEditorViewToPlayerStart();
+		return;
+	}
+
+	FTimerDelegate resetDelegate;
+	resetDelegate.BindUObject(this, &AScenarioEditorController::HandleMoveEditorViewToPlayerStartTimer);
+	world->GetTimerManager().SetTimerForNextTick(resetDelegate);
+}
+
+// Bridges next-tick timer execution to the PlayerStart reset command.
+void AScenarioEditorController::HandleMoveEditorViewToPlayerStartTimer()
+{
+	MoveEditorViewToPlayerStart();
+}
+
+// Applies the ScenarioEditorMap PlayerStart transform to the active editor camera pawn.
+bool AScenarioEditorController::MoveEditorViewToPlayerStart()
+{
+	UWorld* world = GetWorld();
+	AScenarioEditorPawn* editorPawn = GetEditorPawn();
+	if (!IsValid(world) || !IsValid(editorPawn))
+	{
+		return false;
+	}
+
+	APlayerStart* playerStart = nullptr;
+	for (TActorIterator<APlayerStart> actorIt(world); actorIt; ++actorIt)
+	{
+		if (IsValid(*actorIt))
+		{
+			playerStart = *actorIt;
+			break;
+		}
+	}
+
+	if (!IsValid(playerStart))
+	{
+		UE_LOG(
+			LogScenarioEditorController,
+			Warning,
+			TEXT("Scenario editor PlayerStart view reset skipped because no PlayerStart exists in the map."));
+		return false;
+	}
+
+	if (editorPawn->IsTopDownViewActive())
+	{
+		editorPawn->EnterPerspectiveView();
+	}
+	EditorViewMode = EScenarioEditorViewMode::Perspective;
+
+	const FTransform playerStartTransform = playerStart->GetActorTransform();
+	const FRotator playerStartRotation = playerStartTransform.GetRotation().Rotator();
+	editorPawn->SetActorLocationAndRotation(
+		playerStartTransform.GetLocation(),
+		playerStartRotation,
+		false,
+		nullptr,
+		ETeleportType::TeleportPhysics);
+	SetControlRotation(playerStartRotation);
+
+	if (UPawnMovementComponent* movementComponent = editorPawn->GetMovementComponent())
+	{
+		movementComponent->StopMovementImmediately();
+	}
+	return true;
 }
 
 void AScenarioEditorController::NewScenarioDraft()

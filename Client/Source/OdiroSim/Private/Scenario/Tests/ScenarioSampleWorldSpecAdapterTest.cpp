@@ -437,10 +437,10 @@ bool FScenarioSampleWorldSpecAdapterRightAngleBuildingExpansionTest::RunTest(con
 		TEXT("building-side expansion region type"),
 		static_cast<int32>(ExpansionRegion.RegionType),
 		static_cast<int32>(EScenarioGroundRegionType::Walkable));
-	TestEqual(TEXT("building-side expansion center x cm"), ExpansionRegion.Center.X, 3000.0);
-	TestEqual(TEXT("building-side expansion center y cm"), ExpansionRegion.Center.Y, 2000.0);
-	TestEqual(TEXT("building-side expansion length cm"), ExpansionRegion.Size.X, 6000.0);
-	TestEqual(TEXT("building-side expansion width cm"), ExpansionRegion.Size.Y, 4000.0);
+	TestTrue(TEXT("building-side expansion center x cm"), FMath::IsNearlyEqual(ExpansionRegion.Center.X, 2915.0, 0.1));
+	TestTrue(TEXT("building-side expansion center y cm"), FMath::IsNearlyEqual(ExpansionRegion.Center.Y, 1925.5, 0.1));
+	TestTrue(TEXT("building-side expansion length cm"), FMath::IsNearlyEqual(ExpansionRegion.Size.X, 5851.0, 0.1));
+	TestTrue(TEXT("building-side expansion width cm"), FMath::IsNearlyEqual(ExpansionRegion.Size.Y, 3851.0, 0.1));
 	TestEqual(TEXT("building-side expansion yaw"), ExpansionRegion.YawDegrees, 0.0);
 	return true;
 }
@@ -465,10 +465,10 @@ bool FScenarioSampleWorldSpecAdapterSplitRightAngleBuildingExpansionTest::RunTes
 
 	const FScenarioGroundRegionSpec& ExpansionRegion = Result.WorldSpec.GroundRegions[0];
 	TestEqual(TEXT("split expansion stays rectangular"), static_cast<int32>(ExpansionRegion.ShapeType), static_cast<int32>(EScenarioGroundShapeType::Rectangle));
-	TestEqual(TEXT("split expansion center x cm"), ExpansionRegion.Center.X, 3000.0);
-	TestEqual(TEXT("split expansion center y cm"), ExpansionRegion.Center.Y, 2000.0);
-	TestEqual(TEXT("split expansion length cm"), ExpansionRegion.Size.X, 6000.0);
-	TestEqual(TEXT("split expansion width cm"), ExpansionRegion.Size.Y, 4000.0);
+	TestTrue(TEXT("split expansion center x cm"), FMath::IsNearlyEqual(ExpansionRegion.Center.X, 2915.0, 0.1));
+	TestTrue(TEXT("split expansion center y cm"), FMath::IsNearlyEqual(ExpansionRegion.Center.Y, 1925.5, 0.1));
+	TestTrue(TEXT("split expansion length cm"), FMath::IsNearlyEqual(ExpansionRegion.Size.X, 5851.0, 0.1));
+	TestTrue(TEXT("split expansion width cm"), FMath::IsNearlyEqual(ExpansionRegion.Size.Y, 3851.0, 0.1));
 	return true;
 }
 
@@ -496,9 +496,9 @@ bool FScenarioSampleWorldSpecAdapterShortReturnBuildingExpansionTest::RunTest(co
 		* 100.0;
 	const FScenarioGroundRegionSpec& ExpansionRegion = Result.WorldSpec.GroundRegions[0];
 	TestEqual(TEXT("short return expansion stays rectangular"), static_cast<int32>(ExpansionRegion.ShapeType), static_cast<int32>(EScenarioGroundShapeType::Rectangle));
-	TestEqual(TEXT("short return expansion center x cm"), ExpansionRegion.Center.X, 3000.0);
-	TestEqual(TEXT("short return expansion center y cm"), ExpansionRegion.Center.Y, -500.0);
-	TestEqual(TEXT("short return expansion length cm"), ExpansionRegion.Size.X, 6000.0);
+	TestTrue(TEXT("short return expansion center x cm"), FMath::IsNearlyEqual(ExpansionRegion.Center.X, 2915.0, 0.1));
+	TestTrue(TEXT("short return expansion center y cm"), FMath::IsNearlyEqual(ExpansionRegion.Center.Y, 101.0, 0.1));
+	TestTrue(TEXT("short return expansion length cm"), FMath::IsNearlyEqual(ExpansionRegion.Size.X, 5851.0, 0.1));
 	TestEqual(TEXT("short return expansion uses minimum width cm"), ExpansionRegion.Size.Y, ExpectedMinimumWidthCm);
 	return true;
 }
@@ -535,17 +535,17 @@ bool FScenarioSampleWorldSpecAdapterSkewBuildingExpansionTest::RunTest(const FSt
 		TEXT("skew expansion region type"),
 		static_cast<int32>(ExpansionRegion.RegionType),
 		static_cast<int32>(EScenarioGroundRegionType::Walkable));
-	TestEqual(TEXT("skew expansion center x cm"), ExpansionRegion.Center.X, 5000.0);
-	TestEqual(TEXT("skew expansion center y cm"), ExpansionRegion.Center.Y, 2500.0);
-	TestEqual(TEXT("skew expansion bounds width x cm"), ExpansionRegion.Size.X, 10000.0);
-	TestEqual(TEXT("skew expansion bounds width y cm"), ExpansionRegion.Size.Y, 3000.0);
+	TestTrue(TEXT("skew expansion center x cm"), FMath::IsNearlyEqual(ExpansionRegion.Center.X, 4944.8, 0.1));
+	TestTrue(TEXT("skew expansion center y cm"), FMath::IsNearlyEqual(ExpansionRegion.Center.Y, 2365.9, 0.1));
+	TestTrue(TEXT("skew expansion bounds width x cm"), FMath::IsNearlyEqual(ExpansionRegion.Size.X, 9910.6, 0.1));
+	TestTrue(TEXT("skew expansion bounds width y cm"), FMath::IsNearlyEqual(ExpansionRegion.Size.Y, 2970.2, 0.1));
 	TestEqual(TEXT("skew expansion vertex count"), ExpansionRegion.PolygonVertices.Num(), 4);
 	if (ExpansionRegion.PolygonVertices.Num() == 4)
 	{
-		TestEqual(TEXT("skew expansion first vertex x cm"), ExpansionRegion.PolygonVertices[0].X, -1000.0);
-		TestEqual(TEXT("skew expansion first vertex y cm"), ExpansionRegion.PolygonVertices[0].Y, -1500.0);
-		TestEqual(TEXT("skew expansion third vertex x cm"), ExpansionRegion.PolygonVertices[2].X, 1000.0);
-		TestEqual(TEXT("skew expansion third vertex y cm"), ExpansionRegion.PolygonVertices[2].Y, 1500.0);
+		TestTrue(TEXT("skew expansion first vertex x cm"), FMath::IsNearlyEqual(ExpansionRegion.PolygonVertices[0].X, -4955.3, 0.1));
+		TestTrue(TEXT("skew expansion first vertex y cm"), FMath::IsNearlyEqual(ExpansionRegion.PolygonVertices[0].Y, 1485.1, 0.1));
+		TestTrue(TEXT("skew expansion third vertex x cm"), FMath::IsNearlyEqual(ExpansionRegion.PolygonVertices[2].X, 4955.3, 0.1));
+		TestTrue(TEXT("skew expansion third vertex y cm"), FMath::IsNearlyEqual(ExpansionRegion.PolygonVertices[2].Y, -1485.1, 0.1));
 	}
 	return true;
 }

@@ -39,8 +39,12 @@ namespace
 	const double GeneratedBuildingFrontageCorridorEdgeProjectionToleranceCm = 50.0;
 	// Runtime grid only needs a low semantic volume that covers the robot footprint height.
 	const double GeneratedBuildingCollisionProxyHeightCm = 200.0;
-	// Hidden building proxies use the existing grid rule for blocked areas.
-	const FName GeneratedBuildingCollisionProxyProfileName(TEXT("Blocked"));
+	// Runtime navigation blockers use a dedicated profile so Grid and LiDAR collision stay separate.
+	const FName ScenarioNavBlockerCollisionProfileName(TEXT("ScenarioNavBlocker"));
+	// Building visual meshes remain visible to LiDAR without participating in grid or robot movement collision.
+	const FName ScenarioBuildingVisualCollisionProfileName(TEXT("ScenarioBuildingVisual"));
+	// Existing authored blockers may still use this legacy profile and are normalized at spawn time.
+	const FName LegacyBuildingBlockedCollisionProfileName(TEXT("Blocked"));
 	// Component name prefix used to identify authored-bounds building collision proxies.
 	const FName GeneratedBuildingCollisionProxyComponentName(TEXT("GeneratedBuildingBlockingBounds"));
 	// Authored Building BP component name reserved for low navigation blocker volumes.
@@ -1295,7 +1299,9 @@ namespace
 			return false;
 		}
 
-		return primitiveComponent->GetCollisionProfileName() == GeneratedBuildingCollisionProxyProfileName
+		const FName profileName = primitiveComponent->GetCollisionProfileName();
+		return profileName == ScenarioNavBlockerCollisionProfileName
+			|| profileName == LegacyBuildingBlockedCollisionProfileName
 			|| IsCityBlockGridNavBlockerComponentName(primitiveComponent);
 	}
 
@@ -1311,11 +1317,8 @@ namespace
 	// Normalizes preserved BP-authored blocker components for grid/navigation queries.
 	void ConfigureCityBlockSemanticBlockingComponent(UPrimitiveComponent& primitiveComponent)
 	{
-		primitiveComponent.SetCollisionProfileName(GeneratedBuildingCollisionProxyProfileName);
-		primitiveComponent.SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		primitiveComponent.SetCollisionResponseToAllChannels(ECR_Ignore);
-		primitiveComponent.SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
-		primitiveComponent.SetCollisionResponseToChannel(ECC_GameTraceChannel8, ECR_Block);
+		primitiveComponent.SetCollisionProfileName(ScenarioNavBlockerCollisionProfileName);
+		primitiveComponent.SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		primitiveComponent.SetGenerateOverlapEvents(false);
 		primitiveComponent.SetHiddenInGame(true);
 		primitiveComponent.SetVisibility(false);
@@ -1324,11 +1327,8 @@ namespace
 	// Keeps visual building geometry raycastable without making it authoritative for grid generation.
 	void ConfigureCityBlockStaticMeshLidarComponent(UPrimitiveComponent& primitiveComponent)
 	{
-		primitiveComponent.SetCollisionProfileName(GeneratedBuildingCollisionProxyProfileName);
+		primitiveComponent.SetCollisionProfileName(ScenarioBuildingVisualCollisionProfileName);
 		primitiveComponent.SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		primitiveComponent.SetCollisionResponseToAllChannels(ECR_Ignore);
-		primitiveComponent.SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-		primitiveComponent.SetCollisionResponseToChannel(ECC_GameTraceChannel8, ECR_Ignore);
 		primitiveComponent.SetGenerateOverlapEvents(false);
 	}
 
@@ -1337,7 +1337,7 @@ namespace
 	{
 		if (!IsValid(primitiveComponent)
 			|| primitiveComponent->GetCollisionEnabled() == ECollisionEnabled::NoCollision
-			|| primitiveComponent->GetCollisionProfileName() != GeneratedBuildingCollisionProxyProfileName)
+			|| primitiveComponent->GetCollisionProfileName() != ScenarioNavBlockerCollisionProfileName)
 		{
 			return false;
 		}
@@ -1408,7 +1408,7 @@ namespace
 		return preservedBlockingComponentCount;
 	}
 
-	// Adds a hidden Blocked box based on authored building bounds for runtime grid classification.
+	// Adds a hidden navigation blocker box based on authored building bounds for runtime grid classification.
 	bool AttachBuildingCollisionProxy(
 		AActor& blockActor,
 		const FGeneratedBuildingFootprint& buildingFootprint,
@@ -1441,11 +1441,8 @@ namespace
 			halfHeightCm));
 		proxyComponent->SetWorldLocation(proxyCenterCm);
 		proxyComponent->SetWorldRotation(blockRotation);
-		proxyComponent->SetCollisionProfileName(GeneratedBuildingCollisionProxyProfileName);
-		proxyComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		proxyComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
-		proxyComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
-		proxyComponent->SetCollisionResponseToChannel(ECC_GameTraceChannel8, ECR_Block);
+		proxyComponent->SetCollisionProfileName(ScenarioNavBlockerCollisionProfileName);
+		proxyComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		proxyComponent->SetGenerateOverlapEvents(false);
 		proxyComponent->SetHiddenInGame(true);
 		proxyComponent->SetVisibility(false);

@@ -1030,13 +1030,13 @@ bool FScenarioCityBlockMaterializerBuildingCollisionProxyTest::RunTest(const FSt
 
 			++blockingProxyCount;
 			TestEqual(
-				TEXT("building proxy uses blocked collision profile"),
+				TEXT("building proxy uses nav blocker collision profile"),
 				boxComponent->GetCollisionProfileName(),
-				FName(TEXT("Blocked")));
+				FName(TEXT("ScenarioNavBlocker")));
 			TestEqual(
-				TEXT("building proxy participates in grid queries"),
+				TEXT("building proxy participates in grid and movement queries"),
 				static_cast<int32>(boxComponent->GetCollisionEnabled()),
-				static_cast<int32>(ECollisionEnabled::QueryOnly));
+				static_cast<int32>(ECollisionEnabled::QueryAndPhysics));
 			TestEqual(
 				TEXT("building proxy ignores LiDAR visibility"),
 				static_cast<int32>(boxComponent->GetCollisionResponseToChannel(ECC_Visibility)),
@@ -1044,6 +1044,10 @@ bool FScenarioCityBlockMaterializerBuildingCollisionProxyTest::RunTest(const FSt
 			TestEqual(
 				TEXT("building proxy blocks grid trace"),
 				static_cast<int32>(boxComponent->GetCollisionResponseToChannel(ECC_GameTraceChannel8)),
+				static_cast<int32>(ECR_Block));
+			TestEqual(
+				TEXT("building proxy blocks DeliveryBot movement"),
+				static_cast<int32>(boxComponent->GetCollisionResponseToChannel(ECC_GameTraceChannel3)),
 				static_cast<int32>(ECR_Block));
 			const FVector proxyExtent = boxComponent->GetScaledBoxExtent();
 			TestEqual(
@@ -1188,9 +1192,9 @@ bool FScenarioCityBlockMaterializerBuildingStaticMeshCollisionTest::RunTest(cons
 
 			++blockingStaticMeshCount;
 			TestEqual(
-				TEXT("building static mesh uses blocked collision profile"),
+				TEXT("building static mesh uses visual collision profile"),
 				staticMeshComponent->GetCollisionProfileName(),
-				FName(TEXT("Blocked")));
+				FName(TEXT("ScenarioBuildingVisual")));
 			TestEqual(
 				TEXT("building static mesh participates in LiDAR queries only"),
 				static_cast<int32>(staticMeshComponent->GetCollisionEnabled()),
@@ -1202,6 +1206,10 @@ bool FScenarioCityBlockMaterializerBuildingStaticMeshCollisionTest::RunTest(cons
 			TestEqual(
 				TEXT("building static mesh ignores grid trace"),
 				static_cast<int32>(staticMeshComponent->GetCollisionResponseToChannel(ECC_GameTraceChannel8)),
+				static_cast<int32>(ECR_Ignore));
+			TestEqual(
+				TEXT("building static mesh ignores DeliveryBot movement"),
+				static_cast<int32>(staticMeshComponent->GetCollisionResponseToChannel(ECC_GameTraceChannel3)),
 				static_cast<int32>(ECR_Ignore));
 			TestTrue(TEXT("building static mesh remains visible"), staticMeshComponent->IsVisible());
 		}

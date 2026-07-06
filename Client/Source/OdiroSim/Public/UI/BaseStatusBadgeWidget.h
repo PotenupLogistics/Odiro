@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Fonts/SlateFontInfo.h"
 #include "UI/BaseWidget.h"
 #include "BaseStatusBadgeWidget.generated.h"
 
@@ -41,6 +42,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Status Badge")
 	bool IsDisabled() const { return bDisabled; }
 
+	// Overrides the badge label color independently from semantic status color.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Status Badge")
+	void SetLabelColorOverride(FLinearColor inLabelColor);
+
+	// Restores the badge label color to semantic status color.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Status Badge")
+	void ClearLabelColorOverride();
+
+	// Overrides the badge label font independently from the base text role.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Status Badge")
+	void SetLabelFontOverride(FSlateFontInfo inLabelFont);
+
+	// Restores the badge label font to the base text role.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Status Badge")
+	void ClearLabelFontOverride();
+
 protected:
 	// Badge text.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabel", Setter = "SetLabel", BlueprintGetter = "GetLabel", BlueprintSetter = "SetLabel", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
@@ -53,6 +70,22 @@ protected:
 	// Disabled badge state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
+
+	// Explicit label color used when semantic status color should not drive text.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Style", meta = (ExposeOnSpawn = "true"))
+	FLinearColor LabelColorOverride = FLinearColor::White;
+
+	// Whether LabelColorOverride is currently applied to the badge label.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Style", meta = (ExposeOnSpawn = "true"))
+	bool bHasLabelColorOverride = false;
+
+	// Explicit label font used when the badge participates in mixed header layouts.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Style", meta = (ExposeOnSpawn = "true"))
+	FSlateFontInfo LabelFontOverride;
+
+	// Whether LabelFontOverride is currently applied to the badge label.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Style", meta = (ExposeOnSpawn = "true"))
+	bool bHasLabelFontOverride = false;
 
 	// Badge surface owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

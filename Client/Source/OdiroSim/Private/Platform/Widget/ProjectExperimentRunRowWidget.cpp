@@ -2,6 +2,7 @@
 
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
+#include "Components/Image.h"
 #include "Misc/Paths.h"
 #include "Platform/ViewModel/OdiroListItemViewModel.h"
 #include "UI/BaseButtonWidget.h"
@@ -271,6 +272,10 @@ void UProjectExperimentRunRowWidget::ApplyDisplayTexts() const
 	{
 		RunIdText->SetText(RunIdDisplayText);
 	}
+	if (Image_60)
+	{
+		Image_60->SetVisibility(bShowRunIdIcon ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
 	if (ProgressCountText)
 	{
 		if (!ProgressCountDisplayText.IsEmpty())
@@ -309,6 +314,7 @@ void UProjectExperimentRunRowWidget::ApplyDisplayTexts() const
 		AnalyzeButton->SetDisabled(bHasRunData && !bAnalyzeEnabled);
 		AnalyzeButton->SetVisibility(ResolveAnalyzeButtonVisibility());
 	}
+	ApplyColumnTextFontOverride();
 	ApplyProgressStatus();
 }
 
@@ -326,6 +332,44 @@ void UProjectExperimentRunRowWidget::ApplyProgressStatus() const
 			ProgressCountText->SetLabel(ProgressCountDisplayText);
 		}
 		ProgressCountText->SetBaseState(ToBaseWidgetState(ProgressState));
+		if (bOverrideProgressCountTextColor)
+		{
+			ProgressCountText->SetLabelColorOverride(ProgressCountTextColorOverride);
+		}
+		else
+		{
+			ProgressCountText->ClearLabelColorOverride();
+		}
+		ApplyColumnTextFontOverride();
+	}
+}
+
+void UProjectExperimentRunRowWidget::ApplyColumnTextFontOverride() const
+{
+	if (!bOverrideColumnTextFont)
+	{
+		if (ProgressCountText)
+		{
+			ProgressCountText->ClearLabelFontOverride();
+		}
+		return;
+	}
+
+	if (RunIdText)
+	{
+		RunIdText->SetFont(ColumnTextFontOverride);
+	}
+	if (ProgressCountText)
+	{
+		ProgressCountText->SetLabelFontOverride(ColumnTextFontOverride);
+	}
+	if (SuccessRateText)
+	{
+		SuccessRateText->SetFont(ColumnTextFontOverride);
+	}
+	if (TotalDurationText)
+	{
+		TotalDurationText->SetFont(ColumnTextFontOverride);
 	}
 }
 

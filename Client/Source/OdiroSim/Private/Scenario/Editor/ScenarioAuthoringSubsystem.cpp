@@ -2351,6 +2351,25 @@ bool UScenarioAuthoringSubsystem::IsPositiveTemplateNumber(const FScenarioTempla
 	return FMath::IsFinite(value.FixedValue) && value.FixedValue > KINDA_SMALL_NUMBER;
 }
 
+bool UScenarioAuthoringSubsystem::IsNonNegativeTemplateNumber(const FScenarioTemplateNumberValue& value)
+{
+	if (!value.bIsSet)
+	{
+		return false;
+	}
+
+	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
+	{
+		return FMath::IsFinite(value.MinValue)
+			&& FMath::IsFinite(value.MaxValue)
+			&& value.MinValue <= value.MaxValue
+			&& value.MinValue >= -KINDA_SMALL_NUMBER
+			&& value.MaxValue >= -KINDA_SMALL_NUMBER;
+	}
+
+	return FMath::IsFinite(value.FixedValue) && value.FixedValue >= -KINDA_SMALL_NUMBER;
+}
+
 bool UScenarioAuthoringSubsystem::IsValidOptionalTemplateNumber(const FScenarioTemplateNumberValue& value)
 {
 	if (!value.bIsSet)
@@ -2630,9 +2649,9 @@ bool UScenarioAuthoringSubsystem::ValidateCorridorLaneProfile(
 		{
 			return false;
 		}
-		if (!IsPositiveTemplateNumber(lane.WidthMeters))
+		if (!IsNonNegativeTemplateNumber(lane.WidthMeters))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("%s[%d].width_m must be a positive fixed value or positive min/max range."), *path, index));
+			outDiagnostics.Add(FString::Printf(TEXT("%s[%d].width_m must be a non-negative fixed value or non-negative min/max range."), *path, index));
 			return false;
 		}
 	}

@@ -345,8 +345,8 @@ namespace
 		OutLanes.Add(Region);
 	}
 
-	// Resolves side-lane width params for repeatability while leaving generated city geometry fixed.
-	bool ScenarioSamplerResolveIgnoredSideWidths(
+	// Side-lane width param을 확정하고 0이 아닌 첫 side intent surface를 반환함.
+	bool ScenarioSamplerResolveActiveSideSurface(
 		const TArray<FScenarioTemplateLaneRule>& LaneRules,
 		const FString& ParamPath,
 		TMap<FString, FScenarioSampleParamValue>& Params,
@@ -357,8 +357,11 @@ namespace
 		{
 			const FScenarioTemplateLaneRule& LaneRule = LaneRules[Index];
 			const FString ParamKey = FString::Printf(TEXT("%s[%d].width_m"), *ParamPath, Index);
-			ScenarioSamplerResolveGeometryNumber(LaneRule.WidthMeters, 0.0, ParamKey, Params);
-			if (OutPrimarySurfaceId.IsEmpty() && !LaneRule.SurfaceId.IsEmpty())
+			const double ResolvedWidthMeters =
+				ScenarioSamplerResolveGeometryNumber(LaneRule.WidthMeters, 0.0, ParamKey, Params);
+			if (OutPrimarySurfaceId.IsEmpty()
+				&& ResolvedWidthMeters > KINDA_SMALL_NUMBER
+				&& !LaneRule.SurfaceId.IsEmpty())
 			{
 				OutPrimarySurfaceId = LaneRule.SurfaceId;
 			}
@@ -457,7 +460,7 @@ namespace
 				ScenarioSamplerSurfaceToLaneType(WalkwaySurfaceId));
 
 			FString BuildingSurfaceId;
-			if (ScenarioSamplerResolveIgnoredSideWidths(
+			if (ScenarioSamplerResolveActiveSideSurface(
 				ScenarioDocument.Corridor.BuildingSide,
 				TEXT("corridor.building_side"),
 				Params,
@@ -490,7 +493,7 @@ namespace
 			}
 
 			FString RoadSurfaceId;
-			if (ScenarioSamplerResolveIgnoredSideWidths(
+			if (ScenarioSamplerResolveActiveSideSurface(
 				ScenarioDocument.Corridor.CurbSide,
 				TEXT("corridor.curb_side"),
 				Params,

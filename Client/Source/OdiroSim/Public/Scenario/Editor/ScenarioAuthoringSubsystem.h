@@ -414,6 +414,8 @@ private:
 	static double GetFixedTemplateNumber(const FScenarioTemplateNumberValue& value, double defaultValue);
 	// Template number가 width 같은 양수 필드에 쓸 수 있는지 확인함.
 	static bool IsPositiveTemplateNumber(const FScenarioTemplateNumberValue& value);
+	// Template number가 0 이상의 finite fixed/range 값인지 확인함.
+	static bool IsNonNegativeTemplateNumber(const FScenarioTemplateNumberValue& value);
 	// Template number is unset or contains finite values in allowed min/max order.
 	static bool IsValidOptionalTemplateNumber(const FScenarioTemplateNumberValue& value);
 	// Template integer is unset or contains values in allowed min/max order.

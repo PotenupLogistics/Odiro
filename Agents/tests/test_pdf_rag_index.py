@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,10 @@ from app.services.pdf_rag_index import (
     read_chroma_child_metadata,
     diagnose_chroma_staleness,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
+INDEX_SCRIPT = ROOT / "scripts" / "build_pdf_rag_index.py"
 
 
 def _write_chunks(path: Path, *, text: str = "보호구역 운행속도 기준") -> None:
@@ -138,3 +144,58 @@ def test_stale_manifest_detects_chunk_file_hash_change(tmp_path: Path) -> None:
 
     assert diagnostic["stale"] is True
     assert diagnostic["rag_error_type"] == "chroma_index_stale"
+
+
+def _run_index_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(INDEX_SCRIPT), *args],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+
+
+def test_check_only_reports_missing_index_without_openai_call(tmp_path: Path) -> None:
+    chunk_file = tmp_path / "validated_parent_child_chunks.jsonl"
+    active_dir = tmp_path / "active"
+    _write_chunks(chunk_file)
+
+    completed = _run_index_cli(
+        "--check-only",
+        "--chunk-file",
+        str(chunk_file),
+        "--active-dir",
+        str(active_dir),
+        "--collection-name",
+        "pdf_rag_test",
+    )
+
+    assert completed.returncode == 10
+    assert "missing" in completed.stdout.lower()
+    assert "OPENAI_API_KEY" not in completed.stdout
+
+
+def test_check_only_reports_up_to_date_index(tmp_path: Path) -> None:
+    chunk_file = tmp_path / "validated_parent_child_chunks.jsonl"
+    active_dir = tmp_path / "active"
+    _write_chunks(chunk_file)
+    build_pdf_rag_index_atomic(
+        chunk_file=chunk_file,
+        active_dir=active_dir,
+        embedding_client=FakeEmbeddingClient(),
+        collection_name="pdf_rag_test",
+        run_smoke_tests=False,
+    )
+
+    completed = _run_index_cli(
+        "--check-only",
+        "--chunk-file",
+        str(chunk_file),
+        "--active-dir",
+        str(active_dir),
+        "--collection-name",
+        "pdf_rag_test",
+    )
+
+    assert completed.returncode == 0
+    assert "up to date" in completed.stdout.lower()

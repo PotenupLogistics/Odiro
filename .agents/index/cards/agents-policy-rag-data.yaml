@@ -27,6 +27,7 @@ guardrails:
   - Agents/data is source, processed, and review data; release runtime read-only assets move to static/agents when needed.
   - Raw PDFs and manual review packs are not release assets by default.
   - PDF Vector Hybrid RAG uses KOR/RSR PDF-derived corpus artifacts and .cache/rag/chroma/pdf_corpus; do not use legacy card JSONL as source or fallback.
+  - Agents setup checks .cache/rag/chroma/pdf_corpus by `build_pdf_rag_index.py --check-only`, attempts build when OPENAI_API_KEY is present, and treats ODIRO_REQUIRE_PDF_RAG_INDEX=1 as strict mode.
   - Keep Chroma/embedding cache out of Agents/data/rag and out of git-tracked artifacts.
   - Preserve /api/v2/analysis/run public request/response schema and keep source/chunk/page/score/backend details internal.
   - Policy recommendation code should not write project policy files directly unless an API contract says it may.
@@ -36,6 +37,7 @@ verify:
       - file-based RAG readiness check
       - policy card/chunk validation
       - PDF RAG corpus/index focused tests
+      - PDF RAG setup/install flow tests
       - v2 analysis API contract tests
       - focused retrieval or recommendation tests
 related:

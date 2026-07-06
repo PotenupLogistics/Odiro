@@ -31,6 +31,21 @@ DEFAULT_EMBEDDING_PROVIDER = "openai"
 # Default OpenAI embedding model; callers may override via environment/settings.
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 
+# Exit code returned when the active PDF RAG Chroma index is current.
+PDF_RAG_INDEX_READY = 0
+
+# Exit code returned when no active PDF RAG Chroma index manifest exists.
+PDF_RAG_INDEX_MISSING = 10
+
+# Exit code returned when the active PDF RAG Chroma index no longer matches the corpus or model.
+PDF_RAG_INDEX_STALE = 11
+
+# Exit code returned when the active PDF RAG Chroma manifest cannot be read safely.
+PDF_RAG_INDEX_MANIFEST_INVALID = 12
+
+# Exit code returned when the active Chroma collection count does not match child chunks.
+PDF_RAG_INDEX_COLLECTION_MISMATCH = 13
+
 
 class PdfRagEmbeddingError(RuntimeError):
     """Embedding failure with internal diagnostic categories for RAG unavailable responses."""
@@ -147,6 +162,17 @@ class PdfRagIndexBuildResult:
     manifest_path: Path
     embedded_child_count: int
     collection_count: int
+
+
+@dataclass(frozen=True)
+class PdfRagIndexCheckResult:
+    """Status returned by check-only PDF RAG index validation."""
+
+    exit_code: int
+    status: str
+    message: str
+    expected_child_count: int | None = None
+    actual_collection_count: int | None = None
 
 
 def build_chroma_manifest(
@@ -274,6 +300,111 @@ def diagnose_chroma_staleness(
             "current_chunk_file_hash": current_hash,
         }
     return {"stale": False, "rag_error_type": None, "embedding_error_type": None}
+
+
+def check_pdf_rag_index(
+    *,
+    chunk_file: Path,
+    active_dir: Path,
+    expected_embedding_model: str,
+    expected_embedding_provider: str = DEFAULT_EMBEDDING_PROVIDER,
+    collection_name: str = "pdf_rag_corpus",
+) -> PdfRagIndexCheckResult:
+    """Check local Chroma index freshness without embedding or OpenAI calls."""
+    manifest_path = active_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_MISSING,
+            status="missing",
+            message="[PDF RAG] Chroma index missing.",
+        )
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_MANIFEST_INVALID,
+            status="manifest_invalid",
+            message=f"[PDF RAG] Chroma index manifest is invalid: {exc.__class__.__name__}.",
+        )
+    if not isinstance(manifest, dict):
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_MANIFEST_INVALID,
+            status="manifest_invalid",
+            message="[PDF RAG] Chroma index manifest is invalid: root must be an object.",
+        )
+
+    try:
+        chunks = read_jsonl(chunk_file)
+    except Exception as exc:
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_MANIFEST_INVALID,
+            status="chunk_file_invalid",
+            message=f"[PDF RAG] Validated chunk file cannot be read: {exc.__class__.__name__}.",
+        )
+    expected_child_count = len([chunk for chunk in chunks if chunk.get("chunk_kind") == "child"])
+
+    if manifest.get("embedding_provider") != expected_embedding_provider:
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_STALE,
+            status="stale",
+            message="[PDF RAG] Chroma index stale: embedding provider mismatch.",
+            expected_child_count=expected_child_count,
+        )
+    if manifest.get("embedding_model") != expected_embedding_model:
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_STALE,
+            status="stale",
+            message="[PDF RAG] Chroma index stale: embedding model mismatch.",
+            expected_child_count=expected_child_count,
+        )
+    if manifest.get("collection_name") != collection_name:
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_STALE,
+            status="stale",
+            message="[PDF RAG] Chroma index stale: collection name mismatch.",
+            expected_child_count=expected_child_count,
+        )
+    if manifest.get("chunk_file_hash") != build_file_hash(chunk_file):
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_STALE,
+            status="stale",
+            message="[PDF RAG] Chroma index stale: validated chunk file changed.",
+            expected_child_count=expected_child_count,
+        )
+    if int(manifest.get("embedded_child_count") or -1) != expected_child_count:
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_COLLECTION_MISMATCH,
+            status="collection_count_mismatch",
+            message="[PDF RAG] Chroma index collection count mismatch: manifest child count changed.",
+            expected_child_count=expected_child_count,
+        )
+
+    try:
+        actual_count = get_chroma_collection_count(active_dir, collection_name)
+    except Exception as exc:
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_COLLECTION_MISMATCH,
+            status="collection_count_mismatch",
+            message=f"[PDF RAG] Chroma index collection count mismatch: {exc.__class__.__name__}.",
+            expected_child_count=expected_child_count,
+        )
+    if actual_count != expected_child_count:
+        return PdfRagIndexCheckResult(
+            exit_code=PDF_RAG_INDEX_COLLECTION_MISMATCH,
+            status="collection_count_mismatch",
+            message="[PDF RAG] Chroma index collection count mismatch.",
+            expected_child_count=expected_child_count,
+            actual_collection_count=actual_count,
+        )
+
+    return PdfRagIndexCheckResult(
+        exit_code=PDF_RAG_INDEX_READY,
+        status="up_to_date",
+        message="[PDF RAG] Chroma index is up to date. Skipping build.",
+        expected_child_count=expected_child_count,
+        actual_collection_count=actual_count,
+    )
 
 
 def get_chroma_collection_count(active_dir: Path, collection_name: str) -> int:

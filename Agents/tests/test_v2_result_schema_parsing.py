@@ -287,7 +287,7 @@ def test_environment_review_summary_uses_environment_message_when_penalty_also_e
     report = json.loads((review_dir / "report.json").read_text(encoding="utf-8"))
     pedestrian_finding = next(finding for finding in report["findings"] if finding["type"] == "pedestrian_collision")
     pedestrian_evidence = next(item for item in report["evidence"] if item["metric"] == "pedestrian_collision_count")
-    assert payload["summary"]["message"].startswith("환경 또는 장애물 관련 충돌이 발생해")
+    assert payload["summary"]["message"] == "장애물 주변 충돌 반복으로 환경 배치와 회피 판단 조건 점검 필요"
     assert "Penalty region violation" not in payload["summary"]["message"]
     assert report["summary"]["message"] == payload["summary"]["message"]
     assert payload["metrics"]["pedestrian_collision_count"] == 104

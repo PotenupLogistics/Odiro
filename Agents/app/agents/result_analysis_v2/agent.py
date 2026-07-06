@@ -630,6 +630,17 @@ class ResultAnalysisV2Agent:
         """Return setup failure details recorded on setup-stage episodes."""
         return [episode.setup_failure_details for episode in episodes if episode.setup_failure_details is not None]
 
+    def _bullet_detail(self, sections: list[tuple[str, list[str]]]) -> str:
+        """Format public analysis detail text as short UI-ready sections."""
+        lines: list[str] = []
+        for heading, bullets in sections:
+            section_bullets = [bullet.strip() for bullet in bullets if bullet and bullet.strip()]
+            if not section_bullets:
+                continue
+            lines.append(heading)
+            lines.extend(f"- {bullet}" for bullet in section_bullets[:3])
+        return "\n".join(lines)
+
     def _build_insights(
         self,
         *,
@@ -658,17 +669,72 @@ class ResultAnalysisV2Agent:
             and {"timeout", "goal_not_reached", "stuck"} & finding_types
         ):
             evidence_ids = self._finding_evidence_ids(findings, {"timeout", "goal_not_reached", "stuck"})
-            title = "충돌 없이 제한 시간 초과"
-            detail = "충돌은 발생하지 않았지만 목표 도달 실패, 제한 시간 초과, 또는 정체 신호가 확인되었습니다."
+            title = "충돌 없는 목표 도달 실패"
+            detail = self._bullet_detail(
+                [
+                    ("관찰", ["충돌 없음", "일부 episode 목표 도달 실패", "제한 시간 초과 신호"]),
+                    (
+                        "해석",
+                        [
+                            "장애물 충돌보다 경로 효율 문제 가능성",
+                            "감속·정지 조건 또는 재탐색 진입 조건 영향 가능성",
+                        ],
+                    ),
+                    ("확인", ["경로 추종 허용 오차", "감속·정지 판단 기준", "재경로 탐색 시작 기준"]),
+                ]
+            )
             if {"timeout", "stuck"} <= finding_types:
                 title = "정체 후 제한 시간 초과"
-                detail = "충돌은 발생하지 않았지만 정체 신호가 확인되었고, 제한 시간 내 목표에 도달하지 못했습니다."
+                detail = self._bullet_detail(
+                    [
+                        ("관찰", ["충돌 없음", "정체 신호", "목표 도달 실패"]),
+                        (
+                            "해석",
+                            [
+                                "정지 지속 또는 감속 조건 영향 가능성",
+                                "재탐색 진입 지연으로 주행 시간 증가 가능성",
+                            ],
+                        ),
+                        ("확인", ["정체 판단 기준", "감속·정지 해제 조건", "재경로 탐색 시작 기준"]),
+                    ]
+                )
             insights.append(
                 self._insight(
                     index=len(insights) + 1,
                     insight_type="timeout_without_collision",
                     severity="high",
                     title=title,
+                    detail=detail,
+                    evidence_ids=evidence_ids,
+                    evidence_by_id=evidence_by_id,
+                )
+            )
+        if self._metric_value(metrics, "near_miss_count") > 0 or "near_miss" in finding_types:
+            evidence_ids = self._finding_evidence_ids(findings, {"near_miss"})
+            collision_count = self._metric_value(metrics, "collision_count")
+            detail = self._bullet_detail(
+                [
+                    (
+                        "관찰",
+                        ["충돌과 근접 위험 동시 발생", "장애물 또는 보행자 주변 안전 여유 부족 신호"]
+                        if collision_count > 0
+                        else ["근접 위험 반복", "충돌 전조 신호"],
+                    ),
+                    (
+                        "해석",
+                        ["회피 조건과 환경 배치가 함께 영향을 줬을 가능성", "감속 판단 또는 회피 여유 거리 부족 가능성"]
+                        if collision_count > 0
+                        else ["회피 여유 거리 부족 가능성", "감속 시작 기준 지연 가능성"],
+                    ),
+                    ("확인", ["감속 시작 거리", "회피 여유 거리", "정지 판단 기준"]),
+                ]
+            )
+            insights.append(
+                self._insight(
+                    index=len(insights) + 1,
+                    insight_type="near_miss_observed",
+                    severity="medium",
+                    title="Near Miss 반복",
                     detail=detail,
                     evidence_ids=evidence_ids,
                     evidence_by_id=evidence_by_id,
@@ -691,21 +757,22 @@ class ResultAnalysisV2Agent:
                     evidence_by_id=evidence_by_id,
                 )
             )
-        if self._metric_value(metrics, "robot_tip_over_count") > 0:
+        if self._metric_value(metrics, "robot_tip_over_count") > 0 or "robot_tip_over" in finding_types:
             evidence_ids = self._finding_evidence_ids(findings, {"robot_tip_over"})
-            episode_count = self._episode_count_from_evidence(evidence_ids, evidence_by_id)
-            if episode_count == 0:
-                episode_count = max(1, self._metric_value(metrics, "robot_tip_over_count"))
+            detail = self._bullet_detail(
+                [
+                    ("관찰", ["로봇 전복 이벤트", "자세 안정성 저하 신호"]),
+                    ("해석", ["충돌 반응 또는 조향 변화량 영향 가능성", "속도 조건과 자세 복원 조건 점검 필요"]),
+                    ("확인", ["최대 속도", "조향 변화량", "장애물 접촉 이후 자세 안정성"]),
+                ]
+            )
             insights.append(
                 self._insight(
                     index=len(insights) + 1,
                     insight_type="robot_tip_over_observed",
                     severity="medium",
                     title="전복 이벤트 확인",
-                    detail=(
-                        f"{episode_count}개 episode에서 로봇 전복이 발생했습니다. "
-                        "장애물 접촉 이후 자세 안정성 또는 충돌 반응 조건을 함께 확인할 필요가 있습니다."
-                    ),
+                    detail=detail,
                     evidence_ids=evidence_ids,
                     evidence_by_id=evidence_by_id,
                 )
@@ -713,16 +780,23 @@ class ResultAnalysisV2Agent:
         repath_repeat_count = self._pattern_count(patterns, {"repath_repeated"})
         if repath_repeat_count > 0 or self._metric_value(metrics, "repath_count") >= 3:
             evidence_ids = self._finding_evidence_ids(findings, {"repath"})
-            if repath_repeat_count > 0:
-                detail = (
-                    f"{repath_repeat_count}개 episode에서 재경로 탐색이 반복되었습니다. "
-                    "장애물 주변에서 경로가 안정적으로 유지되지 않았는지 확인할 필요가 있습니다."
-                )
-            else:
-                detail = (
-                    f"재경로 탐색이 {self._metric_value(metrics, 'repath_count')}회 발생했습니다. "
-                    "장애물 주변에서 경로가 안정적으로 유지되지 않았는지 확인할 필요가 있습니다."
-                )
+            mixed_outcomes = self._metric_value(metrics, "success_count") > 0 and self._metric_value(metrics, "failure_count") > 0
+            detail = self._bullet_detail(
+                [
+                    (
+                        "관찰",
+                        [
+                            "여러 episode에서 재경로 탐색 발생",
+                            "성공 episode와 실패 episode가 함께 존재" if mixed_outcomes else "우회 판단 반복 신호",
+                        ],
+                    ),
+                    (
+                        "해석",
+                        ["특정 구간에서 경로 안정성 저하 가능성", "우회 판단 반복으로 주행 시간 증가 가능성"],
+                    ),
+                    ("확인", ["전방 주시 거리", "경로 이탈 허용 범위", "우회 경로 선택 조건"]),
+                ]
+            )
             insights.append(
                 self._insight(
                     index=len(insights) + 1,
@@ -748,13 +822,34 @@ class ResultAnalysisV2Agent:
                     "robot_tip_over",
                 },
             )
+            mixed_outcomes = self._metric_value(metrics, "success_count") > 0 and self._metric_value(metrics, "failure_count") > 0
+            if mixed_outcomes:
+                title = "성공·실패 결과 혼재"
+                detail = self._bullet_detail(
+                    [
+                        ("관찰", ["동일 run 안에서 성공과 실패가 함께 발생"]),
+                        ("해석", ["전체 정책 실패보다 특정 구간 또는 조건에서 불안정 가능성"]),
+                        ("확인", ["실패 episode의 재탐색 시점", "성공 episode와 실패 episode의 경로 차이", "정지 또는 감속이 길어진 구간"]),
+                    ]
+                )
+                insight_type = "mixed_success_failure"
+            else:
+                title = "경로 안정성 저하 가능성"
+                detail = self._bullet_detail(
+                    [
+                        ("관찰", ["주행 정책 검토 신호 발생"]),
+                        ("해석", ["경로 추종 또는 회피 판단 조건 영향 가능성"]),
+                        ("확인", ["경로 추종 조건", "감속·정지 판단 기준", "재경로 탐색 진입 조건"]),
+                    ]
+                )
+                insight_type = "policy_stability_check"
             insights.append(
                 self._insight(
                     index=len(insights) + 1,
-                    insight_type="policy_review_priority",
+                    insight_type=insight_type,
                     severity="medium",
-                    title="정책 검토 우선",
-                    detail="경로 추종, 감속/정지, 재경로 탐색 조건 확인이 우선입니다.",
+                    title=title,
+                    detail=detail,
                     evidence_ids=evidence_ids,
                     evidence_by_id=evidence_by_id,
                 )
@@ -844,29 +939,39 @@ class ResultAnalysisV2Agent:
     def _collision_insight_detail(self, *, collision_parts: list[tuple[str, int]], repeat_count: int) -> str:
         """Return a detail string that avoids unobserved collision categories."""
         if len(collision_parts) == 1:
-            label, count = collision_parts[0]
-            detail = f"{label}이 {count}회 발생"
-            if repeat_count > 0:
-                detail = f"{detail}했고, {repeat_count}개 episode에서 충돌 패턴이 반복되었습니다."
-            else:
-                detail = f"{detail}했습니다."
-            return f"{detail} {self._collision_followup_text(label)}"
+            label, _count = collision_parts[0]
+            return self._bullet_detail(
+                [
+                    ("관찰", [f"{label} 발생", "동일 충돌 패턴 반복" if repeat_count > 0 else "단일 충돌 유형"]),
+                    ("해석", [self._collision_followup_text(label)]),
+                    ("확인", self._collision_followup_checks(label)),
+                ]
+            )
 
-        event_text = ", ".join(f"{label} {count}회" for label, count in collision_parts)
-        detail = f"{event_text}가 발생"
-        if repeat_count > 0:
-            detail = f"{detail}했고, {repeat_count}개 episode에서 충돌 관련 패턴이 반복되었습니다."
-        else:
-            detail = f"{detail}했습니다."
-        return f"{detail} 발생한 충돌 유형별로 장애물 배치, 보행자 회피, 통과 가능 영역 조건을 분리해 확인할 필요가 있습니다."
+        collision_labels = [label for label, _count in collision_parts]
+        return self._bullet_detail(
+            [
+                ("관찰", collision_labels[:3]),
+                ("해석", ["충돌 유형별 원인이 서로 다를 가능성", "환경 배치와 회피 판단 조건 분리 필요"]),
+                ("확인", ["장애물 배치", "보행자 회피 조건", "통과 가능 영역 조건"]),
+            ]
+        )
 
     def _collision_followup_text(self, collision_label: str) -> str:
-        """Return the follow-up sentence for one collision type."""
+        """Return the follow-up analysis phrase for one collision type."""
         if collision_label == "정적 장애물 충돌":
-            return "장애물 배치나 유효 통로 폭이 주행 경로를 과도하게 제한했을 가능성이 있습니다."
+            return "장애물 배치나 유효 통로 폭이 주행 경로를 제한했을 가능성"
         if collision_label == "보행자 충돌":
-            return "보행자 근접 상황에서 감속, 정지, 회피 조건이 충분했는지 확인할 필요가 있습니다."
-        return "차단 영역 배치나 통과 가능 영역 조건이 주행 경로와 충돌했는지 확인할 필요가 있습니다."
+            return "보행자 근접 상황의 감속·정지·회피 조건 부족 가능성"
+        return "차단 영역 배치나 통과 가능 영역 조건과 주행 경로 충돌 가능성"
+
+    def _collision_followup_checks(self, collision_label: str) -> list[str]:
+        """Return concrete UI check items for one collision type."""
+        if collision_label == "정적 장애물 충돌":
+            return ["장애물 간격", "유효 통로 폭", "회피 경로 여유"]
+        if collision_label == "보행자 충돌":
+            return ["보행자 감속 시작 거리", "정지 판단 기준", "회피 여유 거리"]
+        return ["차단 영역 배치", "통과 가능 영역 경계", "경로 보정 기준"]
 
     def _pattern_count(self, patterns: list[dict[str, Any]], pattern_types: set[str]) -> int:
         """Return the largest repeated-episode count for the requested pattern types."""
@@ -987,15 +1092,19 @@ class ResultAnalysisV2Agent:
         finding_types = {str(finding.get("type")) for finding in findings}
         has_setup_failure = self._has_setup_failure(findings=findings, setup_failure_details=setup_failure_details)
         if recommendation_type == "environment_review":
-            response.summary.message = "환경 또는 장애물 관련 충돌이 발생해 환경 검토가 필요합니다."
+            if "near_miss" in finding_types and self._metric_value(response.metrics, "collision_count") > 0:
+                response.summary.message = "충돌과 근접 위험 반복으로 주행 안정성과 회피 판단 조건 점검 필요"
+            else:
+                response.summary.message = "장애물 주변 충돌 반복으로 환경 배치와 회피 판단 조건 점검 필요"
             if has_setup_failure:
-                response.summary.message = f"{response.summary.message} 일부 episode는 세팅 단계에서 중단되어 환경 판단에서 제외했습니다."
+                response.summary.message = f"{response.summary.message} 일부 episode는 세팅 단계 중단으로 환경 판단에서 제외"
             self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
             return
         if response.metrics is not None and response.metrics.success_count > 0 and response.metrics.failure_count == 0:
-            response.summary.message = (
-                "주행은 성공했지만, 패널티 구역 침범 등 안전/정책 검토가 필요한 신호가 나타났습니다."
-            )
+            if "penalty_region_violation" in finding_types:
+                response.summary.message = "성공 run 내 패널티 구역 침범 신호로 경로 경계와 회피 조건 재점검 필요"
+            else:
+                response.summary.message = "성공 run 내 안전 신호로 경로 경계와 회피 조건 재점검 필요"
             self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
             return
         if (
@@ -1004,15 +1113,20 @@ class ResultAnalysisV2Agent:
             and not {"static_obstacle_collision", "blocked_region_collision"} & finding_types
         ):
             response.summary.message = (
-                "사용자 요청 관점에서 요청한 장애물/충돌 문제는 확인되지 않았고, "
-                "패널티 구역 침범이 발생해 주행 정책 검토가 필요합니다."
+                "요청한 장애물·충돌 문제보다 패널티 구역 침범 중심의 주행 정책 점검 필요"
             )
+        elif "near_miss" in finding_types and self._metric_value(response.metrics, "collision_count") == 0:
+            response.summary.message = "근접 위험 반복으로 회피 여유 거리와 감속 판단 조건 점검 필요"
+        elif "near_miss" in finding_types:
+            response.summary.message = "충돌과 근접 위험 반복으로 주행 안정성과 회피 판단 조건 점검 필요"
         elif {"timeout", "stuck"} <= finding_types:
-            response.summary.message = "정체 이후 제한 시간 초과로 종료되어 주행 정책 검토가 필요합니다."
+            response.summary.message = "정체와 제한 시간 초과 신호로 감속·정지 및 재탐색 조건 점검 필요"
+        elif "repath" in finding_types and {"timeout", "goal_not_reached"} & finding_types:
+            response.summary.message = "재경로 탐색 반복과 시간 초과 신호로 주행 정책 점검 필요"
         else:
-            response.summary.message = "주행 정책 검토가 필요한 실패가 발생했습니다."
+            response.summary.message = "목표 도달 실패와 경로 안정성 신호로 주행 정책 점검 필요"
         if has_setup_failure:
-            response.summary.message = f"{response.summary.message} 일부 episode는 세팅 단계에서 중단되어 정책 판단에서 제외했습니다."
+            response.summary.message = f"{response.summary.message} 일부 episode는 세팅 단계 중단으로 정책 판단에서 제외"
         self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
 
     def _has_setup_failure(self, *, findings: list[dict[str, Any]], setup_failure_details: list[Any]) -> bool:
@@ -1047,7 +1161,7 @@ class ResultAnalysisV2Agent:
         """Append prompt focus text when summary alignment replaced the original message."""
         if response.summary is not None and prompt_focus and "사용자 요청 관점" not in response.summary.message:
             response.summary.message = (
-                f"{response.summary.message} 사용자 요청 관점: {', '.join(prompt_focus)} 중심으로 확인했습니다."
+                f"{response.summary.message} 사용자 요청 관점: {', '.join(prompt_focus)} 중심 확인"
             )
 
     def _recommendations(

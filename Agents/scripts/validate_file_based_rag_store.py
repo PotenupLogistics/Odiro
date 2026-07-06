@@ -12,6 +12,7 @@ RAG_DIR = Path("data") / "rag"
 RUNTIME_CHUNKS_FILE = RAG_DIR / "policy_rag_chunks.jsonl"
 KNOWLEDGE_CARDS_FILE = RAG_DIR / "policy_knowledge_cards.jsonl"
 SOURCE_INVENTORY_FILE = Path("data") / "sources" / "source_inventory.json"
+PDF_RAG_SOURCE_INVENTORY_SCHEMA = "pdf_vector_hybrid_rag_source_inventory"
 EXPECTED_RUNTIME_CHUNK_COUNT = 17
 EXPECTED_KNOWLEDGE_CARD_COUNT = 11
 REQUIRED_SOURCE_IDS = (
@@ -34,6 +35,7 @@ ALLOWED_SOURCE_STATUSES = (
     "active_internal",
 )
 RUNTIME_ALLOWED_SOURCE_STATUSES = ("active", "active_internal")
+LEGACY_INTERNAL_SOURCE_IDS = ("PRJ-AGENT", "PRJ-DOE", "PRJ-EVAL")
 FORBIDDEN_VECTOR_DB_DIRS = (
     RAG_DIR / "embeddings",
     RAG_DIR / "vector_db",
@@ -256,10 +258,14 @@ def _validate_source_inventory(
     if not inventory:
         return [], [], [], [], False, False
 
+    schema = inventory.get("schema")
+    is_pdf_rag_inventory = schema == PDF_RAG_SOURCE_INVENTORY_SCHEMA
     if "schema" not in inventory:
         errors.append(f"{display_path}: missing schema")
-    elif inventory["schema"] != "file_based_rag_source_inventory":
-        errors.append(f"{display_path}: schema must be file_based_rag_source_inventory")
+    elif schema not in {"file_based_rag_source_inventory", PDF_RAG_SOURCE_INVENTORY_SCHEMA}:
+        errors.append(
+            f"{display_path}: schema must be file_based_rag_source_inventory or {PDF_RAG_SOURCE_INVENTORY_SCHEMA}"
+        )
 
     if "version" not in inventory:
         errors.append(f"{display_path}: missing version")
@@ -285,30 +291,45 @@ def _validate_source_inventory(
         seen.add(source_id)
         source_ids.append(source_id)
 
-        for field_name in ("status", "role", "usage"):
-            value = source.get(field_name)
-            if not isinstance(value, str) or not value.strip():
-                errors.append(f"{display_path} source_id {source_id}: {field_name} must be a non-empty string")
+        if not is_pdf_rag_inventory:
+            for field_name in ("status", "role", "usage"):
+                value = source.get(field_name)
+                if not isinstance(value, str) or not value.strip():
+                    errors.append(f"{display_path} source_id {source_id}: {field_name} must be a non-empty string")
 
-        status = source.get("status")
+        status = source.get("status") or source.get("version_status")
         if isinstance(status, str):
             status_by_source_id[source_id] = status
-            if status not in ALLOWED_SOURCE_STATUSES:
+            if not is_pdf_rag_inventory and status not in ALLOWED_SOURCE_STATUSES:
                 errors.append(f"{display_path} source_id {source_id}: invalid status {status}")
+            if is_pdf_rag_inventory and status not in {"active", "superseded"}:
+                errors.append(f"{display_path} source_id {source_id}: invalid version_status {status}")
 
         for path_field in ("raw_file_path", "processed_file_path"):
             value = source.get(path_field)
-            if isinstance(value, str) and value.strip() and not (root / value).exists():
+            if (
+                isinstance(value, str)
+                and value.strip()
+                and not (root / value).exists()
+                and not (is_pdf_rag_inventory and path_field == "processed_file_path")
+            ):
                 errors.append(f"{display_path} source_id {source_id}: {path_field} does not exist: {value}")
 
-    for required_source_id in REQUIRED_SOURCE_IDS:
-        if required_source_id not in seen:
-            errors.append(f"{display_path}: missing required source_id: {required_source_id}")
+    if is_pdf_rag_inventory:
+        for legacy_source_id in LEGACY_INTERNAL_SOURCE_IDS:
+            status_by_source_id.setdefault(legacy_source_id, "active_internal")
+    else:
+        for required_source_id in REQUIRED_SOURCE_IDS:
+            if required_source_id not in seen:
+                errors.append(f"{display_path}: missing required source_id: {required_source_id}")
 
-    if "KOR-003" not in seen:
+    if not is_pdf_rag_inventory and "KOR-003" not in seen:
         errors.append(f"{display_path}: missing active runtime source KOR-003")
 
-    unregistered_chunk_sources = sorted(source_id for source_id in chunk_source_lines if source_id not in seen)
+    virtual_source_ids = set(LEGACY_INTERNAL_SOURCE_IDS) if is_pdf_rag_inventory else set()
+    unregistered_chunk_sources = sorted(
+        source_id for source_id in chunk_source_lines if source_id not in seen and source_id not in virtual_source_ids
+    )
     if unregistered_chunk_sources:
         errors.append(
             f"{display_path}: chunk sourceIds not registered in source inventory: "
@@ -327,9 +348,9 @@ def _validate_source_inventory(
                 "but runtime chunks only allow active or active_internal"
             )
 
-    if status_by_source_id.get("KOR-004") != "active":
+    if not is_pdf_rag_inventory and status_by_source_id.get("KOR-004") != "active":
         errors.append(f"{display_path} source_id KOR-004: status must be active after confirmed runtime promotion")
-    if status_by_source_id.get("RSR-001") != "supporting_candidate":
+    if not is_pdf_rag_inventory and status_by_source_id.get("RSR-001") != "supporting_candidate":
         errors.append(f"{display_path} source_id RSR-001: status must remain supporting_candidate")
 
     active_sources = [source_id for source_id in source_ids if status_by_source_id.get(source_id) == "active"]

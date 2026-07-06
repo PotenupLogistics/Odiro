@@ -51,7 +51,8 @@ def test_prompt_builder_creates_system_and_user_prompt() -> None:
     assert "Extra keys are not allowed" in package.systemPrompt + package.userPrompt
     assert "You must return exactly one JSON object" in package.systemPrompt
     assert "Do not invent keys outside the schema" in package.systemPrompt
-    assert package.retrievedContexts
+    assert package.retrievedContexts == []
+    assert "No related policy RAG chunks were retrieved." in package.warnings
 
 
 def test_prompt_builder_includes_scenario_requirements_for_korean_prompt() -> None:

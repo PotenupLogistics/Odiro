@@ -146,17 +146,8 @@ def analysis_run_v2_endpoint(
     try:
         return ResultAnalysisGraphRunnerV2(settings=settings).run(request)
     except Exception:
-        response = AnalysisRunV2Response(
-            status="failed",
-            run_id=request.run_id,
-            error={
-                "code": "ANALYSIS_PROCESSING_FAILED",
-                "message": "분석 결과를 생성하는 중 오류가 발생했습니다.",
-                "phase": "build_response",
-            },
-            warnings=[],
-        )
+        response = ResultAnalysisGraphRunnerV2.processing_failed_response(run_id=request.run_id)
         return JSONResponse(
             status_code=500,
-            content=response.model_dump(by_alias=True, exclude_none=True),
+            content=response.model_dump(by_alias=True, exclude_none=True, mode="json"),
         )

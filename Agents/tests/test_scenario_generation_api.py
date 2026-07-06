@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.main import app
+from app.models.scenario_generation import ScenarioGenerateRequest
 
 
 def test_v1_scenario_generate_returns_run_queue_removed_notice() -> None:
@@ -20,6 +23,20 @@ def test_v1_scenario_generate_does_not_validate_legacy_body_shape() -> None:
 
     assert response.status_code == 410
     assert response.json()["detail"]["code"] == "RUN_QUEUE_REMOVED"
+
+
+def test_legacy_scenario_generate_request_validates_episode_count_and_extra_fields() -> None:
+    """Keep the removed v1 request model strict for archived RunQueue tooling."""
+    assert ScenarioGenerateRequest(prompt="장애물 경로", episode_count=2).episode_count == 2
+
+    for payload in (
+        {"prompt": "장애물 경로", "episode_count": 1.5},
+        {"prompt": "장애물 경로", "episode_count": "3"},
+        {"prompt": "장애물 경로", "episodeCount": 3},
+        {"prompt": "장애물 경로", "episode_count": 1, "extra": "value"},
+    ):
+        with pytest.raises(ValidationError):
+            ScenarioGenerateRequest(**payload)
 
 
 def test_openapi_keeps_only_supported_api_v1_routes() -> None:

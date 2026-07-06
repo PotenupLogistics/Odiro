@@ -66,7 +66,8 @@ guardrails:
   - Result analysis public responses expose display fields only; keep detailed recommendation ids, proposed changes, and modified candidate payloads in `recommendations.json`.
   - Result analysis LLM recommendations must pass public text guardrails; internal RAG/source markers never belong in public summary, insight, reason, or recommendation text.
   - Result analysis file-based RAG is internal recommendation context only; do not create `rag_evidence.json`, `review_dir/internal`, public path fields, or `manifest.json.rag_diagnostic`.
-  - Result analysis must preserve the existing `report.json`, `recommendations.json`, `manifest.json`, and review directory structure expected by the Client.
+  - Result analysis summarizes large `actions.jsonl` files by streaming line-by-line; raw action records and debug logs stay out of public responses and LLM prompts.
+  - Result analysis must preserve `response.json`, `report.json`, `recommendations.json`, `manifest.json`, and the review directory structure expected by the Client.
   - Recommendation output uses the public `recommendation` field; normalize legacy internal names before API/artifact output.
   - UI-facing finding/evidence text may be Korean; stable metric/type codes remain English.
 verify:
@@ -85,6 +86,7 @@ verify:
   - when: v2 analysis or recommendation artifacts change
     run:
       - cd Agents; uv run pytest tests/test_v2_analysis_run_api.py tests/test_v2_result_analysis_graph_runner.py tests/test_v2_analysis_recommendation_artifacts.py -q
+      - cd Agents; uv run pytest tests/test_v2_actions_streaming_summary.py tests/test_v2_analysis_review_lifecycle.py -q
       - pytest covering review lifecycle, parsing, text, and recommendation artifacts when those surfaces change
   - when: v2 analysis LangGraph routing or file-based RAG context changes
     run:

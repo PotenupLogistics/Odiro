@@ -40,6 +40,7 @@ class EventTimelineBuilderV2:
                     episode_id=str(metric.get("episode_id") or ""),
                     events=item.get("events", []),
                     actions=item.get("actions", []),
+                    action_summary=item.get("action_summary"),
                 )
             )
         return timelines
@@ -52,7 +53,10 @@ class EventTimelineBuilderV2:
         episode_id: str,
         events: list[dict],
         actions: list[dict] | None = None,
+        action_summary: dict[str, Any] | None = None,
     ) -> dict:
+        """Build a bounded timeline record for one episode."""
+        _ = actions
         normalized_events = [
             normalized
             for raw_event in events
@@ -68,6 +72,7 @@ class EventTimelineBuilderV2:
             "episode_id": episode_id,
             "timeline": key_events,
             "timeline_summary": self._summary(key_events),
+            "action_summary": self._compact_action_summary(action_summary),
         }
 
     def normalize_event_record(
@@ -92,8 +97,8 @@ class EventTimelineBuilderV2:
     ) -> list[dict]:
         return [event for event in normalized_events if event.get("event_type") in KEY_EVENT_TYPES]
 
-    def _episode_inputs(self, parsed_artifacts: dict) -> dict[tuple[str, str, str], dict[str, list[dict]]]:
-        inputs: dict[tuple[str, str, str], dict[str, list[dict]]] = {}
+    def _episode_inputs(self, parsed_artifacts: dict) -> dict[tuple[str, str, str], dict[str, Any]]:
+        inputs: dict[tuple[str, str, str], dict[str, Any]] = {}
         for item in parsed_artifacts.get("episodes", []):
             if not isinstance(item, dict):
                 continue
@@ -102,6 +107,7 @@ class EventTimelineBuilderV2:
                 continue
             events = item.get("events") if isinstance(item.get("events"), list) else []
             actions = item.get("actions") if isinstance(item.get("actions"), list) else []
+            action_summary = item.get("action_summary") if isinstance(item.get("action_summary"), dict) else None
             source_path = str(item.get("source_path") or "events.jsonl")
             inputs[key] = {
                 "events": [
@@ -110,6 +116,7 @@ class EventTimelineBuilderV2:
                     if isinstance(event, dict)
                 ],
                 "actions": [action for action in actions if isinstance(action, dict)],
+                "action_summary": action_summary,
             }
         return inputs
 
@@ -152,3 +159,25 @@ class EventTimelineBuilderV2:
         if len(event_names) == 1:
             return f"{event_names[0]} 이벤트가 발생했습니다."
         return f"{' 후 '.join(event_names)}이 발생했습니다."
+
+    def _compact_action_summary(self, action_summary: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Return only action summary fields that are safe for analysis context."""
+        if not isinstance(action_summary, dict):
+            return None
+        return {
+            "actions_line_count": action_summary.get("actions_line_count", 0),
+            "parsed_actions_line_count": action_summary.get("parsed_actions_line_count", 0),
+            "broken_actions_line_count": action_summary.get("broken_actions_line_count", 0),
+            "action_type_counts": action_summary.get("action_type_counts", {}),
+            "decision_reason_counts": action_summary.get("decision_reason_counts", {}),
+            "repath_action_count": action_summary.get("repath_action_count", 0),
+            "slowdown_action_count": action_summary.get("slowdown_action_count", 0),
+            "stop_action_count": action_summary.get("stop_action_count", 0),
+            "follow_path_action_count": action_summary.get("follow_path_action_count", 0),
+            "speed_stats": action_summary.get("speed_stats", {}),
+            "path_error_stats": action_summary.get("path_error_stats", {}),
+            "goal_distance_change": action_summary.get("goal_distance_change", {}),
+            "first_timestamp": action_summary.get("first_timestamp"),
+            "last_timestamp": action_summary.get("last_timestamp"),
+            "truncated": action_summary.get("truncated", False),
+        }

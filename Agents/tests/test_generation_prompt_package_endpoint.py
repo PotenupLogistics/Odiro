@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.models.generation import WorldConfigGenerationRequest
+from app.services import world_config_prompt_builder as prompt_builder_module
 from app.services.world_config_prompt_builder import build_world_config_prompt_package
 
 
@@ -29,14 +30,17 @@ def _generation_request() -> WorldConfigGenerationRequest:
     })
 
 
-def test_prompt_package_builder_returns_prompt_package_without_llm_output() -> None:
+def test_prompt_package_builder_returns_prompt_package_without_llm_output(monkeypatch) -> None:
+    monkeypatch.setattr(prompt_builder_module, "build_policy_context_for_world_config", lambda *args, **kwargs: [])
+
     package = build_world_config_prompt_package(_generation_request())
     payload = package.model_dump(mode="json")
 
     assert payload["requestId"] == "REQ-API-PROMPT-001"
     assert payload["systemPrompt"]
     assert payload["userPrompt"]
-    assert payload["retrievedContexts"]
+    assert payload["retrievedContexts"] == []
+    assert "No related policy RAG chunks were retrieved." in payload["warnings"]
     assert payload["schemaSummary"]
     assert payload["validationPolicy"]
     assert "generatedPayload" not in payload

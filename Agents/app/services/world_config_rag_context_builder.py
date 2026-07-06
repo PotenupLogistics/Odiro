@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from app.models.generation import RetrievedPolicyContext, WorldConfigGenerationRequest
-from app.models.rag import RagSearchQuery
 from app.services.natural_language_normalizer import infer_retrieval_queries
-from app.services.policy_rag_retriever import search_policy_chunks
+from app.services.pdf_rag_retriever import get_pdf_rag_retriever, route_query
 from app.services.world_config_scenario_intent_extractor import extract_scenario_intent
 
 
@@ -17,7 +16,7 @@ def build_policy_context_for_world_config(
     top_k: int = 5,
     compact: bool = False,
 ) -> list[RetrievedPolicyContext]:
-    contexts_by_chunk_id: dict[str, RetrievedPolicyContext] = {}
+    contexts_by_key: dict[str, RetrievedPolicyContext] = {}
     intent = extract_scenario_intent(request.prompt)
     retrieval_queries = infer_retrieval_queries(request.prompt)
     retrieval_queries.extend(intent.suggestedCategories)
@@ -33,47 +32,30 @@ def build_policy_context_for_world_config(
             ]
         )
 
+    retriever = get_pdf_rag_retriever()
+    context_index = 1
     for retrieval_query in dict.fromkeys(retrieval_queries):
-        result = search_policy_chunks(
-            RagSearchQuery(
-                query=retrieval_query,
-                topK=top_k,
-                categoryFilter=[retrieval_query] if retrieval_query in intent.suggestedCategories else None,
-            )
-        )
-        for chunk in result.results:
-            if chunk.chunkId in contexts_by_chunk_id:
+        result = retriever.retrieve(retrieval_query, route_hint=route_query(retrieval_query))
+        if not result.available:
+            continue
+        for evidence in result.context_pack.evidence_items[:top_k]:
+            key = f"{evidence.source_title}:{evidence.section_title}:{evidence.evidence_summary}"
+            if key in contexts_by_key:
                 continue
-            contexts_by_chunk_id[chunk.chunkId] = RetrievedPolicyContext(
-                chunkId=chunk.chunkId,
-                cardId=chunk.cardId,
-                category=chunk.metadata.category,
-                evidenceLocation=chunk.metadata.evidenceLocation,
-                relatedActions=chunk.metadata.relatedActions,
-                relatedPolicyParams=chunk.metadata.relatedPolicyParams,
-                shortText=_shorten(chunk.chunkText, 120 if compact else 320),
-                score=chunk.score,
+            contexts_by_key[key] = RetrievedPolicyContext(
+                chunkId=f"PDF-RAG-{context_index:03d}",
+                cardId=f"PDF-RAG-{context_index:03d}",
+                category=evidence.topic_tags[0] if evidence.topic_tags else "pdf_rag_context",
+                evidenceLocation=evidence.section_title,
+                relatedActions=[],
+                relatedPolicyParams=[],
+                shortText=_shorten(evidence.evidence_text, 120 if compact else 320),
+                score=float(top_k - min(context_index, top_k) + 1),
             )
-
-    if not contexts_by_chunk_id:
-        for category in intent.suggestedCategories:
-            result = search_policy_chunks(
-                RagSearchQuery(query=category, topK=top_k, categoryFilter=[category])
-            )
-            for chunk in result.results:
-                contexts_by_chunk_id[chunk.chunkId] = RetrievedPolicyContext(
-                    chunkId=chunk.chunkId,
-                    cardId=chunk.cardId,
-                    category=chunk.metadata.category,
-                    evidenceLocation=chunk.metadata.evidenceLocation,
-                    relatedActions=chunk.metadata.relatedActions,
-                    relatedPolicyParams=chunk.metadata.relatedPolicyParams,
-                    shortText=_shorten(chunk.chunkText, 120 if compact else 320),
-                    score=chunk.score,
-                )
+            context_index += 1
 
     contexts = sorted(
-        contexts_by_chunk_id.values(),
+        contexts_by_key.values(),
         key=lambda item: (-item.score, item.chunkId),
     )
     return contexts[:top_k]

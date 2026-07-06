@@ -1,60 +1,68 @@
-# RAG Chunking Strategy
+# PDF Vector Hybrid RAG Chunking Strategy
 
 ## 1. 목적
 
-confirmed policy knowledge card를 RAG 검색 단위로 변환하는 전략을 정의한다.
+Agents RAG runtime은 PDF 원문 기반의 parent-child corpus를 사용한다. 기존 `data/rag/policy_knowledge_cards.jsonl` 및 `data/rag/policy_rag_chunks.jsonl`은 legacy card store로 남기지만, 새 PDF RAG의 source나 fallback으로 사용하지 않는다.
 
-## 2. 현재 RAG 대상
+## 2. 산출물 구조
 
-현재 RAG 대상은 원본 PDF가 아니라 `data/rag/policy_knowledge_cards.jsonl`의 confirmed policy card이다.
+```text
+PDF source
+-> processed page text
+-> parent-child chunk candidates
+-> schema / metadata / route validation
+-> data/rag/pdf_corpus/validated_parent_child_chunks.jsonl
+-> .cache/rag/chroma/pdf_corpus
+```
 
-## 3. 기본 전략
+`validated_parent_child_chunks.jsonl`은 사람이 전수 작성하는 파일이 아니라 자동 chunking과 validator를 통과한 runtime corpus artifact다. 사람 검수는 `chunk_build_report.json` / `chunk_build_report.md`와 low-confidence/sample chunk 확인으로 제한한다.
 
-- 1 policy card = 1 RAG chunk
-- 원본 PDF와 processed Markdown은 현재 chunking 대상이 아니다.
-- pending/rejected candidate는 RAG에 넣지 않는다.
-- 각 chunk는 evidenceText, principle, projectRule, relatedActions, relatedPolicyParams, evidenceLocation을 포함한다.
+## 3. Chunk 계층
 
-## 4. chunk text 구성
+- Source Document: KOR-001~KOR-008, RSR-001~RSR-006 PDF.
+- Parent Chunk: 조문, 인증/시험 항목, 논문 section처럼 의미가 완결되는 큰 단위.
+- Child Chunk: vector search와 BM25/keyword search 대상.
+- Evidence Snippet: retrieval 이후 LLM context와 review artifact에만 쓰는 짧은 내부 근거.
 
-chunkText는 아래 필드를 조합한다.
+모든 child는 `parent_chunk_id`를 가진다. `chunk_id`는 `source_id`, `hierarchy_path`, `section_title`, normalized text hash 기반으로 생성해 같은 원문/구조에서는 재생성해도 유지한다.
 
-- category
-- principle
-- projectRule
-- evidenceText
-- evidenceLocation
-- relatedPolicyParams
-- relatedRequestFields
-- relatedActions
-- relatedMetrics
-- caution
+## 4. 문서별 기준
 
-## 5. metadata 구성
+- KOR 법령 (`KOR-001`, `KOR-002`, `KOR-006`, `KOR-007`, `KOR-008`): parent는 `제N조` 전체, child는 항/호/목 단위다. 조문 번호, 제목, 법령명, 시행일은 child metadata에 복사한다.
+- KOR-003 KIRIA 가이드북: parent는 인증/시험 항목, child는 내부 요구사항, 표 행, 평가 조건이다.
+- KOR-004 산업부 고시 PDF: parent는 별표/인증기준 평가 항목, child는 세부 기준, 시험 방법, 예외 조건이다. KOR-004는 `original_format=pdf`, `stored_format=pdf`이며 `hwpx` 또는 `converted_by=user` metadata를 쓰지 않는다.
+- RSR 연구 문서: parent는 section/subsection, child는 방법론 단락, 실험 설계 단락, 알고리즘 설명이다. references, author bio, acknowledgements, citation list는 제외하거나 낮은 priority로 둔다.
 
-각 chunk metadata에는 아래를 포함한다.
+RSR 문서는 법규/인증 판단 route에서 차단한다. 특히 RSR-003은 `experiment_design`, `coverage_gap`, `next_run_recommendation` 용도로만 사용한다.
 
-- chunkId
-- cardId
-- sourceIds
-- category
-- relatedPolicyParams
-- relatedActions
-- relatedRequestFields
-- evidenceLocation
-- createdFromCandidateId
-- status: confirmed_policy_card
+## 5. Metadata
 
-## 6. 검색 전략
+validated child chunk는 최소 다음 metadata를 가진다.
 
-- category 기반 필터링
-- action 기반 필터링
-- policy parameter 기반 필터링
-- topK 기본값 3~5
-- 검색 결과는 policy generation 또는 decision reasoning에 사용한다.
+```json
+{
+  "chunk_id": "KOR-004-chunk-...",
+  "parent_chunk_id": "KOR-004-chunk-...",
+  "source_id": "KOR-004",
+  "source_type": "official_notice",
+  "authority_rank": 1,
+  "version_status": "active",
+  "page_start": 8,
+  "page_end": 9,
+  "section_title": "운행속도",
+  "hierarchy_path": ["별표", "운행속도"],
+  "topic_tags": ["speed_policy"],
+  "use_scope": ["certification_requirement", "safety_rule"],
+  "route_names": ["safety_certification"],
+  "chunk_kind": "child",
+  "language": "ko",
+  "review_status": "auto_validated",
+  "extraction_confidence": "high"
+}
+```
 
-## 7. 후속 확장
+허용 값은 `app/services/pdf_rag_corpus.py`에서 관리한다. candidate 단계에서는 warning으로 볼 수 있지만, validated corpus 단계에서는 정의되지 않은 값이 있으면 실패한다.
 
-- source document RAG는 별도 index로 분리한다.
-- processed Markdown chunking은 reviewed 문서에 한해 section/page 단위로 수행한다.
-- evaluation metric RAG는 RSR-001 검토 후 별도 card로 구성한다.
+## 6. Table QA
+
+KOR-003/KOR-004는 표 기반 기준이 중요하므로 표 title, column, row value, unit이 child text에 남아야 한다. 속도, 질량, 거리, 각도, dB 등 숫자/단위가 깨지면 `extraction_confidence=low` 또는 source별 parser override 대상으로 표시한다.

@@ -3,10 +3,23 @@
 - system prompt의 근거 제한, 금지사항, public 응답 안전 규칙을 우선합니다.
 - recommendations 배열만 포함한 JSON object를 출력합니다.
 - 입력에 포함된 patterns, metrics, warnings, refs로 뒷받침되는 항목만 추천합니다.
+- 성공률, 평균 실행 시간, 충돌 횟수, Near Miss 횟수 같은 숫자는 별도 통계 UI에 표시되므로 반복하지 말고, 그 의미와 개선 방향을 설명합니다.
 - evidence는 실제 제공된 episode 참조만 사용합니다.
 - target은 "policy" 또는 "environment"만 사용합니다.
 - 근거가 부족하거나 원인 분류가 none이면 recommendations는 빈 배열로 둡니다.
+- recommendations는 1~3개로 제한합니다.
 - 각 recommendation에는 id를 `REC-LLM-001`, `REC-LLM-002`처럼 안정적으로 부여합니다.
+- title은 무엇을 확인하거나 조정할지 짧게 작성합니다.
+- reason은 `이유\n- ...` 형식의 개조식 문자열로 작성합니다.
+- recommendation은 `확인 항목\n- ...` 형식의 개조식 문자열로 작성합니다.
+- 각 bullet은 원인 해석 또는 확인 항목 중심의 짧은 구문으로 작성합니다.
+- "했습니다", "합니다", "필요가 있습니다", "확인되었습니다", "검토할 필요가 있습니다" 같은 긴 서술형 종결을 피합니다.
+- title, reason, recommendation에 "높음", "중간", "낮음", "위험", "보통" 같은 등급 라벨을 직접 넣지 않습니다. priority 필드만 등급/정렬 기준으로 유지합니다.
+- metrics.near_miss_count가 0보다 크면 Near Miss를 충돌 전조 또는 회피 여유 부족 신호로 설명하고, 회피 여유 거리와 감속 판단 조건 확인을 포함합니다.
+- metrics.near_miss_count가 0이면 Near Miss recommendation을 생성하지 않습니다.
+- timeout_repeated와 repath_repeated가 함께 있으면 recommendations를 최소 2개 생성합니다.
+- success_count와 failure_count가 모두 0보다 크면 성공·실패 episode 비교 recommendation을 3번째 후보로 포함할 수 있습니다.
+- "정책 검토 우선" 같은 추상 title은 쓰지 않습니다.
 - proposed_change는 문자열이 아니라 object여야 합니다.
 - policy 추천의 proposed_change는 `{ "type": "policy_parameter_adjustment", "content": { ... } }` 형식이며 content에는 `followSpeedKmh_max`, `maxPathErrorM_max`, `lookAheadDistanceM_max`, `pathSmoothingDistanceM_max`, `maxSteeringDelta_max` 숫자 값을 모두 포함합니다.
 - policy 숫자 값은 각각 `followSpeedKmh_max <= 3.5`, `maxPathErrorM_max <= 0.8`, `lookAheadDistanceM_max <= 1.0`, `pathSmoothingDistanceM_max <= 0.25`, `maxSteeringDelta_max <= 0.06` 범위를 넘지 않습니다.

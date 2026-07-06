@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 
 from app.api import routes
 from app.agents.result_analysis_v2 import ResultAnalysisV2Agent
+from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2
+from app.agents.result_analysis_v2.public_text_guardrail import contains_forbidden_public_text
 from app.core.settings import Settings
 from app.main import app
 from app.models.analysis_v2 import AnalysisRunV2Request, AnalysisRunV2Response
@@ -19,7 +21,28 @@ FORBIDDEN_USER_TEXT = (
     "근거를 토대로",
     "pipeline.diagnostics",
     "evidence",
+    "source_id",
+    "chunk_id",
+    "page",
+    "score",
+    "Chroma",
+    "chroma",
+    "vector",
+    "Vector",
+    "embedding",
+    "Embedding",
+    "retrieval_backend",
+    "retrieval backend",
+    "RAG",
+    "rag",
+    "Rag",
 )
+
+FORBIDDEN_RATING_PREFIXES = ("높음", "중간", "낮음", "위험", "보통")
+
+FORBIDDEN_RATING_TEXT = ("높음 |", "중간 |", "낮음 |", "위험 수준", "보통 |")
+
+FORBIDDEN_PROSE_ENDINGS = ("했습니다.", "합니다.", "필요가 있습니다.", "확인되었습니다.")
 
 
 class _FakeJsonClient:
@@ -73,6 +96,51 @@ def _assert_display_text_hides_internal_evidence(payload: dict) -> None:
     user_text = f"{payload['summary']['message']}\n{recommendation_text}\n{insight_text}"
     for forbidden in FORBIDDEN_USER_TEXT:
         assert forbidden not in user_text
+
+
+def _assert_response_artifact_matches_payload(project: Path, payload: dict) -> None:
+    """Assert persisted public response artifact matches the HTTP response body."""
+    response_path = project / "runs" / payload["run_id"] / "review" / payload["review_id"] / "response.json"
+    persisted = _read_json(response_path)
+    persisted_text = json.dumps(persisted, ensure_ascii=False)
+
+    assert persisted == payload
+    assert "response_path" not in payload
+    for forbidden in FORBIDDEN_USER_TEXT:
+        assert forbidden not in persisted_text
+
+
+def _assert_analysis_display_text_is_explainable(payload: dict) -> None:
+    """Ensure public analysis text is ready for the Unreal analysis UI."""
+    assert payload["summary"]["message"].strip()
+    assert len(payload.get("insights", [])) <= 3
+    assert len(payload.get("recommendations", [])) <= 3
+    for insight in payload.get("insights", []):
+        assert insight.get("severity")
+        assert not str(insight.get("title", "")).startswith(FORBIDDEN_RATING_PREFIXES)
+        description = str(insight.get("description", ""))
+        assert "관찰\n-" in description
+        assert "해석\n-" in description
+        assert "확인\n-" in description
+        text = f"{insight.get('title', '')}\n{description}"
+        for forbidden in FORBIDDEN_RATING_TEXT:
+            assert forbidden not in text
+        for forbidden in FORBIDDEN_PROSE_ENDINGS:
+            assert forbidden not in description
+    for recommendation in payload.get("recommendations", []):
+        assert recommendation.get("priority")
+        assert not str(recommendation.get("title", "")).startswith(FORBIDDEN_RATING_PREFIXES)
+        assert "이유\n-" in str(recommendation.get("reason", ""))
+        assert "확인 항목\n-" in str(recommendation.get("recommendation", ""))
+        text = (
+            f"{recommendation.get('title', '')}\n"
+            f"{recommendation.get('reason', '')}\n"
+            f"{recommendation.get('recommendation', '')}"
+        )
+        for forbidden in FORBIDDEN_RATING_TEXT:
+            assert forbidden not in text
+        for forbidden in FORBIDDEN_PROSE_ENDINGS:
+            assert forbidden not in text
 
 
 def _empty_analysis_response(run_id: str = "000001") -> AnalysisRunV2Response:
@@ -403,6 +471,40 @@ def test_non_analysis_v2_validation_errors_keep_fastapi_default() -> None:
     assert "detail" in response.json()
 
 
+def test_v2_analysis_run_success_persists_public_response_artifact(tmp_path) -> None:
+    """Successful run review stores the exact public response body for later UI reuse."""
+    project = tmp_path / "Project1"
+    _write_penalty_episode(project, "000001")
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    _assert_response_artifact_matches_payload(project, response.json())
+
+
+def test_v2_analysis_run_failure_after_review_start_persists_public_response_artifact(monkeypatch, tmp_path) -> None:
+    """Processing failures after review allocation still leave the public failure payload on disk."""
+    project = tmp_path / "Project1"
+    _write_penalty_episode(project, "000001")
+
+    def fail_scan(self, state):
+        """Force a deterministic post-review-start processing failure."""
+        raise RuntimeError("forced scan failure")
+
+    monkeypatch.setattr(ResultAnalysisGraphRunnerV2, "_compile_graph", lambda self: None)
+    monkeypatch.setattr(ResultAnalysisGraphRunnerV2, "scan_workspace_node", fail_scan)
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 500, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    response_path = review_dir / "response.json"
+    assert _read_json(response_path) == payload
+    assert "response_path" not in payload
+    assert _read_json(review_dir / "status.json")["status"] == "failed"
+
+
 def test_v2_analysis_run_summary_rows_match_ue_success_and_display_contract(tmp_path) -> None:
     """Public overview and episode rows reproduce the UE dashboard success rules."""
     project = tmp_path / "Project1"
@@ -719,7 +821,7 @@ def test_v2_analysis_run_exposes_repath_and_tip_over_metrics(tmp_path) -> None:
 
 
 def test_v2_analysis_run_insights_describe_observed_collision_metrics_only(tmp_path) -> None:
-    """Collision insights mention only observed event types and include repeat counts."""
+    """Collision insights mention only observed event types in UI-ready sections."""
     project = tmp_path / "Project1"
     for episode_id, static_collisions, repaths in (
         ("000001", 6, 5),
@@ -781,18 +883,19 @@ def test_v2_analysis_run_insights_describe_observed_collision_metrics_only(tmp_p
     collision_insight = payload["insights"][0]
     assert collision_insight["severity"] == "high"
     assert collision_insight["title"] == "정적 장애물 충돌 반복"
-    assert "정적 장애물 충돌이 8회 발생" in collision_insight["description"]
-    assert "3개 episode에서 충돌 패턴이 반복" in collision_insight["description"]
+    assert "관찰\n- 정적 장애물 충돌 발생" in collision_insight["description"]
+    assert "해석\n- 장애물 배치나 유효 통로 폭" in collision_insight["description"]
+    assert "확인\n- 장애물 간격" in collision_insight["description"]
     assert "보행자" not in collision_insight["description"]
     assert "차단 구역" not in collision_insight["description"]
     assert any(
         insight["title"] == "전복 이벤트 확인"
-        and "1개 episode에서 로봇 전복이 발생했습니다" in insight["description"]
+        and "관찰\n- 로봇 전복 이벤트" in insight["description"]
         for insight in payload["insights"]
     )
     assert any(
         insight["title"] == "재경로 탐색 반복"
-        and "5개 episode에서 재경로 탐색이 반복되었습니다" in insight["description"]
+        and "관찰\n- 여러 episode에서 재경로 탐색 발생" in insight["description"]
         for insight in payload["insights"]
     )
     assert "analysis_mode" not in payload
@@ -873,11 +976,104 @@ def test_v2_analysis_run_success_with_policy_evidence_uses_safety_review_wording
     payload = response.json()
     assert payload["recommendation_type"] == "policy_review"
     assert payload["summary"]["overall_judgement"] == "change_recommended"
-    assert "주행은 성공했지만" in payload["summary"]["message"]
+    assert "성공 run 내 패널티 구역 침범 신호" in payload["summary"]["message"]
     assert "실패 근거" not in payload["summary"]["message"]
     assert "반복 실패" not in payload["recommendations"][0]["recommendation"]
-    assert "경로 재탐색" in payload["recommendations"][0]["recommendation"]
+    assert "경로 추종 조건" in payload["recommendations"][0]["recommendation"]
     assert "analysis_text" not in payload
+
+
+def test_v2_analysis_run_near_miss_public_text_is_explainable_without_rating_labels(tmp_path) -> None:
+    """Near Miss signals are explained as a safety margin issue without changing the API schema."""
+    project = tmp_path / "Project1"
+    for episode_id in ("000001", "000002"):
+        _write_episode(
+            project,
+            episode_id,
+            {"success": False, "failure_type": "timeout", "near_miss_count": 1},
+            '{"event_type": "near_miss", "distance_m": 0.4}\n',
+        )
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["schema"] == "analysis_run_response_v2"
+    assert payload["version"] == 2
+    assert "analysis_text" not in payload
+    assert "analysis_mode" not in payload
+    assert "modified_policy_json" not in payload
+    assert "modified_environment_json" not in payload
+    assert payload["recommendation_type"] == "policy_review"
+    assert payload["summary"]["message"] == (
+        "근접 위험 반복으로 회피 여유 거리와 감속 판단 조건 점검 필요"
+    )
+
+    near_miss_insight = next(
+        insight for insight in payload["insights"] if "Near Miss" in insight["title"] or "근접 위험" in insight["title"]
+    )
+    assert near_miss_insight["severity"] == "medium"
+    assert near_miss_insight["title"] == "Near Miss 반복"
+    assert "근접 위험" in near_miss_insight["description"]
+    assert "충돌 전조" in near_miss_insight["description"] or "회피 여유" in near_miss_insight["description"]
+
+    near_miss_recommendation = next(
+        recommendation
+        for recommendation in payload["recommendations"]
+        if "Near Miss" in recommendation["title"] or "근접 위험" in recommendation["reason"]
+    )
+    assert near_miss_recommendation["target"] == "policy"
+    assert near_miss_recommendation["priority"] == "medium"
+    assert near_miss_recommendation["title"] == "Near Miss 대응 조건 점검"
+    assert near_miss_recommendation["reason"].startswith("이유\n-")
+    assert "회피 여유 거리" in near_miss_recommendation["reason"]
+    assert near_miss_recommendation["recommendation"].startswith("확인 항목\n-")
+    assert "감속 시작 거리" in near_miss_recommendation["recommendation"]
+    assert "id" not in near_miss_recommendation
+    assert "proposed_change" not in near_miss_recommendation
+    _assert_analysis_display_text_is_explainable(payload)
+    _assert_display_text_hides_internal_evidence(payload)
+
+
+def test_v2_analysis_run_timeout_repath_uses_bullet_ready_policy_text(tmp_path) -> None:
+    """Timeout and repeated repath signals create UI-ready analysis and multiple policy actions."""
+    project = tmp_path / "Project1"
+    for episode_id in ("000001", "000002"):
+        _write_episode(project, episode_id, {"success": True, "goal_reached": True})
+    for episode_id in ("000003", "000004", "000005"):
+        _write_episode(
+            project,
+            episode_id,
+            {"success": False, "failure_type": "timeout"},
+            '{"event_type": "Repath"}\n{"event_type": "Repath"}\n',
+        )
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["schema"] == "analysis_run_response_v2"
+    assert payload["version"] == 2
+    assert payload["recommendation_type"] == "policy_review"
+    assert payload["summary"]["message"] == "재경로 탐색 반복과 시간 초과 신호로 주행 정책 점검 필요"
+    assert 2 <= len(payload["recommendations"]) <= 3
+    assert payload["metrics"]["near_miss_count"] == 0
+    assert all("Near Miss" not in item["title"] for item in payload["insights"])
+    assert all("Near Miss" not in item["title"] for item in payload["recommendations"])
+    insight_titles = {insight["title"] for insight in payload["insights"]}
+    assert "충돌 없는 목표 도달 실패" in insight_titles
+    assert "재경로 탐색 반복" in insight_titles
+    assert "성공·실패 결과 혼재" in insight_titles
+    assert "정책 검토 우선" not in insight_titles
+    recommendation_titles = {recommendation["title"] for recommendation in payload["recommendations"]}
+    assert "경로 추종 안정성 점검" in recommendation_titles
+    assert "재경로 탐색 진입 조건 점검" in recommendation_titles
+    assert "성공·실패 episode 비교" in recommendation_titles
+    for recommendation in payload["recommendations"]:
+        assert "id" not in recommendation
+        assert "proposed_change" not in recommendation
+    _assert_analysis_display_text_is_explainable(payload)
+    _assert_display_text_hides_internal_evidence(payload)
 
 
 def test_v2_analysis_run_stuck_timeout_uses_specific_public_wording(tmp_path) -> None:
@@ -898,15 +1094,15 @@ def test_v2_analysis_run_stuck_timeout_uses_specific_public_wording(tmp_path) ->
     payload = response.json()
     insight = next(item for item in payload["insights"] if "제한 시간" in item["title"])
     assert payload["recommendation_type"] == "policy_review"
-    assert payload["summary"]["message"] == "정체 이후 제한 시간 초과로 종료되어 주행 정책 검토가 필요합니다."
+    assert payload["summary"]["message"] == "정체와 제한 시간 초과 신호로 감속·정지 및 재탐색 조건 점검 필요"
     assert insight["title"] == "정체 후 제한 시간 초과"
     assert "정체 신호" in insight["description"]
-    assert "제한 시간 내 목표에 도달하지 못했습니다" in insight["description"]
-    assert payload["recommendations"][0]["title"] == "정체와 제한 시간 초과 대응 정책 검토"
-    assert payload["recommendations"][0]["reason"] == (
-        "정체 이후 제한 시간 초과가 확인되어 감속, 정지, 재경로 탐색 조건을 검토할 필요가 있습니다."
-    )
+    assert "목표 도달 실패" in insight["description"]
+    assert payload["recommendations"][0]["title"] == "경로 추종 안정성 점검"
+    assert payload["recommendations"][0]["reason"].startswith("이유\n-")
+    assert payload["recommendations"][0]["recommendation"].startswith("확인 항목\n-")
     assert "stuck_count" not in payload["metrics"]
+    _assert_analysis_display_text_is_explainable(payload)
     _assert_display_text_hides_internal_evidence(payload)
 
 
@@ -943,6 +1139,41 @@ def test_v2_analysis_run_repeated_blocked_region_generates_environment_recommend
     assert recommendation_artifact["modified_environment_json"][0]["source_recommendation_id"] == detailed_recommendation["id"]
     assert recommendation_artifact["modified_environment_json"][0]["target"] == "environment"
     assert recommendation_artifact["modified_policy_json"] == []
+
+
+def test_v2_analysis_run_environment_review_adds_runtime_pattern_recommendations(tmp_path) -> None:
+    """Environment reviews include extra UI actions when runtime policy signals also repeat."""
+    project = tmp_path / "Project1"
+    for episode_id in ("000001", "000002", "000003"):
+        _write_episode(
+            project,
+            episode_id,
+            {"success": False, "failure_type": "static_obstacle_collision"},
+            '{"event_type": "static_obstacle_collision"}\n{"event_type": "Repath"}\n{"event_type": "Repath"}\n',
+        )
+    _write_episode(
+        project,
+        "000004",
+        {"success": False, "failure_type": "robot_tip_over", "robot_tip_over_count": 1},
+        '{"event_type": "robot_tip_over"}\n{"event_type": "Repath"}\n',
+    )
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["recommendation_type"] == "environment_review"
+    assert 2 <= len(payload["recommendations"]) <= 3
+    recommendation_titles = {recommendation["title"] for recommendation in payload["recommendations"]}
+    assert "정적 장애물 배치와 통로 폭 검토" in recommendation_titles
+    assert "재경로 탐색 진입 조건 점검" in recommendation_titles
+    assert all(recommendation["reason"].startswith("이유\n-") for recommendation in payload["recommendations"])
+    assert all(
+        recommendation["recommendation"].startswith("확인 항목\n-")
+        for recommendation in payload["recommendations"]
+    )
+    recommendations = _read_json(project / "runs" / "000001" / "review" / "0001" / "recommendations.json")
+    assert len(recommendations["recommendations"]) == len(payload["recommendations"])
 
 
 def test_v2_analysis_run_setup_failed_only_uses_setup_text_and_no_candidates(tmp_path) -> None:
@@ -1182,7 +1413,8 @@ def test_v2_analysis_run_terminal_reason_controls_goal_not_reached_finding(tmp_p
             assert any(insight["title"] == "차단 구역 위반 확인" for insight in payload["insights"])
         if case_name == "RobotTipOver":
             assert payload["recommendation_type"] == "policy_review"
-            assert any(insight["title"] == "정책 검토 우선" for insight in payload["insights"])
+            assert any(insight["title"] == "전복 이벤트 확인" for insight in payload["insights"])
+        assert all(insight["title"] != "정책 검토 우선" for insight in payload["insights"])
 
 
 def test_v2_analysis_agent_keeps_rule_based_mode_when_llm_disabled(tmp_path) -> None:
@@ -1222,6 +1454,33 @@ def test_v2_analysis_agent_uses_valid_llm_recommendation(tmp_path) -> None:
     recommendations = _read_json(project / "runs" / "000001" / "review" / "0001" / "recommendations.json")
     assert recommendations["recommendations"][0]["id"] == "REC-LLM-001"
     assert recommendations["modified_policy_json"][0]["source_recommendation_id"] == "REC-LLM-001"
+
+
+def test_v2_analysis_agent_filters_internal_rag_terms_from_llm_public_text(tmp_path) -> None:
+    project = tmp_path / "Project1"
+    _write_penalty_episode(project, "000001")
+    llm_payload = _llm_analysis(project.name, "000001")
+    internal_text = "source_id chunk_id page score chroma vector embedding retrieval_backend retrieval backend rag"
+    llm_payload["summary_message"] = f"추천 요약 {internal_text}"
+    llm_payload["recommendations"][0]["title"] = f"내부 식별자 {internal_text}"
+    llm_payload["recommendations"][0]["reason"] = f"내부 검색 진단 {internal_text}"
+    llm_payload["recommendations"][0]["llm_recommendation"] = f"사용자 표시 문구 {internal_text}"
+    fake = _FakeJsonClient([llm_payload])
+    agent = ResultAnalysisV2Agent(
+        settings=Settings(v2AgentLlmEnabled=True),
+        llm_client=fake,
+    )
+
+    response = agent.run(_request_model(project))
+
+    _assert_display_text_hides_internal_evidence(response.model_dump(by_alias=True))
+
+
+def test_public_text_guardrail_allows_common_words_containing_forbidden_fragments() -> None:
+    assert contains_forbidden_public_text("drag control remains stable") is False
+    assert contains_forbidden_public_text("webpage display is available") is False
+    assert contains_forbidden_public_text("success score improved") is False
+    assert contains_forbidden_public_text("score: 0.82") is True
 
 
 def test_v2_analysis_agent_falls_back_when_llm_evidence_is_invalid(tmp_path) -> None:

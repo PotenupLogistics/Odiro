@@ -144,10 +144,29 @@ def _write_snapshot_policy_file(project: Path, run_id: str, relative_path: str, 
 
 
 def _write_large_actions_file(project: Path, run_id: str, episode_id: str) -> None:
-    """Create an actions.jsonl file that the scanner will skip as too large."""
+    """Create a large actions.jsonl file that should be summarized by streaming."""
     actions_path = project / "runs" / run_id / "episodes" / episode_id / "actions.jsonl"
     actions_path.parent.mkdir(parents=True, exist_ok=True)
-    actions_path.write_bytes(b"{\"action\":\"noop\"}\n" + b" " * 5_000_001)
+    rows = [
+        {
+            "action": "repath",
+            "decision_reason": "blocked",
+            "timestamp": 1.0,
+            "speed_mps": 0.3,
+            "path_error": 1.1,
+            "goal_distance": 12.0,
+            "padding": "x" * 5_000_001,
+        },
+        {
+            "command": "stop",
+            "cause": "near_miss",
+            "time_s": 2.0,
+            "speed": 0.0,
+            "path_error": 1.4,
+            "goal_distance": 12.0,
+        },
+    ]
+    actions_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 
 
 @pytest.fixture(autouse=True)
@@ -286,8 +305,10 @@ def test_v2_analysis_run_snapshot_hash_excludes_policy_runtime_cache_files(tmp_p
     assert "runs/000001/snapshot/policy/.DS_Store" not in manifest["source_run_files"]
 
 
-def test_v2_analysis_run_data_coverage_lists_broken_json_and_large_actions_by_requested_run(tmp_path) -> None:
-    """Data coverage distinguishes skipped actions and run-local broken JSON paths."""
+def test_v2_analysis_run_data_coverage_lists_broken_json_and_summarized_large_actions_by_requested_run(
+    tmp_path,
+) -> None:
+    """Data coverage distinguishes summarized actions and run-local broken JSON paths."""
     project = tmp_path / "Project1"
     _write_episode(project, "000001", "000001", {"success": True, "goal_reached": True})
     _write_large_actions_file(project, "000001", "000001")
@@ -308,13 +329,54 @@ def test_v2_analysis_run_data_coverage_lists_broken_json_and_large_actions_by_re
     report = _read_json(review_dir / "report.json")
     coverage = report["data_coverage"]
     assert coverage["actions_file_count"] == 1
-    assert coverage["parsed_actions_file_count"] == 0
-    assert coverage["skipped_large_actions_file_count"] == 1
+    assert coverage["parsed_actions_file_count"] == 1
+    assert coverage["summarized_actions_file_count"] == 1
+    assert coverage["skipped_large_actions_file_count"] == 0
+    assert coverage["actions_summary_line_count"] == 2
+    assert coverage["actions_summary_parsed_line_count"] == 2
+    assert coverage["actions_summary_broken_line_count"] == 0
     assert coverage["broken_json_count"] == 1
     assert coverage["broken_json_paths"] == ["runs/000002/snapshot/scenario.json"]
+    assert not any("actions.jsonl" in warning for warning in coverage["large_file_warnings"])
     assert not any("skipped large file" in warning for warning in payload["warnings"])
     assert any("runs/000002/snapshot/scenario.json" in warning for warning in payload["warnings"])
     assert not any("runs\\000001\\episodes\\000001\\actions.jsonl" in warning for warning in payload["warnings"])
+
+
+def test_v2_analysis_run_summarizes_actions_for_multiple_episodes_without_public_raw_logs(tmp_path) -> None:
+    """Run review artifacts include action summaries while the public response stays compact."""
+    project = tmp_path / "Project1"
+    for index in range(1, 6):
+        episode_id = f"{index:06d}"
+        _write_episode(project, "000001", episode_id, {"success": False, "failure_type": "timeout"})
+        _write_large_actions_file(project, "000001", episode_id)
+
+    response = TestClient(app).post(
+        "/api/v2/analysis/run",
+        json={"project_path": str(project), "run_id": "000001"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    report = _read_json(review_dir / "report.json")
+    response_artifact = _read_json(review_dir / "response.json")
+    coverage = report["data_coverage"]
+    public_text = json.dumps(payload, ensure_ascii=False)
+    response_artifact_text = json.dumps(response_artifact, ensure_ascii=False)
+
+    assert coverage["actions_file_count"] == 5
+    assert coverage["parsed_actions_file_count"] == 5
+    assert coverage["summarized_actions_file_count"] == 5
+    assert coverage["actions_summary_line_count"] == 10
+    assert coverage["actions_summary_parsed_line_count"] == 10
+    assert coverage["skipped_large_actions_file_count"] == 0
+    assert any(finding["type"] == "repath" for finding in report["findings"])
+    assert any(evidence["kind"] == "actions_summary" for evidence in report["evidence"])
+    assert "padding" not in public_text
+    assert "actions_streaming_summary" not in public_text
+    assert response_artifact == payload
+    assert "padding" not in response_artifact_text
 
 
 def test_v2_analysis_run_missing_run_does_not_create_review_directory(tmp_path) -> None:

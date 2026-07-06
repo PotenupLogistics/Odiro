@@ -1,12 +1,10 @@
-"""File-based RAG adapter and context builder for result-analysis v2 internals."""
+"""PDF RAG adapter and context builder for result-analysis v2 internals."""
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from app.agents.result_analysis_v2.routes import (
-    RAG_ROUTE_JSONL_ERROR,
     RAG_ROUTE_NO_QUERY,
     RAG_ROUTE_NO_RESULT,
     RAG_ROUTE_RETRIEVED,
@@ -15,19 +13,19 @@ from app.agents.result_analysis_v2.routes import (
     RAG_ROUTE_STORE_MISSING,
     RagRouteV2,
 )
-from app.models.rag import RagSearchQuery
-from app.services.policy_rag_retriever import search_policy_chunks
+from app.services.pdf_rag_retriever import PDF_RAG_BACKEND, PdfVectorHybridRagRetriever, get_pdf_rag_retriever
 
 
 # Stable backend identifier for internal diagnostics and route tests.
-RAG_BACKEND_FILE_BASED_JSONL = "file_based_jsonl"
+RAG_BACKEND_PDF_VECTOR_HYBRID = PDF_RAG_BACKEND
 
 
-class FileBasedRagRetrieverAdapterV2:
-    """Wrap the file-based policy RAG search for result-analysis internal state."""
+class PdfRagRetrieverAdapterV2:
+    """Wrap PDF Vector Hybrid RAG retrieval for result-analysis internal state."""
 
-    def __init__(self) -> None:
-        """Initialize a diagnostic record for the last retrieval attempt."""
+    def __init__(self, retriever: PdfVectorHybridRagRetriever | None = None) -> None:
+        """Initialize a retriever and diagnostic record for the last retrieval attempt."""
+        self.retriever = retriever
         self.last_diagnostic = self._diagnostic(route=RAG_ROUTE_SKIPPED)
 
     def retrieve(
@@ -48,6 +46,7 @@ class FileBasedRagRetrieverAdapterV2:
 
         retrieved: list[dict[str, Any]] = []
         try:
+            retriever = self.retriever or get_pdf_rag_retriever()
             for query in queries:
                 query_text = self._query_text(query)
                 if not query_text:
@@ -57,16 +56,26 @@ class FileBasedRagRetrieverAdapterV2:
                         fallback_reason="query_empty",
                     )
                     return []
-                result = search_policy_chunks(RagSearchQuery(query=query_text, topK=top_k))
-                for chunk in result.results:
+                result = retriever.retrieve(query_text, route_hint=self._route_hint(query))
+                if not result.available:
+                    self.last_diagnostic = {
+                        **self._diagnostic(
+                            route=RAG_ROUTE_STORE_MISSING,
+                            query_count=query_count,
+                            fallback_reason=result.diagnostic.get("rag_error_type", "rag_unavailable"),
+                        ),
+                        **result.diagnostic,
+                    }
+                    return []
+                for evidence in result.context_pack.evidence_items[:top_k]:
                     retrieved.append(
                         {
                             "query_id": str(query.get("query_id") or ""),
                             "query_type": str(query.get("query_type") or ""),
-                            "context_text": chunk.chunkText,
-                            "category": chunk.metadata.category,
-                            "related_policy_params": list(chunk.metadata.relatedPolicyParams),
-                            "related_actions": list(chunk.metadata.relatedActions),
+                            "context_text": evidence.evidence_text,
+                            "category": evidence.topic_tags[0] if evidence.topic_tags else "",
+                            "related_policy_params": [],
+                            "related_actions": [],
                         }
                     )
         except FileNotFoundError:
@@ -74,13 +83,6 @@ class FileBasedRagRetrieverAdapterV2:
                 route=RAG_ROUTE_STORE_MISSING,
                 query_count=query_count,
                 fallback_reason="store_missing",
-            )
-            return []
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            self.last_diagnostic = self._diagnostic(
-                route=RAG_ROUTE_JSONL_ERROR,
-                query_count=query_count,
-                fallback_reason="jsonl_parse_failed",
             )
             return []
         except Exception:
@@ -117,6 +119,17 @@ class FileBasedRagRetrieverAdapterV2:
             return " ".join(str(keyword) for keyword in keywords if str(keyword).strip()).strip()
         return ""
 
+    def _route_hint(self, query: dict[str, Any]) -> str | None:
+        """Map v2 query type labels to PDF RAG route hints."""
+        query_type = str(query.get("query_type") or "")
+        if query_type in {"policy_safety", "collision_prevention", "general_safety"}:
+            return "safety_certification"
+        if query_type == "pedestrian_safety":
+            return "crosswalk_sidewalk"
+        if query_type == "navigation_efficiency":
+            return "experiment_coverage"
+        return None
+
     def _diagnostic(
         self,
         *,
@@ -129,7 +142,7 @@ class FileBasedRagRetrieverAdapterV2:
         """Create a path-free retrieval diagnostic for internal state only."""
         return {
             "enabled": True,
-            "backend": RAG_BACKEND_FILE_BASED_JSONL,
+            "backend": RAG_BACKEND_PDF_VECTOR_HYBRID,
             "used": used,
             "query_count": query_count,
             "retrieved_chunk_count": retrieved_chunk_count,
@@ -151,5 +164,9 @@ class RagContextBuilderV2:
         return {
             "rag_queries": queries,
             "retrieved_contexts": retrieved_contexts,
-            "retrieval_mode": "disabled" if not retrieved_contexts else RAG_BACKEND_FILE_BASED_JSONL,
+            "retrieval_mode": "disabled" if not retrieved_contexts else RAG_BACKEND_PDF_VECTOR_HYBRID,
         }
+
+
+# Backward-compatible import name; implementation no longer calls legacy card JSONL.
+FileBasedRagRetrieverAdapterV2 = PdfRagRetrieverAdapterV2

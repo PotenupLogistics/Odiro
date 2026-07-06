@@ -116,7 +116,7 @@ class ResponseBuilder:
     def public_recommendations(self, recommendations: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Trim detailed recommendation records down to public display fields."""
         public_items: list[dict[str, Any]] = []
-        for recommendation in recommendations:
+        for recommendation in recommendations[:3]:
             if not isinstance(recommendation, dict):
                 continue
             public_item = {

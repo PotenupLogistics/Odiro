@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 # Internal source markers that must not appear in user-facing analysis text.
@@ -11,7 +12,36 @@ PUBLIC_RESPONSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "관련 정책 문서",
     "p.33",
     "근거 문서",
+    "source_id",
+    "chunk_id",
+    "page",
+    "score",
+    "Chroma",
+    "chroma",
+    "vector",
+    "Vector",
+    "embedding",
+    "Embedding",
+    "retrieval_backend",
+    "retrieval backend",
     "RAG",
+    "rag",
+    "Rag",
+)
+
+# Terms that are only forbidden when they look like internal metadata.
+PUBLIC_RESPONSE_CONTEXTUAL_TERMS: frozenset[str] = frozenset({"score"})
+
+# Internal source markers compiled with token boundaries to avoid normal word fragments.
+PUBLIC_RESPONSE_FORBIDDEN_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(rf"(?<![A-Za-z0-9_]){re.escape(term)}(?![A-Za-z0-9_])", re.IGNORECASE)
+    for term in PUBLIC_RESPONSE_FORBIDDEN_TERMS
+    if term.casefold() not in PUBLIC_RESPONSE_CONTEXTUAL_TERMS
+)
+
+# Metadata-shaped internal markers that are too common for broad substring blocking.
+PUBLIC_RESPONSE_CONTEXTUAL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?<![A-Za-z0-9_])score(?![A-Za-z0-9_])\s*[:=]", re.IGNORECASE),
 )
 
 # Recommendation fields copied to the public response surface.
@@ -25,7 +55,9 @@ def contains_forbidden_public_text(value: object) -> bool:
     """Return whether a public text value includes an internal source marker."""
     if not isinstance(value, str):
         return False
-    return any(term in value for term in PUBLIC_RESPONSE_FORBIDDEN_TERMS)
+    return any(pattern.search(value) for pattern in PUBLIC_RESPONSE_FORBIDDEN_PATTERNS) or any(
+        pattern.search(value) for pattern in PUBLIC_RESPONSE_CONTEXTUAL_PATTERNS
+    )
 
 
 def record_contains_forbidden_public_text(record: dict[str, Any], fields: tuple[str, ...]) -> bool:

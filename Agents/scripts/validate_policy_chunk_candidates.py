@@ -79,7 +79,7 @@ def _load_inventory(root: Path, errors: list[str]) -> dict[str, str]:
             errors.append(f"{display_path} sources[{index}]: source must be an object")
             continue
         source_id = source.get("source_id")
-        status = source.get("status")
+        status = source.get("status") or source.get("version_status")
         if isinstance(source_id, str) and isinstance(status, str):
             status_by_source_id[source_id] = status
     return status_by_source_id
@@ -158,13 +158,26 @@ def _validate_candidate(
             and promotion_decision.get("can_promote_to_runtime") is True
             and payload.get("source_status_at_review") in ALLOWED_CANDIDATE_SOURCE_STATUSES
         )
-        if inventory_status not in ALLOWED_CANDIDATE_SOURCE_STATUSES and not promoted_confirmed_candidate:
+        historical_pdf_candidate = (
+            inventory_status == PROMOTED_RUNTIME_SOURCE_STATUS
+            and payload.get("source_status_at_review") in ALLOWED_CANDIDATE_SOURCE_STATUSES
+            and payload.get("review_status") in {"candidate", "needs_revision", "rejected"}
+        )
+        if (
+            inventory_status not in ALLOWED_CANDIDATE_SOURCE_STATUSES
+            and not promoted_confirmed_candidate
+            and not historical_pdf_candidate
+        ):
             errors.append(
                 f"{display_path}: source_id {source_id} has status {inventory_status}, "
                 "but candidate chunks require candidate_active, supporting_candidate, "
                 "reference_only, review_candidate, or a confirmed promoted active source"
             )
-        if payload.get("source_status_at_review") != inventory_status and not promoted_confirmed_candidate:
+        if (
+            payload.get("source_status_at_review") != inventory_status
+            and not promoted_confirmed_candidate
+            and not historical_pdf_candidate
+        ):
             errors.append(
                 f"{display_path}: source_status_at_review must match inventory status {inventory_status}"
             )

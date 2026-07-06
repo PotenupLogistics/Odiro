@@ -18,6 +18,11 @@ def test_default_settings_load_without_env_file() -> None:
     assert all("Fallback" not in name for name in Settings.model_fields)
     assert settings.openaiApiKey == ""
     assert settings.ollamaBaseUrl == "http://localhost:11434"
+    assert settings.pdfRagEmbeddingModel == "text-embedding-3-small"
+    assert settings.pdfRagQueryTimeoutSec == 5
+    assert settings.pdfRagQueryMaxRetries == 1
+    assert "ragEmbeddingEnabled" not in Settings.model_fields
+    assert "pdfRagEmbeddingEnabled" not in Settings.model_fields
 
 
 def test_default_provider_chain_is_openai_only() -> None:

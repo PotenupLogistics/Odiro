@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from app.agents.result_analysis_v2.artifact_parser import ACTIONS_STREAMING_SUMMARY_TYPE
 from app.agents.result_analysis_v2.artifact_parser import ParsedArtifact
 from app.agents.result_analysis_v2.episode_metric_extractor import EpisodeMetrics
 from app.agents.result_analysis_v2.review_text import evidence_message, finding_summary, finding_title
@@ -39,6 +40,30 @@ class FindingBuilder:
                             (episode.experiment_id, episode.run_id, episode.episode_id),
                             f"runs/{episode.run_id}/episodes/{episode.episode_id}/result.json",
                         ),
+                        "metric": metric,
+                        "value": value,
+                        "event_type": None,
+                        "message": message,
+                    }
+                )
+                finding_inputs.setdefault(finding_type, []).append(evidence_id)
+
+        for artifact in self._action_summary_artifacts(parsed_artifacts):
+            info = artifact.info
+            summary = artifact.data
+            if not isinstance(summary, dict):
+                continue
+            for finding_type, metric, value, message in self._action_summary_signals(summary):
+                if value <= 0:
+                    continue
+                evidence_id = f"EV-{len(evidence) + 1:04d}"
+                evidence.append(
+                    {
+                        "evidence_id": evidence_id,
+                        "kind": "actions_summary",
+                        "run_id": info.run_id,
+                        "episode_id": info.episode_id,
+                        "source_file": info.relative_path,
                         "metric": metric,
                         "value": value,
                         "event_type": None,
@@ -123,6 +148,82 @@ class FindingBuilder:
             ),
         ]
         return signals
+
+    def _action_summary_artifacts(self, parsed_artifacts: list[ParsedArtifact]) -> list[ParsedArtifact]:
+        """Return episode action artifacts that contain streaming summaries."""
+        return [
+            artifact
+            for artifact in parsed_artifacts
+            if artifact.info.artifact_type == "episode_actions"
+            and isinstance(artifact.data, dict)
+            and artifact.data.get("summary_type") == ACTIONS_STREAMING_SUMMARY_TYPE
+        ]
+
+    def _action_summary_signals(self, summary: dict[str, Any]) -> list[tuple[str, str, int, str]]:
+        """Map compact action summaries to conservative policy-review evidence."""
+        signals: list[tuple[str, str, int, str]] = []
+        repath_count = self._int_summary_value(summary, "repath_action_count")
+        if repath_count > 0:
+            signals.append(
+                (
+                    "repath",
+                    "repath_action_count",
+                    repath_count,
+                    f"행동 요약에서 경로 재탐색이 {repath_count}회 확인되었습니다.",
+                )
+            )
+
+        stop_slowdown_count = self._int_summary_value(summary, "stop_action_count") + self._int_summary_value(
+            summary,
+            "slowdown_action_count",
+        )
+        if stop_slowdown_count >= 10:
+            signals.append(
+                (
+                    "stuck",
+                    "stop_or_slowdown_action_count",
+                    stop_slowdown_count,
+                    f"행동 요약에서 감속 또는 정지가 {stop_slowdown_count}회 확인되었습니다.",
+                )
+            )
+
+        path_error_max = self._stats_value(summary, "path_error_stats", "max")
+        if path_error_max is not None and path_error_max >= 1.0:
+            signals.append(
+                (
+                    "policy_decision_error",
+                    "path_error_max",
+                    int(round(path_error_max)),
+                    f"행동 요약에서 경로 추종 오차 최대값이 {path_error_max:.2f}m로 확인되었습니다.",
+                )
+            )
+
+        goal_distance_change = summary.get("goal_distance_change")
+        if isinstance(goal_distance_change, dict):
+            delta = goal_distance_change.get("delta")
+            if isinstance(delta, int | float) and delta >= 0 and self._int_summary_value(summary, "parsed_actions_line_count") >= 2:
+                signals.append(
+                    (
+                        "stuck",
+                        "goal_distance_delta",
+                        1,
+                        "행동 요약에서 목표까지의 거리가 줄어들지 않은 구간이 확인되었습니다.",
+                    )
+                )
+        return signals
+
+    def _int_summary_value(self, summary: dict[str, Any], key: str) -> int:
+        """Read one non-negative integer from an action summary."""
+        value = summary.get(key)
+        return max(0, int(value)) if isinstance(value, int | float) else 0
+
+    def _stats_value(self, summary: dict[str, Any], stats_key: str, value_key: str) -> float | None:
+        """Read one numeric value from a nested action-summary stats object."""
+        stats = summary.get(stats_key)
+        if not isinstance(stats, dict):
+            return None
+        value = stats.get(value_key)
+        return float(value) if isinstance(value, int | float) else None
 
     def _setup_failure_message(self, episode: EpisodeMetrics) -> str:
         """Describe setup-stage interruption using only logged structured details."""

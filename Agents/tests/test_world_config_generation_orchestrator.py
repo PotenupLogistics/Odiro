@@ -286,7 +286,8 @@ def test_disabled_provider_returns_failed_generation_without_payload() -> None:
     assert result.error is not None
     assert result.error.code == "provider_disabled"
     assert result.validation.status == "skipped"
-    assert result.retrievedContexts
+    assert result.retrievedContexts == []
+    assert "No related policy RAG chunks were retrieved." in result.warnings
 
 
 def test_fake_success_client_generates_valid_payload() -> None:

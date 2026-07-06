@@ -46,7 +46,8 @@ def test_world_config_generation_service_disabled_provider_returns_failed_result
     assert payload["success"] is False
     assert payload["error"]["code"] == "provider_disabled"
     assert payload["generatedPayload"] is None
-    assert payload["retrievedContexts"]
+    assert payload["retrievedContexts"] == []
+    assert "No related policy RAG chunks were retrieved." in payload["warnings"]
     assert payload["attempts"]
 
 
@@ -86,12 +87,14 @@ def test_world_config_generation_result_serializes_scenario_post_processing() ->
 
 def test_prompt_package_builder_still_returns_context() -> None:
     package = build_world_config_prompt_package(_generation_request())
-    assert package.retrievedContexts
+    assert package.retrievedContexts == []
+    assert "No related policy RAG chunks were retrieved." in package.warnings
 
 
 def test_prompt_package_builder_returns_context_and_scenario_intent_for_korean_prompt() -> None:
     payload = build_world_config_prompt_package(_korean_generation_request()).model_dump(mode="json")
-    assert len(payload["retrievedContexts"]) >= 1
+    assert payload["retrievedContexts"] == []
+    assert "No related policy RAG chunks were retrieved." in payload["warnings"]
     assert payload["scenarioIntent"]["pathBlockingHints"] is True
     assert payload["scenarioRequirements"]
 

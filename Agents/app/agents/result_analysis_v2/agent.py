@@ -265,6 +265,7 @@ class ResultAnalysisV2Agent:
                     "episode_id": info.episode_id,
                     "events": [],
                     "actions": [],
+                    "action_summary": None,
                     "source_path": info.relative_path,
                 },
             )
@@ -274,6 +275,8 @@ class ResultAnalysisV2Agent:
                 )
             elif info.artifact_type == "episode_actions" and isinstance(artifact.data, list):
                 item["actions"].extend(action for action in artifact.data if isinstance(action, dict))
+            elif info.artifact_type == "episode_actions" and isinstance(artifact.data, dict):
+                item["action_summary"] = artifact.data
         return {"episodes": list(episodes.values())}
 
     def _episode_as_dict(self, episode: EpisodeMetrics) -> dict[str, Any]:

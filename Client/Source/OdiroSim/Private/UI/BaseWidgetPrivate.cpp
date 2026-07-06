@@ -10,6 +10,7 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/Widget.h"
+#include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 
@@ -424,6 +425,27 @@ namespace BaseWidgetPrivate
 			return applyMaterialBrush(material);
 		}
 
+		// Uses the WBP-authored image material; C++ only drives runtime
+		// parameters and falls back to a normal texture brush if no material exists.
+		UMaterialInstanceDynamic* EnsureAuthoredImageMaterial(UImage* image)
+		{
+			if (!IsValid(image))
+			{
+				return nullptr;
+			}
+
+			UObject* resource = image->GetBrush().GetResourceObject();
+			if (UMaterialInstanceDynamic* material = Cast<UMaterialInstanceDynamic>(resource))
+			{
+				return material;
+			}
+			if (Cast<UMaterialInterface>(resource))
+			{
+				return image->GetDynamicMaterial();
+			}
+			return nullptr;
+		}
+
 		// Drives the rounded fill+stroke SDF material on one border.
 		void ApplyRoundedMaterial(
 			UBorder* border,
@@ -502,6 +524,43 @@ namespace BaseWidgetPrivate
 		ApplyRoundedMaterial(surfaceBorder, TabMaterialPath, fillColor, strokeColor, radiusPx, borderWidthPx);
 	}
 
+	void ApplyTopRoundedMediaImage(
+		UImage* image,
+		UTexture2D* texture,
+		const float radiusPx,
+		const float borderWidthPx)
+	{
+		if (!IsValid(image))
+		{
+			return;
+		}
+
+		if (!texture)
+		{
+			image->SetVisibility(ESlateVisibility::Collapsed);
+			return;
+		}
+
+		image->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		if (UMaterialInstanceDynamic* material = EnsureAuthoredImageMaterial(image))
+		{
+			const FVector2D brushSize = image->GetBrush().ImageSize;
+			material->SetTextureParameterValue(TEXT("MediaTexture"), texture);
+			material->SetScalarParameterValue(TEXT("RadiusPx"), FMath::Max(radiusPx, 0.0f));
+			material->SetScalarParameterValue(TEXT("BorderWidthPx"), FMath::Max(borderWidthPx, 0.0f));
+			if (brushSize.X >= 1.0f && brushSize.Y >= 1.0f)
+			{
+				material->SetVectorParameterValue(
+					TEXT("ElementSize"),
+					FLinearColor(brushSize.X, brushSize.Y, 0.0f, 0.0f));
+			}
+			image->InvalidateLayoutAndVolatility();
+			return;
+		}
+
+		image->SetBrushFromTexture(texture, false);
+	}
+
 	void UpdateRoundedSurfaceSize(UBorder* surfaceBorder, const FVector2D& fallbackSize)
 	{
 		if (!IsValid(surfaceBorder))
@@ -527,6 +586,48 @@ namespace BaseWidgetPrivate
 		if (maxRadius > 0.0f && material->GetScalarParameterValue(TEXT("RadiusPx"), radiusPx))
 		{
 			material->SetScalarParameterValue(TEXT("RadiusPx"), FMath::Min(radiusPx, maxRadius));
+		}
+	}
+
+	void UpdateTopRoundedMediaImageSize(UImage* image, const FVector2D& fallbackSize)
+	{
+		if (!IsValid(image))
+		{
+			return;
+		}
+
+		UMaterialInstanceDynamic* material =
+			Cast<UMaterialInstanceDynamic>(image->GetBrush().GetResourceObject());
+		if (!material)
+		{
+			return;
+		}
+
+		FVector2D size = image->GetCachedGeometry().GetLocalSize();
+		if (size.X < 1.0f || size.Y < 1.0f)
+		{
+			size = fallbackSize;
+		}
+		if (size.X < 1.0f || size.Y < 1.0f)
+		{
+			size = image->GetBrush().ImageSize;
+		}
+		if (size.X < 1.0f || size.Y < 1.0f)
+		{
+			size = MaterialBrushPlaceholderSize;
+		}
+		material->SetVectorParameterValue(TEXT("ElementSize"), FLinearColor(size.X, size.Y, 0.0f, 0.0f));
+
+		const float maxRadius = FMath::Max(0.0f, FMath::Min(size.X, size.Y) * 0.5f - 0.5f);
+		float radiusPx = 0.0f;
+		if (maxRadius > 0.0f && material->GetScalarParameterValue(TEXT("RadiusPx"), radiusPx))
+		{
+			material->SetScalarParameterValue(TEXT("RadiusPx"), FMath::Min(radiusPx, maxRadius));
+		}
+		float borderWidthPx = 0.0f;
+		if (maxRadius > 0.0f && material->GetScalarParameterValue(TEXT("BorderWidthPx"), borderWidthPx))
+		{
+			material->SetScalarParameterValue(TEXT("BorderWidthPx"), FMath::Min(borderWidthPx, maxRadius));
 		}
 	}
 

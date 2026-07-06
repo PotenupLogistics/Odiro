@@ -10,6 +10,7 @@ class UBorder;
 class UImage;
 class USizeBox;
 class UTextBlock;
+class UTexture2D;
 class UWidget;
 
 namespace BaseWidgetPrivate
@@ -98,6 +99,10 @@ namespace BaseWidgetPrivate
 		float radiusPx,
 		float borderWidthPx);
 
+
+	// Draws a texture through the top-rounded UI material used by thumbnail
+	// cards while preserving WBP-owned image layout and tint.
+	void ApplyTopRoundedMediaImage(UImage* image, UTexture2D* texture, float radiusPx, float borderWidthPx);
 	// Draws a rounded progress bar on a border via the progress SDF material:
 	// a rounded track plus a fill clipped to percent. NativePaint feeds the
 	// material's ElementSize parameter for pixel-accurate corners.
@@ -115,6 +120,10 @@ namespace BaseWidgetPrivate
 	// before the surface has a cached geometry.
 	void UpdateRoundedSurfaceSize(UBorder* surfaceBorder, const FVector2D& fallbackSize);
 
+
+	// Feeds a top-rounded media material its painted image size so the mask lines
+	// up with the WBP-authored media bounds.
+	void UpdateTopRoundedMediaImageSize(UImage* image, const FVector2D& fallbackSize);
 	// Clears border drawing while keeping WBP-authored padding and child layout.
 	void MakeBorderVisualTransparent(UBorder* border);
 }

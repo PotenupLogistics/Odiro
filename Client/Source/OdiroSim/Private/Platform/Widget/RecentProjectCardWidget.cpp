@@ -109,20 +109,23 @@ bool URecentProjectCardWidget::ApplyProjectPreviewThumbnail(const FString& previ
 	const FString normalizedPreviewPath = previewPath.TrimStartAndEnd();
 	if (normalizedPreviewPath.IsEmpty() || !FPaths::FileExists(normalizedPreviewPath))
 	{
-		CardThumbnailTexture = nullptr;
-		SetMediaTexture(nullptr);
+		SetPreviewThumbnailTexture(nullptr);
 		return false;
 	}
 
 	UTexture2D* thumbnailTexture = FImageUtils::ImportFileAsTexture2D(normalizedPreviewPath);
 	if (!thumbnailTexture)
 	{
-		CardThumbnailTexture = nullptr;
-		SetMediaTexture(nullptr);
+		SetPreviewThumbnailTexture(nullptr);
 		return false;
 	}
 
+	SetPreviewThumbnailTexture(thumbnailTexture);
+	return true;
+}
+
+void URecentProjectCardWidget::SetPreviewThumbnailTexture(UTexture2D* thumbnailTexture)
+{
 	CardThumbnailTexture = thumbnailTexture;
 	SetMediaTexture(CardThumbnailTexture.Get());
-	return true;
 }

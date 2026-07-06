@@ -72,7 +72,7 @@ public:
 
 	// Initial distance from the replay robot target to the orbit camera.
 	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "1.0", UIMin = "100.0"))
-	double OrbitCameraDistanceCm = 1400.0;
+	double OrbitCameraDistanceCm = 1000.0;
 
 	// Minimum distance allowed by orbit camera zoom controls.
 	UPROPERTY(EditAnywhere, Config, Category = "Orbit Camera", meta = (ClampMin = "1.0", UIMin = "100.0"))

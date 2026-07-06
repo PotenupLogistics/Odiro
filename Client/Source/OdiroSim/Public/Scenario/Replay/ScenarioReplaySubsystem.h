@@ -172,7 +172,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
 	double GetPlaybackProgress() const;
 
-	// Switches the replay SceneCapture between top-down, free, and vehicle-forward views.
+	// Switches the replay SceneCapture between top-down, orbit, vehicle-forward, and free views.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Replay")
 	void SetReplayCameraMode(EScenarioReplayCameraMode NewMode);
 
@@ -486,7 +486,7 @@ private:
 
 	// Camera mode used to place and configure the replay SceneCapture.
 	UPROPERTY(Transient)
-	EScenarioReplayCameraMode CameraMode = EScenarioReplayCameraMode::TopDown;
+	EScenarioReplayCameraMode CameraMode = EScenarioReplayCameraMode::Orbit;
 
 	// Whether replay scenario map actors are included in the replay capture.
 	UPROPERTY(Transient)

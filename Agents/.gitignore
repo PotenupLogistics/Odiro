@@ -21,6 +21,12 @@ htmlcov/
 harness/reports/*
 !harness/reports/.gitkeep
 
+# Runtime RAG and review artifacts
+data/rag/chroma/
+data/rag/embeddings/
+data/rag/**/vectors.json
+**/runs/*/review/*/response.json
+
 # Runtime logs
 logs/
 data/server_logs

@@ -52,6 +52,26 @@ class Settings(BaseSettings):
         default=30,
         validation_alias=AliasChoices("OPENAI_DAILY_REQUEST_LIMIT", "openaiDailyRequestLimit"),
     )
+    pdfRagEmbeddingModel: str = Field(
+        default="text-embedding-3-small",
+        validation_alias=AliasChoices("PDF_RAG_EMBEDDING_MODEL", "pdfRagEmbeddingModel"),
+    )
+    pdfRagQueryTimeoutSec: int = Field(
+        default=5,
+        validation_alias=AliasChoices("PDF_RAG_QUERY_TIMEOUT_SEC", "pdfRagQueryTimeoutSec"),
+    )
+    pdfRagQueryMaxRetries: int = Field(
+        default=1,
+        validation_alias=AliasChoices("PDF_RAG_QUERY_MAX_RETRIES", "pdfRagQueryMaxRetries"),
+    )
+    pdfRagValidatedCorpusPath: str = Field(
+        default="data/rag/pdf_corpus/validated_parent_child_chunks.jsonl",
+        validation_alias=AliasChoices("PDF_RAG_VALIDATED_CORPUS_PATH", "pdfRagValidatedCorpusPath"),
+    )
+    pdfRagChromaDir: str = Field(
+        default=".cache/rag/chroma/pdf_corpus",
+        validation_alias=AliasChoices("PDF_RAG_CHROMA_DIR", "pdfRagChromaDir"),
+    )
     ollamaBaseUrl: str = Field(
         default="http://localhost:11434",
         validation_alias=AliasChoices("OLLAMA_BASE_URL", "ollamaBaseUrl"),

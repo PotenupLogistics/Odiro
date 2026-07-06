@@ -23,6 +23,7 @@ from app.agents.result_analysis_v2.routes import (
 )
 from app.agents.result_analysis_v2.recommendation_schema import analysis_recommendations_v2_response_schema
 from app.core.settings import Settings
+from app.models.analysis_v2 import AnalysisRunV2Response
 
 try:
     from langgraph.graph import END, START, StateGraph
@@ -68,12 +69,33 @@ class ResultAnalysisGraphRunnerV2:
             return state["response"]
         except Exception as exc:
             if review_session is not None:
+                failure_response = self.processing_failed_response(
+                    run_id=request.run_id if request is not None else None,
+                )
+                try:
+                    self.agent.review_lifecycle.write_response(session=review_session, response=failure_response)
+                except Exception:
+                    pass
                 self.agent.review_lifecycle.fail(
                     session=review_session,
                     code=exc.__class__.__name__,
                     message=str(exc),
                 )
             raise
+
+    @staticmethod
+    def processing_failed_response(*, run_id: str | None) -> AnalysisRunV2Response:
+        """Build the public failure body shared by the API and review response artifact."""
+        return AnalysisRunV2Response(
+            status="failed",
+            run_id=run_id,
+            error={
+                "code": "ANALYSIS_PROCESSING_FAILED",
+                "message": "분석 결과를 생성하는 중 오류가 발생했습니다.",
+                "phase": "build_response",
+            },
+            warnings=[],
+        )
 
     def _compile_graph(self) -> Any:
         """Build and compile the result-analysis v2 StateGraph."""
@@ -184,7 +206,7 @@ class ResultAnalysisGraphRunnerV2:
             "recommendation_validation_route": RECOMMENDATION_VALIDATION_VALID,
             "rag_diagnostic": {
                 "enabled": True,
-                "backend": "file_based_jsonl",
+                "backend": "pdf_vector_hybrid",
                 "used": False,
                 "query_count": 0,
                 "retrieved_chunk_count": 0,

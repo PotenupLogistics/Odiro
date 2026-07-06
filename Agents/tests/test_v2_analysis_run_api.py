@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 
 from app.api import routes
 from app.agents.result_analysis_v2 import ResultAnalysisV2Agent
+from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2
+from app.agents.result_analysis_v2.public_text_guardrail import contains_forbidden_public_text
 from app.core.settings import Settings
 from app.main import app
 from app.models.analysis_v2 import AnalysisRunV2Request, AnalysisRunV2Response
@@ -19,6 +21,21 @@ FORBIDDEN_USER_TEXT = (
     "근거를 토대로",
     "pipeline.diagnostics",
     "evidence",
+    "source_id",
+    "chunk_id",
+    "page",
+    "score",
+    "Chroma",
+    "chroma",
+    "vector",
+    "Vector",
+    "embedding",
+    "Embedding",
+    "retrieval_backend",
+    "retrieval backend",
+    "RAG",
+    "rag",
+    "Rag",
 )
 
 
@@ -73,6 +90,18 @@ def _assert_display_text_hides_internal_evidence(payload: dict) -> None:
     user_text = f"{payload['summary']['message']}\n{recommendation_text}\n{insight_text}"
     for forbidden in FORBIDDEN_USER_TEXT:
         assert forbidden not in user_text
+
+
+def _assert_response_artifact_matches_payload(project: Path, payload: dict) -> None:
+    """Assert persisted public response artifact matches the HTTP response body."""
+    response_path = project / "runs" / payload["run_id"] / "review" / payload["review_id"] / "response.json"
+    persisted = _read_json(response_path)
+    persisted_text = json.dumps(persisted, ensure_ascii=False)
+
+    assert persisted == payload
+    assert "response_path" not in payload
+    for forbidden in FORBIDDEN_USER_TEXT:
+        assert forbidden not in persisted_text
 
 
 def _empty_analysis_response(run_id: str = "000001") -> AnalysisRunV2Response:
@@ -401,6 +430,40 @@ def test_non_analysis_v2_validation_errors_keep_fastapi_default() -> None:
 
     assert response.status_code == 422
     assert "detail" in response.json()
+
+
+def test_v2_analysis_run_success_persists_public_response_artifact(tmp_path) -> None:
+    """Successful run review stores the exact public response body for later UI reuse."""
+    project = tmp_path / "Project1"
+    _write_penalty_episode(project, "000001")
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    _assert_response_artifact_matches_payload(project, response.json())
+
+
+def test_v2_analysis_run_failure_after_review_start_persists_public_response_artifact(monkeypatch, tmp_path) -> None:
+    """Processing failures after review allocation still leave the public failure payload on disk."""
+    project = tmp_path / "Project1"
+    _write_penalty_episode(project, "000001")
+
+    def fail_scan(self, state):
+        """Force a deterministic post-review-start processing failure."""
+        raise RuntimeError("forced scan failure")
+
+    monkeypatch.setattr(ResultAnalysisGraphRunnerV2, "_compile_graph", lambda self: None)
+    monkeypatch.setattr(ResultAnalysisGraphRunnerV2, "scan_workspace_node", fail_scan)
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 500, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    response_path = review_dir / "response.json"
+    assert _read_json(response_path) == payload
+    assert "response_path" not in payload
+    assert _read_json(review_dir / "status.json")["status"] == "failed"
 
 
 def test_v2_analysis_run_summary_rows_match_ue_success_and_display_contract(tmp_path) -> None:
@@ -1222,6 +1285,33 @@ def test_v2_analysis_agent_uses_valid_llm_recommendation(tmp_path) -> None:
     recommendations = _read_json(project / "runs" / "000001" / "review" / "0001" / "recommendations.json")
     assert recommendations["recommendations"][0]["id"] == "REC-LLM-001"
     assert recommendations["modified_policy_json"][0]["source_recommendation_id"] == "REC-LLM-001"
+
+
+def test_v2_analysis_agent_filters_internal_rag_terms_from_llm_public_text(tmp_path) -> None:
+    project = tmp_path / "Project1"
+    _write_penalty_episode(project, "000001")
+    llm_payload = _llm_analysis(project.name, "000001")
+    internal_text = "source_id chunk_id page score chroma vector embedding retrieval_backend retrieval backend rag"
+    llm_payload["summary_message"] = f"추천 요약 {internal_text}"
+    llm_payload["recommendations"][0]["title"] = f"내부 식별자 {internal_text}"
+    llm_payload["recommendations"][0]["reason"] = f"내부 검색 진단 {internal_text}"
+    llm_payload["recommendations"][0]["llm_recommendation"] = f"사용자 표시 문구 {internal_text}"
+    fake = _FakeJsonClient([llm_payload])
+    agent = ResultAnalysisV2Agent(
+        settings=Settings(v2AgentLlmEnabled=True),
+        llm_client=fake,
+    )
+
+    response = agent.run(_request_model(project))
+
+    _assert_display_text_hides_internal_evidence(response.model_dump(by_alias=True))
+
+
+def test_public_text_guardrail_allows_common_words_containing_forbidden_fragments() -> None:
+    assert contains_forbidden_public_text("drag control remains stable") is False
+    assert contains_forbidden_public_text("webpage display is available") is False
+    assert contains_forbidden_public_text("success score improved") is False
+    assert contains_forbidden_public_text("score: 0.82") is True
 
 
 def test_v2_analysis_agent_falls_back_when_llm_evidence_is_invalid(tmp_path) -> None:

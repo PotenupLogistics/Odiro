@@ -12,6 +12,7 @@ from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunner
 from app.core.settings import Settings
 from app.main import app
 from app.models.analysis_v2 import AnalysisRunV2Request
+from app.services.pdf_rag_retriever import PdfRagContextPack, PdfRagEvidenceItem, PdfRagRetrievalResult
 
 
 # Internal source markers that unsafe LLM output must not expose publicly.
@@ -41,6 +42,47 @@ FORBIDDEN_RAG_PUBLIC_METADATA = (
     "retrieval_score",
     "chunk retrieval score",
 )
+
+
+class _FakeGraphPdfRetriever:
+    """Provide deterministic PDF RAG results for graph-runner route tests."""
+
+    def __init__(self, *, available: bool = True) -> None:
+        """Store whether retrieval should return evidence or unavailable diagnostics."""
+        self.available = available
+
+    def retrieve(self, query: str, *, route_hint: str | None = None, metrics: dict | None = None) -> PdfRagRetrievalResult:
+        """Return one sanitized evidence item or an unavailable result."""
+        _ = query, metrics
+        if not self.available:
+            return PdfRagRetrievalResult.unavailable(
+                route_name=route_hint or "safety_certification",
+                rag_error_type="vector_index_missing",
+            )
+        return PdfRagRetrievalResult(
+            available=True,
+            route_name=route_hint or "safety_certification",
+            context_pack=PdfRagContextPack(
+                evidence_items=[
+                    PdfRagEvidenceItem(
+                        source_id="KOR-004",
+                        source_title="산업부 고시",
+                        source_type="official_notice",
+                        chunk_id="KOR-004-child-speed",
+                        parent_chunk_id="KOR-004-parent-speed",
+                        section_title="운행속도",
+                        page_range="8-9",
+                        evidence_text="보호구역 운행속도 기준은 5 km/h 이하입니다.",
+                        evidence_summary="보호구역 운행속도 기준",
+                        parent_summary="운행속도 인증 기준",
+                        topic_tags=["speed_policy"],
+                        use_scope=["certification_requirement"],
+                        score=10.0,
+                    )
+                ]
+            ),
+            diagnostic={"backend": "pdf_vector_hybrid", "used": True},
+        )
 
 
 class _FakeJsonClient:
@@ -346,21 +388,22 @@ def test_graph_runner_generates_recommendations_for_repeated_blocked_region(tmp_
     assert runner.last_state["recommendation_route"] == "rule_based_fallback"
 
 
-def test_graph_runner_retrieves_file_based_rag_context_for_patterns(tmp_path) -> None:
+def test_graph_runner_retrieves_pdf_rag_context_for_patterns(tmp_path) -> None:
     experiments = tmp_path / "experiments"
     _write_blocked_episode(experiments, "000001")
     _write_blocked_episode(experiments, "000002")
     runner = ResultAnalysisGraphRunnerV2(experiments_root=experiments, settings=Settings(_env_file=None))
+    runner.agent.rag_retriever = rag_module.PdfRagRetrieverAdapterV2(retriever=_FakeGraphPdfRetriever())
 
     response = runner.run()
     state = runner.last_state
 
     assert response.summary.overall_judgement == "change_recommended"
     assert state["rag_route"] == "retrieved"
-    assert state["rag_diagnostic"]["backend"] == "file_based_jsonl"
+    assert state["rag_diagnostic"]["backend"] == "pdf_vector_hybrid"
     assert state["rag_diagnostic"]["used"] is True
     assert state["rag_diagnostic"]["retrieved_chunk_count"] > 0
-    assert state["rag_context"]["retrieval_mode"] == "file_based_jsonl"
+    assert state["rag_context"]["retrieval_mode"] == "pdf_vector_hybrid"
     assert state["retrieved_context"]
     assert all("chunk_id" not in item for item in state["retrieved_context"])
     assert all("card_id" not in item for item in state["retrieved_context"])
@@ -368,22 +411,22 @@ def test_graph_runner_retrieves_file_based_rag_context_for_patterns(tmp_path) ->
     assert all("retrieval_score" not in item for item in state["retrieved_context"])
 
 
-def test_graph_runner_rag_store_missing_falls_back_without_public_leak(monkeypatch, tmp_path) -> None:
-    def missing_store(_query):
-        raise FileNotFoundError("C:/internal/path/policy_rag_chunks.jsonl")
-
-    monkeypatch.setattr(rag_module, "search_policy_chunks", missing_store, raising=False)
+def test_graph_runner_pdf_rag_unavailable_falls_back_without_public_leak(tmp_path) -> None:
     experiments = tmp_path / "experiments"
     _write_blocked_episode(experiments, "000001")
     _write_blocked_episode(experiments, "000002")
     runner = ResultAnalysisGraphRunnerV2(experiments_root=experiments, settings=Settings(_env_file=None))
+    runner.agent.rag_retriever = rag_module.PdfRagRetrieverAdapterV2(
+        retriever=_FakeGraphPdfRetriever(available=False)
+    )
 
     response = runner.run()
     state = runner.last_state
 
     assert response.summary.overall_judgement == "change_recommended"
     assert state["rag_route"] == "store_missing"
-    assert state["rag_diagnostic"]["fallback_reason"] == "store_missing"
+    assert state["rag_diagnostic"]["fallback_reason"] == "vector_index_missing"
+    assert state["rag_diagnostic"]["rag_unavailable"] is True
     assert "C:/internal/path" not in json.dumps(state["rag_diagnostic"])
     assert "policy_rag_chunks.jsonl" not in json.dumps(state["rag_diagnostic"])
 

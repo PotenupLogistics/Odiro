@@ -1,6 +1,8 @@
-# Odiro Agents
+# Proto-AI
 
-Odiro monorepo의 AI 백엔드입니다. 주행 로봇 시뮬레이션 검증용이며 실제 운영 안전성이나 출시 기준을 충족하지 않습니다.
+## Odiro Agents
+
+Odiro Agents는 Odiro monorepo의 AI 백엔드입니다. 주행 로봇 시뮬레이션 검증용이며 실제 운영 안전성이나 출시 기준을 충족하지 않습니다.
 
 ## 역할
 

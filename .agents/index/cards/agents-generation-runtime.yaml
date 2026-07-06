@@ -66,7 +66,7 @@ guardrails:
   - Result analysis public responses expose display fields only; keep detailed recommendation ids, proposed changes, and modified candidate payloads in `recommendations.json`.
   - Result analysis LLM recommendations must pass public text guardrails; internal RAG/source markers never belong in public summary, insight, reason, or recommendation text.
   - Result analysis file-based RAG is internal recommendation context only; do not create `rag_evidence.json`, `review_dir/internal`, public path fields, or `manifest.json.rag_diagnostic`.
-  - Result analysis must preserve the existing `report.json`, `recommendations.json`, `manifest.json`, and review directory structure expected by the Client.
+  - Result analysis must preserve `response.json`, `report.json`, `recommendations.json`, `manifest.json`, and the review directory structure expected by the Client.
   - Recommendation output uses the public `recommendation` field; normalize legacy internal names before API/artifact output.
   - UI-facing finding/evidence text may be Korean; stable metric/type codes remain English.
 verify:

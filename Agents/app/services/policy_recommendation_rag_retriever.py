@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Union
 
-from app.models.rag import RagRetrievedChunk, RagSearchQuery
+from app.models.rag import RagChunkMetadata, RagRetrievedChunk
 from app.models.recommendation import (
     AnalysisStatistics,
     EpisodeSetupParamName,
@@ -11,7 +11,7 @@ from app.models.recommendation import (
     PolicyParamName,
     PolicyServerParamName,
 )
-from app.services.policy_rag_retriever import search_policy_chunks
+from app.services.pdf_rag_retriever import PdfRagEvidenceItem, get_pdf_rag_retriever, route_query
 
 
 @dataclass(frozen=True)
@@ -135,17 +135,11 @@ def retrieve_policy_context(
             continue
         seen.add(key)
 
-        rag_query = RagSearchQuery(
-            query=query_text,
-            topK=topK,
-            policyParamFilter=[param] if param != "canRepath" else None,
-        )
-        result = search_policy_chunks(rag_query)
         contexts.append(
             PolicyRagContext(
                 param=param,
                 query=query_text,
-                chunks=result.results,
+                chunks=_search_chunks_for_param(str(param), query_text, topK),
             )
         )
     return contexts
@@ -265,12 +259,37 @@ def _build_policy_server_queries(
 
 
 def _search_chunks_for_param(card_key: str, query_text: str, topK: int) -> list[RagRetrievedChunk]:
-    rag_query = RagSearchQuery(
-        query=query_text,
-        topK=topK,
-        policyParamFilter=[card_key],
+    _ = card_key
+    result = get_pdf_rag_retriever().retrieve(query_text, route_hint=route_query(query_text))
+    if not result.available:
+        return []
+    return [
+        _evidence_to_rag_chunk(index=index, evidence=evidence)
+        for index, evidence in enumerate(result.context_pack.evidence_items[:topK], start=1)
+    ]
+
+
+def _evidence_to_rag_chunk(*, index: int, evidence: PdfRagEvidenceItem) -> RagRetrievedChunk:
+    """Adapt internal PDF RAG evidence to the legacy in-process context model."""
+    context_id = f"PDF-RAG-{index:03d}"
+    return RagRetrievedChunk(
+        chunkId=context_id,
+        cardId=context_id,
+        chunkText=evidence.evidence_text,
+        metadata=RagChunkMetadata(
+            sourceIds=[],
+            category=evidence.topic_tags[0] if evidence.topic_tags else "pdf_rag_context",
+            relatedPolicyParams=[],
+            relatedRequestFields=[],
+            relatedActions=[],
+            relatedMetrics=[],
+            evidenceLocation=evidence.section_title,
+            createdFromCandidateId="",
+            status="auto_validated_pdf_rag",
+        ),
+        score=evidence.score,
+        matchedFields=["pdf_vector_hybrid"],
     )
-    return search_policy_chunks(rag_query).results
 
 
 def retrieve_episode_setup_context(

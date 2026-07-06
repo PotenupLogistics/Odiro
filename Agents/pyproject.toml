@@ -21,6 +21,7 @@ dependencies = [
     "langchain-chroma>=0.2.0",
     "langgraph>=1.2.2",
     "chromadb>=0.6.0",
+    "pypdf>=5.0.0",
 ]
 
 [project.optional-dependencies]

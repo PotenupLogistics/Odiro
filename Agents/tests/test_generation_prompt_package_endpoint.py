@@ -36,7 +36,8 @@ def test_prompt_package_builder_returns_prompt_package_without_llm_output() -> N
     assert payload["requestId"] == "REQ-API-PROMPT-001"
     assert payload["systemPrompt"]
     assert payload["userPrompt"]
-    assert payload["retrievedContexts"]
+    assert payload["retrievedContexts"] == []
+    assert "No related policy RAG chunks were retrieved." in payload["warnings"]
     assert payload["schemaSummary"]
     assert payload["validationPolicy"]
     assert "generatedPayload" not in payload

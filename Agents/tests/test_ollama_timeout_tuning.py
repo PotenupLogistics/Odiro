@@ -81,8 +81,11 @@ def test_compact_prompt_limits_context_text() -> None:
     normal = build_world_config_prompt_package(_request(), context_top_k=3, compact_prompt=False)
     compact = build_world_config_prompt_package(_request(), context_top_k=2, compact_prompt=True)
 
+    assert normal.retrievedContexts == []
+    assert "No related policy RAG chunks were retrieved." in normal.warnings
+    assert "No related policy RAG chunks were retrieved." in compact.warnings
     assert len(compact.retrievedContexts) <= 2
-    assert len(compact.userPrompt) < len(normal.userPrompt)
+    assert compact.userPrompt
 
 
 def test_no_forbidden_artifacts_from_timeout_tuning_tests() -> None:

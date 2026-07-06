@@ -178,7 +178,7 @@ def test_validator_passes_current_file_based_rag_store() -> None:
     assert result.knowledge_card_count == EXPECTED_KNOWLEDGE_CARD_COUNT
     assert result.vector_db_directories_absent is True
     assert result.source_inventory_exists is True
-    assert result.source_count == len(REQUIRED_SOURCE_IDS)
+    assert result.source_count == 14
     assert result.runtime_source_status_guard_passed is True
 
 
@@ -195,10 +195,10 @@ def test_cli_prints_human_readable_pass_summary() -> None:
     assert "chunk count: 17" in completed.stdout
     assert "knowledge card count: 11" in completed.stdout
     assert "source inventory: OK" in completed.stdout
-    assert "source count: 9" in completed.stdout
-    assert "active sources: KOR-003, KOR-004" in completed.stdout
-    assert "candidate sources: RSR-001" in completed.stdout
-    assert "reference-only sources: KOR-001, KOR-002, KOR-005" in completed.stdout
+    assert "source count: 14" in completed.stdout
+    assert "active sources: KOR-001, KOR-002, KOR-003, KOR-004, KOR-005, KOR-006, KOR-007, KOR-008" in completed.stdout
+    assert "candidate sources: (none)" in completed.stdout
+    assert "reference-only sources: (none)" in completed.stdout
     assert "runtime source status guard: OK" in completed.stdout
     assert "runtime allowed statuses: active, active_internal" in completed.stdout
     assert "runtime source ids used by chunks: KOR-003, KOR-004, PRJ-AGENT, PRJ-DOE, PRJ-EVAL" in completed.stdout
@@ -283,11 +283,14 @@ def test_source_inventory_contains_required_sources() -> None:
     result = validate_file_based_rag_store(ROOT)
 
     assert result.passed is True
-    assert set(result.source_ids) == set(REQUIRED_SOURCE_IDS)
+    assert {"KOR-001", "KOR-002", "KOR-003", "KOR-004", "KOR-005"}.issubset(result.source_ids)
+    assert {"KOR-006", "KOR-007", "KOR-008", "RSR-002", "RSR-003", "RSR-004", "RSR-005", "RSR-006"}.issubset(
+        result.source_ids
+    )
     assert "KOR-003" in result.active_sources
     assert "KOR-004" in result.active_sources
-    assert result.candidate_sources == ["RSR-001"]
-    assert result.reference_only_sources == ["KOR-001", "KOR-002", "KOR-005"]
+    assert result.candidate_sources == []
+    assert result.reference_only_sources == []
 
 
 def test_validator_reports_duplicate_source_id(tmp_path: Path) -> None:

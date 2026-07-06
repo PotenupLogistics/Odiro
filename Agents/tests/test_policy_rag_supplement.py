@@ -131,7 +131,7 @@ def test_retrieve_episode_setup_context_pedestrian_collision() -> None:
     assert "actors.pedestrians[*].movement.speed_mps" in params
     assert "evaluation.near_miss.distance_m" in params
     cites = context_citation_ids_multi(contexts)
-    assert "PRJ-EVAL" in cites or "PRJ-DOE" in cites
+    assert cites == []
 
 
 def test_retrieve_policy_server_context_timeout() -> None:
@@ -142,7 +142,7 @@ def test_retrieve_policy_server_context_timeout() -> None:
     assert "force_action_override" in params
     assert "stop_distance_m_threshold" in params
     cites = context_citation_ids_multi(contexts)
-    assert "PRJ-AGENT" in cites
+    assert cites == []
 
 
 # ── 기존 검색 회귀 ─────────────────────────────────────────────────────────

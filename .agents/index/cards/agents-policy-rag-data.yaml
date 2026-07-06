@@ -4,6 +4,7 @@ description: Policy RAG retrieval, policy source analysis, and Agents data asset
 paths:
   - Agents/app/services/*rag*
   - Agents/app/services/*policy*
+  - Agents/app/services/pdf_rag_*
   - Agents/data/**
   - Agents/docs/policy/**
   - Agents/docs/rag/**
@@ -15,6 +16,9 @@ entry:
     description: RAG retrieval, policy recommendation, and data generation surfaces.
     read:
       - Agents/app/services/policy_rag_retriever.py
+      - Agents/app/services/pdf_rag_corpus.py
+      - Agents/app/services/pdf_rag_index.py
+      - Agents/app/services/pdf_rag_retriever.py
       - Agents/app/services/policy_recommendation_orchestrator.py
       - Agents/app/services/policy_source_analyzer.py
       - Agents/data
@@ -22,12 +26,17 @@ entry:
 guardrails:
   - Agents/data is source, processed, and review data; release runtime read-only assets move to static/agents when needed.
   - Raw PDFs and manual review packs are not release assets by default.
+  - PDF Vector Hybrid RAG uses KOR/RSR PDF-derived corpus artifacts and .cache/rag/chroma/pdf_corpus; do not use legacy card JSONL as source or fallback.
+  - Keep Chroma/embedding cache out of Agents/data/rag and out of git-tracked artifacts.
+  - Preserve /api/v2/analysis/run public request/response schema and keep source/chunk/page/score/backend details internal.
   - Policy recommendation code should not write project policy files directly unless an API contract says it may.
 verify:
   - when: policy RAG or data generation changes
     run:
       - file-based RAG readiness check
       - policy card/chunk validation
+      - PDF RAG corpus/index focused tests
+      - v2 analysis API contract tests
       - focused retrieval or recommendation tests
 related:
   - agents-generation-runtime

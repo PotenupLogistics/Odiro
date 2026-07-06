@@ -16,7 +16,7 @@ from app.agents.result_analysis_v2.experiment_aggregator import ExperimentAggreg
 from app.agents.result_analysis_v2.failure_pattern_detector import FailurePatternDetector
 from app.agents.result_analysis_v2.finding_builder import FindingBuilder
 from app.agents.result_analysis_v2.llm_failure_analyzer import LlmFailureAnalyzer
-from app.agents.result_analysis_v2.rag_context_builder import FileBasedRagRetrieverAdapterV2, RagContextBuilderV2
+from app.agents.result_analysis_v2.rag_context_builder import PdfRagRetrieverAdapterV2, RagContextBuilderV2
 from app.agents.result_analysis_v2.rag_query_builder import RagQueryBuilderV2
 from app.agents.result_analysis_v2.recommendation_artifact_writer import RecommendationArtifactWriter
 from app.agents.result_analysis_v2.recommendation_schema import analysis_recommendations_v2_response_schema
@@ -60,7 +60,7 @@ class ResultAnalysisV2Agent:
         self.timeline_builder = EventTimelineBuilderV2()
         self.representative_selector = RepresentativeFailedEpisodeSelectorV2()
         self.rag_query_builder = RagQueryBuilderV2()
-        self.rag_retriever = FileBasedRagRetrieverAdapterV2()
+        self.rag_retriever = PdfRagRetrieverAdapterV2()
         self.rag_context_builder = RagContextBuilderV2()
         self.context_builder = AnalysisContextBuilder()
         self.llm_analyzer = LlmFailureAnalyzer()
@@ -603,6 +603,10 @@ class ResultAnalysisV2Agent:
                 if response.summary is not None and response.summary.overall_judgement == "insufficient_data"
                 else "none"
             )
+            try:
+                self.review_lifecycle.write_response(session=session, response=response)
+            except Exception:
+                pass
 
     def _source_run_files(self, parsed: list[ParsedArtifact]) -> list[str]:
         """Return source run files used by analysis, excluding generated review artifacts."""

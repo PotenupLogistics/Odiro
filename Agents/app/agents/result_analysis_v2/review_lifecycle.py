@@ -80,6 +80,7 @@ class ReviewLifecycleManager:
     ) -> None:
         """Persist final review artifacts and update the project analysis index."""
         completed_at = utc_now_iso()
+        self.write_response(session=session, response=response)
         manifest = {
             **manifest,
             "review_id": session.review_id,
@@ -123,6 +124,14 @@ class ReviewLifecycleManager:
                 "completed_at": utc_now_iso(),
                 "error": {"code": code, "message": message},
             },
+        )
+
+    def write_response(self, *, session: ReviewSession, response: AnalysisRunV2Response) -> None:
+        """Persist the public API response body as an atomically replaced review artifact."""
+        self._write_json_atomic(
+            session,
+            "response.json",
+            response.model_dump(by_alias=True, exclude_none=True, mode="json"),
         )
 
     def _allocate_session(self, *, project_path: Path, run_id: str, review_root: Path) -> ReviewSession:
@@ -170,6 +179,18 @@ class ReviewLifecycleManager:
         """Write one review artifact with deterministic formatting."""
         path = session.review_dir / filename
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        self._track_generated_file(session, path)
+
+    def _write_json_atomic(self, session: ReviewSession, filename: str, payload: dict[str, Any]) -> None:
+        """Write one review artifact through a temporary file before replacing the target."""
+        path = session.review_dir / filename
+        temp_path = path.with_name(f"{path.name}.tmp")
+        temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        temp_path.replace(path)
+        self._track_generated_file(session, path)
+
+    def _track_generated_file(self, session: ReviewSession, path: Path) -> None:
+        """Record a generated artifact path once, relative to the project root."""
         relative = path.relative_to(session.project_path).as_posix()
         if relative not in session.generated_files:
             session.generated_files.append(relative)
@@ -179,6 +200,7 @@ class ReviewLifecycleManager:
         expected = [
             f"runs/{session.run_id}/review/{session.review_id}/status.json",
             f"runs/{session.run_id}/review/{session.review_id}/request.json",
+            f"runs/{session.run_id}/review/{session.review_id}/response.json",
             f"runs/{session.run_id}/review/{session.review_id}/report.json",
             f"runs/{session.run_id}/review/{session.review_id}/recommendations.json",
             f"runs/{session.run_id}/review/{session.review_id}/manifest.json",

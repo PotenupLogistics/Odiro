@@ -53,7 +53,6 @@ void URunDetailScreenWidget::NativeConstruct()
 	RestoreReplayViewerToNormalHost();
 	ResolveReplayInterestRegionStrip();
 	ApplyReplayInterestRegionStripToViewer();
-	SetReplayEpisodeNumberText(FString());
 }
 
 void URunDetailScreenWidget::NativeDestruct()
@@ -266,7 +265,7 @@ void URunDetailScreenWidget::ResetReplay()
 	}
 	LoadedReplayRunId.Reset();
 	LoadedReplayEpisodeDirectory.Reset();
-	SetReplayEpisodeNumberText(FString());
+	SetActiveEpisodeReplayCard(nullptr);
 }
 
 UProjectWorkspaceViewModel* URunDetailScreenWidget::ResolveWorkspaceViewModel()
@@ -342,7 +341,10 @@ void URunDetailScreenWidget::OpenInitialEpisodeReplay()
 		&& LoadedReplayRunId.Equals(selectedRunId, ESearchCase::IgnoreCase)
 		&& !LoadedReplayEpisodeDirectory.IsEmpty())
 	{
-		return;
+		if (ApplyActiveEpisodeReplayCardFromLoadedDirectory())
+		{
+			return;
+		}
 	}
 
 	for (UProjectEpisodeReplayCardWidget* cardWidget : EpisodeCards)
@@ -358,7 +360,7 @@ void URunDetailScreenWidget::OpenInitialEpisodeReplay()
 	ResetReplay();
 }
 
-// Opens replay for one episode card and mirrors the selected episode header on success.
+// Opens replay for one episode card and updates the active card highlight on success.
 bool URunDetailScreenWidget::OpenEpisodeReplayCard(
 	UProjectEpisodeReplayCardWidget* cardWidget)
 {
@@ -373,8 +375,6 @@ bool URunDetailScreenWidget::OpenEpisodeReplayCard(
 		return false;
 	}
 
-	SetReplayEpisodeNumberText(cardWidget->GetEpisodeId());
-
 	UProjectWorkspaceViewModel* workspaceViewModel = ResolveWorkspaceViewModel();
 	LoadedReplayRunId = workspaceViewModel
 		? workspaceViewModel->GetSelectedRunId()
@@ -382,7 +382,51 @@ bool URunDetailScreenWidget::OpenEpisodeReplayCard(
 	LoadedReplayRunId = LoadedReplayRunId.TrimStartAndEnd();
 	LoadedReplayEpisodeDirectory = cardWidget->GetEpisodeDirectory();
 	FPaths::NormalizeDirectoryName(LoadedReplayEpisodeDirectory);
+	SetActiveEpisodeReplayCard(cardWidget);
 	return true;
+}
+
+void URunDetailScreenWidget::SetActiveEpisodeReplayCard(
+	UProjectEpisodeReplayCardWidget* activeCardWidget)
+{
+	ActiveEpisodeReplayCard = activeCardWidget;
+	for (UProjectEpisodeReplayCardWidget* cardWidget : EpisodeCards)
+	{
+		if (cardWidget)
+		{
+			cardWidget->SetActiveReplay(cardWidget == activeCardWidget);
+		}
+	}
+}
+
+bool URunDetailScreenWidget::ApplyActiveEpisodeReplayCardFromLoadedDirectory()
+{
+	FString normalizedLoadedDirectory = LoadedReplayEpisodeDirectory;
+	FPaths::NormalizeDirectoryName(normalizedLoadedDirectory);
+	if (normalizedLoadedDirectory.IsEmpty())
+	{
+		SetActiveEpisodeReplayCard(nullptr);
+		return false;
+	}
+
+	for (UProjectEpisodeReplayCardWidget* cardWidget : EpisodeCards)
+	{
+		if (!cardWidget)
+		{
+			continue;
+		}
+
+		FString normalizedCardDirectory = cardWidget->GetEpisodeDirectory();
+		FPaths::NormalizeDirectoryName(normalizedCardDirectory);
+		if (normalizedCardDirectory.Equals(normalizedLoadedDirectory, ESearchCase::IgnoreCase))
+		{
+			SetActiveEpisodeReplayCard(cardWidget);
+			return true;
+		}
+	}
+
+	SetActiveEpisodeReplayCard(nullptr);
+	return false;
 }
 
 void URunDetailScreenWidget::RebuildAnalysisRows()
@@ -420,6 +464,7 @@ void URunDetailScreenWidget::ClearEpisodeCards()
 		}
 	}
 	EpisodeCards.Reset();
+	ActiveEpisodeReplayCard = nullptr;
 	if (EpisodeReplayCardWrapBox)
 	{
 		EpisodeReplayCardWrapBox->ClearChildren();
@@ -523,25 +568,6 @@ void URunDetailScreenWidget::AddSuggestionRowToContainer(
 	rowWidget->InitializeFromSuggestionViewModel(suggestionItem);
 	container->AddChild(rowWidget);
 	AnalysisRows.Add(rowWidget);
-}
-
-void URunDetailScreenWidget::SetReplayEpisodeNumberText(const FString& episodeId)
-{
-	UTextBlock* episodeNumberText = ReplayEpisodeNumber.Get();
-	if (!episodeNumberText)
-	{
-		ReplayEpisodeNumber = Cast<UTextBlock>(GetWidgetFromName(TEXT("ReplayEpisodeNumber")));
-		episodeNumberText = ReplayEpisodeNumber.Get();
-	}
-	if (!episodeNumberText)
-	{
-		return;
-	}
-
-	const FString trimmedEpisodeId = episodeId.TrimStartAndEnd();
-	episodeNumberText->SetText(trimmedEpisodeId.IsEmpty()
-		? FText::GetEmpty()
-		: FText::FromString(trimmedEpisodeId));
 }
 
 void URunDetailScreenWidget::HandleEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget)

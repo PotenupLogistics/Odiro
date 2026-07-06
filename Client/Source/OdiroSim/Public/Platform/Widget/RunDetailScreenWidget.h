@@ -66,8 +66,14 @@ private:
 	// Opens the first replay-capable episode when this run does not already have a loaded replay.
 	void OpenInitialEpisodeReplay();
 
-	// Opens replay for one episode card and mirrors the selected episode header on success.
+	// Opens replay for one episode card and updates the active card highlight on success.
 	bool OpenEpisodeReplayCard(UProjectEpisodeReplayCardWidget* cardWidget);
+
+	// Updates active card highlight to the given replay card.
+	void SetActiveEpisodeReplayCard(UProjectEpisodeReplayCardWidget* activeCardWidget);
+
+	// Restores active card highlight from the loaded replay directory.
+	bool ApplyActiveEpisodeReplayCardFromLoadedDirectory();
 
 	// Rebuilds AI analysis row widgets.
 	void RebuildAnalysisRows();
@@ -118,9 +124,6 @@ private:
 	// Connects the RunDetail-owned interest strip to the embedded replay viewer.
 	void ApplyReplayInterestRegionStripToViewer();
 
-	// Updates the RunDetail header with the selected replay episode id.
-	void SetReplayEpisodeNumberText(const FString& episodeId);
-
 	// Analysis button click handler.
 	UFUNCTION()
 	void HandleRequestAiAnalysisClicked(UBaseButtonWidget* button);
@@ -156,6 +159,10 @@ private:
 	UPROPERTY(Transient)
 	FString LoadedReplayEpisodeDirectory;
 
+	// Runtime card currently highlighted as the replay viewer source.
+	UPROPERTY(Transient)
+	TObjectPtr<UProjectEpisodeReplayCardWidget> ActiveEpisodeReplayCard;
+
 	// Episode card Widget Blueprint class.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunDetail", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UProjectEpisodeReplayCardWidget> EpisodeCardWidgetClass;
@@ -166,7 +173,7 @@ private:
 
 	// Runtime HorizontalBox slot spacing for episode replay cards.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunDetail|Layout", meta = (AllowPrivateAccess = "true"))
-	FMargin EpisodeReplayCardPadding = FMargin(0.0f, 0.0f, 8.0f, 8.0f);
+	FMargin EpisodeReplayCardPadding = FMargin(0.0f);
 
 	// Run id title display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -243,10 +250,6 @@ private:
 	// Fullscreen replay host layered above run detail content.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> ReplayFullscreenHost;
-
-	// Selected replay episode id label owned by the RunDetail header.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> ReplayEpisodeNumber;
 
 	// Embedded replay viewer owned by a replay host widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

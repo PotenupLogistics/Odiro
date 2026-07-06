@@ -43,6 +43,8 @@ namespace
 	const FName GeneratedBuildingCollisionProxyProfileName(TEXT("Blocked"));
 	// Component name prefix used to identify authored-bounds building collision proxies.
 	const FName GeneratedBuildingCollisionProxyComponentName(TEXT("GeneratedBuildingBlockingBounds"));
+	// Authored Building BP component name reserved for low navigation blocker volumes.
+	const FString BuildingGridNavBlockerComponentName(TEXT("GridNavBlocker"));
 	// Clearance reserved only between generated building frontage actors.
 	const double GeneratedBuildingInterBlockGapCm = 100.0;
 
@@ -1271,12 +1273,30 @@ namespace
 			+ (right * sideSign * (regionHalfWidthCm - blockHalfWidthCm + postAnchorOffsetCm));
 	}
 
+	// Matches authored blocker component instances even when Blueprint duplication appends a suffix.
+	bool IsCityBlockGridNavBlockerComponentName(const UActorComponent* component)
+	{
+		if (!IsValid(component))
+		{
+			return false;
+		}
+
+		const FString componentName = component->GetName();
+		return componentName.Equals(BuildingGridNavBlockerComponentName, ESearchCase::IgnoreCase)
+			|| componentName.StartsWith(BuildingGridNavBlockerComponentName + TEXT("_"), ESearchCase::IgnoreCase);
+	}
+
 	// Identifies BP-authored shape components that intentionally represent semantic building blockers.
 	bool IsCityBlockSemanticBlockingComponent(const UPrimitiveComponent* primitiveComponent)
 	{
-		return IsValid(primitiveComponent)
-			&& primitiveComponent->IsA<UShapeComponent>()
-			&& primitiveComponent->GetCollisionProfileName() == GeneratedBuildingCollisionProxyProfileName;
+		if (!IsValid(primitiveComponent)
+			|| !primitiveComponent->IsA<UShapeComponent>())
+		{
+			return false;
+		}
+
+		return primitiveComponent->GetCollisionProfileName() == GeneratedBuildingCollisionProxyProfileName
+			|| IsCityBlockGridNavBlockerComponentName(primitiveComponent);
 	}
 
 	// Identifies BP static mesh components that should remain visible to robot LiDAR traces.

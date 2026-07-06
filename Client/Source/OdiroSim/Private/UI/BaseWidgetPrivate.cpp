@@ -354,6 +354,8 @@ namespace BaseWidgetPrivate
 			TEXT("/Game/Widgets/Common/M_BaseTabSurface_UI.M_BaseTabSurface_UI");
 		const TCHAR* ProgressMaterialPath =
 			TEXT("/Game/Widgets/Common/M_BaseProgressSurface_UI.M_BaseProgressSurface_UI");
+		const TCHAR* TabJoinCornerMaterialPath =
+			TEXT("/Game/Widgets/Common/M_BaseTabJoinCorner_UI.M_BaseTabJoinCorner_UI");
 		const FVector2D MaterialBrushPlaceholderSize(16.0f, 16.0f);
 
 		// The material's emissive color is written to an sRGB target, so an authored
@@ -367,15 +369,6 @@ namespace BaseWidgetPrivate
 			return clamped <= 0.04045f
 				? clamped / 12.92f
 				: FMath::Pow((clamped + 0.055f) / 1.055f, 2.4f);
-		}
-
-		FLinearColor EncodeTexturedColor(const FLinearColor& color)
-		{
-			return FLinearColor(
-				DecodeSrgbChannel(color.R),
-				DecodeSrgbChannel(color.G),
-				DecodeSrgbChannel(color.B),
-				color.A);
 		}
 
 		// Ensures a border draws the given material and returns its cached dynamic
@@ -425,6 +418,41 @@ namespace BaseWidgetPrivate
 			return applyMaterialBrush(material);
 		}
 
+		// Ensures an image owns one dynamic material instance without taking over
+		// the WBP-authored slot, size, or tint settings around the brush.
+		UMaterialInstanceDynamic* EnsureImageMaterialBrush(UImage* image, const TCHAR* materialPath)
+		{
+			if (!IsValid(image))
+			{
+				return nullptr;
+			}
+
+			UMaterialInterface* baseMaterial = LoadObject<UMaterialInterface>(nullptr, materialPath);
+			if (!baseMaterial)
+			{
+				return nullptr;
+			}
+
+			if (UMaterialInstanceDynamic* existingMaterial =
+				Cast<UMaterialInstanceDynamic>(image->GetBrush().GetResourceObject()))
+			{
+				if (existingMaterial->Parent.Get() == baseMaterial)
+				{
+					return existingMaterial;
+				}
+			}
+
+			FSlateBrush brush = image->GetBrush();
+			brush.DrawAs = ESlateBrushDrawType::Image;
+			if (brush.ImageSize.X < 1.0f || brush.ImageSize.Y < 1.0f)
+			{
+				brush.ImageSize = MaterialBrushPlaceholderSize;
+			}
+			brush.SetResourceObject(baseMaterial);
+			image->SetBrush(brush);
+			return image->GetDynamicMaterial();
+		}
+
 		// Uses the WBP-authored image material; C++ only drives runtime
 		// parameters and falls back to a normal texture brush if no material exists.
 		UMaterialInstanceDynamic* EnsureAuthoredImageMaterial(UImage* image)
@@ -457,13 +485,22 @@ namespace BaseWidgetPrivate
 		{
 			if (UMaterialInstanceDynamic* material = EnsureMaterialBrush(border, materialPath))
 			{
-				material->SetVectorParameterValue(TEXT("FillColor"), EncodeTexturedColor(fillColor));
-				material->SetVectorParameterValue(TEXT("StrokeColor"), EncodeTexturedColor(strokeColor));
+				material->SetVectorParameterValue(TEXT("FillColor"), EncodeUiMaterialColor(fillColor));
+				material->SetVectorParameterValue(TEXT("StrokeColor"), EncodeUiMaterialColor(strokeColor));
 				material->SetScalarParameterValue(TEXT("RadiusPx"), FMath::Max(radiusPx, 0.0f));
 				material->SetScalarParameterValue(TEXT("BorderWidthPx"), FMath::Max(borderWidthPx, 0.0f));
 			}
 		}
 
+	}
+
+	FLinearColor EncodeUiMaterialColor(const FLinearColor& color)
+	{
+		return FLinearColor(
+			DecodeSrgbChannel(color.R),
+			DecodeSrgbChannel(color.G),
+			DecodeSrgbChannel(color.B),
+			color.A);
 	}
 
 	void ApplyProgressSurface(
@@ -475,8 +512,8 @@ namespace BaseWidgetPrivate
 	{
 		if (UMaterialInstanceDynamic* material = EnsureMaterialBrush(trackBorder, ProgressMaterialPath))
 		{
-			material->SetVectorParameterValue(TEXT("TrackColor"), EncodeTexturedColor(trackColor));
-			material->SetVectorParameterValue(TEXT("FillColor"), EncodeTexturedColor(fillColor));
+			material->SetVectorParameterValue(TEXT("TrackColor"), EncodeUiMaterialColor(trackColor));
+			material->SetVectorParameterValue(TEXT("FillColor"), EncodeUiMaterialColor(fillColor));
 			material->SetScalarParameterValue(TEXT("Percent"), FMath::Clamp(percent, 0.0f, 1.0f));
 			material->SetScalarParameterValue(TEXT("RadiusPx"), FMath::Max(radiusPx, 0.0f));
 		}
@@ -559,6 +596,36 @@ namespace BaseWidgetPrivate
 		}
 
 		image->SetBrushFromTexture(texture, false);
+	}
+
+	void ApplyTabJoinCorner(
+		UImage* image,
+		const FLinearColor& fillColor,
+		const float cornerSizePx,
+		const bool bRightSide)
+	{
+		if (!IsValid(image))
+		{
+			return;
+		}
+
+		const float size = FMath::Max(cornerSizePx, 1.0f);
+		if (UMaterialInstanceDynamic* material = EnsureImageMaterialBrush(image, TabJoinCornerMaterialPath))
+		{
+			const FLinearColor materialColor = EncodeUiMaterialColor(fillColor);
+			FSlateBrush brush = image->GetBrush();
+			brush.DrawAs = ESlateBrushDrawType::Image;
+			brush.ImageSize = FVector2D(size, size);
+			brush.TintColor = FSlateColor(FLinearColor::White);
+			brush.SetResourceObject(material);
+			image->SetBrush(brush);
+			image->SetColorAndOpacity(FLinearColor::White);
+
+			material->SetVectorParameterValue(TEXT("FillColor"), materialColor);
+			material->SetVectorParameterValue(TEXT("ElementSize"), FLinearColor(size, size, materialColor.A, 0.0f));
+			material->SetScalarParameterValue(TEXT("CornerSide"), bRightSide ? 1.0f : 0.0f);
+			image->InvalidateLayoutAndVolatility();
+		}
 	}
 
 	void UpdateRoundedSurfaceSize(UBorder* surfaceBorder, const FVector2D& fallbackSize)

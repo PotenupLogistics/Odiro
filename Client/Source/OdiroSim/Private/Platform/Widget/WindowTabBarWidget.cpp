@@ -263,6 +263,7 @@ void UWindowTabBarWidget::ConfigureFixedTab(
 	}
 
 	ApplyTabDimensions(tabWidget, config.SizeConstraints);
+	ConfigureTabJoinCornerColors(tabWidget);
 }
 
 void UWindowTabBarWidget::ApplyTabDimensions(UBaseTabWidget* tabWidget, const FBaseWidgetSizeConstraints& constraints) const
@@ -372,7 +373,35 @@ void UWindowTabBarWidget::ConfigureTab(UBaseTabWidget* tabWidget, const FWindowT
 	}
 	ApplyTabDimensions(tabWidget, config.SizeConstraints);
 	tabWidget->SetClosable(config.bClosable);
+	ConfigureTabJoinCornerColors(tabWidget);
 	ApplyTabVisibility(config.TabId, IsTabVisible(config.TabId));
+}
+
+void UWindowTabBarWidget::ConfigureTabJoinCornerColors(UBaseTabWidget* tabWidget) const
+{
+	if (!tabWidget)
+	{
+		return;
+	}
+
+	tabWidget->SetStatePaintLayeringEnabled(true);
+
+	const UBaseWidgetColorCatalog* colors = tabWidget->GetResolvedBaseColors();
+	if (!colors)
+	{
+		tabWidget->SetJoinCornerColors(
+			FLinearColor::Transparent,
+			FLinearColor::Transparent,
+			FLinearColor::Transparent,
+			FLinearColor::Transparent);
+		return;
+	}
+
+	tabWidget->SetJoinCornerColors(
+		FLinearColor::Transparent,
+		colors->SurfaceHoverSoftColor,
+		colors->SurfacePanelColor,
+		colors->SurfaceControlActiveColor);
 }
 
 void UWindowTabBarWidget::BindTab(UBaseTabWidget* tabWidget)

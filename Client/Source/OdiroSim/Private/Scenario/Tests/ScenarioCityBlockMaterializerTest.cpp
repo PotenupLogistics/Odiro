@@ -1116,10 +1116,8 @@ bool FScenarioCityBlockMaterializerBuildingStaticMeshCollisionTest::RunTest(cons
 	const bool bOriginalGenerateOverlapEvents = defaultStaticMeshComponent->GetGenerateOverlapEvents();
 
 	defaultStaticMeshComponent->SetStaticMesh(cubeMesh);
-	defaultStaticMeshComponent->SetCollisionProfileName(FName(TEXT("BlockAll")));
-	defaultStaticMeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	defaultStaticMeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-	defaultStaticMeshComponent->SetCollisionResponseToChannel(ECC_GameTraceChannel8, ECR_Block);
+	defaultStaticMeshComponent->SetCollisionProfileName(FName(TEXT("NoCollision")));
+	defaultStaticMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	UScenarioCityBlockCatalog* catalog = NewObject<UScenarioCityBlockCatalog>();
 	TestNotNull(TEXT("Catalog can be constructed for materializer tests"), catalog);
@@ -1192,11 +1190,7 @@ bool FScenarioCityBlockMaterializerBuildingStaticMeshCollisionTest::RunTest(cons
 
 			++blockingStaticMeshCount;
 			TestEqual(
-				TEXT("building static mesh uses visual collision profile"),
-				staticMeshComponent->GetCollisionProfileName(),
-				FName(TEXT("ScenarioBuildingVisual")));
-			TestEqual(
-				TEXT("building static mesh participates in LiDAR queries only"),
+				TEXT("building static mesh is revived for LiDAR queries"),
 				static_cast<int32>(staticMeshComponent->GetCollisionEnabled()),
 				static_cast<int32>(ECollisionEnabled::QueryOnly));
 			TestEqual(

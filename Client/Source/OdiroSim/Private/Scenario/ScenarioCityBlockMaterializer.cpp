@@ -1310,8 +1310,7 @@ namespace
 	{
 		const UStaticMeshComponent* staticMeshComponent = Cast<UStaticMeshComponent>(primitiveComponent);
 		return IsValid(staticMeshComponent)
-			&& IsValid(staticMeshComponent->GetStaticMesh())
-			&& staticMeshComponent->GetCollisionEnabled() != ECollisionEnabled::NoCollision;
+			&& IsValid(staticMeshComponent->GetStaticMesh());
 	}
 
 	// Normalizes preserved BP-authored blocker components for grid/navigation queries.
@@ -1329,6 +1328,9 @@ namespace
 	{
 		primitiveComponent.SetCollisionProfileName(ScenarioBuildingVisualCollisionProfileName);
 		primitiveComponent.SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		primitiveComponent.SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		primitiveComponent.SetCollisionResponseToChannel(ECC_GameTraceChannel8, ECR_Ignore);
+		primitiveComponent.SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Ignore);
 		primitiveComponent.SetGenerateOverlapEvents(false);
 	}
 

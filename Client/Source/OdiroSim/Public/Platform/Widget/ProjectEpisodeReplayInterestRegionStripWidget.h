@@ -12,10 +12,11 @@ class UScrollBox;
 class UTextBlock;
 
 // Native event channel used when an interest-region strip requests a replay seek.
-DECLARE_MULTICAST_DELEGATE_TwoParams(
+DECLARE_MULTICAST_DELEGATE_ThreeParams(
 	FProjectEpisodeReplayInterestRegionSelectedNative,
 	UProjectEpisodeReplayInterestRegionStripWidget*,
-	double);
+	double,
+	int32);
 
 // Horizontal replay interest-region strip driven by WBP_ReplayInterestRegionStrip.
 UCLASS(BlueprintType, Blueprintable)
@@ -53,7 +54,8 @@ private:
 	// Handles one runtime card selection.
 	void HandleCardSelected(
 		UProjectEpisodeReplayInterestEventCardWidget* CardWidget,
-		double TimeSeconds);
+		double TimeSeconds,
+		int32 EventIndex);
 
 	// Returns the card index that is close enough to the current replay time.
 	int32 ResolveSelectedCardIndex(double CurrentTimeSeconds) const;
@@ -66,6 +68,9 @@ private:
 	// Finds the runtime card index for one card pointer.
 	int32 FindCardIndex(
 		const UProjectEpisodeReplayInterestEventCardWidget* CardWidget) const;
+
+	// Finds the runtime card index for one stable replay event id.
+	int32 FindCardIndexByEventIndex(int32 EventIndex) const;
 
 	// Count label owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -93,6 +98,9 @@ private:
 
 	// Current selected card index, or INDEX_NONE when no card is active.
 	int32 SelectedCardIndex = INDEX_NONE;
+
+	// User-focused event id kept selected while replay time remains near it.
+	int32 FocusedEventIndex = INDEX_NONE;
 
 	// Maximum time distance for a card to be considered active.
 	double SelectionWindowSeconds = 0.35;

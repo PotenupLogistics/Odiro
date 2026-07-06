@@ -1293,8 +1293,9 @@ void UProjectEpisodeReplayViewerWidget::HandleFullscreenLidarDistanceToggleClick
 }
 
 void UProjectEpisodeReplayViewerWidget::HandleReplayInterestEventSelected(
-	UProjectEpisodeReplayInterestRegionStripWidget* InterestStrip,
-	double TimeSeconds)
+	UProjectEpisodeReplayInterestRegionStripWidget* /*InterestStrip*/,
+	double TimeSeconds,
+	int32 EventIndex)
 {
 	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
 	if (!ReplaySubsystem)
@@ -1314,7 +1315,14 @@ void UProjectEpisodeReplayViewerWidget::HandleReplayInterestEventSelected(
 	ClearReplayMovementInput();
 	ClearReplayLookInput();
 	UpdateReplayTimelineUi();
-	UpdateReplayInterestRegionSelection(true);
+	if (EventIndex != INDEX_NONE)
+	{
+		FocusReplayInterestEvent(EventIndex);
+	}
+	else
+	{
+		UpdateReplayInterestRegionSelection(true);
+	}
 	SetDiagnosticsText(FString::Printf(
 		TEXT("Replay stopped at event %.2fs."),
 		TimeSeconds));
@@ -1774,7 +1782,7 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 	if (ReplayTimeText)
 	{
 		ReplayTimeText->SetText(FText::Format(
-			FText::FromString(TEXT("Time: {0} / {1}")),
+			FText::FromString(TEXT("{0} / {1}")),
 			FormatReplayTime(CurrentTimeSeconds),
 			FormatReplayTime(DurationSeconds)));
 	}
@@ -1790,7 +1798,7 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 				? ReplaySubsystem->GetFrameCount()
 				: 0;
 		ReplayFrameText->SetText(FText::FromString(FString::Printf(
-			TEXT("Frame: %d / %d"),
+			TEXT("%d / %d"),
 			CurrentFrameIndex >= 0 ? CurrentFrameIndex + 1 : 0,
 			FrameCount)));
 	}

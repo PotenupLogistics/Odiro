@@ -99,6 +99,7 @@ void UProjectEpisodeReplayInterestRegionStripWidget::ClearEventMarkers()
 	EventCards.Reset();
 	EventMarkers.Reset();
 	SelectedCardIndex = INDEX_NONE;
+	FocusedEventIndex = INDEX_NONE;
 
 	if (InterestCardRow)
 	{
@@ -116,6 +117,23 @@ void UProjectEpisodeReplayInterestRegionStripWidget::SetCurrentTime(
 	double CurrentTimeSeconds,
 	bool bScrollSelectedIntoView)
 {
+	if (FocusedEventIndex != INDEX_NONE)
+	{
+		const int32 FocusedCardIndex = FindCardIndexByEventIndex(FocusedEventIndex);
+		if (EventMarkers.IsValidIndex(FocusedCardIndex))
+		{
+			const double FocusedDistanceSeconds =
+				FMath::Abs(EventMarkers[FocusedCardIndex].TimeSeconds - CurrentTimeSeconds);
+			if (FocusedDistanceSeconds <= SelectionWindowSeconds)
+			{
+				SetSelectedCardIndex(FocusedCardIndex, bScrollSelectedIntoView);
+				return;
+			}
+		}
+
+		FocusedEventIndex = INDEX_NONE;
+	}
+
 	SetSelectedCardIndex(
 		ResolveSelectedCardIndex(CurrentTimeSeconds),
 		bScrollSelectedIntoView);
@@ -123,13 +141,12 @@ void UProjectEpisodeReplayInterestRegionStripWidget::SetCurrentTime(
 
 bool UProjectEpisodeReplayInterestRegionStripWidget::FocusEventByIndex(int32 EventIndex)
 {
-	for (int32 CardIndex = 0; CardIndex < EventMarkers.Num(); ++CardIndex)
+	const int32 CardIndex = FindCardIndexByEventIndex(EventIndex);
+	if (EventMarkers.IsValidIndex(CardIndex))
 	{
-		if (EventMarkers[CardIndex].EventIndex == EventIndex)
-		{
-			SetSelectedCardIndex(CardIndex, true);
-			return true;
-		}
+		FocusedEventIndex = EventIndex;
+		SetSelectedCardIndex(CardIndex, true);
+		return true;
 	}
 
 	return false;
@@ -137,10 +154,21 @@ bool UProjectEpisodeReplayInterestRegionStripWidget::FocusEventByIndex(int32 Eve
 
 void UProjectEpisodeReplayInterestRegionStripWidget::HandleCardSelected(
 	UProjectEpisodeReplayInterestEventCardWidget* CardWidget,
-	double TimeSeconds)
+	double /*TimeSeconds*/,
+	int32 /*EventIndex*/)
 {
-	SetSelectedCardIndex(FindCardIndex(CardWidget), true);
-	OnInterestEventSelected.Broadcast(this, TimeSeconds);
+	const int32 CardIndex = FindCardIndex(CardWidget);
+	if (!EventMarkers.IsValidIndex(CardIndex))
+	{
+		return;
+	}
+
+	FocusedEventIndex = EventMarkers[CardIndex].EventIndex;
+	SetSelectedCardIndex(CardIndex, true);
+	OnInterestEventSelected.Broadcast(
+		this,
+		EventMarkers[CardIndex].TimeSeconds,
+		FocusedEventIndex);
 }
 
 int32 UProjectEpisodeReplayInterestRegionStripWidget::ResolveSelectedCardIndex(
@@ -153,7 +181,8 @@ int32 UProjectEpisodeReplayInterestRegionStripWidget::ResolveSelectedCardIndex(
 	{
 		const double DistanceSeconds =
 			FMath::Abs(EventMarkers[CardIndex].TimeSeconds - CurrentTimeSeconds);
-		if (DistanceSeconds <= BestDistanceSeconds)
+		if (DistanceSeconds <= SelectionWindowSeconds
+			&& (BestCardIndex == INDEX_NONE || DistanceSeconds < BestDistanceSeconds))
 		{
 			BestCardIndex = CardIndex;
 			BestDistanceSeconds = DistanceSeconds;
@@ -197,6 +226,20 @@ int32 UProjectEpisodeReplayInterestRegionStripWidget::FindCardIndex(
 	for (int32 CardIndex = 0; CardIndex < EventCards.Num(); ++CardIndex)
 	{
 		if (EventCards[CardIndex] == CardWidget)
+		{
+			return CardIndex;
+		}
+	}
+
+	return INDEX_NONE;
+}
+
+int32 UProjectEpisodeReplayInterestRegionStripWidget::FindCardIndexByEventIndex(
+	int32 EventIndex) const
+{
+	for (int32 CardIndex = 0; CardIndex < EventMarkers.Num(); ++CardIndex)
+	{
+		if (EventMarkers[CardIndex].EventIndex == EventIndex)
 		{
 			return CardIndex;
 		}

@@ -3,6 +3,7 @@
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+#include "UI/BaseWidgetPrivate.h"
 
 namespace
 {
@@ -93,11 +94,32 @@ namespace
 
 		return FText::FromString(TEXT("상세 정보 없음"));
 	}
+
+	// ApplyRoundedSurface expects token-style sRGB input; WBP color pickers store
+	// FLinearColor channels already linearized from values such as #242424.
+	float EncodeLinearChannelForRoundedSurface(const float value)
+	{
+		const float clamped = FMath::Clamp(value, 0.0f, 1.0f);
+		return clamped <= 0.0031308f
+			? clamped * 12.92f
+			: 1.055f * FMath::Pow(clamped, 1.0f / 2.4f) - 0.055f;
+	}
+
+	FLinearColor EncodeWbpColorForRoundedSurface(const FLinearColor& color)
+	{
+		return FLinearColor(
+			EncodeLinearChannelForRoundedSurface(color.R),
+			EncodeLinearChannelForRoundedSurface(color.G),
+			EncodeLinearChannelForRoundedSurface(color.B),
+			color.A);
+	}
 }
 
 void UProjectEpisodeReplayInterestEventCardWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	SynchronizeCardSurfaceProperties();
 
 	if (CardButton)
 	{
@@ -121,6 +143,49 @@ void UProjectEpisodeReplayInterestEventCardWidget::NativeDestruct()
 
 	OnInterestEventSelected.Clear();
 	Super::NativeDestruct();
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::NativePreConstruct()
+{
+	Super::NativePreConstruct();
+
+	SynchronizeCardSurfaceProperties();
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::SynchronizeProperties()
+{
+	Super::SynchronizeProperties();
+	SynchronizeCardSurfaceProperties();
+}
+
+#if WITH_EDITOR
+void UProjectEpisodeReplayInterestEventCardWidget::PostEditChangeProperty(
+	FPropertyChangedEvent& propertyChangedEvent)
+{
+	Super::PostEditChangeProperty(propertyChangedEvent);
+	SynchronizeCardSurfaceProperties();
+}
+#endif
+
+int32 UProjectEpisodeReplayInterestEventCardWidget::NativePaint(
+	const FPaintArgs& Args,
+	const FGeometry& AllottedGeometry,
+	const FSlateRect& MyCullingRect,
+	FSlateWindowElementList& OutDrawElements,
+	const int32 LayerId,
+	const FWidgetStyle& InWidgetStyle,
+	const bool bParentEnabled) const
+{
+	const FVector2D fallbackSize = AllottedGeometry.GetLocalSize();
+	BaseWidgetPrivate::UpdateRoundedSurfaceSize(CardBackground.Get(), fallbackSize);
+	return Super::NativePaint(
+		Args,
+		AllottedGeometry,
+		MyCullingRect,
+		OutDrawElements,
+		LayerId,
+		InWidgetStyle,
+		bParentEnabled);
 }
 
 void UProjectEpisodeReplayInterestEventCardWidget::InitializeFromEventMarker(
@@ -166,20 +231,88 @@ void UProjectEpisodeReplayInterestEventCardWidget::InitializeFromEventMarker(
 
 void UProjectEpisodeReplayInterestEventCardWidget::SetSelected(bool bNewSelected)
 {
+	bSelected = bNewSelected;
+	SynchronizeCardSurfaceProperties();
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::SynchronizeCardSurfaceProperties()
+{
+	ApplyCardSurfaceStyle();
+	ClearSelectedOverlayStyle();
+	InvalidateLayoutAndVolatility();
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::SetCardSurfaceFillColor(const FLinearColor inColor)
+{
+	CardSurfaceFillColor = inColor;
+	SynchronizeCardSurfaceProperties();
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::SetCardSurfaceStrokeColor(const FLinearColor inColor)
+{
+	CardSurfaceStrokeColor = inColor;
+	SynchronizeCardSurfaceProperties();
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::SetCardSurfaceRadius(const float inRadius)
+{
+	CardSurfaceRadius = FMath::Max(inRadius, 0.0f);
+	SynchronizeCardSurfaceProperties();
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::SetCardSurfaceBorderWidth(const float inBorderWidth)
+{
+	CardSurfaceBorderWidth = FMath::Max(inBorderWidth, 0.0f);
+	SynchronizeCardSurfaceProperties();
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::SetSelectedCardSurfaceFillColor(
+	const FLinearColor inColor)
+{
+	SelectedOverlayFillColor = inColor;
+	SynchronizeCardSurfaceProperties();
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::SetSelectedCardSurfaceStrokeColor(
+	const FLinearColor inColor)
+{
+	SelectedOverlayStrokeColor = inColor;
+	SynchronizeCardSurfaceProperties();
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::ApplyCardSurfaceStyle()
+{
+	const FLinearColor fillColor = bSelected
+		? SelectedOverlayFillColor
+		: CardSurfaceFillColor;
+	const FLinearColor strokeColor = bSelected
+		? SelectedOverlayStrokeColor
+		: CardSurfaceStrokeColor;
+
+	BaseWidgetPrivate::ApplyRoundedSurface(
+		nullptr,
+		CardBackground.Get(),
+		EncodeWbpColorForRoundedSurface(fillColor),
+		EncodeWbpColorForRoundedSurface(strokeColor),
+		CardSurfaceRadius,
+		CardSurfaceBorderWidth);
+}
+
+void UProjectEpisodeReplayInterestEventCardWidget::ClearSelectedOverlayStyle()
+{
 	if (!SelectedOverlay)
 	{
 		return;
 	}
 
 	SelectedOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
-	SelectedOverlay->SetBrushColor(FLinearColor(
-		0.0f,
-		0.48f,
-		1.0f,
-		bNewSelected ? 0.22f : 0.0f));
+	BaseWidgetPrivate::MakeBorderVisualTransparent(SelectedOverlay.Get());
 }
 
 void UProjectEpisodeReplayInterestEventCardWidget::HandleCardClicked()
 {
-	OnInterestEventSelected.Broadcast(this, EventMarker.TimeSeconds);
+	OnInterestEventSelected.Broadcast(
+		this,
+		EventMarker.TimeSeconds,
+		EventMarker.EventIndex);
 }

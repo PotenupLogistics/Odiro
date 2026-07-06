@@ -175,7 +175,8 @@ private:
 	// Seeks replay playback to the selected interest event.
 	void HandleReplayInterestEventSelected(
 		UProjectEpisodeReplayInterestRegionStripWidget* InterestStrip,
-		double TimeSeconds);
+		double TimeSeconds,
+		int32 EventIndex);
 
 	// Returns the world replay subsystem for this viewer.
 	UScenarioReplaySubsystem* GetReplaySubsystem() const;

@@ -128,6 +128,14 @@ public:
 		float InTopDownSphereSizeCm,
 		float InColorBrightnessMultiplier);
 
+	// Offsets TopDown sphere fallback points from their source positions.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PointCloud")
+	void SetReviewTopDownSphereZOffset(float InZOffsetCm);
+
+	// Enables the plugin point cloud renderer alongside the mesh fallback.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PointCloud")
+	void SetReviewPluginRendererEnabled(bool bEnabled);
+
 private:
 	// File path helpers
 
@@ -300,6 +308,9 @@ private:
 	// Runtime color multiplier used for emphasized replay point cloud layers.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|Style", meta = (ClampMin = "0.0"))
 	float ColorBrightnessMultiplier{ 1.0f };
+
+	// Whether the plugin point cloud renderer participates in review presentation.
+	bool bReviewPluginRendererEnabled = true;
 
 	// Capture origin used to restore map_accumulated.xyz points into source world coordinates.
 	FVector MapCaptureOriginCm = FVector::ZeroVector;

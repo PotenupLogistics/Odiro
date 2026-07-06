@@ -43,9 +43,10 @@ namespace
 	const TCHAR* ReplayLidarRayManifestFileName = TEXT("rays.meta.json");
 	const TCHAR* ReplayProfileFileName = TEXT("profile.json");
 	const TCHAR* ReplayEventsFileName = TEXT("events.jsonl");
-	const float ReplayPointCloudHighlightPointSizeCm = 40.0f;
-	const float ReplayPointCloudHighlightSphereSizeCm = 6.0f;
-	const float ReplayPointCloudHighlightColorBrightness = 1.65f;
+	const float ReplayPointCloudHighlightPointSizeCm = 24.0f;
+	const float ReplayPointCloudHighlightSphereSizeCm = 3.0f;
+	const float ReplayPointCloudHighlightSphereZOffsetCm = 8.0f;
+	const float ReplayPointCloudHighlightColorBrightness = 10.f;
 
 	// Carries validated point cloud import paths and coordinate metadata.
 	struct FReplayPointCloudImportInfo
@@ -791,11 +792,16 @@ void UScenarioReplaySubsystem::SetReplayPointCloudVisible(const bool bVisible)
 	}
 	if (IsValid(ReplayPointCloudFrameHighlightActor))
 	{
-		ReplayPointCloudFrameHighlightActor->SetPointCloudVisible(bVisible);
+		ReplayPointCloudFrameHighlightActor->SetPointCloudVisible(
+			bVisible && PointCloudFrameRecords.IsValidIndex(CurrentPointCloudFrameHighlightIndex));
 		if (bVisible)
 		{
 			ApplyPointCloudFrameHighlightAtTime(CurrentReplayTimeSeconds);
 		}
+	}
+	if (IsValid(ReplayPointCloudFrameHighlightBackBufferActor))
+	{
+		ReplayPointCloudFrameHighlightBackBufferActor->SetPointCloudVisible(false);
 	}
 
 	RefreshReplayCaptureShowOnlyActors();
@@ -806,7 +812,9 @@ void UScenarioReplaySubsystem::SetReplayPointCloudVisible(const bool bVisible)
 		Log,
 		TEXT("Replay point cloud visibility changed | Visible=%s Available=%s"),
 		bReplayPointCloudVisible ? TEXT("true") : TEXT("false"),
-		IsValid(ReplayPointCloudActor) || IsValid(ReplayPointCloudFrameHighlightActor)
+		IsValid(ReplayPointCloudActor)
+			|| IsValid(ReplayPointCloudFrameHighlightActor)
+			|| IsValid(ReplayPointCloudFrameHighlightBackBufferActor)
 			? TEXT("true")
 			: TEXT("false"));
 }
@@ -814,8 +822,9 @@ void UScenarioReplaySubsystem::SetReplayPointCloudVisible(const bool bVisible)
 void UScenarioReplaySubsystem::SetReplayLidarRaysVisible(const bool bVisible)
 {
 	bReplayLidarRaysVisible = bVisible;
+	const bool bAnyLidarVisible = bReplayLidarRaysVisible || bReplayLidarDistanceVisible;
 
-	if (bVisible && HasReplayLidarRays() && !IsValid(ReplayLidarRayActor))
+	if (bAnyLidarVisible && HasReplayLidarRays() && !IsValid(ReplayLidarRayActor))
 	{
 		TArray<FString> SpawnDiagnostics;
 		SpawnReplayLidarRayActor(SpawnDiagnostics);
@@ -827,8 +836,9 @@ void UScenarioReplaySubsystem::SetReplayLidarRaysVisible(const bool bVisible)
 
 	if (IsValid(ReplayLidarRayActor))
 	{
-		ReplayLidarRayActor->SetLidarRaysVisible(bVisible);
-		if (bVisible)
+		ReplayLidarRayActor->SetLidarSensorRaysVisible(bReplayLidarRaysVisible);
+		ReplayLidarRayActor->SetLidarDistanceOverlayVisible(bReplayLidarDistanceVisible);
+		if (bAnyLidarVisible)
 		{
 			RefreshReplayLidarRayActor();
 		}
@@ -842,6 +852,43 @@ void UScenarioReplaySubsystem::SetReplayLidarRaysVisible(const bool bVisible)
 		Log,
 		TEXT("Replay LiDAR ray visibility changed | Visible=%s Available=%s"),
 		bReplayLidarRaysVisible ? TEXT("true") : TEXT("false"),
+		IsValid(ReplayLidarRayActor) ? TEXT("true") : TEXT("false"));
+}
+
+// Shows or hides replay LiDAR distance overlays and refreshes the replay capture.
+void UScenarioReplaySubsystem::SetReplayLidarDistanceVisible(const bool bVisible)
+{
+	bReplayLidarDistanceVisible = bVisible;
+	const bool bAnyLidarVisible = bReplayLidarRaysVisible || bReplayLidarDistanceVisible;
+
+	if (bAnyLidarVisible && HasReplayLidarRays() && !IsValid(ReplayLidarRayActor))
+	{
+		TArray<FString> SpawnDiagnostics;
+		SpawnReplayLidarRayActor(SpawnDiagnostics);
+		for (const FString& Diagnostic : SpawnDiagnostics)
+		{
+			UE_LOG(LogScenarioReplay, Warning, TEXT("%s"), *Diagnostic);
+		}
+	}
+
+	if (IsValid(ReplayLidarRayActor))
+	{
+		ReplayLidarRayActor->SetLidarSensorRaysVisible(bReplayLidarRaysVisible);
+		ReplayLidarRayActor->SetLidarDistanceOverlayVisible(bReplayLidarDistanceVisible);
+		if (bAnyLidarVisible)
+		{
+			RefreshReplayLidarRayActor();
+		}
+	}
+
+	RefreshReplayCaptureShowOnlyActors();
+	CaptureReplayScene();
+
+	UE_LOG(
+		LogScenarioReplay,
+		Log,
+		TEXT("Replay LiDAR distance visibility changed | Visible=%s Available=%s"),
+		bReplayLidarDistanceVisible ? TEXT("true") : TEXT("false"),
 		IsValid(ReplayLidarRayActor) ? TEXT("true") : TEXT("false"));
 }
 
@@ -1239,6 +1286,12 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	}
 	ReplayPointCloudFrameHighlightActor = nullptr;
 
+	if (IsValid(ReplayPointCloudFrameHighlightBackBufferActor))
+	{
+		ReplayPointCloudFrameHighlightBackBufferActor->Destroy();
+	}
+	ReplayPointCloudFrameHighlightBackBufferActor = nullptr;
+
 	if (IsValid(ReplayLidarRayActor))
 	{
 		ReplayLidarRayActor->Destroy();
@@ -1273,6 +1326,7 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	CurrentFrameIndex = INDEX_NONE;
 	CurrentLidarRayFrameIndex = INDEX_NONE;
 	CurrentPointCloudFrameHighlightIndex = INDEX_NONE;
+	BackBufferPointCloudFrameHighlightIndex = INDEX_NONE;
 	CurrentRobotSpeedKmh = 0.0;
 	CurrentRobotThrottle = 0.0;
 	CurrentRobotSteering = 0.0;
@@ -1284,6 +1338,7 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	bReplayMapVisible = true;
 	bReplayPointCloudVisible = true;
 	bReplayLidarRaysVisible = false;
+	bReplayLidarDistanceVisible = false;
 	ReplayPointCloudCaptureOriginCm = FVector::ZeroVector;
 	ReplayPointCloudImportYAxisSign = -1.0f;
 	FreeCameraLocation = FVector::ZeroVector;
@@ -1385,25 +1440,53 @@ bool UScenarioReplaySubsystem::LoadEpisodePointCloudWorld(
 
 	if (!PointCloudFrameRecords.IsEmpty())
 	{
-		ADeliveryBotPointCloudReviewActor* HighlightActor =
-			World->SpawnActor<ADeliveryBotPointCloudReviewActor>(
-				ADeliveryBotPointCloudReviewActor::StaticClass(),
-				ReplayWorldOffset,
-				FRotator::ZeroRotator,
-				SpawnParameters);
-		if (IsValid(HighlightActor))
+		auto SpawnFrameHighlightActor = [&]() -> ADeliveryBotPointCloudReviewActor*
 		{
+			ADeliveryBotPointCloudReviewActor* HighlightActor =
+				World->SpawnActor<ADeliveryBotPointCloudReviewActor>(
+					ADeliveryBotPointCloudReviewActor::StaticClass(),
+					ReplayWorldOffset,
+					FRotator::ZeroRotator,
+					SpawnParameters);
+			if (!IsValid(HighlightActor))
+			{
+				return nullptr;
+			}
+
 			HighlightActor->Tags.AddUnique(FName(TEXT("ReplayOnly")));
 			HighlightActor->ConfigureReviewVisualStyle(
 				ReplayPointCloudHighlightPointSizeCm,
 				ReplayPointCloudHighlightSphereSizeCm,
 				ReplayPointCloudHighlightColorBrightness);
-			HighlightActor->SetPointCloudVisible(bReplayPointCloudVisible);
-			ReplayPointCloudFrameHighlightActor = HighlightActor;
+			HighlightActor->SetReviewTopDownSphereZOffset(
+				ReplayPointCloudHighlightSphereZOffsetCm);
+			HighlightActor->SetReviewPluginRendererEnabled(false);
+			HighlightActor->SetPointCloudVisible(false);
+			return HighlightActor;
+		};
+
+		ADeliveryBotPointCloudReviewActor* ActiveHighlightActor =
+			SpawnFrameHighlightActor();
+		ADeliveryBotPointCloudReviewActor* BackBufferHighlightActor =
+			SpawnFrameHighlightActor();
+		if (IsValid(ActiveHighlightActor) && IsValid(BackBufferHighlightActor))
+		{
+			ReplayPointCloudFrameHighlightActor = ActiveHighlightActor;
+			ReplayPointCloudFrameHighlightBackBufferActor = BackBufferHighlightActor;
+			CurrentPointCloudFrameHighlightIndex = INDEX_NONE;
+			BackBufferPointCloudFrameHighlightIndex = INDEX_NONE;
 		}
 		else
 		{
-			OutDiagnostics.Add(TEXT("Failed to spawn replay point cloud frame highlight actor."));
+			if (IsValid(ActiveHighlightActor))
+			{
+				ActiveHighlightActor->Destroy();
+			}
+			if (IsValid(BackBufferHighlightActor))
+			{
+				BackBufferHighlightActor->Destroy();
+			}
+			OutDiagnostics.Add(TEXT("Failed to spawn replay point cloud frame highlight actors."));
 		}
 	}
 
@@ -1432,6 +1515,7 @@ void UScenarioReplaySubsystem::LoadEpisodePointCloudFrameIndex(
 {
 	PointCloudFrameRecords.Reset();
 	CurrentPointCloudFrameHighlightIndex = INDEX_NONE;
+	BackBufferPointCloudFrameHighlightIndex = INDEX_NONE;
 
 	FString FrameIndexPath = FPaths::Combine(
 		EpisodeDirectory,
@@ -1788,7 +1872,8 @@ bool UScenarioReplaySubsystem::SpawnReplayLidarRayActor(TArray<FString>& OutDiag
 	}
 
 	LidarRayActor->Tags.AddUnique(FName(TEXT("ReplayOnly")));
-	LidarRayActor->SetLidarRaysVisible(bReplayLidarRaysVisible);
+	LidarRayActor->SetLidarSensorRaysVisible(bReplayLidarRaysVisible);
+	LidarRayActor->SetLidarDistanceOverlayVisible(bReplayLidarDistanceVisible);
 	ReplayLidarRayActor = LidarRayActor;
 	RefreshReplayLidarRayActor();
 	RefreshReplayCaptureShowOnlyActors();
@@ -2115,12 +2200,14 @@ void UScenarioReplaySubsystem::PopulateReplayCaptureShowOnlyActors(
 	{
 		CaptureComponent.ShowOnlyActors.Add(ReplayPointCloudActor);
 	}
-	if (bReplayPointCloudVisible && IsValid(ReplayPointCloudFrameHighlightActor))
+	if (bReplayPointCloudVisible
+		&& PointCloudFrameRecords.IsValidIndex(CurrentPointCloudFrameHighlightIndex)
+		&& IsValid(ReplayPointCloudFrameHighlightActor))
 	{
 		CaptureComponent.ShowOnlyActors.Add(ReplayPointCloudFrameHighlightActor);
 	}
 
-	if (bReplayLidarRaysVisible && IsValid(ReplayLidarRayActor))
+	if ((bReplayLidarRaysVisible || bReplayLidarDistanceVisible) && IsValid(ReplayLidarRayActor))
 	{
 		CaptureComponent.ShowOnlyActors.Add(ReplayLidarRayActor);
 	}
@@ -2151,37 +2238,106 @@ void UScenarioReplaySubsystem::RefreshReplayPointCloudRenderMode()
 	{
 		ReplayPointCloudFrameHighlightActor->SetReviewRenderMode(RenderMode);
 	}
+	if (IsValid(ReplayPointCloudFrameHighlightBackBufferActor))
+	{
+		ReplayPointCloudFrameHighlightBackBufferActor->SetReviewRenderMode(RenderMode);
+	}
 }
 
 // Updates the current-frame point cloud highlight for the requested replay time.
 void UScenarioReplaySubsystem::ApplyPointCloudFrameHighlightAtTime(const double TimeSeconds)
 {
-	if (!IsValid(ReplayPointCloudFrameHighlightActor) || PointCloudFrameRecords.IsEmpty())
+	if ((!IsValid(ReplayPointCloudFrameHighlightActor)
+			&& !IsValid(ReplayPointCloudFrameHighlightBackBufferActor))
+		|| PointCloudFrameRecords.IsEmpty())
 	{
 		CurrentPointCloudFrameHighlightIndex = INDEX_NONE;
+		BackBufferPointCloudFrameHighlightIndex = INDEX_NONE;
 		return;
 	}
 	if (!bReplayPointCloudVisible)
 	{
+		if (IsValid(ReplayPointCloudFrameHighlightActor))
+		{
+			ReplayPointCloudFrameHighlightActor->SetPointCloudVisible(false);
+		}
+		if (IsValid(ReplayPointCloudFrameHighlightBackBufferActor))
+		{
+			ReplayPointCloudFrameHighlightBackBufferActor->SetPointCloudVisible(false);
+		}
 		return;
 	}
 
 	const int32 FrameIndex = ResolvePointCloudFrameHighlightIndexAtTime(TimeSeconds);
 	if (FrameIndex == CurrentPointCloudFrameHighlightIndex)
 	{
+		if (IsValid(ReplayPointCloudFrameHighlightActor))
+		{
+			ReplayPointCloudFrameHighlightActor->SetPointCloudVisible(
+				PointCloudFrameRecords.IsValidIndex(CurrentPointCloudFrameHighlightIndex));
+		}
+		if (IsValid(ReplayPointCloudFrameHighlightBackBufferActor))
+		{
+			ReplayPointCloudFrameHighlightBackBufferActor->SetPointCloudVisible(false);
+		}
 		return;
 	}
 
-	CurrentPointCloudFrameHighlightIndex = FrameIndex;
 	if (!PointCloudFrameRecords.IsValidIndex(FrameIndex))
 	{
-		ReplayPointCloudFrameHighlightActor->ClearPointCloud();
+		if (IsValid(ReplayPointCloudFrameHighlightActor))
+		{
+			ReplayPointCloudFrameHighlightActor->SetPointCloudVisible(false);
+		}
+		if (IsValid(ReplayPointCloudFrameHighlightBackBufferActor))
+		{
+			ReplayPointCloudFrameHighlightBackBufferActor->SetPointCloudVisible(false);
+		}
+		CurrentPointCloudFrameHighlightIndex = INDEX_NONE;
+		RefreshReplayCaptureShowOnlyActors();
 		return;
 	}
+
+	if (FrameIndex == BackBufferPointCloudFrameHighlightIndex
+		&& IsValid(ReplayPointCloudFrameHighlightBackBufferActor))
+	{
+		ADeliveryBotPointCloudReviewActor* PreviousActiveActor =
+			ReplayPointCloudFrameHighlightActor.Get();
+		ADeliveryBotPointCloudReviewActor* NewActiveActor =
+			ReplayPointCloudFrameHighlightBackBufferActor.Get();
+		const int32 PreviousActiveFrameIndex = CurrentPointCloudFrameHighlightIndex;
+
+		ReplayPointCloudFrameHighlightActor = NewActiveActor;
+		ReplayPointCloudFrameHighlightBackBufferActor = PreviousActiveActor;
+		CurrentPointCloudFrameHighlightIndex = FrameIndex;
+		BackBufferPointCloudFrameHighlightIndex = PreviousActiveFrameIndex;
+
+		ReplayPointCloudFrameHighlightActor->SetPointCloudVisible(true);
+		if (IsValid(ReplayPointCloudFrameHighlightBackBufferActor))
+		{
+			ReplayPointCloudFrameHighlightBackBufferActor->SetPointCloudVisible(false);
+		}
+		RefreshReplayPointCloudRenderMode();
+		RefreshReplayCaptureShowOnlyActors();
+		return;
+	}
+
+	ADeliveryBotPointCloudReviewActor* LoadTargetActor =
+		ReplayPointCloudFrameHighlightBackBufferActor.Get();
+	if (!IsValid(LoadTargetActor))
+	{
+		LoadTargetActor = ReplayPointCloudFrameHighlightActor.Get();
+	}
+	if (!IsValid(LoadTargetActor))
+	{
+		return;
+	}
+
+	LoadTargetActor->SetPointCloudVisible(false);
 
 	const FScenarioReplayPointCloudFrameRecord& FrameRecord =
 		PointCloudFrameRecords[FrameIndex];
-	if (!ReplayPointCloudFrameHighlightActor->LoadReplayMapPointCloudFromFile(
+	if (!LoadTargetActor->LoadReplayMapPointCloudFromFile(
 		FrameRecord.XyzFilePath,
 		ReplayPointCloudCaptureOriginCm,
 		ReplayPointCloudImportYAxisSign))
@@ -2192,12 +2348,29 @@ void UScenarioReplaySubsystem::ApplyPointCloudFrameHighlightAtTime(const double 
 			TEXT("Replay point cloud frame highlight load failed | Index=%d Path=%s"),
 			FrameIndex,
 			*FrameRecord.XyzFilePath);
-		ReplayPointCloudFrameHighlightActor->ClearPointCloud();
 		return;
 	}
 
+	ADeliveryBotPointCloudReviewActor* PreviousActiveActor =
+		ReplayPointCloudFrameHighlightActor.Get();
+	const int32 PreviousActiveFrameIndex = CurrentPointCloudFrameHighlightIndex;
+
+	ReplayPointCloudFrameHighlightActor = LoadTargetActor;
+	ReplayPointCloudFrameHighlightBackBufferActor =
+		LoadTargetActor == PreviousActiveActor ? nullptr : PreviousActiveActor;
+	CurrentPointCloudFrameHighlightIndex = FrameIndex;
+	BackBufferPointCloudFrameHighlightIndex =
+		IsValid(ReplayPointCloudFrameHighlightBackBufferActor)
+			? PreviousActiveFrameIndex
+			: INDEX_NONE;
+
 	RefreshReplayPointCloudRenderMode();
 	ReplayPointCloudFrameHighlightActor->SetPointCloudVisible(bReplayPointCloudVisible);
+	if (IsValid(ReplayPointCloudFrameHighlightBackBufferActor))
+	{
+		ReplayPointCloudFrameHighlightBackBufferActor->SetPointCloudVisible(false);
+	}
+	RefreshReplayCaptureShowOnlyActors();
 }
 
 // Returns the point cloud frame index active at the requested replay time.
@@ -2571,7 +2744,7 @@ UTextureRenderTarget2D* UScenarioReplaySubsystem::CreateReplayRenderTarget()
 	RenderTarget->RenderTargetFormat = RTF_RGBA8_SRGB;
 	RenderTarget->ClearColor = FLinearColor(0.026042f, 0.026042f, 0.026042f, 1.0f);
 	RenderTarget->bAutoGenerateMips = false;
-	RenderTarget->InitAutoFormat(1024, 576);
+	RenderTarget->InitAutoFormat(2560, 1440);
 	RenderTarget->UpdateResourceImmediate(true);
 	return RenderTarget;
 }

@@ -4,7 +4,6 @@
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/TextBlock.h"
-#include "Scenario/Data/WidgetTextStyleCatalog.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
 #include "Scenario/ViewModel/ScenarioLlmPromptViewModel.h"
 
@@ -19,9 +18,6 @@ void UScenarioLlmPromptWidget::NativeConstruct()
 	Super::NativeConstruct();
 	BindLlmSubsystem();
 	ConfigureStatusTextBlock();
-	UWidgetTextStyleCatalog::ApplyMultiLineEditableTextBoxStyle(PromptTextBox.Get(), EWidgetTextStyleRole::Value);
-	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(ScenarioCountTextBox.Get(), EWidgetTextStyleRole::Value);
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(StatusTextBlock.Get(), EWidgetTextStyleRole::Value);
 	RequestEditorWidgetInputMode();
 	SetStatusText(TEXT("프롬프트를 입력하세요."));
 }

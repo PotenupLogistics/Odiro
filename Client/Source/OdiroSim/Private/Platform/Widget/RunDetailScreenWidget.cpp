@@ -1,10 +1,10 @@
 #include "Platform/Widget/RunDetailScreenWidget.h"
 
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
-#include "Components/WrapBox.h"
-#include "Components/WrapBoxSlot.h"
 #include "Misc/Paths.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/PlatformUiSubsystem.h"
@@ -17,7 +17,6 @@
 #include "Platform/Widget/ProjectEpisodeReplayInterestRegionStripWidget.h"
 #include "Platform/Widget/ProjectEpisodeReplayViewerWidget.h"
 #include "UI/BaseButtonWidget.h"
-#include "UI/BaseTextWidget.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRunDetailScreenWidget, Log, All);
 
@@ -116,6 +115,43 @@ void URunDetailScreenWidget::RefreshFromViewModels()
 
 	const FString selectedRunDirectory = workspaceViewModel->GetSelectedRunDirectory();
 	const bool bLoaded = resultViewModel->LoadRunDirectory(selectedRunDirectory);
+	const FProjectRunResultDashboardData dashboardData = resultViewModel->GetDashboardData();
+
+	const auto formatOneDecimalMetricValue = [](const double value)
+	{
+		return FString::Printf(TEXT("%.1f"), value);
+	};
+	const auto formatPercentMetricValue = [](const int32 count, const int32 total)
+	{
+		return total > 0
+			? FString::Printf(TEXT("%.0f"), 100.0 * static_cast<double>(count) / total)
+			: FString(TEXT("-"));
+	};
+	const auto formatSecondsTimeMetricValue = [](const double seconds)
+	{
+		const int32 clampedSeconds = FMath::Max(0, FMath::RoundToInt(seconds));
+		return FString::Printf(TEXT("%02d:%02d"), clampedSeconds / 60, clampedSeconds % 60);
+	};
+	const auto formatFractionMetricValue = [](const int32 count, const int32 total)
+	{
+		return total > 0
+			? FString::Printf(TEXT("%d / %d"), count, total)
+			: FString(TEXT("-"));
+	};
+	const auto isTimeoutEpisode = [](const FProjectRunEpisodeDashboardItem& episodeItem)
+	{
+		return episodeItem.TerminalReason.Equals(TEXT("Timeout"), ESearchCase::IgnoreCase)
+			|| episodeItem.Outcome.Equals(TEXT("Timeout"), ESearchCase::IgnoreCase)
+			|| episodeItem.Outcome.Equals(TEXT("TimedOut"), ESearchCase::IgnoreCase);
+	};
+	int32 timeoutEpisodeCount = 0;
+	for (const FProjectRunEpisodeDashboardItem& episodeItem : dashboardData.Episodes)
+	{
+		if (isTimeoutEpisode(episodeItem))
+		{
+			++timeoutEpisodeCount;
+		}
+	}
 
 	if (RunIdText)
 	{
@@ -127,37 +163,57 @@ void URunDetailScreenWidget::RefreshFromViewModels()
 	}
 	if (TotalDurationText)
 	{
-		TotalDurationText->SetText(FText::FromString(resultViewModel->GetAverageDurationLabel()));
+		TotalDurationText->SetText(FText::FromString(
+			dashboardData.EpisodeCount > 0
+				? formatOneDecimalMetricValue(dashboardData.TotalDurationSeconds / dashboardData.EpisodeCount)
+				: FString(TEXT("-"))));
 	}
 	if (DurationMetricSub)
 	{
-		DurationMetricSub->SetText(FText::Format(
-			NSLOCTEXT("OdiroPlatform", "RunDetailTotalDurationSub", "총 {0} 소요"),
-			FText::FromString(resultViewModel->GetTotalDurationLabel())));
+		DurationMetricSub->SetText(FText::FromString(
+			dashboardData.EpisodeCount > 0
+				? formatSecondsTimeMetricValue(dashboardData.TotalDurationSeconds)
+				: FString(TEXT("-"))));
 	}
 	if (SuccessRateText)
 	{
-		SuccessRateText->SetText(FText::FromString(resultViewModel->GetSuccessRateLabel()));
+		SuccessRateText->SetText(FText::FromString(formatPercentMetricValue(
+			dashboardData.SuccessCount,
+			dashboardData.EpisodeCount)));
 	}
 	if (SuccessMetricSub)
 	{
-		SuccessMetricSub->SetText(FText::FromString(resultViewModel->GetSuccessMetricSubLabel()));
+		SuccessMetricSub->SetText(FText::FromString(formatFractionMetricValue(
+			dashboardData.SuccessCount,
+			dashboardData.EpisodeCount)));
 	}
 	if (CollisionCountText)
 	{
-		CollisionCountText->SetText(FText::FromString(resultViewModel->GetCollisionCountLabel()));
+		CollisionCountText->SetText(FText::FromString(
+			dashboardData.EpisodeCount > 0
+				? formatOneDecimalMetricValue(
+					static_cast<double>(dashboardData.CollisionCount) / dashboardData.EpisodeCount)
+				: FString(TEXT("-"))));
 	}
 	if (CollisionMetricSub)
 	{
-		CollisionMetricSub->SetText(FText::FromString(resultViewModel->GetCollisionMetricSubLabel()));
+		CollisionMetricSub->SetText(FText::FromString(
+			dashboardData.EpisodeCount > 0
+				? FString::FromInt(dashboardData.CollisionCount)
+				: FString(TEXT("-"))));
 	}
 	if (TimeoutMetricValue)
 	{
-		TimeoutMetricValue->SetText(FText::FromString(resultViewModel->GetTimeoutCountLabel()));
+		TimeoutMetricValue->SetText(FText::FromString(
+			dashboardData.EpisodeCount > 0
+				? FString::FromInt(timeoutEpisodeCount)
+				: FString(TEXT("-"))));
 	}
 	if (TimeoutMetricSub)
 	{
-		TimeoutMetricSub->SetText(FText::FromString(resultViewModel->GetTimeoutMetricSubLabel()));
+		TimeoutMetricSub->SetText(FText::FromString(formatFractionMetricValue(
+			timeoutEpisodeCount,
+			dashboardData.EpisodeCount)));
 	}
 	if (AiSummaryText)
 	{
@@ -260,7 +316,7 @@ void URunDetailScreenWidget::RebuildEpisodeCards()
 		cardWidget->InitializeFromEpisodeViewModel(episodeItem);
 		cardWidget->OnReplayRequested.RemoveAll(this);
 		cardWidget->OnReplayRequested.AddUObject(this, &URunDetailScreenWidget::HandleEpisodeReplayRequested);
-		if (UWrapBoxSlot* cardSlot = EpisodeReplayCardWrapBox->AddChildToWrapBox(cardWidget))
+		if (UHorizontalBoxSlot* cardSlot = EpisodeReplayCardWrapBox->AddChildToHorizontalBox(cardWidget))
 		{
 			cardSlot->SetPadding(EpisodeReplayCardPadding);
 		}

@@ -4,7 +4,6 @@
 #include "UI/BaseWidget.h"
 #include "RunDetailScreenWidget.generated.h"
 
-class UBaseTextWidget;
 class UBaseButtonWidget;
 class UExperimentResultInsightViewModel;
 class UExperimentResultSuggestionViewModel;
@@ -15,10 +14,10 @@ class UProjectEpisodeReplayCardWidget;
 class UProjectEpisodeReplayInterestRegionStripWidget;
 class UProjectEpisodeReplayViewerWidget;
 class UProjectWorkspaceViewModel;
+class UHorizontalBox;
 class USizeBox;
 class UTextBlock;
 class UVerticalBox;
-class UWrapBox;
 struct FPlatformAnalysisAiResponse;
 
 // Platform project run detail screen with dashboard metrics and embedded replay.
@@ -165,21 +164,21 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunDetail", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UProjectAiSuggestionRowWidget> SuggestionRowWidgetClass;
 
-	// Runtime WrapBox slot spacing for episode replay cards.
+	// Runtime HorizontalBox slot spacing for episode replay cards.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunDetail|Layout", meta = (AllowPrivateAccess = "true"))
 	FMargin EpisodeReplayCardPadding = FMargin(0.0f, 0.0f, 8.0f, 8.0f);
 
 	// Run id title display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> RunIdText;
+	TObjectPtr<UTextBlock> RunIdText;
 
 	// Run directory display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> RunDirectoryText;
+	TObjectPtr<UTextBlock> RunDirectoryText;
 
 	// Total duration metric display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> TotalDurationText;
+	TObjectPtr<UTextBlock> TotalDurationText;
 
 	// Small total duration sublabel below average duration.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -187,7 +186,7 @@ private:
 
 	// Success rate metric display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> SuccessRateText;
+	TObjectPtr<UTextBlock> SuccessRateText;
 
 	// Success rate metric sublabel display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -195,7 +194,7 @@ private:
 
 	// Collision count metric display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> CollisionCountText;
+	TObjectPtr<UTextBlock> CollisionCountText;
 
 	// Collision count metric sublabel display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -211,11 +210,11 @@ private:
 
 	// AI summary display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> AiSummaryText;
+	TObjectPtr<UTextBlock> AiSummaryText;
 
 	// Detail status display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> StatusText;
+	TObjectPtr<UTextBlock> StatusText;
 
 	// Request AI analysis command button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -223,7 +222,7 @@ private:
 
 	// Episode replay card container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UWrapBox> EpisodeReplayCardWrapBox;
+	TObjectPtr<UHorizontalBox> EpisodeReplayCardWrapBox;
 
 	// Suggestion row container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

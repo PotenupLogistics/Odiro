@@ -73,13 +73,13 @@ Range와 choices는 episode별 scenario_sample 생성 시 seed로 확정된다. 
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
 | `surface` | string | 예 | `building_side`는 `building`, `curb_side`는 `road`를 사용한다. |
-| `width_m` | number or range | 예 | 호환성 필수 필드. 현재 generated city geometry에서는 이 값으로 폭을 조절하지 않는다. |
+| `width_m` | number or range | 예 | side lane 활성화 여부. `0`이면 해당 side lane을 생성하지 않는다. 양수 값은 generated city rule을 켜지만 폭 조절값은 아니다. |
 
 `building_side`에 `surface: "building"`을 두면 corridor 한쪽에 walkable building expansion과 building frontage visual이 생성된다.
 
 `curb_side`에 `surface: "road"`를 두면 corridor 한쪽에 fixed curb/2-lane road 영역과 road/corner visual이 생성된다.
 
-`width_m`은 validator가 요구하므로 작성해야 하지만, 실제 building depth, curb width, road width는 코드와 CityBuildings catalog 규칙이 결정한다. LLM은 예시에서 일정한 placeholder 값을 사용한다.
+`width_m`이 `0`이면 해당 side lane은 생성되지 않는다. 양수이면 side lane intent가 활성화되며, 실제 building depth, curb width, road width는 코드와 CityBuildings catalog 규칙이 결정한다. LLM은 side lane이 필요할 때 예시의 일정한 placeholder 값을 사용한다.
 
 ### corridor.segments[]
 
@@ -154,7 +154,7 @@ Fixed obstacle은 sample의 `semantic.static_obstacles[]`로 생성된다. Clear
 - `corridor.segments[].id`와 `obstacles.placements[].id`는 각각 unique해야 한다.
 - `corridor.segments[].type`은 `straight`로 작성한다.
 - `corridor.building_side[].surface`는 `building`, `corridor.curb_side[].surface`는 `road`를 사용한다.
-- `corridor.building_side[].width_m`와 `corridor.curb_side[].width_m`는 호환성 필수 필드이며 generated city 폭 조절값이 아니다.
+- `corridor.building_side[].width_m`와 `corridor.curb_side[].width_m`는 `0`일 때 해당 side lane을 끄고, 양수일 때 generated city rule을 활성화한다. 양수 값 자체가 generated city 폭을 조절하지는 않는다.
 - Obstacle과 robot anchor가 참조하는 segment는 존재해야 한다.
 - `corridor_pose.along_m`은 참조 segment의 `along_range_m` 안에 있어야 한다.
 - `allow_blocking` 없이 `min_clear_width_m` 계약을 깨면 error다.

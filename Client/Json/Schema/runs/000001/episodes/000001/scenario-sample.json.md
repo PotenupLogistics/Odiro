@@ -60,7 +60,7 @@ runs/<RunId>/episodes/<EpisodeId>/scenario.json
 - Key는 가능한 한 `scenario.json` 경로를 유지한다.
 - 값은 확정된 scalar 또는 짧은 배열을 우선한다.
 - `max_duration_s`는 `setting.runtime.max_duration_s`에서 파생되어 runtime timeout으로 쓰인다.
-- `corridor.building_side[].width_m`와 `corridor.curb_side[].width_m`가 기록될 수 있지만 generated city 폭을 재계산하는 source of truth는 아니다.
+- `corridor.building_side[].width_m`와 `corridor.curb_side[].width_m`가 `0`이면 해당 side lane은 생성되지 않는다. 양수 값은 generated city rule을 활성화하지만 generated city 폭을 재계산하는 source of truth는 아니다.
 
 ## scenario.semantic
 

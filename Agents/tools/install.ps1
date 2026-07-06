@@ -22,6 +22,40 @@ function Test-SetupFlag {
     return $value -match '^(1|true|yes|on)$'
 }
 
+# Loads local Agents .env values into the current setup process without overriding existing environment values.
+function Import-AgentsDotEnv {
+    param([string] $AgentsDir)
+    $envPath = Join-Path $AgentsDir ".env"
+    if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) {
+        return
+    }
+
+    foreach ($line in Get-Content -LiteralPath $envPath) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+            continue
+        }
+
+        $match = [regex]::Match($line, '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$')
+        if (-not $match.Success) {
+            continue
+        }
+
+        $name = $match.Groups[1].Value
+        $value = $match.Groups[2].Value
+        if (
+            ($value.Length -ge 2) -and
+            (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'")))
+        ) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+
+        if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name, "Process"))) {
+            [Environment]::SetEnvironmentVariable($name, $value, "Process")
+        }
+    }
+}
+
 # Clears handled native-command failures before returning to root setup wrappers.
 function Clear-NonfatalLastExitCode {
     $global:LASTEXITCODE = 0
@@ -139,6 +173,7 @@ if (-not $dependenciesCurrent) {
     Invoke-External -WorkingDirectory $agentsDir -FilePath "uv" -Arguments @("sync", "--dev")
 }
 
+Import-AgentsDotEnv -AgentsDir $agentsDir
 Invoke-PdfRagIndexSetup -AgentsDir $agentsDir
 
 Write-Success "Agents install phase complete."

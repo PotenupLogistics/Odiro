@@ -7,6 +7,8 @@ import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 # Agents root must be importable when this file runs as a script.
 ROOT_FOR_IMPORTS = Path(__file__).resolve().parents[1]
@@ -29,6 +31,12 @@ DEFAULT_CHUNK_FILE = ROOT / "data" / "rag" / "pdf_corpus" / "validated_parent_ch
 DEFAULT_ACTIVE_DIR = ROOT / ".cache" / "rag" / "chroma" / "pdf_corpus"
 
 
+def load_agents_dotenv(env_path: Path = ROOT / ".env") -> None:
+    """Load local Agents .env values without replacing existing process environment."""
+    if env_path.is_file():
+        load_dotenv(dotenv_path=env_path, override=False)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser for the PDF RAG index builder."""
     parser = argparse.ArgumentParser(description="Build the local PDF RAG Chroma cache.")
@@ -44,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Build and promote the local PDF RAG vector cache."""
+    load_agents_dotenv()
     args = build_parser().parse_args(argv)
     if args.check_only:
         check = check_pdf_rag_index(

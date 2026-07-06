@@ -31,6 +31,9 @@ DEFAULT_EMBEDDING_PROVIDER = "openai"
 # Default OpenAI embedding model; callers may override via environment/settings.
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 
+# Default child chunk batch size for embedding requests to stay below provider request limits.
+DEFAULT_EMBEDDING_BATCH_SIZE = 64
+
 # Exit code returned when the active PDF RAG Chroma index is current.
 PDF_RAG_INDEX_READY = 0
 
@@ -213,6 +216,7 @@ def build_pdf_rag_index_atomic(
     collection_name: str = "pdf_rag_corpus",
     source_hashes: dict[str, str] | None = None,
     run_smoke_tests: bool = True,
+    embedding_batch_size: int = DEFAULT_EMBEDDING_BATCH_SIZE,
 ) -> PdfRagIndexBuildResult:
     """Build a Chroma index in a tmp dir and promote it atomically on success."""
     chunks = read_jsonl(chunk_file)
@@ -226,7 +230,11 @@ def build_pdf_rag_index_atomic(
     tmp_dir.mkdir(parents=True, exist_ok=True)
     try:
         texts = [str(chunk.get("text") or "") for chunk in child_chunks]
-        vectors = embedding_client.embed_texts(texts)
+        vectors = _embed_texts_in_batches(
+            embedding_client=embedding_client,
+            texts=texts,
+            batch_size=embedding_batch_size,
+        )
         if len(vectors) != len(child_chunks):
             raise RuntimeError("embedding count does not match child chunk count")
         collection_count = _write_chroma_collection(
@@ -268,6 +276,21 @@ def build_pdf_rag_index_atomic(
         embedded_child_count=len(child_chunks),
         collection_count=collection_count,
     )
+
+
+def _embed_texts_in_batches(
+    *,
+    embedding_client: EmbeddingClient,
+    texts: list[str],
+    batch_size: int,
+) -> list[list[float]]:
+    """Embed texts in bounded batches while preserving the original order."""
+    safe_batch_size = max(1, batch_size)
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), safe_batch_size):
+        batch = texts[start : start + safe_batch_size]
+        vectors.extend(embedding_client.embed_texts(batch))
+    return vectors
 
 
 def diagnose_chroma_staleness(

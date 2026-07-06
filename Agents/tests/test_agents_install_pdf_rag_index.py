@@ -17,6 +17,8 @@ def _write_fake_uv(bin_dir: Path) -> Path:
     uv_path.write_text(
         """@echo off
 echo %*>>"%ODIRO_FAKE_UV_LOG%"
+if defined ODIRO_EXPECTED_OPENAI_KEY if "%OPENAI_API_KEY%"=="%ODIRO_EXPECTED_OPENAI_KEY%" echo OPENAI_KEY_MATCHED_EXPECTED>>"%ODIRO_FAKE_UV_LOG%"
+if defined ODIRO_UNEXPECTED_OPENAI_KEY if "%OPENAI_API_KEY%"=="%ODIRO_UNEXPECTED_OPENAI_KEY%" echo OPENAI_KEY_MATCHED_UNEXPECTED>>"%ODIRO_FAKE_UV_LOG%"
 if "%1"=="sync" exit /b 0
 if "%1"=="run" if "%2"=="python" if "%3"=="scripts/build_pdf_rag_index.py" if "%4"=="--check-only" (
   if "%ODIRO_FAKE_INDEX_STATUS%"=="up-to-date" (
@@ -56,10 +58,13 @@ def _run_install(
     *,
     env_overrides: dict[str, str | None],
     propagate_last_exit_code: bool = False,
+    env_file_contents: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     if POWERSHELL is None:
         pytest.skip("PowerShell is required for install flow tests")
     agents_root = _copy_agents_tools(tmp_path)
+    if env_file_contents is not None:
+        (agents_root / ".env").write_text(env_file_contents, encoding="utf-8")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _write_fake_uv(bin_dir)
@@ -165,6 +170,50 @@ def test_install_builds_pdf_rag_index_when_missing_with_openai_key(tmp_path: Pat
         "scripts/build_pdf_rag_index.py" in line and "--check-only" not in line
         for line in completed.fake_uv_log.splitlines()  # type: ignore[attr-defined]
     )
+
+
+def test_install_loads_openai_key_from_agents_env_for_pdf_rag_build(tmp_path: Path) -> None:
+    dotenv_key = "dotenv-key-is-not-printed"
+    completed = _run_install(
+        tmp_path,
+        env_overrides={
+            "OPENAI_API_KEY": None,
+            "ODIRO_EXPECTED_OPENAI_KEY": dotenv_key,
+        },
+        env_file_contents=f"OPENAI_API_KEY={dotenv_key}\n",
+    )
+
+    assert completed.returncode == 0
+    assert "Building local Chroma index" in completed.stdout
+    assert "Chroma index build completed" in completed.stdout
+    assert "OPENAI_KEY_MATCHED_EXPECTED" in completed.fake_uv_log  # type: ignore[attr-defined]
+    assert dotenv_key not in completed.stdout
+    assert dotenv_key not in completed.stderr
+    assert dotenv_key not in completed.fake_uv_log  # type: ignore[attr-defined]
+
+
+def test_install_prefers_process_openai_key_over_agents_env(tmp_path: Path) -> None:
+    process_key = "process-key-is-not-printed"
+    dotenv_key = "dotenv-key-is-not-used"
+    completed = _run_install(
+        tmp_path,
+        env_overrides={
+            "OPENAI_API_KEY": process_key,
+            "ODIRO_EXPECTED_OPENAI_KEY": process_key,
+            "ODIRO_UNEXPECTED_OPENAI_KEY": dotenv_key,
+        },
+        env_file_contents=f"OPENAI_API_KEY={dotenv_key}\n",
+    )
+
+    assert completed.returncode == 0
+    assert "OPENAI_KEY_MATCHED_EXPECTED" in completed.fake_uv_log  # type: ignore[attr-defined]
+    assert "OPENAI_KEY_MATCHED_UNEXPECTED" not in completed.fake_uv_log  # type: ignore[attr-defined]
+    assert process_key not in completed.stdout
+    assert dotenv_key not in completed.stdout
+    assert process_key not in completed.stderr
+    assert dotenv_key not in completed.stderr
+    assert process_key not in completed.fake_uv_log  # type: ignore[attr-defined]
+    assert dotenv_key not in completed.fake_uv_log  # type: ignore[attr-defined]
 
 
 def test_install_strict_mode_fails_when_index_missing_without_openai_key(tmp_path: Path) -> None:

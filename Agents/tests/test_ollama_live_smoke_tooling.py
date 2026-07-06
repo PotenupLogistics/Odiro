@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -11,11 +12,15 @@ SCRIPT = ROOT / "scripts" / "run_ollama_world_config_smoke.py"
 
 
 def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["PDF_RAG_CHROMA_DIR"] = str(ROOT / ".pytest-missing-chroma")
+    env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         cwd=ROOT,
         text=True,
         capture_output=True,
+        env=env,
     )
 
 

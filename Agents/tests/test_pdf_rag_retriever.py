@@ -475,6 +475,7 @@ def test_stale_chroma_manifest_returns_unavailable_before_query_embedding(tmp_pa
         chroma_dir=active_dir,
         embedding_client=query_embedding_client,
         collection_name="pdf_rag_test",
+        settings=Settings(openaiApiKey="unused", pdfRagEmbeddingModel="text-embedding-3-small"),
     )
 
     result = retriever.retrieve("보호구역 운행속도 기준", route_hint="safety_certification")

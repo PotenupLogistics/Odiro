@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.models.generation import WorldConfigGenerationConstraints, WorldConfigGenerationRequest
 from app.models.llm import LlmGenerationRequest, LlmGenerationResponse, LlmProvider, LlmError
+from app.services import world_config_prompt_builder as prompt_builder_module
 from app.services.world_config_generation_orchestrator import generate_world_config
 from app.services.world_config_prompt_builder import build_world_config_prompt_package
 
@@ -77,7 +78,9 @@ def test_provider_timeout_becomes_final_timeout_classification() -> None:
     assert all(attempt.providerErrorCode == "ollama_timeout" for attempt in result.attempts)
 
 
-def test_compact_prompt_limits_context_text() -> None:
+def test_compact_prompt_limits_context_text(monkeypatch) -> None:
+    monkeypatch.setattr(prompt_builder_module, "build_policy_context_for_world_config", lambda *args, **kwargs: [])
+
     normal = build_world_config_prompt_package(_request(), context_top_k=3, compact_prompt=False)
     compact = build_world_config_prompt_package(_request(), context_top_k=2, compact_prompt=True)
 

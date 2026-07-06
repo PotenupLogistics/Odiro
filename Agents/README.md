@@ -54,7 +54,7 @@ uv run pytest
 uv run uvicorn app.main:app --reload
 ```
 
-루트 `.\task-setup.bat`는 Agents 의존성 설치 후 PDF RAG Chroma index 준비를 시도합니다. `OPENAI_API_KEY`가 설정되어 있고 `.cache/rag/chroma/pdf_corpus` index가 없거나 stale이면 `uv run python scripts/build_pdf_rag_index.py`를 실행합니다. key가 없으면 setup은 계속 완료되지만 Vector RAG는 index가 만들어질 때까지 unavailable 상태로 동작합니다.
+루트 `.\task-setup.bat`는 Agents 의존성 설치 후 PDF RAG Chroma index 준비를 시도합니다. process env 또는 `Agents/.env`에 `OPENAI_API_KEY`가 설정되어 있고 `.cache/rag/chroma/pdf_corpus` index가 없거나 stale이면 `uv run python scripts/build_pdf_rag_index.py`를 실행합니다. 설정 우선순위는 process env, `Agents/.env`, code default 순서입니다. key가 없으면 setup은 계속 완료되지만 Vector RAG는 index가 만들어질 때까지 unavailable 상태로 동작합니다.
 
 수동 생성:
 
@@ -70,7 +70,7 @@ $env:ODIRO_SKIP_PDF_RAG_INDEX="1"
 .\task-setup.bat
 ```
 
-index 준비 실패를 setup 실패로 강제하려면 `ODIRO_REQUIRE_PDF_RAG_INDEX=1`을 설정합니다. active Chroma index는 local cache이며 commit 대상이 아닙니다.
+index 준비 실패를 setup 실패로 강제하려면 `ODIRO_REQUIRE_PDF_RAG_INDEX=1`을 설정합니다. 실제 `.env`와 active Chroma index는 local-only 파일이며 commit 대상이 아닙니다.
 
 RAG store 변경 후:
 

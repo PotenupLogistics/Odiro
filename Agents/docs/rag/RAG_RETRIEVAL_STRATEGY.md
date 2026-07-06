@@ -12,7 +12,7 @@
 
 legacy card store는 보존하지만 PDF RAG source 또는 fallback으로 사용하지 않는다. Chroma index missing/stale, query embedding failure, timeout, API key 누락, model mismatch, Chroma query failure가 발생해도 legacy JSONL로 fallback하지 않는다.
 
-루트 `.\task-setup.bat`는 Agents 의존성 설치 후 `.cache/rag/chroma/pdf_corpus` 상태를 확인하고, index가 없거나 stale이면 local Chroma index 생성을 시도한다. 이 단계는 `OPENAI_API_KEY`가 있을 때만 OpenAI embedding을 호출한다. key가 없으면 warning을 출력하고 setup은 계속되며, strict mode인 `ODIRO_REQUIRE_PDF_RAG_INDEX=1`에서만 setup 실패로 처리한다. `ODIRO_SKIP_PDF_RAG_INDEX=1`이면 check/build를 모두 건너뛴다.
+루트 `.\task-setup.bat`는 Agents 의존성 설치 후 `.cache/rag/chroma/pdf_corpus` 상태를 확인하고, index가 없거나 stale이면 local Chroma index 생성을 시도한다. 이 단계는 process env 또는 `Agents/.env`에 `OPENAI_API_KEY`가 있을 때만 OpenAI embedding을 호출하며, 우선순위는 process env, `Agents/.env`, code default 순서다. key가 없으면 warning을 출력하고 setup은 계속되며, strict mode인 `ODIRO_REQUIRE_PDF_RAG_INDEX=1`에서만 setup 실패로 처리한다. `ODIRO_SKIP_PDF_RAG_INDEX=1`이면 check/build를 모두 건너뛴다. 실제 `.env`와 active Chroma index는 commit 대상이 아니다.
 
 수동 상태 확인과 생성 명령:
 

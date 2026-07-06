@@ -13,7 +13,6 @@ class UProjectCreateScreenViewModel;
 class UProjectCreateScreenWidget;
 class UProjectPresetCardWidget;
 class UTextBlock;
-class UWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FProjectCreateScreenCancelRequested, UProjectCreateScreenWidget*, ProjectCreateScreen);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FProjectCreateScreenProjectCreated, UProjectCreateScreenWidget*, ProjectCreateScreen, const FString&, ProjectPath);
@@ -77,9 +76,6 @@ private:
 
 	// 한 preset section의 card 목록을 다시 생성한다.
 	void RefreshPresetCardPanel(UPanelWidget* panel, const TArray<struct FProjectCreatePresetItem>& items);
-
-	// 동적으로 생성한 preset card의 WBP-editable slot 간격을 적용한다.
-	void ConfigurePresetCardSlot(UWidget* cardWidget, bool bLastCard) const;
 
 	// 카드 class 설정을 해석한다.
 	TSubclassOf<UProjectPresetCardWidget> ResolveProjectPresetCardWidgetClass() const;
@@ -174,16 +170,16 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectCreate", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UProjectPresetCardWidget> ProjectPresetCardWidgetClass;
 
-	// 동적으로 생성된 preset card 사이의 가로 간격.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectCreate|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", UIMin = "0.0"))
+	// Deprecated: preset card panel spacing은 WBP panel 설정이 소유한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectCreate|Layout", meta = (AllowPrivateAccess = "true", DeprecatedProperty, DeprecationMessage = "Preset card panel layout is owned by WBP panel settings.", ClampMin = "0.0", UIMin = "0.0"))
 	float PresetCardSpacing = 12.0f;
 
-	// 동적으로 생성된 preset card의 panel slot 가로 정렬.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectCreate|Layout", meta = (AllowPrivateAccess = "true"))
+	// Deprecated: preset card slot alignment는 WBP panel 설정이 소유한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectCreate|Layout", meta = (AllowPrivateAccess = "true", DeprecatedProperty, DeprecationMessage = "Preset card panel layout is owned by WBP panel settings."))
 	TEnumAsByte<EHorizontalAlignment> PresetCardHorizontalAlignment = HAlign_Left;
 
-	// 동적으로 생성된 preset card의 panel slot 세로 정렬.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectCreate|Layout", meta = (AllowPrivateAccess = "true"))
+	// Deprecated: preset card slot alignment는 WBP panel 설정이 소유한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectCreate|Layout", meta = (AllowPrivateAccess = "true", DeprecatedProperty, DeprecationMessage = "Preset card panel layout is owned by WBP panel settings."))
 	TEnumAsByte<EVerticalAlignment> PresetCardVerticalAlignment = VAlign_Top;
 
 	// WBP에서 수정 가능한 오류 상황별 진단 문구.

@@ -660,6 +660,10 @@ bool UScenarioReplaySubsystem::LoadEpisodeReplay(
 	}
 
 	CurrentReplayTimeSeconds = 0.0;
+	if (CameraMode == EScenarioReplayCameraMode::Orbit && !Frames.IsEmpty())
+	{
+		OrbitCameraYawDegrees = Frames[0].Rotation.Rotator().Yaw;
+	}
 	if (!ApplyFrameAtTime(CurrentReplayTimeSeconds))
 	{
 		OutDiagnostics.Add(TEXT("Failed to apply the first replay frame."));
@@ -1334,7 +1338,7 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	CurrentRobotTargetSpeedKmh = 0.0;
 	CurrentRobotPositionCm = FVector::ZeroVector;
 	PlaybackState = EScenarioReplayPlaybackState::Stopped;
-	CameraMode = EScenarioReplayCameraMode::TopDown;
+	CameraMode = EScenarioReplayCameraMode::Orbit;
 	bReplayMapVisible = true;
 	bReplayPointCloudVisible = true;
 	bReplayLidarRaysVisible = false;

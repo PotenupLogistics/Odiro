@@ -394,6 +394,7 @@ bool UScenarioEditorUiSubsystem::LoadLatestGeneratedProjectScenario(FString& out
 		return false;
 	}
 
+	editorController->RequestMoveEditorViewToPlayerStart();
 	outStatusText = TEXT("프로젝트 시나리오를 불러왔습니다.");
 	return true;
 }
@@ -451,6 +452,7 @@ bool UScenarioEditorUiSubsystem::LoadDemoProjectScenario(FString& outStatusText)
 		return false;
 	}
 
+	editorController->RequestMoveEditorViewToPlayerStart();
 	outStatusText = TEXT("시나리오를 현재 프로젝트에 적용했습니다.");
 	return true;
 }

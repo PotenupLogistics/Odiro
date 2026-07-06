@@ -268,6 +268,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
 	bool LoadProjectScenarioJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
+	// Queues the editor camera to return to ScenarioEditorMap PlayerStart after load-time viewport work.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Viewport")
+	void RequestMoveEditorViewToPlayerStart();
+
+	// Moves the editor camera pawn directly to ScenarioEditorMap PlayerStart.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Viewport")
+	bool MoveEditorViewToPlayerStart();
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Authoring")
 	void NewScenarioDraft();
 
@@ -417,6 +425,8 @@ private:
 	void RequestFitEditorViewToScenario();
 	// Applies the queued scenario viewport fit to the currently active editor view mode.
 	void FitEditorViewToScenario();
+	// Executes the deferred PlayerStart viewport reset requested after scenario load.
+	void HandleMoveEditorViewToPlayerStartTimer();
 	// Resolves a viewport-aspect-aware frame for the current authored scenario.
 	bool TryResolveEditorViewportFrame(FScenarioPreviewFrame& outFrame, FScenarioMapBounds& outBounds) const;
 	// Mirrors Platform root active-screen changes into editor overlay visibility.

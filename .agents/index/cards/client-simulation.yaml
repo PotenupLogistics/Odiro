@@ -26,6 +26,10 @@ paths:
   - Client/Content/Blueprints/Vehicle/BP_DeliveryBotReplayVisual.uasset
   - Client/Content/Materials/M_LidarRayHit.uasset
   - Client/Content/Materials/M_LidarRayMiss.uasset
+  - Client/Content/Materials/M_RobotPreview_LidarRay.uasset
+  - Client/Content/Materials/M_RobotPreview_LidarRange.uasset
+  - Client/Content/Materials/MI_RobotPreview_LidarRay_OusterActive.uasset
+  - Client/Content/Materials/MI_RobotPreview_LidarRay_OusterFull.uasset
   - Client/Content/Models/DeliveryBot/SM_LiDARLay.uasset
   - Client/Content/Input/**
   - Client/Content/Maps/ScenarioEditorMap.umap
@@ -197,7 +201,7 @@ guardrails:
   - Embedded Replay LiDAR Ray rendering uses a ScenarioReplaySubsystem-owned replay-only actor; UI controls should toggle subsystem visibility, not spawn actors or read ray files.
   - Robot profile preview and Embedded Replay LiDAR Ray rendering include obstacle_warning_distance_m as a visual range layer only; policy behavior remains owned by the runtime/Python obstacle policy path.
   - Robot profile preview uses BP_DeliveryBotPreviewVisual for the displayed DeliveryBot body and wheels; keep Replay wheel-pose contracts owned by BP_DeliveryBotReplayVisual.
-  - Robot profile preview and Embedded Replay LiDAR Ray rendering share DeliveryBotLidarRayBeamRendering for SM_LiDARLay beam component setup, material assignment, and transform math; keep Replay default-off and add it to SceneCapture show-only only while toggled visible.
+  - Robot profile preview and Embedded Replay LiDAR Ray rendering share DeliveryBotLidarRayBeamRendering for SM_LiDARLay beam component setup, material assignment, and transform math; OS1 active sweep and full-range beams should use the same MI_RobotPreview_LidarRay_OusterActive/OusterFull material assets in both surfaces; keep Replay default-off and add it to SceneCapture show-only only while toggled visible.
   - Embedded Replay V2 wheel data stores baked visual wheel poses from the runtime robot; replay actors must apply the poses without running Chaos Vehicle, policy, HTTP, or sensors.
   - Replay-specific high-frequency data belongs under episode/replay/ (replay.meta.json, replay.frames.bin, and future lidar_rays files); trace.jsonl remains LLM/human analysis-oriented unless a task explicitly changes trace.
 verify:

@@ -97,6 +97,10 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarThreeDRayInstances;
 
+	// Faint full-coverage beam instances for OS1 rotating 3D LiDAR replay.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
+	TObjectPtr<UInstancedStaticMeshComponent> LidarThreeDFullRayInstances;
+
 	// Beam instances for the full scan range ring.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|Replay|LiDAR")
 	TObjectPtr<UInstancedStaticMeshComponent> LidarRangeRingInstances;

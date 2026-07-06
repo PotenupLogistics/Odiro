@@ -37,7 +37,8 @@ namespace
 		{
 			MakeGridSubsystemFallbackCollisionRule(FName(TEXT("Walkable")), EDeliveryBotGridAreaType::Walkable, 1.0f, false),
 			MakeGridSubsystemFallbackCollisionRule(FName(TEXT("Penalty")), EDeliveryBotGridAreaType::Penalty, 3.0f, false),
-			MakeGridSubsystemFallbackCollisionRule(FName(TEXT("Blocked")), EDeliveryBotGridAreaType::Blocked, BIG_NUMBER, true)
+			MakeGridSubsystemFallbackCollisionRule(FName(TEXT("Blocked")), EDeliveryBotGridAreaType::Blocked, BIG_NUMBER, true),
+			MakeGridSubsystemFallbackCollisionRule(FName(TEXT("ScenarioNavBlocker")), EDeliveryBotGridAreaType::Blocked, BIG_NUMBER, true)
 		};
 
 		return rules;

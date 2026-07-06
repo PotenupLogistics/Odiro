@@ -165,8 +165,11 @@ namespace
 		TArray<UMaterialInterface*> Materials;
 	};
 
-	// Disables visual collision while optionally preserving semantic blockers.
-	int32 DisableCityBlockActorCollision(AActor& blockActor, bool bPreserveSemanticBlockingComponents);
+	// Disables visual collision while optionally preserving building collision sources.
+	int32 DisableCityBlockActorCollision(
+		AActor& blockActor,
+		bool bPreserveSemanticBlockingComponents,
+		bool bPreserveBuildingStaticMeshCollision);
 
 	// Prevents generated visual blocks from receiving projected runtime/editor decals.
 	void SetActorReceivesDecals(AActor& blockActor, bool bReceivesDecals);
@@ -1276,6 +1279,15 @@ namespace
 			&& primitiveComponent->GetCollisionProfileName() == GeneratedBuildingCollisionProxyProfileName;
 	}
 
+	// Identifies BP static mesh components that are already intended to carry building collision.
+	bool IsCityBlockStaticMeshBlockingComponent(const UPrimitiveComponent* primitiveComponent)
+	{
+		const UStaticMeshComponent* staticMeshComponent = Cast<UStaticMeshComponent>(primitiveComponent);
+		return IsValid(staticMeshComponent)
+			&& IsValid(staticMeshComponent->GetStaticMesh())
+			&& staticMeshComponent->GetCollisionEnabled() != ECollisionEnabled::NoCollision;
+	}
+
 	// Normalizes preserved BP-authored blocker components for both GridTrace and LiDAR queries.
 	void ConfigureCityBlockSemanticBlockingComponent(UPrimitiveComponent& primitiveComponent)
 	{
@@ -1288,32 +1300,56 @@ namespace
 		primitiveComponent.SetVisibility(false);
 	}
 
-	// Counts preserved semantic blockers after visual collision has been stripped from a CityBuildings actor.
-	int32 CountCityBlockSemanticBlockingComponents(const AActor& blockActor)
+	// Normalizes preserved BP static mesh collision for both GridTrace and LiDAR queries.
+	void ConfigureCityBlockStaticMeshBlockingComponent(UPrimitiveComponent& primitiveComponent)
 	{
-		int32 semanticBlockingComponentCount = 0;
+		primitiveComponent.SetCollisionProfileName(GeneratedBuildingCollisionProxyProfileName);
+		primitiveComponent.SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		primitiveComponent.SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		primitiveComponent.SetCollisionResponseToChannel(ECC_GameTraceChannel8, ECR_Block);
+		primitiveComponent.SetGenerateOverlapEvents(false);
+	}
+
+	// Identifies building blockers preserved after visual collision has been stripped from a CityBuildings actor.
+	bool IsCityBlockPreservedBlockingComponent(const UPrimitiveComponent* primitiveComponent)
+	{
+		if (!IsValid(primitiveComponent)
+			|| primitiveComponent->GetCollisionEnabled() == ECollisionEnabled::NoCollision
+			|| primitiveComponent->GetCollisionProfileName() != GeneratedBuildingCollisionProxyProfileName)
+		{
+			return false;
+		}
+
+		return primitiveComponent->IsA<UShapeComponent>()
+			|| primitiveComponent->IsA<UStaticMeshComponent>();
+	}
+
+	// Counts preserved building blockers after visual collision has been stripped from a CityBuildings actor.
+	int32 CountCityBlockBuildingBlockingComponents(const AActor& blockActor)
+	{
+		int32 blockingComponentCount = 0;
 		TArray<UPrimitiveComponent*> primitiveComponents;
 		blockActor.GetComponents<UPrimitiveComponent>(primitiveComponents);
 		for (const UPrimitiveComponent* primitiveComponent : primitiveComponents)
 		{
-			if (IsCityBlockSemanticBlockingComponent(primitiveComponent)
-				&& primitiveComponent->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
+			if (IsCityBlockPreservedBlockingComponent(primitiveComponent))
 			{
-				++semanticBlockingComponentCount;
+				++blockingComponentCount;
 			}
 		}
 
-		return semanticBlockingComponentCount;
+		return blockingComponentCount;
 	}
 
-	// Disables visual CityBuildings collision while optionally preserving BP-authored semantic blockers.
+	// Disables visual CityBuildings collision while optionally preserving building blockers.
 	int32 DisableCityBlockActorCollision(
 		AActor& blockActor,
-		bool bPreserveSemanticBlockingComponents)
+		bool bPreserveSemanticBlockingComponents,
+		bool bPreserveBuildingStaticMeshCollision)
 	{
 		blockActor.SetActorEnableCollision(false);
 
-		int32 preservedSemanticBlockingComponentCount = 0;
+		int32 preservedBlockingComponentCount = 0;
 		TArray<UPrimitiveComponent*> primitiveComponents;
 		blockActor.GetComponents<UPrimitiveComponent>(primitiveComponents);
 		for (UPrimitiveComponent* primitiveComponent : primitiveComponents)
@@ -1327,7 +1363,15 @@ namespace
 				&& IsCityBlockSemanticBlockingComponent(primitiveComponent))
 			{
 				ConfigureCityBlockSemanticBlockingComponent(*primitiveComponent);
-				++preservedSemanticBlockingComponentCount;
+				++preservedBlockingComponentCount;
+				continue;
+			}
+
+			if (bPreserveBuildingStaticMeshCollision
+				&& IsCityBlockStaticMeshBlockingComponent(primitiveComponent))
+			{
+				ConfigureCityBlockStaticMeshBlockingComponent(*primitiveComponent);
+				++preservedBlockingComponentCount;
 				continue;
 			}
 
@@ -1335,12 +1379,12 @@ namespace
 			primitiveComponent->SetGenerateOverlapEvents(false);
 		}
 
-		if (preservedSemanticBlockingComponentCount > 0)
+		if (preservedBlockingComponentCount > 0)
 		{
 			blockActor.SetActorEnableCollision(true);
 		}
 
-		return preservedSemanticBlockingComponentCount;
+		return preservedBlockingComponentCount;
 	}
 
 	// Adds a hidden Blocked box based on authored building bounds for runtime grid classification.
@@ -1946,7 +1990,7 @@ namespace
 				splineMeshComponent->SetStartAndEnd(startLocalCm, startTangentCm, endLocalCm, endTangentCm, true);
 			}
 
-			DisableCityBlockActorCollision(*roadActor, false);
+			DisableCityBlockActorCollision(*roadActor, false, false);
 			SetActorReceivesDecals(*roadActor, false);
 			outSpawnedActors.Add(roadActor);
 			++spawnedActorCount;
@@ -1996,19 +2040,22 @@ namespace
 			return nullptr;
 		}
 
-		const int32 preservedSemanticBlockingComponentCount = DisableCityBlockActorCollision(
+		const bool bPreserveBuildingCollision =
+			options.bCreateBuildingCollisionProxies && blockEntry.Role == EScenarioCityBlockRole::Building;
+		const int32 preservedBlockingComponentCount = DisableCityBlockActorCollision(
 			*blockActor,
-			options.bCreateBuildingCollisionProxies && blockEntry.Role == EScenarioCityBlockRole::Building);
+			bPreserveBuildingCollision,
+			bPreserveBuildingCollision);
 		ApplyCityBlockSemanticTags(*blockActor, blockEntry);
-		if (preservedSemanticBlockingComponentCount > 0)
+		if (preservedBlockingComponentCount > 0)
 		{
 			UE_LOG(
 				LogScenarioCityBlockMaterializer,
 				Verbose,
-				TEXT("%s generated city block '%s' preserved %d BP-authored semantic blocker component(s) for '%s'."),
+				TEXT("%s generated city block '%s' preserved %d BP-authored building blocker component(s) for '%s'."),
 				*options.LogContext,
 				*blockEntry.BlockId.ToString(),
-				preservedSemanticBlockingComponentCount,
+				preservedBlockingComponentCount,
 				*debugSourceId);
 		}
 		SetActorReceivesDecals(*blockActor, false);
@@ -2429,11 +2476,11 @@ namespace
 				{
 					if (options.bCreateBuildingCollisionProxies)
 					{
-						const int32 semanticBlockingComponentCount =
-							CountCityBlockSemanticBlockingComponents(*spawnedActor);
-						if (semanticBlockingComponentCount > 0)
+						const int32 blockingComponentCount =
+							CountCityBlockBuildingBlockingComponents(*spawnedActor);
+						if (blockingComponentCount > 0)
 						{
-							outSpawnedCollisionProxyCount += semanticBlockingComponentCount;
+							outSpawnedCollisionProxyCount += blockingComponentCount;
 						}
 						else if (AttachBuildingCollisionProxy(*spawnedActor, candidateFootprint, blockRotation))
 						{

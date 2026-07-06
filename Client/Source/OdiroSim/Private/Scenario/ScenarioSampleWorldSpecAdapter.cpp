@@ -17,6 +17,10 @@ namespace
 	const double GeneratedCityRightAngleDotTolerance = 0.01;
 	// Point tolerance for stitching adjacent generated city chunks in meters.
 	const double GeneratedCityPointToleranceMeters = 0.01;
+	// Tiny overlap that prevents raster cracks between independently generated walkway meshes.
+	const double GeneratedCityBuildingWalkwaySeamClosureMeters = 0.01;
+	// World-space visual alignment offset for generated building-side walkable expansion regions.
+	const FVector GeneratedCityBuildingExpansionWorldOffsetCm(-1.2, 0.0, 0.0);
 
 	// Side of the sampled walkway used when deriving generated city padding bands.
 	enum class EGeneratedCitySide : uint8
@@ -539,6 +543,56 @@ namespace
 		return Side == EGeneratedCitySide::Lower ? TEXT("lower") : TEXT("upper");
 	}
 
+	// Returns the walkway outer edge used as the inner boundary for generated city padding.
+	double GeneratedCityWalkwayEdgeOffsetMeters(
+		EGeneratedCitySide Side,
+		const FScenarioOffsetRangeMeters& WalkwayOffsetRangeMeters)
+	{
+		return Side == EGeneratedCitySide::Lower
+			? WalkwayOffsetRangeMeters.MinMeters
+			: WalkwayOffsetRangeMeters.MaxMeters;
+	}
+
+	// Moves the generated building expansion edge just inside the walkway to close visual-only seams.
+	double GeneratedCityBuildingInnerEdgeOffsetMeters(
+		EGeneratedCitySide Side,
+		const FScenarioOffsetRangeMeters& WalkwayOffsetRangeMeters)
+	{
+		const double WalkwayWidthMeters =
+			FMath::Max(WalkwayOffsetRangeMeters.MaxMeters - WalkwayOffsetRangeMeters.MinMeters, 0.0);
+		const double SeamClosureMeters =
+			FMath::Min(GeneratedCityBuildingWalkwaySeamClosureMeters, WalkwayWidthMeters * 0.25);
+		return GeneratedCityWalkwayEdgeOffsetMeters(Side, WalkwayOffsetRangeMeters)
+			- (GeneratedCitySideSign(Side) * SeamClosureMeters);
+	}
+
+	// Returns the signed 2D cross product used by generated-city line clipping.
+	double CrossGeneratedCity2D(const FVector2D& Lhs, const FVector2D& Rhs)
+	{
+		return (Lhs.X * Rhs.Y) - (Lhs.Y * Rhs.X);
+	}
+
+	// Intersects two infinite 2D lines in meters for generated-city edge construction.
+	bool TryIntersectGeneratedCityLines2D(
+		const FVector2D& LinePointA,
+		const FVector2D& LineDirectionA,
+		const FVector2D& LinePointB,
+		const FVector2D& LineDirectionB,
+		FVector2D& OutIntersection)
+	{
+		const double Denominator = CrossGeneratedCity2D(LineDirectionA, LineDirectionB);
+		if (FMath::IsNearlyZero(Denominator, KINDA_SMALL_NUMBER))
+		{
+			OutIntersection = FVector2D::ZeroVector;
+			return false;
+		}
+
+		const FVector2D Delta = LinePointB - LinePointA;
+		const double DistanceAlongA = CrossGeneratedCity2D(Delta, LineDirectionB) / Denominator;
+		OutIntersection = LinePointA + (LineDirectionA * DistanceAlongA);
+		return true;
+	}
+
 	// Resolves the walkway lane offset bounds used as anchors for generated city padding.
 	bool TryResolveWalkwayOffsetRange(
 		const FScenarioSampleLayoutEntry& LayoutEntry,
@@ -668,7 +722,8 @@ namespace
 		RegionSpec.Center = FVector(
 			CenterMeters.X * MetersToCentimeters,
 			CenterMeters.Y * MetersToCentimeters,
-			ResolveGeneratedCitySurfaceTopZCm(RegionSpec.SurfaceId));
+			ResolveGeneratedCitySurfaceTopZCm(RegionSpec.SurfaceId))
+			+ GeneratedCityBuildingExpansionWorldOffsetCm;
 		RegionSpec.Size = FVector2D(
 			LengthMeters * MetersToCentimeters,
 			WidthMeters * MetersToCentimeters);
@@ -719,7 +774,8 @@ namespace
 		RegionSpec.Center = FVector(
 			CenterMeters.X * MetersToCentimeters,
 			CenterMeters.Y * MetersToCentimeters,
-			ResolveGeneratedCitySurfaceTopZCm(RegionSpec.SurfaceId));
+			ResolveGeneratedCitySurfaceTopZCm(RegionSpec.SurfaceId))
+			+ GeneratedCityBuildingExpansionWorldOffsetCm;
 		RegionSpec.Size = LocalBoundsCm.bIsValid ? LocalBoundsCm.GetSize() : FVector2D::ZeroVector;
 		RegionSpec.PolygonVertices = MoveTemp(LocalVerticesCm);
 		RegionSpec.TraversabilityScore = ToGeneratedCityTraversabilityScore(RegionSpec.RegionType);
@@ -731,6 +787,7 @@ namespace
 		const TArray<FGeneratedCityAxisChunk>& Chunks,
 		EGeneratedCitySide Side,
 		int32 LayoutIndex,
+		const FScenarioOffsetRangeMeters& WalkwayOffsetRangeMeters,
 		FScenarioWorldSpec& WorldSpec)
 	{
 		TArray<FGeneratedCityAxisChunk> SimplifiedChunks;
@@ -759,10 +816,6 @@ namespace
 		const double MinimumExpansionWidthMeters =
 			FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters
 			+ FScenarioCorridorGeometry::GeneratedCityBuildingDepthMeters;
-		const double EffectiveSecondLengthMeters = FMath::Max(SecondLengthMeters, MinimumExpansionWidthMeters);
-		const FVector2D EffectiveSecondVector = SecondForward * EffectiveSecondLengthMeters;
-		const FVector2D EffectiveSecondEndWorldMeters =
-			SimplifiedChunks[1].StartWorldMeters + EffectiveSecondVector;
 		const double CrossZ = (FirstForward.X * SecondForward.Y) - (FirstForward.Y * SecondForward.X);
 		if (FMath::Abs(CrossZ) <= KINDA_SMALL_NUMBER)
 		{
@@ -775,6 +828,42 @@ namespace
 			return false;
 		}
 
+		const double WalkwayEdgeOffsetMeters = GeneratedCityBuildingInnerEdgeOffsetMeters(Side, WalkwayOffsetRangeMeters);
+		const FVector2D FirstRight(-FirstForward.Y, FirstForward.X);
+		const FVector2D SecondRight(-SecondForward.Y, SecondForward.X);
+		const FVector2D FirstWalkwayEdgeStart =
+			SimplifiedChunks[0].StartWorldMeters + (FirstRight * WalkwayEdgeOffsetMeters);
+		const FVector2D FirstWalkwayEdgeLinePoint =
+			SimplifiedChunks[0].EndWorldMeters + (FirstRight * WalkwayEdgeOffsetMeters);
+		const FVector2D SecondWalkwayEdgeLinePoint =
+			SimplifiedChunks[1].StartWorldMeters + (SecondRight * WalkwayEdgeOffsetMeters);
+		FVector2D WalkwayEdgeCorner = FVector2D::ZeroVector;
+		if (!TryIntersectGeneratedCityLines2D(
+			FirstWalkwayEdgeLinePoint,
+			FirstForward,
+			SecondWalkwayEdgeLinePoint,
+			SecondForward,
+			WalkwayEdgeCorner))
+		{
+			return false;
+		}
+
+		const double FirstInteriorLengthMeters =
+			FVector2D::DotProduct(WalkwayEdgeCorner - FirstWalkwayEdgeStart, FirstForward);
+		if (FirstInteriorLengthMeters <= KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+
+		const FVector2D SecondWalkwayEdgeEnd =
+			SimplifiedChunks[1].EndWorldMeters + (SecondRight * WalkwayEdgeOffsetMeters);
+		const double AvailableSecondDepthMeters =
+			FVector2D::DotProduct(SecondWalkwayEdgeEnd - WalkwayEdgeCorner, SecondForward);
+		const double EffectiveSecondDepthMeters =
+			FMath::Max(AvailableSecondDepthMeters, MinimumExpansionWidthMeters);
+		const FVector2D EffectiveSecondVector = SecondForward * EffectiveSecondDepthMeters;
+		const FVector2D FarWalkwayEdgeCorner = WalkwayEdgeCorner + EffectiveSecondVector;
+		const FVector2D FarStartCorner = FirstWalkwayEdgeStart + EffectiveSecondVector;
 		const FString RegionId = FString::Printf(
 			TEXT("generated_city_%s_building_expansion_%02d_00"),
 			*GeneratedCitySideIdFragment(Side),
@@ -782,21 +871,21 @@ namespace
 		if (FMath::Abs(FVector2D::DotProduct(FirstForward, SecondForward)) <= GeneratedCityRightAngleDotTolerance)
 		{
 			const FVector2D CenterMeters =
-				(SimplifiedChunks[0].StartWorldMeters + EffectiveSecondEndWorldMeters) * 0.5;
+				(FirstWalkwayEdgeStart + FarWalkwayEdgeCorner) * 0.5;
 			WorldSpec.GroundRegions.Add(MakeGeneratedCityBuildingExpansionRegion(
 				RegionId,
 				CenterMeters,
-				FirstLengthMeters,
-				EffectiveSecondLengthMeters,
+				FirstInteriorLengthMeters,
+				EffectiveSecondDepthMeters,
 				FMath::RadiansToDegrees(FMath::Atan2(FirstForward.Y, FirstForward.X))));
 			return true;
 		}
 
 		const TArray<FVector2D> WorldVerticesMeters = {
-			SimplifiedChunks[0].StartWorldMeters,
-			SimplifiedChunks[0].EndWorldMeters,
-			EffectiveSecondEndWorldMeters,
-			SimplifiedChunks[0].StartWorldMeters + EffectiveSecondVector
+			FirstWalkwayEdgeStart,
+			WalkwayEdgeCorner,
+			FarWalkwayEdgeCorner,
+			FarStartCorner
 		};
 		WorldSpec.GroundRegions.Add(MakeGeneratedCityBuildingExpansionPolygonRegion(
 			RegionId,
@@ -812,13 +901,15 @@ namespace
 		const FScenarioOffsetRangeMeters& WalkwayOffsetRangeMeters,
 		FScenarioWorldSpec& WorldSpec)
 	{
-		const double WidthMeters =
+		const double BaseWidthMeters =
 			FScenarioCorridorGeometry::GeneratedCityWalkwayExtensionWidthMeters
 			+ FScenarioCorridorGeometry::GeneratedCityBuildingDepthMeters;
-		const double WalkwayEdgeMeters = Side == EGeneratedCitySide::Lower
-			? WalkwayOffsetRangeMeters.MinMeters
-			: WalkwayOffsetRangeMeters.MaxMeters;
-		const double CenterOffsetMeters = WalkwayEdgeMeters + (GeneratedCitySideSign(Side) * WidthMeters * 0.5);
+		const double SideSign = GeneratedCitySideSign(Side);
+		const double WalkwayEdgeMeters = GeneratedCityWalkwayEdgeOffsetMeters(Side, WalkwayOffsetRangeMeters);
+		const double InnerEdgeMeters = GeneratedCityBuildingInnerEdgeOffsetMeters(Side, WalkwayOffsetRangeMeters);
+		const double OuterEdgeMeters = WalkwayEdgeMeters + (SideSign * BaseWidthMeters);
+		const double WidthMeters = FMath::Abs(OuterEdgeMeters - InnerEdgeMeters);
+		const double CenterOffsetMeters = (InnerEdgeMeters + OuterEdgeMeters) * 0.5;
 
 		for (const FGeneratedCityAxisChunk& Chunk : Chunks)
 		{
@@ -924,7 +1015,12 @@ namespace
 			return;
 		}
 
-		if (TryAddGeneratedCityTwoChunkBuildingExpansionRegion(Chunks, Side, LayoutIndex, WorldSpec))
+		if (TryAddGeneratedCityTwoChunkBuildingExpansionRegion(
+			Chunks,
+			Side,
+			LayoutIndex,
+			WalkwayOffsetRangeMeters,
+			WorldSpec))
 		{
 			return;
 		}

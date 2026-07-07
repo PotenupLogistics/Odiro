@@ -418,7 +418,9 @@ private:
 	// Returns the user-facing display text for one dropdown option.
 	FText ResolveComboOptionDisplayText(const FString& option) const;
 	// Returns the optional thumbnail texture for one dropdown option.
-	UTexture2D* ResolveComboOptionThumbnail(const FString& option) const;
+	UTexture2D* ResolveComboOptionThumbnail(const FString& option);
+	// Resolves a soft texture once and reuses it for later row synchronizations.
+	UTexture2D* ResolveCachedTexture(const TSoftObjectPtr<UTexture2D>& textureReference);
 	// Applies runtime text to a WBP-owned TextBlock child.
 	void SetTextBlockText(UTextBlock* textWidget, const FString& text) const;
 	// Applies text-mode state to a BaseTextInput child.
@@ -439,6 +441,10 @@ private:
 	// Option value to thumbnail map used by asset-backed dropdown rows.
 	UPROPERTY(Transient)
 	TMap<FString, TSoftObjectPtr<UTexture2D>> ComboOptionThumbnailByValue;
+
+	// Soft texture cache used by row action icons and dropdown thumbnails.
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UTexture2D>> CachedTexturesByPath;
 
 	// Prevents child events from echoing property synchronization writes.
 	UPROPERTY(Transient)

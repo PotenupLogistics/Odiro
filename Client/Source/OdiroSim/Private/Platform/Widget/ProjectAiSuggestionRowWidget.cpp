@@ -282,8 +282,7 @@ bool UProjectAiSuggestionRowWidget::RebuildStructuredSections(
 	bOutReasonRendered = false;
 	bOutRecommendationRendered = false;
 
-	const TSubclassOf<UProjectAiSuggestionSectionWidget> sectionWidgetClass = ResolveSuggestionSectionWidgetClass();
-	if (!suggestionItem || !StructuredSectionListBox || !sectionWidgetClass)
+	if (!suggestionItem || !StructuredSectionListBox || !SuggestionSectionWidgetClass)
 	{
 		ClearStructuredSections();
 		return false;
@@ -314,7 +313,7 @@ bool UProjectAiSuggestionRowWidget::RebuildStructuredSections(
 		}
 
 		UProjectAiSuggestionSectionWidget* sectionWidget =
-			CreateWidget<UProjectAiSuggestionSectionWidget>(this, sectionWidgetClass);
+			CreateWidget<UProjectAiSuggestionSectionWidget>(this, SuggestionSectionWidgetClass);
 		if (!sectionWidget)
 		{
 			continue;
@@ -330,30 +329,6 @@ bool UProjectAiSuggestionRowWidget::RebuildStructuredSections(
 	bOutReasonRendered = bRenderedAnySection && bReasonParsed;
 	bOutRecommendationRendered = bRenderedAnySection && bRecommendationParsed;
 	return bRenderedAnySection;
-}
-
-TSubclassOf<UProjectAiSuggestionSectionWidget> UProjectAiSuggestionRowWidget::ResolveSuggestionSectionWidgetClass() const
-{
-	if (SuggestionSectionWidgetClass)
-	{
-		return SuggestionSectionWidgetClass;
-	}
-
-	if (!StructuredSectionListBox)
-	{
-		return nullptr;
-	}
-
-	for (int32 childIndex = 0; childIndex < StructuredSectionListBox->GetChildrenCount(); ++childIndex)
-	{
-		if (const UProjectAiSuggestionSectionWidget* previewSection =
-			Cast<UProjectAiSuggestionSectionWidget>(StructuredSectionListBox->GetChildAt(childIndex)))
-		{
-			return previewSection->GetClass();
-		}
-	}
-
-	return nullptr;
 }
 
 void UProjectAiSuggestionRowWidget::ClearStructuredSections() const

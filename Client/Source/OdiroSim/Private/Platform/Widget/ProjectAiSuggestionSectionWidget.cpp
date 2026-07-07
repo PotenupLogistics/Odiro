@@ -83,9 +83,8 @@ bool UProjectAiSuggestionSectionWidget::RebuildListItemWidgets(const TArray<FStr
 		return false;
 	}
 
-	const TSubclassOf<UProjectAiSuggestionListItemWidget> itemWidgetClass = ResolveListItemWidgetClass();
 	ListItemBox->ClearChildren();
-	if (!itemWidgetClass)
+	if (!ListItemWidgetClass)
 	{
 		SetOptionalWidgetVisible(ListItemBox.Get(), false);
 		return false;
@@ -101,7 +100,7 @@ bool UProjectAiSuggestionSectionWidget::RebuildListItemWidgets(const TArray<FStr
 		}
 
 		UProjectAiSuggestionListItemWidget* itemWidget =
-			CreateWidget<UProjectAiSuggestionListItemWidget>(this, itemWidgetClass);
+			CreateWidget<UProjectAiSuggestionListItemWidget>(this, ListItemWidgetClass);
 		if (!itemWidget)
 		{
 			continue;
@@ -132,30 +131,6 @@ void UProjectAiSuggestionSectionWidget::ApplyPreviewListItemText()
 			return;
 		}
 	}
-}
-
-TSubclassOf<UProjectAiSuggestionListItemWidget> UProjectAiSuggestionSectionWidget::ResolveListItemWidgetClass() const
-{
-	if (ListItemWidgetClass)
-	{
-		return ListItemWidgetClass;
-	}
-
-	if (!ListItemBox)
-	{
-		return nullptr;
-	}
-
-	for (int32 childIndex = 0; childIndex < ListItemBox->GetChildrenCount(); ++childIndex)
-	{
-		if (const UProjectAiSuggestionListItemWidget* previewItem =
-			Cast<UProjectAiSuggestionListItemWidget>(ListItemBox->GetChildAt(childIndex)))
-		{
-			return previewItem->GetClass();
-		}
-	}
-
-	return nullptr;
 }
 
 FString UProjectAiSuggestionSectionWidget::BuildFallbackListText(const TArray<FString>& listItems) const

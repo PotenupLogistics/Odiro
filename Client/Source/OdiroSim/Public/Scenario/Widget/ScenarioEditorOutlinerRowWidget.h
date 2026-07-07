@@ -7,7 +7,6 @@
 
 class UBorder;
 class UButton;
-class UHorizontalBox;
 class UImage;
 class UScenarioEditorListItemViewModel;
 class USpacer;
@@ -76,8 +75,6 @@ private:
 	void EnsureExpandIconImage();
 	// Applies the current expanded/collapsed icon state to the WBP-authored expand control.
 	void ApplyExpandButtonState();
-	// Resolves the authored or runtime-created semantic icon image for this row.
-	UImage* ResolveOutlinerIconImage();
 	// Resolves the semantic icon texture from the row group or actor category.
 	UTexture2D* ResolveIconTexture() const;
 
@@ -103,13 +100,9 @@ private:
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> ItemSubtitleText;
 
-	// Optional icon image authored by WBP; created at runtime when the older WBP lacks the slot.
+	// Optional semantic icon image authored by WBP.
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UImage> OutlinerIconImage;
-
-	// Existing horizontal text row used as an insertion point for runtime icon fallback.
-	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
-	TObjectPtr<UHorizontalBox> OutlinerRowTextBox;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<USpacer> RowIndentSpacer;

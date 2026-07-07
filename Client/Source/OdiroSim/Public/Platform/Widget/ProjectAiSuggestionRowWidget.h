@@ -6,6 +6,8 @@
 #include "ProjectAiSuggestionRowWidget.generated.h"
 
 class UExperimentResultSuggestionViewModel;
+class UPanelWidget;
+class UProjectAiSuggestionSectionWidget;
 class UWidget;
 
 // AI suggestion row adapter used by Platform run detail screens.
@@ -18,15 +20,32 @@ public:
 	// Applies suggestion ViewModel fields to WBP-owned labels and severity indicators.
 	void InitializeFromSuggestionViewModel(const UExperimentResultSuggestionViewModel* suggestionItem);
 
+protected:
+	// WBP template used for each parsed reason/recommendation section.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ExperimentResult|List")
+	TSubclassOf<UProjectAiSuggestionSectionWidget> SuggestionSectionWidgetClass;
+
 private:
 	// Updates the severity indicator visibility from the current severity.
 	void RefreshSeverityVisibility(EProjectRunAiSuggestionSeverity severity) const;
+
+	// Resolves a WBP-owned section template from class defaults or design-time children.
+	TSubclassOf<UProjectAiSuggestionSectionWidget> ResolveSuggestionSectionWidgetClass() const;
 
 	// Applies runtime row text and collapses optional empty fields.
 	static void SetRuntimeText(UWidget* textWidget, const FString& text, bool bAutoWrap = false);
 
 	// Applies a runtime row text color to BaseText or native TextBlock widgets.
 	static void SetRuntimeTextColor(UWidget* textWidget, const FLinearColor& color);
+
+	// Rebuilds optional WBP-authored structured reason/recommendation sections.
+	bool RebuildStructuredSections(
+		const UExperimentResultSuggestionViewModel* suggestionItem,
+		bool& bOutReasonRendered,
+		bool& bOutRecommendationRendered);
+
+	// Clears optional structured sections when fallback text rendering is used.
+	void ClearStructuredSections() const;
 
 	// Returns the shared severity color for the given suggestion severity.
 	static FLinearColor ResolveSeverityTextColor(EProjectRunAiSuggestionSeverity severity);
@@ -69,6 +88,10 @@ private:
 	// Optional value pill row authored in WBP.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> ValueRow;
+
+	// Optional WBP-owned host for parsed reason/recommendation list sections.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UPanelWidget> StructuredSectionListBox;
 
 	// Optional current value pill authored in WBP.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

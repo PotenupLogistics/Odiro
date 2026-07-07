@@ -36,11 +36,14 @@ void UProjectEpisodeReplayCardWidget::InitializeFromEpisodeViewModel(
 	if (EpisodeStateText)
 	{
 		const FString outcomeLabel = episodeItem ? episodeItem->GetOutcomeLabel() : FString();
+		const bool bEpisodeSuccess = episodeItem && episodeItem->IsSuccess();
 		EpisodeStateText->SetText(outcomeLabel.IsEmpty()
-			? (episodeItem && episodeItem->IsSuccess()
+			? (bEpisodeSuccess
 				? NSLOCTEXT("OdiroPlatform", "EpisodeCardSuccess", "성공")
 				: NSLOCTEXT("OdiroPlatform", "EpisodeCardFailed", "실패"))
 			: FText::FromString(outcomeLabel));
+		EpisodeStateText->SetColorAndOpacity(FSlateColor(
+			bEpisodeSuccess ? SuccessEpisodeStateTextColor : FailureEpisodeStateTextColor));
 	}
 	if (EpisodeDurationText)
 	{

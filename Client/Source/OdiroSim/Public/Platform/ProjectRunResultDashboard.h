@@ -74,7 +74,7 @@ struct ODIROSIM_API FProjectRunAiSuggestionDashboardItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	EProjectRunAiSuggestionSeverity Severity = EProjectRunAiSuggestionSeverity::Info;
 
-	// 사용자에게 표시할 심각도 label.
+	// 사용자에게 표시할 중요도 label.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	FString SeverityLabel;
 
@@ -117,7 +117,7 @@ struct ODIROSIM_API FProjectRunAnalysisInsightDashboardItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	EProjectRunAiSuggestionSeverity Severity = EProjectRunAiSuggestionSeverity::Info;
 
-	// 사용자에게 표시할 심각도 label.
+	// 사용자에게 표시할 중요도 label.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	FString SeverityLabel;
 

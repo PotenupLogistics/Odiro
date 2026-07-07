@@ -122,6 +122,8 @@ class LidarObservation:
     rays1d: list[LidarRay1D] = field(default_factory=list)
     rays2d: list[LidarRay2D] = field(default_factory=list)
     rays3d: list[LidarRay3D] = field(default_factory=list)
+    sendFullRays: bool = False
+    rayPayloadMode: str = ""
 
 
 # Scenario start request.

@@ -1,6 +1,6 @@
 import math
 
-from ..action import BotAction, stop_action
+from ..action import BotAction, clamp, stop_action
 from ..contract import GoalLocation, GridCell, GridMap, LidarRay, ScenarioDecideRequest
 from ..lidar_selector import (
     convert_lidar_ray_1d_to_policy_ray,
@@ -32,6 +32,7 @@ class RePathPolicy:
         repath_local_rejoin_lookahead_cells: int = 2,
         repath_local_rejoin_max_distance_m: float = 12.0,
         repath_local_search_margin_m: float = 3.0,
+        path_corridor_half_width_m: float = 0.65,
     ):
         self.pathfinder = AStarPathfinder()
         self.repathDistanceM = repath_distance_m
@@ -48,11 +49,13 @@ class RePathPolicy:
         self.repathLocalRejoinLookaheadCells = repath_local_rejoin_lookahead_cells
         self.repathLocalRejoinMaxDistanceM = repath_local_rejoin_max_distance_m
         self.repathLocalSearchMarginM = repath_local_search_margin_m
+        self.pathCorridorHalfWidthM = path_corridor_half_width_m
 
     # /scenario/start의 lidarSpec 값으로 재탐색 기준을 갱신한다.
     def configure_from_start(self, request) -> None:
         lidar_spec = request.lidarSpec or {}
         control_spec = request.controlSpec or {}
+        robot_spec = request.robotSpec or request.vehicleSpec or {}
 
         self.repathDistanceM = float(
             control_spec.get(
@@ -119,6 +122,7 @@ class RePathPolicy:
         )
         self.obstacleWarningDistanceM = obstacle_warning_distance_m
         self.nearObjectDistanceM = self.obstacleWarningDistanceM
+        self.pathCorridorHalfWidthM = self.get_path_corridor_half_width_m(control_spec, robot_spec)
         self.pathfinder.configure_from_control_spec(control_spec)
 
     # 전방 장애물 또는 빈 경로를 보고 재탐색을 수행한다.
@@ -127,7 +131,7 @@ class RePathPolicy:
         request: ScenarioDecideRequest,
         state: AgentState,
     ) -> tuple[BotAction | None, str]:
-        front_ray = self.find_nearest_front_hit_ray(request)
+        front_ray = self.find_nearest_front_hit_ray(request, state)
         bColliding = request.robotState.bColliding
 
         if bColliding:
@@ -746,7 +750,11 @@ class RePathPolicy:
         return f"ray:{ray_index}:{round(self.normalize_angle_degree(ray.rayYawDegree), 1)}"
 
     # 전방 각도 안에서 가장 가까운 hit ray를 찾는다.
-    def find_nearest_front_hit_ray(self, request: ScenarioDecideRequest) -> LidarRay | None:
+    def find_nearest_front_hit_ray(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState | None = None,
+    ) -> LidarRay | None:
         lidar_rays = self.get_repath_candidate_lidar_rays(request)
         front_rays = [
             ray
@@ -755,6 +763,10 @@ class RePathPolicy:
                 ray.hit
                 and not self.is_ignored_lidar_policy_ray(ray)
                 and abs(self.normalize_angle_degree(ray.rayYawDegree)) <= self.frontAngleDegree
+                and (
+                    state is None
+                    or self.is_ray_on_current_path_corridor(request, state, ray)
+                )
             )
         ]
 
@@ -789,6 +801,84 @@ class RePathPolicy:
             return list(request.lidarRays)
 
         return []
+
+    # Keep RePath obstacle candidates near the current path centerline.
+    def is_ray_on_current_path_corridor(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+        ray: LidarRay,
+    ) -> bool:
+        path_points = self.get_current_path_points(state)
+        if len(path_points) < 2:
+            return True
+
+        hit_x, hit_y = self.get_ray_hit_world_location(request, ray)
+        robot_forward_x = math.cos(math.radians(request.robotState.yawDegree))
+        robot_forward_y = math.sin(math.radians(request.robotState.yawDegree))
+        robot_to_hit_x = hit_x - request.robotState.x
+        robot_to_hit_y = hit_y - request.robotState.y
+        forward_distance_cm = (robot_to_hit_x * robot_forward_x) + (robot_to_hit_y * robot_forward_y)
+        if forward_distance_cm < 0.0:
+            return False
+
+        max_lateral_cm = self.pathCorridorHalfWidthM * 100.0
+        max_forward_cm = max(ray.distanceM * 100.0, 1.0) + 50.0
+        start_index = min(max(state.pathIndex - 1, 0), max(len(path_points) - 2, 0))
+
+        for index in range(start_index, len(path_points) - 1):
+            start_x, start_y = path_points[index]
+            end_x, end_y = path_points[index + 1]
+            segment_x = end_x - start_x
+            segment_y = end_y - start_y
+            segment_length_sq = segment_x * segment_x + segment_y * segment_y
+            if segment_length_sq <= 0.0001:
+                continue
+
+            alpha = ((hit_x - start_x) * segment_x + (hit_y - start_y) * segment_y) / segment_length_sq
+            if alpha < -0.05 or alpha > 1.15:
+                continue
+
+            closest_x = start_x + segment_x * alpha
+            closest_y = start_y + segment_y * alpha
+            lateral_cm = math.hypot(hit_x - closest_x, hit_y - closest_y)
+            if lateral_cm > max_lateral_cm:
+                continue
+
+            if forward_distance_cm > max_forward_cm:
+                continue
+
+            return True
+
+        return False
+
+    # Return path points in world centimeters for corridor checks.
+    def get_current_path_points(self, state: AgentState) -> list[tuple[float, float]]:
+        if state.followPathWorldPoints:
+            return [
+                (float(point.get("x", 0.0)), float(point.get("y", 0.0)))
+                for point in state.followPathWorldPoints
+            ]
+
+        if state.grid is None:
+            return []
+
+        return [
+            self.cell_to_world_center(cell, state.grid)
+            for cell in state.path
+        ]
+
+    # Derive a narrow corridor width from explicit config or robot body width.
+    def get_path_corridor_half_width_m(self, control_spec: dict, robot_spec: dict) -> float:
+        if "pathCorridorHalfWidthM" in control_spec:
+            return clamp(float(control_spec["pathCorridorHalfWidthM"]), 0.25, 0.9)
+
+        body_width_cm = float(robot_spec.get("bodyWidthCm", 0.0))
+        if body_width_cm > 0.0:
+            body_width_m = body_width_cm / 100.0
+            return clamp((body_width_m * 0.5) + 0.2, 0.25, 0.75)
+
+        return clamp(self.pathCorridorHalfWidthM, 0.25, 0.75)
 
     # blocksPolicy가 false인 hit과 정적 맵 geometry는 RePath 장애물 후보에서 제외한다.
     def is_ignored_lidar_policy_ray(self, ray: LidarRay) -> bool:

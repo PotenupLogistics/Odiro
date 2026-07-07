@@ -93,6 +93,8 @@ CONTEXT_FIELDS = (
     "lastSensorDeltaSeconds",
     "lidarRayCount",
     "lidarMode",
+    "lidarRayPayloadMode",
+    "bSendFullLidarRays",
     "lidarRays1dCount",
     "lidarRays2dCount",
     "lidarRays3dCount",

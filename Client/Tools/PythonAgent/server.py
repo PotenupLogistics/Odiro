@@ -244,6 +244,8 @@ def parse_lidar_observation(data: dict) -> LidarObservation:
         rawRays3dCount=parse_optional_int(lidar_data.get("rawRays3dCount")),
         transmittedRays3dCount=parse_optional_int(lidar_data.get("transmittedRays3dCount")),
         rays3dCompacted=bool(lidar_data.get("rays3dCompacted", False)),
+        sendFullRays=bool(lidar_data.get("sendFullRays", False)),
+        rayPayloadMode=str(lidar_data.get("rayPayloadMode", "")),
     )
 
 

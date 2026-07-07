@@ -230,6 +230,8 @@ def build_lidar_input_debug(request: ScenarioDecideRequest) -> dict:
 
     return {
         "lidarMode": request.lidar.mode,
+        "lidarRayPayloadMode": request.lidar.rayPayloadMode,
+        "bSendFullLidarRays": request.lidar.sendFullRays,
         "selectedLidarPolicyMode": selection["family"],
         "lidarRays1dCount": len(request.lidar.rays1d),
         "lidarRays2dCount": len(request.lidar.rays2d),

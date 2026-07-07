@@ -1297,18 +1297,47 @@ class PathFollower:
             return True
 
         path_points = self.get_current_follow_path_points(state)
-        if not path_points:
+        if len(path_points) < 2:
             return True
 
         hit_x, hit_y = self.get_ray_hit_world_location(request, ray)
-        start_index = min(max(state.targetPathIndex - 1, 0), max(len(path_points) - 1, 0))
-        distance_cm = self.get_distance_to_path_points_cm(
-            x=hit_x,
-            y=hit_y,
-            path_points=path_points[start_index:],
-        )
+        robot_forward_x = math.cos(math.radians(request.robotState.yawDegree))
+        robot_forward_y = math.sin(math.radians(request.robotState.yawDegree))
+        robot_to_hit_x = hit_x - request.robotState.x
+        robot_to_hit_y = hit_y - request.robotState.y
+        forward_distance_cm = (robot_to_hit_x * robot_forward_x) + (robot_to_hit_y * robot_forward_y)
+        if forward_distance_cm < 0.0:
+            return False
 
-        return distance_cm <= self.pathCorridorHalfWidthM * 100.0
+        max_lateral_cm = self.pathCorridorHalfWidthM * 100.0
+        max_forward_cm = max(ray.distanceM * 100.0, 1.0) + 50.0
+        start_index = min(max(state.targetPathIndex - 1, 0), max(len(path_points) - 2, 0))
+
+        for index in range(start_index, len(path_points) - 1):
+            start_x, start_y = path_points[index]
+            end_x, end_y = path_points[index + 1]
+            segment_x = end_x - start_x
+            segment_y = end_y - start_y
+            segment_length_sq = segment_x * segment_x + segment_y * segment_y
+            if segment_length_sq <= 0.0001:
+                continue
+
+            alpha = ((hit_x - start_x) * segment_x + (hit_y - start_y) * segment_y) / segment_length_sq
+            if alpha < -0.05 or alpha > 1.15:
+                continue
+
+            closest_x = start_x + segment_x * alpha
+            closest_y = start_y + segment_y * alpha
+            lateral_cm = self.get_distance_cm(hit_x, hit_y, closest_x, closest_y)
+            if lateral_cm > max_lateral_cm:
+                continue
+
+            if forward_distance_cm > max_forward_cm:
+                continue
+
+            return True
+
+        return False
 
     # 현재 PathFollower가 추종 중인 world path point 목록을 가져온다.
     def get_current_follow_path_points(self, state: AgentState) -> list[tuple[float, float]]:
@@ -1371,13 +1400,14 @@ class PathFollower:
     # path corridor 폭을 설정값 또는 로봇 폭 기준으로 계산한다.
     def get_path_corridor_half_width_m(self, control_spec: dict, robot_spec: dict) -> float:
         if "pathCorridorHalfWidthM" in control_spec:
-            return max(0.1, float(control_spec["pathCorridorHalfWidthM"]))
+            return clamp(float(control_spec["pathCorridorHalfWidthM"]), 0.25, 0.9)
 
         body_width_cm = float(robot_spec.get("bodyWidthCm", 0.0))
         if body_width_cm > 0.0:
-            return max(0.25, (body_width_cm * 0.5 / 100.0) + 0.25)
+            body_width_m = body_width_cm / 100.0
+            return clamp((body_width_m * 0.5) + 0.2, 0.25, 0.75)
 
-        return max(0.1, self.pathCorridorHalfWidthM)
+        return clamp(self.pathCorridorHalfWidthM, 0.25, 0.75)
 
     def get_bool_config(self, config: dict, key: str, default_value: bool) -> bool:
         value = config.get(key, default_value)

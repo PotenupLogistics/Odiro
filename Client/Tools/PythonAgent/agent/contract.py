@@ -129,6 +129,8 @@ class LidarObservation:
     rawRays3dCount: int | None = None
     transmittedRays3dCount: int | None = None
     rays3dCompacted: bool = False
+    sendFullRays: bool = False
+    rayPayloadMode: str = ""
 
 
 # Scenario start request.

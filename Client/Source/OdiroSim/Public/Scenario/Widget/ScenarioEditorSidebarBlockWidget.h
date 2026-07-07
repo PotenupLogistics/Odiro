@@ -2,12 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Styling/SlateTypes.h"
 #include "ScenarioEditorSidebarBlockWidget.generated.h"
 
 class UButton;
+class UBaseButtonWidget;
 class UHorizontalBox;
 class UImage;
-class USpacer;
 class UTextBlock;
 class UVerticalBox;
 class UWidget;
@@ -30,6 +31,9 @@ class ODIROSIM_API UScenarioEditorSidebarBlockWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	// Sets default toggle icon assets used when WBP bindings ask native code to swap state icons.
+	UScenarioEditorSidebarBlockWidget(const FObjectInitializer& objectInitializer);
+
 	// Binds local header controls after UMG construction.
 	virtual void NativeConstruct() override;
 
@@ -96,6 +100,42 @@ public:
 	// Shared typography catalog used by header text.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
+
+	// Expanded-state icon applied to the WBP-authored ToggleIconImage.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style")
+	TSoftObjectPtr<UTexture2D> ExpandedToggleIconTexture;
+
+	// Collapsed-state icon applied to the WBP-authored ToggleIconImage.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style")
+	TSoftObjectPtr<UTexture2D> CollapsedToggleIconTexture;
+
+	// Slot padding applied when native code adds a field row into BodyBox.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style")
+	FMargin GeneratedFieldRowSlotPadding = FMargin(0.0f, 0.0f, 0.0f, 2.0f);
+
+	// Slot padding applied when native code adds a non-field widget into BodyBox.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style")
+	FMargin GeneratedBodyWidgetSlotPadding = FMargin(0.0f, 0.0f, 0.0f, 6.0f);
+
+	// Slot padding applied to the generated asset thumbnail.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style")
+	FMargin GeneratedAssetThumbnailSlotPadding = FMargin(0.0f, 0.0f, 7.0f, 0.0f);
+
+	// Slot padding applied to the generated asset text stack.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style")
+	FMargin GeneratedAssetTextSlotPadding = FMargin(0.0f);
+
+	// Slot padding applied to the generated asset type line.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style")
+	FMargin GeneratedAssetTypeSlotPadding = FMargin(0.0f, 0.0f, 0.0f, 1.0f);
+
+	// Slot padding applied to the generated asset summary container.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style")
+	FMargin GeneratedAssetContainerSlotPadding = FMargin(6.0f, 0.0f, 4.0f, 0.0f);
+
+	// Optional generated asset thumbnail size; values <= 0 keep the texture-authored size.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style", meta = (ClampMin = "0.0"))
+	float GeneratedAssetThumbnailSize = 34.0f;
 
 	// Optional WBP-owned outline region for block visuals.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -222,64 +262,48 @@ private:
 	UFUNCTION()
 	void HandleToggleClicked();
 
-	// Handles add action clicks from the generated header button.
+	// Handles add action clicks from the WBP-authored header button.
 	UFUNCTION()
-	void HandleAddActionClicked();
+	void HandleAddActionClicked(UBaseButtonWidget* button);
 
-	// Handles remove action clicks from the generated header button.
+	// Handles remove action clicks from the WBP-authored header button.
 	UFUNCTION()
-	void HandleRemoveActionClicked();
+	void HandleRemoveActionClicked(UBaseButtonWidget* button);
 
-	// Generated add button owned by the header row when action visibility requires it.
-	UPROPERTY(Transient)
-	TObjectPtr<UButton> AddActionButton;
+	// Optional WBP-authored add button owned by the header row.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseButtonWidget> AddActionButton;
 
-	// Generated add button text owned by AddActionButton.
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> AddActionTextBlock;
+	// Optional WBP-authored remove button owned by the header row.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UBaseButtonWidget> RemoveActionButton;
 
-	// Generated add button icon owned by AddActionButton.
-	UPROPERTY(Transient)
-	TObjectPtr<UImage> AddActionIconImage;
-
-	// Generated remove button owned by the header row when action visibility requires it.
-	UPROPERTY(Transient)
-	TObjectPtr<UButton> RemoveActionButton;
-
-	// Generated remove button text owned by RemoveActionButton.
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> RemoveActionTextBlock;
-
-	// Generated remove button icon owned by RemoveActionButton.
-	UPROPERTY(Transient)
-	TObjectPtr<UImage> RemoveActionIconImage;
-
-	// Generated fill spacer that pushes header actions to the right edge.
-	UPROPERTY(Transient)
-	TObjectPtr<USpacer> HeaderActionSpacer;
-
-	// Generated container that owns add/remove actions at the header right edge.
-	UPROPERTY(Transient)
+	// Optional WBP-authored container that owns add/remove actions at the header right edge.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UHorizontalBox> HeaderActionBox;
 
-	// Generated asset summary container owned by the header row.
-	UPROPERTY(Transient)
+	// Optional WBP-authored spacer that preserves right-edge header actions when the badge is hidden.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> HeaderActionSpacer;
+
+	// Optional WBP-authored or generated asset summary container owned by the header row.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UHorizontalBox> AssetHeaderContainer;
 
-	// Generated thumbnail image shown by the asset summary header.
-	UPROPERTY(Transient)
+	// Optional WBP-authored or generated thumbnail image shown by the asset summary header.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UImage> AssetHeaderThumbnailImage;
 
-	// Generated vertical text stack owned by AssetHeaderContainer.
-	UPROPERTY(Transient)
+	// Optional WBP-authored or generated vertical text stack owned by AssetHeaderContainer.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UVerticalBox> AssetHeaderTextBox;
 
-	// Generated first-line asset kind text.
-	UPROPERTY(Transient)
+	// Optional WBP-authored or generated first-line asset kind text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> AssetHeaderTypeTextBlock;
 
-	// Generated second-line object name text.
-	UPROPERTY(Transient)
+	// Optional WBP-authored or generated second-line object name text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> AssetHeaderNameTextBlock;
 
 	// Cached asset kind text for the generated asset summary header.
@@ -294,6 +318,10 @@ private:
 	UPROPERTY(Transient)
 	TSoftObjectPtr<UTexture2D> AssetHeaderThumbnailTexture;
 
+	// True only when native code created the asset header fallback widgets.
+	UPROPERTY(Transient)
+	bool bGeneratedAssetHeaderSummaryCreated = false;
+
 	// Broadcasts this block path as the active sidebar selection.
 	void BroadcastBlockSelected();
 	// Returns true when this block should claim a click before child controls handle it.
@@ -302,31 +330,17 @@ private:
 	void BindControls();
 	// Releases optional local control bindings.
 	void UnbindControls();
-	// Creates generated header action buttons when the WBP header can host them.
+	// Binds WBP-authored header action buttons when present.
 	void EnsureActionButtons();
-	// Creates the right-aligned header action container.
-	void EnsureHeaderActionContainer();
-	// Replaces the optional text toggle glyph with the configured icon image.
+	// Resolves the WBP-authored toggle icon image.
 	void EnsureToggleIcon();
 	// Creates the generated asset summary header when the WBP header can host it.
 	void EnsureAssetHeaderSummary();
-	// Creates one generated header button and attaches it to the header row.
-	void CreateActionButton(
-		TObjectPtr<UButton>& outButton,
-		TObjectPtr<UTextBlock>& outTextBlock,
-		TObjectPtr<UImage>& outIconImage,
-		const TCHAR* iconPath);
-	// Applies visibility and label state to one generated header button.
-	void SetActionButtonState(
-		UButton* button,
-		UTextBlock* textBlock,
-		UImage* iconImage,
-		bool bVisible,
-		const FString& label,
-		const TCHAR* iconPath) const;
-	// Applies visibility state to the generated header action container.
+	// Applies runtime visibility state to one WBP-authored header action.
+	void SetActionButtonState(UBaseButtonWidget* button, bool bVisible) const;
+	// Applies visibility state to the WBP-authored header action container.
 	void SetHeaderActionContainerVisible(bool bVisible) const;
-	// Applies expanded/collapsed icon and flat button style to the header toggle.
+	// Applies expanded/collapsed icon state to the header toggle image.
 	void ApplyToggleButtonState() const;
 	// Applies cached asset summary data to generated header widgets.
 	void ApplyAssetHeaderSummaryState();

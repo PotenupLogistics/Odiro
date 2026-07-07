@@ -23,14 +23,9 @@ void UScenarioEditorSidebarMainPanel::NativeConstruct()
 	{
 		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
 	}
-	SidebarWidgetHelpers::ApplyPanelRootPadding(this, FName(TEXT("MainPanelRootBox")));
 	BindFieldRows();
 	ConfigureFieldRows();
 	RefreshFromDraft();
-
-	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
-	CollectBlockWidgets(blockWidgets);
-	SidebarWidgetHelpers::ApplyPanelBlockSpacing(blockWidgets);
 }
 
 void UScenarioEditorSidebarMainPanel::NativeDestruct()

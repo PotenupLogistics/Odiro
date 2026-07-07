@@ -121,6 +121,10 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UButton> InspectorActiveTabButtonStyleSource;
 
+	// Whether native code swaps inspector tab button styles from InspectorActiveTabButtonStyleSource.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style")
+	bool bApplyInspectorTabButtonStyleSource = false;
+
 	// Optional visibility wrapper for the Scenario Template sidebar.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UWidget> TemplateSidebarPanel;

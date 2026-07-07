@@ -309,6 +309,11 @@ void UScenarioEditorRootWidget::CacheInspectorTabButtonStyles()
 
 void UScenarioEditorRootWidget::ApplyInspectorTabVisualState()
 {
+	if (!bApplyInspectorTabButtonStyleSource)
+	{
+		return;
+	}
+
 	const FButtonStyle* activeStyleSource = InspectorActiveTabButtonStyleSource
 		? &InspectorActiveTabButtonStyleSource->GetStyle()
 		: nullptr;

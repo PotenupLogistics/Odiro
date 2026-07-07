@@ -1423,6 +1423,7 @@ bool UScenarioReplaySubsystem::LoadEpisodePointCloudWorld(
 	}
 
 	PointCloudActor->Tags.AddUnique(FName(TEXT("ReplayOnly")));
+	PointCloudActor->SetReviewPluginRendererEnabled(false);
 	PointCloudActor->SetPointCloudVisible(bReplayPointCloudVisible);
 	ReplayPointCloudCaptureOriginCm = ImportInfo.CaptureOriginCm;
 	ReplayPointCloudImportYAxisSign = ImportInfo.ImportYAxisSign;

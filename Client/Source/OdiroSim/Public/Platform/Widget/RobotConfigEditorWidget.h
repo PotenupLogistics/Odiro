@@ -3,15 +3,14 @@
 #include "CoreMinimal.h"
 #include "Input/Reply.h"
 #include "CommonUserWidget.h"
-#include "Types/SlateEnums.h"
+#include "UI/BaseFormElementTypes.h"
 #include "RobotConfigEditorWidget.generated.h"
 
 class UBorder;
-class UButton;
-class UBaseSliderWidget;
-class UCheckBox;
-class UComboBoxString;
-class UEditableText;
+class UBaseButtonWidget;
+class UBaseCheckBoxWidget;
+class UBaseDropdownWidget;
+class UBaseSliderComboWidget;
 class UImage;
 class URobotPreviewSubsystem;
 class URobotProfileViewModel;
@@ -68,78 +67,66 @@ protected:
 private:
 	// Reset button command.
 	UFUNCTION()
-	void HandleResetProfileClicked();
+	void HandleResetProfileClicked(UBaseButtonWidget* button);
 
 	// Save button command.
 	UFUNCTION()
-	void HandleSaveProfileClicked();
+	void HandleSaveProfileClicked(UBaseButtonWidget* button);
 
-	// Profile numeric slider command.
+	// Profile numeric slider-combo command.
 	UFUNCTION()
-	void HandleProfileSliderChanged(UWidget* widget, float value);
-
-	// Profile text input edit command.
-	UFUNCTION()
-	void HandleProfileInputTextChanged(const FText& text);
-
-	// Profile text input commit command.
-	UFUNCTION()
-	void HandleProfileInputTextCommitted(const FText& text, ETextCommit::Type commitMethod);
+	void HandleProfileSliderComboChanged(UWidget* widget, float value);
 
 	// LiDAR mode selection edit command.
 	UFUNCTION()
-	void HandleLidarModeSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+	void HandleLidarModeSelectionChanged(UWidget* widget, FName selectedId);
 
 	// LiDAR debug checkbox edit command.
 	UFUNCTION()
-	void HandleLidarDrawDebugChanged(bool bIsChecked);
+	void HandleLidarDrawDebugChanged(UWidget* widget, ECheckBoxState checkState);
 
 	// LiDAR preview layer checkbox edit command.
 	UFUNCTION()
-	void HandleLidarPreviewOptionChanged(bool bIsChecked);
+	void HandleLidarPreviewOptionChanged(UWidget* widget, ECheckBoxState checkState);
 
 	// LiDAR preview density selection edit command.
 	UFUNCTION()
-	void HandleLidarPreviewDensitySelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
-
-	// LiDAR preview ray toggle command from the WBP button-styled checkbox.
-	UFUNCTION()
-	void HandleLidarPreviewToggleChanged(bool bIsChecked);
+	void HandleLidarPreviewDensitySelectionChanged(UWidget* widget, FName selectedId);
 
 	// Preview left-rotation command.
 	UFUNCTION()
-	void HandleRotatePreviewLeftClicked();
+	void HandleRotatePreviewLeftClicked(UBaseButtonWidget* button);
 
 	// Preview front-view reset command.
 	UFUNCTION()
-	void HandleResetPreviewRotationClicked();
+	void HandleResetPreviewRotationClicked(UBaseButtonWidget* button);
 
 	// Preview right-rotation command.
 	UFUNCTION()
-	void HandleRotatePreviewRightClicked();
+	void HandleRotatePreviewRightClicked(UBaseButtonWidget* button);
 
 	// Draws LiDAR rays in the preview from the current editable values.
 	UFUNCTION()
-	void HandleDrawLidarPreviewRaysClicked();
+	void HandleDrawLidarPreviewRaysClicked(UBaseButtonWidget* button);
 
 	// Clears LiDAR rays from the preview.
 	UFUNCTION()
-	void HandleClearLidarPreviewRaysClicked();
+	void HandleClearLidarPreviewRaysClicked(UBaseButtonWidget* button);
 
 	URobotProfileViewModel* ResolveViewModel();
 	// Resolves the world-scoped robot preview subsystem for this widget.
 	URobotPreviewSubsystem* ResolveRobotPreviewSubsystem() const;
 	bool LoadProfileFromViewModel();
 	bool ReadFieldsIntoViewModel();
-	bool TryReadFloatField(UEditableText* input, const FString& label, float& outValue);
+	bool TryReadFloatField(UBaseSliderComboWidget* sliderCombo, const FString& label, float& outValue);
 	// Reads an optional numeric field when the matching WBP widget exists.
-	bool TryReadOptionalFloatField(UEditableText* input, const FString& label, float& outValue);
+	bool TryReadOptionalFloatField(UBaseSliderComboWidget* sliderCombo, const FString& label, float& outValue);
 	// Reads the current UI values into a preview-only settings snapshot.
 	bool TryReadFieldsIntoPreviewSettings(FRobotProfileSettings& outSettings) const;
 	// Reads one numeric field for preview updates without changing save validation state.
-	static bool TryReadPreviewFloatField(UEditableText* input, float& outValue);
+	static bool TryReadPreviewFloatField(UBaseSliderComboWidget* sliderCombo, float& outValue);
 	// Reads an optional numeric field for preview updates when the matching WBP widget exists.
-	static bool TryReadOptionalPreviewFloatField(UEditableText* input, float& outValue);
+	static bool TryReadOptionalPreviewFloatField(UBaseSliderComboWidget* sliderCombo, float& outValue);
 	void ApplyViewModelToFields();
 	void ShowAllProfileSections() const;
 	void MarkProfileDirty();
@@ -149,8 +136,6 @@ private:
 	void StopRobotPreview();
 	// Pushes current UI input values into the active robot preview.
 	void RefreshRobotPreviewFromFields();
-	// Applies valid text input values back to their paired sliders.
-	void SyncProfileSlidersFromValidInputFields() const;
 	// Pushes current LiDAR preview display options into the active robot preview.
 	void ApplyRobotPreviewDisplayOptions();
 	// Shows or clears the preview LiDAR ray snapshot from the current editable values.
@@ -179,22 +164,22 @@ private:
 		const FLinearColor& actionDotColor) const;
 	void SetProfileStatus(const FString& statusText) const;
 	void SetProfilePathText(const FString& profilePath) const;
-	// Registers one custom profile slider with the shared profile slider handler.
-	static void BindProfileSlider(UBaseSliderWidget* slider, URobotConfigEditorWidget* owner);
-	// Releases one custom profile slider from the shared profile slider handler.
-	static void UnbindProfileSlider(UBaseSliderWidget* slider, URobotConfigEditorWidget* owner);
-	// Registers one profile text input with the shared dirty-state handler.
-	static void BindProfileInput(UEditableText* input, URobotConfigEditorWidget* owner);
-	// Releases one profile text input from the shared dirty-state handler.
-	static void UnbindProfileInput(UEditableText* input, URobotConfigEditorWidget* owner);
-	static void SetInputText(UEditableText* input, float value);
-	// Applies one numeric value to a paired text field and optional custom slider.
-	static void SetLinkedSliderFieldValue(UEditableText* input, UBaseSliderWidget* slider, float value);
-	// Applies a valid numeric text input value to a paired custom slider.
-	static void SyncLinkedSliderFromInput(UEditableText* input, UBaseSliderWidget* slider);
-	// Selects an existing combo-box option using case-insensitive matching.
-	static void SetComboBoxSelection(UComboBoxString* comboBox, const FString& selectedOption);
-	static FString FormatProfileFloat(float value);
+	// Registers one profile slider combo with the shared dirty-state handler.
+	static void BindProfileSliderCombo(UBaseSliderComboWidget* sliderCombo, URobotConfigEditorWidget* owner);
+	// Releases one profile slider combo from the shared dirty-state handler.
+	static void UnbindProfileSliderCombo(UBaseSliderComboWidget* sliderCombo, URobotConfigEditorWidget* owner);
+	// Applies one numeric value to a slider combo field.
+	static void SetSliderComboFieldValue(UBaseSliderComboWidget* sliderCombo, float value);
+	// Applies authored dropdown options to base dropdowns.
+	void InitializeDropdowns() const;
+	// Selects an existing dropdown item using case-insensitive id matching.
+	static void SetDropdownSelection(UBaseDropdownWidget* dropdown, const FString& selectedOption);
+	// Returns the selected dropdown id as a profile string.
+	static FString GetDropdownSelection(const UBaseDropdownWidget* dropdown);
+	// Returns whether a base checkbox is checked.
+	static bool IsBaseCheckBoxChecked(const UBaseCheckBoxWidget* checkBox);
+	// Applies a boolean value to a base checkbox.
+	static void SetBaseCheckBoxChecked(UBaseCheckBoxWidget* checkBox, bool bChecked);
 
 	// ViewModel supplied by PlatformUiSubsystem.
 	UPROPERTY(Transient)
@@ -208,9 +193,6 @@ private:
 
 	// Last full viewport size sent to the viewport-backed preview camera.
 	FVector2D LastRobotPreviewViewportSizePixel = FVector2D::ZeroVector;
-
-	// Guards programmatic LiDAR preview toggle updates from firing user commands.
-	bool bSyncingLidarPreviewToggleState = false;
 
 	// Current profile path display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -254,59 +236,59 @@ private:
 
 	// Rotates the preview robot left without changing the camera.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> RotateLeftButton;
+	TObjectPtr<UBaseButtonWidget> RotateLeftButton;
 
 	// Restores the preview robot to the front-facing yaw.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> ResetPreviewRotationButton;
+	TObjectPtr<UBaseButtonWidget> ResetPreviewRotationButton;
 
 	// Rotates the preview robot right without changing the camera.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> RotateRightButton;
+	TObjectPtr<UBaseButtonWidget> RotateRightButton;
 
-	// Legacy push button fallback that toggles LiDAR rays when no button-styled checkbox is authored.
+	// Optional push button fallback that toggles LiDAR rays in alternate WBP layouts.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> DrawLidarRaysButton;
+	TObjectPtr<UBaseButtonWidget> DrawLidarRaysButton;
 
-	// Push button that toggles LiDAR preview rays in newer WBP layouts.
+	// Base button that owns the persistent selected/unselected ray visual state.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> ToggleLidarRaysButton;
+	TObjectPtr<UBaseButtonWidget> ToggleLidarRaysButton;
 
-	// Legacy clear button fallback kept optional so WBP can remove it.
+	// Optional clear button fallback kept for alternate WBP layouts.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> ClearLidarRaysButton;
-
-	// Button-styled checkbox that owns the persistent selected/unselected Ray visual state.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UCheckBox> ToggleLidarRaysCheckBox;
+	TObjectPtr<UBaseButtonWidget> ClearLidarRaysButton;
 
 	// Preview overlay panel containing ray/range/points/density display options.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> LidarPreviewOptionsPanel;
 
+	// Preview overlay row containing ray/range/points/density display options.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> LidarPreviewOptionsRow;
+
 	// Toggles sampled LiDAR ray beams in the preview.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UCheckBox> ShowLidarRaysCheckBox;
+	TObjectPtr<UBaseCheckBoxWidget> ShowLidarRaysCheckBox;
 
 	// Toggles LiDAR range rings and front boundary lines in the preview.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UCheckBox> ShowLidarRangeCheckBox;
+	TObjectPtr<UBaseCheckBoxWidget> ShowLidarRangeCheckBox;
 
 	// Toggles sampled LiDAR end point markers in the preview.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UCheckBox> ShowLidarPointsCheckBox;
+	TObjectPtr<UBaseCheckBoxWidget> ShowLidarPointsCheckBox;
 
 	// Selects how many logical LiDAR rays are sampled into the preview.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UComboBoxString> LidarPreviewDensityComboBox;
+	TObjectPtr<UBaseDropdownWidget> LidarPreviewDensityComboBox;
 
 	// Restores fields to the last loaded ViewModel values.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> ResetProfileButton;
+	TObjectPtr<UBaseButtonWidget> ResetProfileButton;
 
 	// Saves edited fields to profile.json.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> SaveProfileButton;
+	TObjectPtr<UBaseButtonWidget> SaveProfileButton;
 
 	// Body section field container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -320,205 +302,109 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> LiDARFieldsBox;
 
-	// robot.body.length_m input.
+	// robot.body.length_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> BodyLengthInput;
+	TObjectPtr<UBaseSliderComboWidget> BodyLengthSliderCombo;
 
-	// robot.body.length_m slider.
+	// robot.body.width_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> BodyLengthSlider;
+	TObjectPtr<UBaseSliderComboWidget> BodyWidthSliderCombo;
 
-	// robot.body.width_m input.
+	// robot.body.height_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> BodyWidthInput;
+	TObjectPtr<UBaseSliderComboWidget> BodyHeightSliderCombo;
 
-	// robot.body.width_m slider.
+	// robot.body.wheel_base_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> BodyWidthSlider;
+	TObjectPtr<UBaseSliderComboWidget> BodyWheelBaseSliderCombo;
 
-	// robot.body.height_m input.
+	// robot.body.turning_radius_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> BodyHeightInput;
+	TObjectPtr<UBaseSliderComboWidget> BodyTurningRadiusSliderCombo;
 
-	// robot.body.height_m slider.
+	// robot.drive.max_speed_kmh slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> BodyHeightSlider;
+	TObjectPtr<UBaseSliderComboWidget> DriveMaxSpeedSliderCombo;
 
-	// robot.body.wheel_base_m input.
+	// robot.drive.max_reverse_kmh slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> BodyWheelBaseInput;
+	TObjectPtr<UBaseSliderComboWidget> DriveReverseSpeedSliderCombo;
 
-	// robot.body.wheel_base_m slider.
+	// robot.drive.accel_kmh_per_s slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> BodyWheelBaseSlider;
+	TObjectPtr<UBaseSliderComboWidget> DriveAccelerationSliderCombo;
 
-	// robot.body.turning_radius_m input.
+	// robot.drive.decel_kmh_per_s slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> BodyTurningRadiusInput;
+	TObjectPtr<UBaseSliderComboWidget> DriveDecelerationSliderCombo;
 
-	// robot.body.turning_radius_m slider.
+	// robot.drive.steering_rate_per_s slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> BodyTurningRadiusSlider;
+	TObjectPtr<UBaseSliderComboWidget> DriveSteeringGainSliderCombo;
 
-	// robot.drive.max_speed_kmh input.
+	// robot.drive.mass_kg slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> DriveMaxSpeedInput;
+	TObjectPtr<UBaseSliderComboWidget> DriveMassSliderCombo;
 
-	// robot.drive.max_speed_kmh slider.
+	// robot.lidar.lidar_mode dropdown.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> DriveMaxSpeedSlider;
-
-	// robot.drive.max_reverse_kmh input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> DriveReverseSpeedInput;
-
-	// robot.drive.max_reverse_kmh slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> DriveReverseSpeedSlider;
-
-	// robot.drive.accel_kmh_per_s input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> DriveAccelerationInput;
-
-	// robot.drive.accel_kmh_per_s slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> DriveAccelerationSlider;
-
-	// robot.drive.decel_kmh_per_s input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> DriveDecelerationInput;
-
-	// robot.drive.decel_kmh_per_s slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> DriveDecelerationSlider;
-
-	// robot.drive.steering_rate_per_s input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> DriveSteeringGainInput;
-
-	// robot.drive.steering_rate_per_s slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> DriveSteeringGainSlider;
-
-	// robot.drive.mass_kg input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> DriveMassInput;
-
-	// robot.drive.mass_kg slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> DriveMassSlider;
-
-	// robot.lidar.lidar_mode combo box.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UComboBoxString> LidarModeComboBox;
+	TObjectPtr<UBaseDropdownWidget> LidarModeComboBox;
 
 	// robot.lidar.draw_debug check box.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UCheckBox> LidarDrawDebugCheckBox;
+	TObjectPtr<UBaseCheckBoxWidget> LidarDrawDebugCheckBox;
 
-	// robot.lidar.scan_range_m input.
+	// robot.lidar.scan_range_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarRangeInput;
+	TObjectPtr<UBaseSliderComboWidget> LidarRangeSliderCombo;
 
-	// robot.lidar.scan_range_m slider.
+	// robot.lidar.sensor_height_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarRangeSlider;
+	TObjectPtr<UBaseSliderComboWidget> LidarSensorHeightSliderCombo;
 
-	// robot.lidar.sensor_height_m input.
+	// robot.lidar.sensor_forward_offset_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarSensorHeightInput;
+	TObjectPtr<UBaseSliderComboWidget> LidarSensorForwardOffsetSliderCombo;
 
-	// robot.lidar.sensor_height_m slider.
+	// robot.lidar.sensor_right_offset_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarSensorHeightSlider;
+	TObjectPtr<UBaseSliderComboWidget> LidarSensorRightOffsetSliderCombo;
 
-	// robot.lidar.sensor_forward_offset_m input.
+	// robot.lidar.front_half_angle_degree slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarSensorForwardOffsetInput;
+	TObjectPtr<UBaseSliderComboWidget> LidarFrontAngleSliderCombo;
 
-	// robot.lidar.sensor_forward_offset_m slider.
+	// robot.lidar.stop_distance_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarSensorForwardOffsetSlider;
+	TObjectPtr<UBaseSliderComboWidget> LidarStopDistanceSliderCombo;
 
-	// robot.lidar.sensor_right_offset_m input.
+	// robot.lidar.obstacle_warning_distance_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarSensorRightOffsetInput;
+	TObjectPtr<UBaseSliderComboWidget> LidarObstacleWarningDistanceSliderCombo;
 
-	// robot.lidar.sensor_right_offset_m slider.
+	// robot.lidar.slow_down_distance_m slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarSensorRightOffsetSlider;
+	TObjectPtr<UBaseSliderComboWidget> LidarSlowDownDistanceSliderCombo;
 
-	// robot.lidar.front_half_angle_degree input.
+	// robot.lidar.angle_step_degree slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarFrontAngleInput;
+	TObjectPtr<UBaseSliderComboWidget> LidarAngleStepSliderCombo;
 
-	// robot.lidar.front_half_angle_degree slider.
+	// robot.lidar.vertical_min_degree slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarFrontAngleSlider;
+	TObjectPtr<UBaseSliderComboWidget> LidarVerticalMinSliderCombo;
 
-	// robot.lidar.stop_distance_m input.
+	// robot.lidar.vertical_max_degree slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarStopDistanceInput;
+	TObjectPtr<UBaseSliderComboWidget> LidarVerticalMaxSliderCombo;
 
-	// robot.lidar.stop_distance_m slider.
+	// robot.lidar.vertical_step_degree slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarStopDistanceSlider;
+	TObjectPtr<UBaseSliderComboWidget> LidarVerticalStepSliderCombo;
 
-	// robot.lidar.obstacle_warning_distance_m input.
+	// robot.lidar.scan_rate_hz slider combo.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarObstacleWarningDistanceInput;
-
-	// robot.lidar.obstacle_warning_distance_m slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarObstacleWarningDistanceSlider;
-
-	// robot.lidar.slow_down_distance_m input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarSlowDownDistanceInput;
-
-	// robot.lidar.slow_down_distance_m slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarSlowDownDistanceSlider;
-
-	// robot.lidar.angle_step_degree input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarAngleStepInput;
-
-	// robot.lidar.angle_step_degree slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarAngleStepSlider;
-
-	// robot.lidar.vertical_min_degree input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarVerticalMinInput;
-
-	// robot.lidar.vertical_min_degree slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarVerticalMinSlider;
-
-	// robot.lidar.vertical_max_degree input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarVerticalMaxInput;
-
-	// robot.lidar.vertical_max_degree slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarVerticalMaxSlider;
-
-	// robot.lidar.vertical_step_degree input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarVerticalStepInput;
-
-	// robot.lidar.vertical_step_degree slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarVerticalStepSlider;
-
-	// robot.lidar.scan_rate_hz input.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableText> LidarScanRateInput;
-
-	// robot.lidar.scan_rate_hz slider.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseSliderWidget> LidarScanRateSlider;
+	TObjectPtr<UBaseSliderComboWidget> LidarScanRateSliderCombo;
 
 	// True while code is applying ViewModel values into widgets.
 	bool bApplyingProfileFields = false;

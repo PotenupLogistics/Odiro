@@ -1356,6 +1356,27 @@ bool FBaseFormElementsSliderTest::RunTest(const FString& parameters)
 	}
 	combo->SetComboStyle(EBaseSliderComboStyle::Modern);
 	TestEqual(TEXT("slider combo style stores"), combo->GetComboStyle(), EBaseSliderComboStyle::Modern);
+	combo->SetLabelFontSizeOverride(17.0f);
+	TestEqual(TEXT("slider combo label font size override stores"), combo->GetLabelFontSizeOverride(), 17.0f);
+	combo->SetLabelFontSizeOverride(-1.0f);
+	TestEqual(TEXT("slider combo label font size override clears on negative value"), combo->GetLabelFontSizeOverride(), 0.0f);
+	combo->SetLabelMinWidthOverride(112.0f);
+	TestEqual(TEXT("slider combo label min width override stores"), combo->GetLabelMinWidthOverride(), 112.0f);
+	combo->SetLabelMinWidthOverride(-1.0f);
+	TestEqual(TEXT("slider combo label min width override clears on negative value"), combo->GetLabelMinWidthOverride(), 0.0f);
+	combo->SetTextInputFontSizeOverride(13.0f);
+	TestEqual(TEXT("slider combo text input font size override stores"), combo->GetTextInputFontSizeOverride(), 13.0f);
+	combo->SetTextInputFontSizeOverride(-1.0f);
+	TestEqual(TEXT("slider combo text input font size override clears on negative value"), combo->GetTextInputFontSizeOverride(), 0.0f);
+	FBaseWidgetSizeConstraints inputConstraints;
+	inputConstraints.MinWidth = 120.0f;
+	inputConstraints.MaxWidth = 80.0f;
+	inputConstraints.MinHeight = 44.0f;
+	combo->SetTextInputSizeConstraints(inputConstraints);
+	const FBaseWidgetSizeConstraints storedInputConstraints = combo->GetTextInputSizeConstraints();
+	TestEqual(TEXT("slider combo text input min width constraint normalizes"), storedInputConstraints.MinWidth, 80.0f);
+	TestEqual(TEXT("slider combo text input max width constraint normalizes"), storedInputConstraints.MaxWidth, 120.0f);
+	TestEqual(TEXT("slider combo text input height constraint stores"), storedInputConstraints.MinHeight, 44.0f);
 	combo->SetValueRange(0.0f, 10.0f);
 	combo->SetValue(12.0f);
 	TestEqual(TEXT("slider combo value clamps"), combo->GetValue(), 10.0f);
@@ -1594,6 +1615,20 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FBaseFormElementsCheckBoxGroupTest::RunTest(const FString& parameters)
 {
 	(void)parameters;
+
+	UBaseCheckBoxWidget* checkBox = NewObject<UBaseCheckBoxWidget>();
+	TestNotNull(TEXT("checkbox created"), checkBox);
+	if (!checkBox)
+	{
+		return false;
+	}
+	TestTrue(TEXT("checkbox label defaults visible"), checkBox->ShouldShowLabel());
+	checkBox->SetShowLabel(false);
+	TestFalse(TEXT("checkbox label visibility stores hidden"), checkBox->ShouldShowLabel());
+	checkBox->SetLabelPlacement(EBaseCheckBoxLabelPlacement::Left);
+	TestEqual(TEXT("checkbox label placement stores left"), checkBox->GetLabelPlacement(), EBaseCheckBoxLabelPlacement::Left);
+	checkBox->SetLabelPlacement(EBaseCheckBoxLabelPlacement::Right);
+	TestEqual(TEXT("checkbox label placement stores right"), checkBox->GetLabelPlacement(), EBaseCheckBoxLabelPlacement::Right);
 
 	FBaseCheckBoxGroupItem parent;
 	parent.Id = TEXT("Parent");

@@ -2,9 +2,7 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Components/PanelWidget.h"
-#include "Components/ScrollBoxSlot.h"
 #include "Components/TextBlock.h"
-#include "Components/WrapBoxSlot.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/Paths.h"
 #include "Platform/Widget/ProjectPresetCardWidget.h"
@@ -309,33 +307,8 @@ void UProjectCreateScreenWidget::RefreshPresetCardPanel(
 		cardWidget->InitializeCard(item);
 		cardWidget->OnSelectedRequested.AddUObject(this, &UProjectCreateScreenWidget::HandlePresetCardSelected);
 		panel->AddChild(cardWidget);
-		ConfigurePresetCardSlot(cardWidget, itemIndex == items.Num() - 1);
 		PresetCards.Add(cardWidget);
 	}
-}
-
-void UProjectCreateScreenWidget::ConfigurePresetCardSlot(UWidget* cardWidget, const bool bLastCard) const
-{
-	UScrollBoxSlot* scrollSlot = cardWidget ? Cast<UScrollBoxSlot>(cardWidget->Slot) : nullptr;
-	if (scrollSlot)
-	{
-		scrollSlot->SetHorizontalAlignment(PresetCardHorizontalAlignment);
-		scrollSlot->SetVerticalAlignment(PresetCardVerticalAlignment);
-		const float spacing = FMath::Max(PresetCardSpacing, 0.0f);
-		scrollSlot->SetPadding(bLastCard || spacing <= 0.0f ? FMargin() : FMargin(0.0f, 0.0f, spacing, 0.0f));
-		return;
-	}
-
-	UWrapBoxSlot* wrapSlot = cardWidget ? Cast<UWrapBoxSlot>(cardWidget->Slot) : nullptr;
-	if (!wrapSlot)
-	{
-		return;
-	}
-
-	const float spacing = FMath::Max(PresetCardSpacing, 0.0f);
-	wrapSlot->SetHorizontalAlignment(PresetCardHorizontalAlignment);
-	wrapSlot->SetVerticalAlignment(PresetCardVerticalAlignment);
-	wrapSlot->SetPadding(spacing <= 0.0f ? FMargin() : FMargin(0.0f, 0.0f, spacing, spacing));
 }
 
 TSubclassOf<UProjectPresetCardWidget> UProjectCreateScreenWidget::ResolveProjectPresetCardWidgetClass() const

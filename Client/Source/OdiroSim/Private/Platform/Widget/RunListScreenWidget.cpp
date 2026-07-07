@@ -181,6 +181,24 @@ namespace
 		return FText::Format(format, args).ToString();
 	}
 
+	FString FormatRunListDurationText(
+		const FText& format,
+		const double seconds,
+		const int32 totalSecondsDisplayDecimals)
+	{
+		const int32 clampedSeconds = FMath::Max(0, FMath::RoundToInt(seconds));
+		const FString formatString = format.ToString();
+		const FText resolvedFormat =
+			formatString.Contains(TEXT("{Minutes}")) && formatString.Contains(TEXT("{Seconds}"))
+			? format
+			: NSLOCTEXT("RunListScreen", "TotalDurationMinutesSecondsFormat", "{Minutes}:{Seconds}");
+		FFormatNamedArguments args;
+		args.Add(TEXT("Minutes"), FText::FromString(FString::Printf(TEXT("%02d"), clampedSeconds / 60)));
+		args.Add(TEXT("Seconds"), FText::FromString(FString::Printf(TEXT("%02d"), clampedSeconds % 60)));
+		args.Add(TEXT("TotalSeconds"), FormatNumberForDisplay(seconds, totalSecondsDisplayDecimals));
+		return FText::Format(resolvedFormat, args).ToString();
+	}
+
 	FText FormatRunListProgressCountLabel(
 		const int32 completedCount,
 		const int32 totalCount,
@@ -283,10 +301,10 @@ namespace
 					100.0 * static_cast<double>(dashboardData.SuccessCount) / dashboardData.EpisodeCount,
 					textOptions.SuccessRateDisplayDecimals));
 		}
-		labels.TotalDurationLabel = FormatRunListText(
+		labels.TotalDurationLabel = FormatRunListDurationText(
 			textOptions.TotalDurationFormat,
-			TEXT("Seconds"),
-			FormatNumberForDisplay(dashboardData.TotalDurationSeconds, textOptions.TotalDurationDisplayDecimals));
+			dashboardData.TotalDurationSeconds,
+			textOptions.TotalDurationDisplayDecimals);
 		return labels;
 	}
 

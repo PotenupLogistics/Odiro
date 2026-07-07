@@ -1,10 +1,10 @@
 #include "Platform/Widget/RunDetailScreenWidget.h"
 
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
-#include "Components/WrapBox.h"
-#include "Components/WrapBoxSlot.h"
 #include "Misc/Paths.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/PlatformUiSubsystem.h"
@@ -17,7 +17,6 @@
 #include "Platform/Widget/ProjectEpisodeReplayInterestRegionStripWidget.h"
 #include "Platform/Widget/ProjectEpisodeReplayViewerWidget.h"
 #include "UI/BaseButtonWidget.h"
-#include "UI/BaseTextWidget.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRunDetailScreenWidget, Log, All);
 
@@ -54,7 +53,6 @@ void URunDetailScreenWidget::NativeConstruct()
 	RestoreReplayViewerToNormalHost();
 	ResolveReplayInterestRegionStrip();
 	ApplyReplayInterestRegionStripToViewer();
-	SetReplayEpisodeNumberText(FString());
 }
 
 void URunDetailScreenWidget::NativeDestruct()
@@ -116,6 +114,43 @@ void URunDetailScreenWidget::RefreshFromViewModels()
 
 	const FString selectedRunDirectory = workspaceViewModel->GetSelectedRunDirectory();
 	const bool bLoaded = resultViewModel->LoadRunDirectory(selectedRunDirectory);
+	const FProjectRunResultDashboardData dashboardData = resultViewModel->GetDashboardData();
+
+	const auto formatOneDecimalMetricValue = [](const double value)
+	{
+		return FString::Printf(TEXT("%.1f"), value);
+	};
+	const auto formatPercentMetricValue = [](const int32 count, const int32 total)
+	{
+		return total > 0
+			? FString::Printf(TEXT("%.0f"), 100.0 * static_cast<double>(count) / total)
+			: FString(TEXT("-"));
+	};
+	const auto formatSecondsTimeMetricValue = [](const double seconds)
+	{
+		const int32 clampedSeconds = FMath::Max(0, FMath::RoundToInt(seconds));
+		return FString::Printf(TEXT("%02d:%02d"), clampedSeconds / 60, clampedSeconds % 60);
+	};
+	const auto formatFractionMetricValue = [](const int32 count, const int32 total)
+	{
+		return total > 0
+			? FString::Printf(TEXT("%d / %d"), count, total)
+			: FString(TEXT("-"));
+	};
+	const auto isTimeoutEpisode = [](const FProjectRunEpisodeDashboardItem& episodeItem)
+	{
+		return episodeItem.TerminalReason.Equals(TEXT("Timeout"), ESearchCase::IgnoreCase)
+			|| episodeItem.Outcome.Equals(TEXT("Timeout"), ESearchCase::IgnoreCase)
+			|| episodeItem.Outcome.Equals(TEXT("TimedOut"), ESearchCase::IgnoreCase);
+	};
+	int32 timeoutEpisodeCount = 0;
+	for (const FProjectRunEpisodeDashboardItem& episodeItem : dashboardData.Episodes)
+	{
+		if (isTimeoutEpisode(episodeItem))
+		{
+			++timeoutEpisodeCount;
+		}
+	}
 
 	if (RunIdText)
 	{
@@ -127,37 +162,57 @@ void URunDetailScreenWidget::RefreshFromViewModels()
 	}
 	if (TotalDurationText)
 	{
-		TotalDurationText->SetText(FText::FromString(resultViewModel->GetAverageDurationLabel()));
+		TotalDurationText->SetText(FText::FromString(
+			dashboardData.EpisodeCount > 0
+				? formatOneDecimalMetricValue(dashboardData.TotalDurationSeconds / dashboardData.EpisodeCount)
+				: FString(TEXT("-"))));
 	}
 	if (DurationMetricSub)
 	{
-		DurationMetricSub->SetText(FText::Format(
-			NSLOCTEXT("OdiroPlatform", "RunDetailTotalDurationSub", "총 {0} 소요"),
-			FText::FromString(resultViewModel->GetTotalDurationLabel())));
+		DurationMetricSub->SetText(FText::FromString(
+			dashboardData.EpisodeCount > 0
+				? formatSecondsTimeMetricValue(dashboardData.TotalDurationSeconds)
+				: FString(TEXT("-"))));
 	}
 	if (SuccessRateText)
 	{
-		SuccessRateText->SetText(FText::FromString(resultViewModel->GetSuccessRateLabel()));
+		SuccessRateText->SetText(FText::FromString(formatPercentMetricValue(
+			dashboardData.SuccessCount,
+			dashboardData.EpisodeCount)));
 	}
 	if (SuccessMetricSub)
 	{
-		SuccessMetricSub->SetText(FText::FromString(resultViewModel->GetSuccessMetricSubLabel()));
+		SuccessMetricSub->SetText(FText::FromString(formatFractionMetricValue(
+			dashboardData.SuccessCount,
+			dashboardData.EpisodeCount)));
 	}
 	if (CollisionCountText)
 	{
-		CollisionCountText->SetText(FText::FromString(resultViewModel->GetCollisionCountLabel()));
+		CollisionCountText->SetText(FText::FromString(
+			dashboardData.EpisodeCount > 0
+				? formatOneDecimalMetricValue(
+					static_cast<double>(dashboardData.CollisionCount) / dashboardData.EpisodeCount)
+				: FString(TEXT("-"))));
 	}
 	if (CollisionMetricSub)
 	{
-		CollisionMetricSub->SetText(FText::FromString(resultViewModel->GetCollisionMetricSubLabel()));
+		CollisionMetricSub->SetText(FText::FromString(
+			dashboardData.EpisodeCount > 0
+				? FString::FromInt(dashboardData.CollisionCount)
+				: FString(TEXT("-"))));
 	}
 	if (TimeoutMetricValue)
 	{
-		TimeoutMetricValue->SetText(FText::FromString(resultViewModel->GetTimeoutCountLabel()));
+		TimeoutMetricValue->SetText(FText::FromString(
+			dashboardData.EpisodeCount > 0
+				? FString::FromInt(timeoutEpisodeCount)
+				: FString(TEXT("-"))));
 	}
 	if (TimeoutMetricSub)
 	{
-		TimeoutMetricSub->SetText(FText::FromString(resultViewModel->GetTimeoutMetricSubLabel()));
+		TimeoutMetricSub->SetText(FText::FromString(formatFractionMetricValue(
+			timeoutEpisodeCount,
+			dashboardData.EpisodeCount)));
 	}
 	if (AiSummaryText)
 	{
@@ -210,7 +265,7 @@ void URunDetailScreenWidget::ResetReplay()
 	}
 	LoadedReplayRunId.Reset();
 	LoadedReplayEpisodeDirectory.Reset();
-	SetReplayEpisodeNumberText(FString());
+	SetActiveEpisodeReplayCard(nullptr);
 }
 
 UProjectWorkspaceViewModel* URunDetailScreenWidget::ResolveWorkspaceViewModel()
@@ -260,7 +315,7 @@ void URunDetailScreenWidget::RebuildEpisodeCards()
 		cardWidget->InitializeFromEpisodeViewModel(episodeItem);
 		cardWidget->OnReplayRequested.RemoveAll(this);
 		cardWidget->OnReplayRequested.AddUObject(this, &URunDetailScreenWidget::HandleEpisodeReplayRequested);
-		if (UWrapBoxSlot* cardSlot = EpisodeReplayCardWrapBox->AddChildToWrapBox(cardWidget))
+		if (UHorizontalBoxSlot* cardSlot = EpisodeReplayCardWrapBox->AddChildToHorizontalBox(cardWidget))
 		{
 			cardSlot->SetPadding(EpisodeReplayCardPadding);
 		}
@@ -286,7 +341,10 @@ void URunDetailScreenWidget::OpenInitialEpisodeReplay()
 		&& LoadedReplayRunId.Equals(selectedRunId, ESearchCase::IgnoreCase)
 		&& !LoadedReplayEpisodeDirectory.IsEmpty())
 	{
-		return;
+		if (ApplyActiveEpisodeReplayCardFromLoadedDirectory())
+		{
+			return;
+		}
 	}
 
 	for (UProjectEpisodeReplayCardWidget* cardWidget : EpisodeCards)
@@ -302,7 +360,7 @@ void URunDetailScreenWidget::OpenInitialEpisodeReplay()
 	ResetReplay();
 }
 
-// Opens replay for one episode card and mirrors the selected episode header on success.
+// Opens replay for one episode card and updates the active card highlight on success.
 bool URunDetailScreenWidget::OpenEpisodeReplayCard(
 	UProjectEpisodeReplayCardWidget* cardWidget)
 {
@@ -317,8 +375,6 @@ bool URunDetailScreenWidget::OpenEpisodeReplayCard(
 		return false;
 	}
 
-	SetReplayEpisodeNumberText(cardWidget->GetEpisodeId());
-
 	UProjectWorkspaceViewModel* workspaceViewModel = ResolveWorkspaceViewModel();
 	LoadedReplayRunId = workspaceViewModel
 		? workspaceViewModel->GetSelectedRunId()
@@ -326,7 +382,51 @@ bool URunDetailScreenWidget::OpenEpisodeReplayCard(
 	LoadedReplayRunId = LoadedReplayRunId.TrimStartAndEnd();
 	LoadedReplayEpisodeDirectory = cardWidget->GetEpisodeDirectory();
 	FPaths::NormalizeDirectoryName(LoadedReplayEpisodeDirectory);
+	SetActiveEpisodeReplayCard(cardWidget);
 	return true;
+}
+
+void URunDetailScreenWidget::SetActiveEpisodeReplayCard(
+	UProjectEpisodeReplayCardWidget* activeCardWidget)
+{
+	ActiveEpisodeReplayCard = activeCardWidget;
+	for (UProjectEpisodeReplayCardWidget* cardWidget : EpisodeCards)
+	{
+		if (cardWidget)
+		{
+			cardWidget->SetActiveReplay(cardWidget == activeCardWidget);
+		}
+	}
+}
+
+bool URunDetailScreenWidget::ApplyActiveEpisodeReplayCardFromLoadedDirectory()
+{
+	FString normalizedLoadedDirectory = LoadedReplayEpisodeDirectory;
+	FPaths::NormalizeDirectoryName(normalizedLoadedDirectory);
+	if (normalizedLoadedDirectory.IsEmpty())
+	{
+		SetActiveEpisodeReplayCard(nullptr);
+		return false;
+	}
+
+	for (UProjectEpisodeReplayCardWidget* cardWidget : EpisodeCards)
+	{
+		if (!cardWidget)
+		{
+			continue;
+		}
+
+		FString normalizedCardDirectory = cardWidget->GetEpisodeDirectory();
+		FPaths::NormalizeDirectoryName(normalizedCardDirectory);
+		if (normalizedCardDirectory.Equals(normalizedLoadedDirectory, ESearchCase::IgnoreCase))
+		{
+			SetActiveEpisodeReplayCard(cardWidget);
+			return true;
+		}
+	}
+
+	SetActiveEpisodeReplayCard(nullptr);
+	return false;
 }
 
 void URunDetailScreenWidget::RebuildAnalysisRows()
@@ -364,6 +464,7 @@ void URunDetailScreenWidget::ClearEpisodeCards()
 		}
 	}
 	EpisodeCards.Reset();
+	ActiveEpisodeReplayCard = nullptr;
 	if (EpisodeReplayCardWrapBox)
 	{
 		EpisodeReplayCardWrapBox->ClearChildren();
@@ -467,25 +568,6 @@ void URunDetailScreenWidget::AddSuggestionRowToContainer(
 	rowWidget->InitializeFromSuggestionViewModel(suggestionItem);
 	container->AddChild(rowWidget);
 	AnalysisRows.Add(rowWidget);
-}
-
-void URunDetailScreenWidget::SetReplayEpisodeNumberText(const FString& episodeId)
-{
-	UTextBlock* episodeNumberText = ReplayEpisodeNumber.Get();
-	if (!episodeNumberText)
-	{
-		ReplayEpisodeNumber = Cast<UTextBlock>(GetWidgetFromName(TEXT("ReplayEpisodeNumber")));
-		episodeNumberText = ReplayEpisodeNumber.Get();
-	}
-	if (!episodeNumberText)
-	{
-		return;
-	}
-
-	const FString trimmedEpisodeId = episodeId.TrimStartAndEnd();
-	episodeNumberText->SetText(trimmedEpisodeId.IsEmpty()
-		? FText::GetEmpty()
-		: FText::FromString(trimmedEpisodeId));
 }
 
 void URunDetailScreenWidget::HandleEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget)

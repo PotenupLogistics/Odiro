@@ -400,8 +400,8 @@ bool FPlatformUiViewModelExperimentResultTest::RunTest(const FString& parameters
 	TestTrue(TEXT("load run directory"), viewModel->LoadRunDirectory(runDirectory));
 	TestEqual(TEXT("run id loaded"), viewModel->GetRunId(), FString(TEXT("000123")));
 	TestEqual(TEXT("episode count loaded"), viewModel->GetDashboardData().EpisodeCount, 3);
-	TestEqual(TEXT("total duration label"), viewModel->GetTotalDurationLabel(), FString(TEXT("8.0s")));
-	TestEqual(TEXT("average duration label"), viewModel->GetAverageDurationLabel(), FString(TEXT("2.7s")));
+	TestEqual(TEXT("total duration label"), viewModel->GetTotalDurationLabel(), FString(TEXT("00:08")));
+	TestEqual(TEXT("average duration label"), viewModel->GetAverageDurationLabel(), FString(TEXT("00:03")));
 	TestEqual(TEXT("success rate label"), viewModel->GetSuccessRateLabel(), FString(TEXT("33%")));
 	TestEqual(TEXT("success metric sub label"), viewModel->GetSuccessMetricSubLabel(), FString(TEXT("1/3")));
 	TestEqual(TEXT("collision count label"), viewModel->GetCollisionCountLabel(), FString(TEXT("평균 0.7회")));

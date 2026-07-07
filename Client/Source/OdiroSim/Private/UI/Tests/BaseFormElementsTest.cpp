@@ -39,6 +39,35 @@ namespace
 	{
 		return GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	}
+
+	// Sets the transient CommonUI interaction state that normally comes from input callbacks.
+	bool SetButtonInteractionStateForTest(UBaseButtonWidget* button, const EBaseWidgetState state)
+	{
+		if (!button)
+		{
+			return false;
+		}
+
+		FProperty* interactionStateProperty =
+			UBaseButtonWidget::StaticClass()->FindPropertyByName(TEXT("InteractionState"));
+		FEnumProperty* enumProperty = CastField<FEnumProperty>(interactionStateProperty);
+		if (!enumProperty)
+		{
+			return false;
+		}
+
+		enumProperty->GetUnderlyingProperty()->SetIntPropertyValue(
+			enumProperty->ContainerPtrToValuePtr<void>(button),
+			static_cast<int64>(state));
+		button->SynchronizeBaseProperties();
+		return true;
+	}
+
+	// Returns the dynamic material currently driving a join corner image.
+	UMaterialInstanceDynamic* GetJoinCornerMaterialForTest(UImage* image)
+	{
+		return image ? Cast<UMaterialInstanceDynamic>(image->GetBrush().GetResourceObject()) : nullptr;
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -442,6 +471,255 @@ bool FBaseFormElementsTabDividerMetricsTest::RunTest(const FString& parameters)
 	TestEqual(TEXT("right divider horizontal align"), rightSlot->GetHorizontalAlignment(), HAlign_Right);
 	TestEqual(TEXT("left divider vertical align"), leftSlot->GetVerticalAlignment(), VAlign_Center);
 	TestEqual(TEXT("right divider vertical align"), rightSlot->GetVerticalAlignment(), VAlign_Center);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseFormElementsTabJoinCornerColorTest,
+	"OdiroSim.UI.BaseFormElements.TabJoinCornerColor",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Verifies BaseTab drives optional join corners through color state only.
+bool FBaseFormElementsTabJoinCornerColorTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UWorld* world = GetWidgetAutomationWorld();
+	TestNotNull(TEXT("editor world exists"), world);
+	if (!world)
+	{
+		return false;
+	}
+
+	UClass* tabClass = LoadClass<UBaseTabWidget>(
+		nullptr,
+		TEXT("/Game/Widgets/Common/WBP_BaseTab.WBP_BaseTab_C"));
+	TestNotNull(TEXT("base tab class loads"), tabClass);
+	if (!tabClass)
+	{
+		return false;
+	}
+
+	UBaseTabWidget* tab = CreateWidget<UBaseTabWidget>(world, tabClass);
+	TestNotNull(TEXT("base tab widget creates"), tab);
+	if (!tab || !tab->WidgetTree)
+	{
+		return false;
+	}
+	tab->TakeWidget();
+
+	UImage* leftJoinCorner = Cast<UImage>(tab->WidgetTree->FindWidget(TEXT("LeftJoinCorner")));
+	UImage* rightJoinCorner = Cast<UImage>(tab->WidgetTree->FindWidget(TEXT("RightJoinCorner")));
+	UImage* leftJoinCornerInset = Cast<UImage>(tab->WidgetTree->FindWidget(TEXT("LeftJoinCornerInset")));
+	UImage* rightJoinCornerInset = Cast<UImage>(tab->WidgetTree->FindWidget(TEXT("RightJoinCornerInset")));
+	TestNotNull(TEXT("left join corner exists"), leftJoinCorner);
+	TestNotNull(TEXT("right join corner exists"), rightJoinCorner);
+	TestNotNull(TEXT("left join corner inset exists"), leftJoinCornerInset);
+	TestNotNull(TEXT("right join corner inset exists"), rightJoinCornerInset);
+	if (!leftJoinCorner || !rightJoinCorner || !leftJoinCornerInset || !rightJoinCornerInset)
+	{
+		return false;
+	}
+
+	const UBaseWidgetSizeCatalog* sizes = UBaseWidgetSizeCatalog::MakeDefaultCatalogReference().LoadSynchronous();
+	TestNotNull(TEXT("base size catalog exists"), sizes);
+	if (!sizes)
+	{
+		return false;
+	}
+	const float expectedJoinCornerRadius = FMath::Max(sizes->Radius, 1.0f);
+
+	auto assertJoinCornerFillColor =
+		[this](const TCHAR* label, UImage* image, const FLinearColor& expectedColor)
+	{
+		UMaterialInstanceDynamic* material = GetJoinCornerMaterialForTest(image);
+		const FString materialLabel = FString::Printf(TEXT("%s material exists"), label);
+		TestNotNull(*materialLabel, material);
+		if (!material)
+		{
+			return;
+		}
+
+		const FLinearColor actualColor = material->K2_GetVectorParameterValue(TEXT("FillColor"));
+		const FString colorLabel = FString::Printf(TEXT("%s fill color"), label);
+		TestTrue(*colorLabel, actualColor.Equals(expectedColor));
+
+		const FLinearColor actualElementSize = material->K2_GetVectorParameterValue(TEXT("ElementSize"));
+		const FString alphaLabel = FString::Printf(TEXT("%s shader alpha"), label);
+		TestTrue(*alphaLabel, FMath::IsNearlyEqual(actualElementSize.B, expectedColor.A, KINDA_SMALL_NUMBER));
+	};
+
+	auto assertJoinCornerGeometry =
+		[this, expectedJoinCornerRadius](const TCHAR* label, UImage* image, const FVector2D& expectedTranslation)
+	{
+		const FVector2D imageSize = image ? image->GetBrush().ImageSize : FVector2D::ZeroVector;
+		const FString sizeLabel = FString::Printf(TEXT("%s uses top radius size"), label);
+		TestTrue(
+			*sizeLabel,
+			FMath::IsNearlyEqual(imageSize.X, expectedJoinCornerRadius, KINDA_SMALL_NUMBER)
+				&& FMath::IsNearlyEqual(imageSize.Y, expectedJoinCornerRadius, KINDA_SMALL_NUMBER));
+
+		const FString translationLabel = FString::Printf(TEXT("%s edge translation"), label);
+		TestTrue(
+			*translationLabel,
+			image && image->GetRenderTransform().Translation.Equals(expectedTranslation, KINDA_SMALL_NUMBER));
+
+		if (UMaterialInstanceDynamic* material = GetJoinCornerMaterialForTest(image))
+		{
+			const FLinearColor elementSize = material->K2_GetVectorParameterValue(TEXT("ElementSize"));
+			const FString materialSizeLabel = FString::Printf(TEXT("%s shader size"), label);
+			TestTrue(
+				*materialSizeLabel,
+				FMath::IsNearlyEqual(elementSize.R, expectedJoinCornerRadius, KINDA_SMALL_NUMBER)
+					&& FMath::IsNearlyEqual(elementSize.G, expectedJoinCornerRadius, KINDA_SMALL_NUMBER));
+		}
+	};
+
+	auto assertJoinCornerSide =
+		[this](const TCHAR* label, UImage* image, const float expectedSide)
+	{
+		UMaterialInstanceDynamic* material = GetJoinCornerMaterialForTest(image);
+		const FString materialLabel = FString::Printf(TEXT("%s material exists"), label);
+		TestNotNull(*materialLabel, material);
+		if (!material)
+		{
+			return;
+		}
+
+		const FString sideLabel = FString::Printf(TEXT("%s cutout side"), label);
+		TestEqual(*sideLabel, material->K2_GetScalarParameterValue(TEXT("CornerSide")), expectedSide);
+	};
+
+	TestTrue(
+		TEXT("default left join corner is transparent"),
+		tab->GetJoinCornerDefaultColor().Equals(FLinearColor::Transparent));
+	TestTrue(
+		TEXT("default right join corner is transparent"),
+		tab->GetJoinCornerDefaultColor().Equals(FLinearColor::Transparent));
+	assertJoinCornerFillColor(
+		TEXT("default left join corner"),
+		leftJoinCorner,
+		BaseWidgetPrivate::EncodeUiMaterialColor(FLinearColor::Transparent));
+	assertJoinCornerFillColor(
+		TEXT("default right join corner"),
+		rightJoinCorner,
+		BaseWidgetPrivate::EncodeUiMaterialColor(FLinearColor::Transparent));
+	assertJoinCornerFillColor(
+		TEXT("default left join corner inset"),
+		leftJoinCornerInset,
+		BaseWidgetPrivate::EncodeUiMaterialColor(FLinearColor::Transparent));
+	assertJoinCornerFillColor(
+		TEXT("default right join corner inset"),
+		rightJoinCornerInset,
+		BaseWidgetPrivate::EncodeUiMaterialColor(FLinearColor::Transparent));
+	assertJoinCornerGeometry(
+		TEXT("left join corner"),
+		leftJoinCorner,
+		FVector2D(-expectedJoinCornerRadius, 0.0f));
+	assertJoinCornerGeometry(
+		TEXT("right join corner"),
+		rightJoinCorner,
+		FVector2D(expectedJoinCornerRadius, 0.0f));
+	assertJoinCornerGeometry(TEXT("left join corner inset"), leftJoinCornerInset, FVector2D::ZeroVector);
+	assertJoinCornerGeometry(TEXT("right join corner inset"), rightJoinCornerInset, FVector2D::ZeroVector);
+	TestTrue(
+		TEXT("left join corner keeps widget tint neutral"),
+		leftJoinCorner->GetColorAndOpacity().Equals(FLinearColor::White));
+	TestTrue(
+		TEXT("right join corner keeps widget tint neutral"),
+		rightJoinCorner->GetColorAndOpacity().Equals(FLinearColor::White));
+	TestTrue(
+		TEXT("left join corner inset keeps widget tint neutral"),
+		leftJoinCornerInset->GetColorAndOpacity().Equals(FLinearColor::White));
+	TestTrue(
+		TEXT("right join corner inset keeps widget tint neutral"),
+		rightJoinCornerInset->GetColorAndOpacity().Equals(FLinearColor::White));
+	assertJoinCornerSide(TEXT("left join corner"), leftJoinCorner, 0.0f);
+	assertJoinCornerSide(TEXT("right join corner"), rightJoinCorner, 1.0f);
+	assertJoinCornerSide(TEXT("left join corner inset"), leftJoinCornerInset, 1.0f);
+	assertJoinCornerSide(TEXT("right join corner inset"), rightJoinCornerInset, 0.0f);
+	TestEqual(
+		TEXT("left join corner remains non-hit-testable"),
+		leftJoinCorner->GetVisibility(),
+		ESlateVisibility::SelfHitTestInvisible);
+	TestEqual(
+		TEXT("right join corner remains non-hit-testable"),
+		rightJoinCorner->GetVisibility(),
+		ESlateVisibility::SelfHitTestInvisible);
+	TestEqual(
+		TEXT("left join corner inset remains non-hit-testable"),
+		leftJoinCornerInset->GetVisibility(),
+		ESlateVisibility::SelfHitTestInvisible);
+	TestEqual(
+		TEXT("right join corner inset remains non-hit-testable"),
+		rightJoinCornerInset->GetVisibility(),
+		ESlateVisibility::SelfHitTestInvisible);
+
+	const UBaseWidgetColorCatalog* colors = UBaseWidgetColorCatalog::MakeDefaultCatalogReference().LoadSynchronous();
+	TestNotNull(TEXT("base color catalog exists"), colors);
+	if (!colors)
+	{
+		return false;
+	}
+
+	tab->SetJoinCornerColors(
+		FLinearColor::Transparent,
+		colors->SurfaceHoverSoftColor,
+		colors->SurfacePanelColor,
+		colors->SurfaceControlActiveColor);
+	TestTrue(TEXT("hover join corner palette is stored"), tab->GetJoinCornerHoverColor().Equals(colors->SurfaceHoverSoftColor));
+	TestTrue(TEXT("active join corner palette is stored"), tab->GetJoinCornerActiveColor().Equals(colors->SurfacePanelColor));
+	TestTrue(
+		TEXT("active pressed join corner palette is stored"),
+		tab->GetJoinCornerActivePressedColor().Equals(colors->SurfaceControlActiveColor));
+
+	tab->SetBaseState(EBaseWidgetState::Hovered);
+	const FLinearColor expectedHoverCornerColor =
+		BaseWidgetPrivate::EncodeUiMaterialColor(colors->SurfaceHoverSoftColor);
+	assertJoinCornerFillColor(TEXT("hovered left join corner"), leftJoinCorner, expectedHoverCornerColor);
+	assertJoinCornerFillColor(TEXT("hovered right join corner"), rightJoinCorner, expectedHoverCornerColor);
+	assertJoinCornerFillColor(TEXT("hovered left join corner inset"), leftJoinCornerInset, expectedHoverCornerColor);
+	assertJoinCornerFillColor(TEXT("hovered right join corner inset"), rightJoinCornerInset, expectedHoverCornerColor);
+
+	tab->SetBaseState(EBaseWidgetState::Default);
+	tab->SetSelected(true);
+	const FLinearColor expectedActiveCornerColor =
+		BaseWidgetPrivate::EncodeUiMaterialColor(colors->SurfacePanelColor);
+	assertJoinCornerFillColor(TEXT("active left join corner"), leftJoinCorner, expectedActiveCornerColor);
+	assertJoinCornerFillColor(TEXT("active right join corner"), rightJoinCorner, expectedActiveCornerColor);
+	assertJoinCornerFillColor(TEXT("active left join corner inset"), leftJoinCornerInset, expectedActiveCornerColor);
+	assertJoinCornerFillColor(TEXT("active right join corner inset"), rightJoinCornerInset, expectedActiveCornerColor);
+
+	TestTrue(
+		TEXT("active pressed interaction state can be simulated"),
+		SetButtonInteractionStateForTest(tab, EBaseWidgetState::Pressed));
+	const FLinearColor expectedActivePressedCornerColor =
+		BaseWidgetPrivate::EncodeUiMaterialColor(colors->SurfaceControlActiveColor);
+	assertJoinCornerFillColor(TEXT("active pressed left join corner"), leftJoinCorner, expectedActivePressedCornerColor);
+	assertJoinCornerFillColor(TEXT("active pressed right join corner"), rightJoinCorner, expectedActivePressedCornerColor);
+	assertJoinCornerFillColor(TEXT("active pressed left join corner inset"), leftJoinCornerInset, expectedActivePressedCornerColor);
+	assertJoinCornerFillColor(TEXT("active pressed right join corner inset"), rightJoinCornerInset, expectedActivePressedCornerColor);
+
+	TestTrue(
+		TEXT("interaction state can return to default"),
+		SetButtonInteractionStateForTest(tab, EBaseWidgetState::Default));
+	tab->SetSelected(false);
+	assertJoinCornerFillColor(
+		TEXT("inactive left join corner"),
+		leftJoinCorner,
+		BaseWidgetPrivate::EncodeUiMaterialColor(FLinearColor::Transparent));
+	assertJoinCornerFillColor(
+		TEXT("inactive right join corner"),
+		rightJoinCorner,
+		BaseWidgetPrivate::EncodeUiMaterialColor(FLinearColor::Transparent));
+	assertJoinCornerFillColor(
+		TEXT("inactive left join corner inset"),
+		leftJoinCornerInset,
+		BaseWidgetPrivate::EncodeUiMaterialColor(FLinearColor::Transparent));
+	assertJoinCornerFillColor(
+		TEXT("inactive right join corner inset"),
+		rightJoinCornerInset,
+		BaseWidgetPrivate::EncodeUiMaterialColor(FLinearColor::Transparent));
 	return true;
 }
 

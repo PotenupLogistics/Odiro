@@ -83,20 +83,23 @@ bool UProjectPresetCardWidget::ApplyPresetThumbnail(const FString& thumbnailPath
 	const FString normalizedThumbnailPath = thumbnailPath.TrimStartAndEnd();
 	if (normalizedThumbnailPath.IsEmpty() || !FPaths::FileExists(normalizedThumbnailPath))
 	{
-		CardThumbnailTexture = nullptr;
-		SetMediaTexture(nullptr);
+		SetPresetThumbnailTexture(nullptr);
 		return false;
 	}
 
 	UTexture2D* thumbnailTexture = FImageUtils::ImportFileAsTexture2D(normalizedThumbnailPath);
 	if (!thumbnailTexture)
 	{
-		CardThumbnailTexture = nullptr;
-		SetMediaTexture(nullptr);
+		SetPresetThumbnailTexture(nullptr);
 		return false;
 	}
 
+	SetPresetThumbnailTexture(thumbnailTexture);
+	return true;
+}
+
+void UProjectPresetCardWidget::SetPresetThumbnailTexture(UTexture2D* thumbnailTexture)
+{
 	CardThumbnailTexture = thumbnailTexture;
 	SetMediaTexture(CardThumbnailTexture.Get());
-	return true;
 }

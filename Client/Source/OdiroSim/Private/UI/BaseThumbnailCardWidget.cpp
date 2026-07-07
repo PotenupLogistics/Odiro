@@ -17,7 +17,11 @@ void UBaseThumbnailCardWidget::SynchronizeBaseProperties()
 
 	const UBaseWidgetColorCatalog* colors = GetResolvedBaseColors();
 	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
-	SetImageTexture(MediaImage.Get(), MediaTexture.Get());
+	BaseWidgetPrivate::ApplyTopRoundedMediaImage(
+		MediaImage.Get(),
+		MediaTexture.Get(),
+		sizes ? sizes->Radius : 0.0f,
+		sizes ? sizes->BorderWidth : 0.0f);
 	SetOptionalWidgetVisible(MediaOverlay.Get(), bShowMedia);
 	SetOptionalWidgetVisible(ContentSlot.Get(), !bMediaOnly);
 	if (RootSize && bMediaOnly)
@@ -71,6 +75,10 @@ void UBaseThumbnailCardWidget::SynchronizeBaseProperties()
 int32 UBaseThumbnailCardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, const int32 LayerId, const FWidgetStyle& InWidgetStyle, const bool bParentEnabled) const
 {
 	BaseWidgetPrivate::UpdateRoundedSurfaceSize(SurfaceBorder.Get(), AllottedGeometry.GetLocalSize());
+	const FVector2D mediaFallbackSize = MediaBorder
+		? MediaBorder->GetCachedGeometry().GetLocalSize()
+		: FVector2D::ZeroVector;
+	BaseWidgetPrivate::UpdateTopRoundedMediaImageSize(MediaImage.Get(), mediaFallbackSize);
 	return Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 }
 

@@ -64,6 +64,9 @@ private:
 	// ViewModel이 계산한 preview image 경로를 transient texture로 읽어 thumbnail image에 적용한다.
 	bool ApplyProjectPreviewThumbnail(const FString& previewPath);
 
+	// Runtime preview texture를 BaseThumbnailCard의 rounded media 경로로 전달한다.
+	void SetPreviewThumbnailTexture(UTexture2D* thumbnailTexture);
+
 	// Card 전체 click target. Visual layout은 WBP가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseButtonWidget> CardButton;

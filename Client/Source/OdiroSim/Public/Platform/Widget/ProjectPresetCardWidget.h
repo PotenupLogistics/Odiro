@@ -51,6 +51,9 @@ private:
 	// Preset thumbnail.png를 transient texture로 읽어 media에 적용한다.
 	bool ApplyPresetThumbnail(const FString& thumbnailPath);
 
+	// Runtime preset thumbnail texture를 BaseThumbnailCard의 rounded media 경로로 전달한다.
+	void SetPresetThumbnailTexture(UTexture2D* thumbnailTexture);
+
 	// Card 전체 click target. Visual layout은 WBP가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBaseButtonWidget> CardButton;

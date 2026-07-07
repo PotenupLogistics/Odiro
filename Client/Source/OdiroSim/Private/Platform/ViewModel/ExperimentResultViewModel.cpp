@@ -77,10 +77,11 @@ namespace
 			: FString(TEXT("-"));
 	}
 
-	// Formats a duration in seconds without extra spacing in the unit.
-	FString FormatExperimentResultSecondsLabel(const double seconds)
+	// Formats a duration in minutes and seconds for compact dashboard metrics.
+	FString FormatExperimentResultDurationLabel(const double seconds)
 	{
-		return FString::Printf(TEXT("%.1fs"), seconds);
+		const int32 clampedSeconds = FMath::Max(0, FMath::RoundToInt(seconds));
+		return FString::Printf(TEXT("%02d:%02d"), clampedSeconds / 60, clampedSeconds % 60);
 	}
 
 	// episode가 설정된 제한 시간 때문에 종료되었는지 반환한다.
@@ -278,11 +279,11 @@ void UExperimentResultViewModel::RefreshDisplayLabels()
 	UE_MVVM_SET_PROPERTY_VALUE(
 		TotalDurationLabel,
 		totalDurationLabel.IsEmpty()
-			? FormatExperimentResultSecondsLabel(DashboardData.TotalDurationSeconds)
+			? FormatExperimentResultDurationLabel(DashboardData.TotalDurationSeconds)
 			: totalDurationLabel);
 
 	const FString averageDuration = DashboardData.EpisodeCount > 0
-		? FormatExperimentResultSecondsLabel(DashboardData.TotalDurationSeconds / DashboardData.EpisodeCount)
+		? FormatExperimentResultDurationLabel(DashboardData.TotalDurationSeconds / DashboardData.EpisodeCount)
 		: FString(TEXT("-"));
 	UE_MVVM_SET_PROPERTY_VALUE(AverageDurationLabel, averageDuration);
 

@@ -13,6 +13,10 @@ void UBaseStatusBadgeWidget::SynchronizeBaseProperties()
 	{
 		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Caption);
+		if (bHasLabelFontOverride)
+		{
+			LabelTextBlock->SetFont(LabelFontOverride);
+		}
 	}
 
 	BaseWidgetPrivate::MakeBorderVisualTransparent(BorderFrame.Get());
@@ -24,11 +28,16 @@ void UBaseStatusBadgeWidget::SynchronizeBaseProperties()
 			: colors->GetStateColor(State);
 		if (LabelTextBlock)
 		{
-			LabelTextBlock->SetColorAndOpacity(FSlateColor(bDisabled
+			const FLinearColor labelColor = bDisabled
 				? colors->TextFaintColor
-				: badgeColor));
+				: (bHasLabelColorOverride ? LabelColorOverride : badgeColor);
+			LabelTextBlock->SetColorAndOpacity(FSlateColor(labelColor));
 		}
 		ApplyBorderColor(StatusDot.Get(), badgeColor);
+	}
+	else if (LabelTextBlock && bHasLabelColorOverride)
+	{
+		LabelTextBlock->SetColorAndOpacity(FSlateColor(LabelColorOverride));
 	}
 }
 
@@ -47,5 +56,31 @@ void UBaseStatusBadgeWidget::SetBaseState(const EBaseWidgetState inState)
 void UBaseStatusBadgeWidget::SetDisabled(const bool bInDisabled)
 {
 	bDisabled = bInDisabled;
+	SynchronizeBaseProperties();
+}
+
+void UBaseStatusBadgeWidget::SetLabelColorOverride(const FLinearColor inLabelColor)
+{
+	LabelColorOverride = inLabelColor;
+	bHasLabelColorOverride = true;
+	SynchronizeBaseProperties();
+}
+
+void UBaseStatusBadgeWidget::ClearLabelColorOverride()
+{
+	bHasLabelColorOverride = false;
+	SynchronizeBaseProperties();
+}
+
+void UBaseStatusBadgeWidget::SetLabelFontOverride(const FSlateFontInfo inLabelFont)
+{
+	LabelFontOverride = inLabelFont;
+	bHasLabelFontOverride = true;
+	SynchronizeBaseProperties();
+}
+
+void UBaseStatusBadgeWidget::ClearLabelFontOverride()
+{
+	bHasLabelFontOverride = false;
 	SynchronizeBaseProperties();
 }

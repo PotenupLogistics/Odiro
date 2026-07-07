@@ -168,6 +168,9 @@ private:
 	// C++에서 명시한 tab size constraint만 적용한다.
 	void ApplyTabDimensions(UBaseTabWidget* tabWidget, const FBaseWidgetSizeConstraints& constraints) const;
 
+	// Window tab 전용 hover/active join corner 색상과 paint layer를 적용한다.
+	void ConfigureTabJoinCornerColors(UBaseTabWidget* tabWidget) const;
+
 	// WBP fixed tab visibility 기본값을 설정한다.
 	void ConfigureFixedTabs();
 

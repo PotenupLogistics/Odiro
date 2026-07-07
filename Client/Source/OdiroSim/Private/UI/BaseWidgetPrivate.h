@@ -10,6 +10,7 @@ class UBorder;
 class UImage;
 class USizeBox;
 class UTextBlock;
+class UTexture2D;
 class UWidget;
 
 namespace BaseWidgetPrivate
@@ -78,6 +79,9 @@ namespace BaseWidgetPrivate
 	// Applies semantic color to a border without replacing its authored brush shape.
 	void ApplyBorderBrushTint(UBorder* border, const FLinearColor& color);
 
+	// Converts authored Slate token colors to the parameter space used by UI materials.
+	FLinearColor EncodeUiMaterialColor(const FLinearColor& color);
+
 	// Draws a crisp rounded surface (fill + inner stroke) on surfaceBorder via an
 	// analytic SDF UI material. NativePaint feeds the material's ElementSize
 	// parameter so it stays sharp at the WBP-authored size.
@@ -98,6 +102,14 @@ namespace BaseWidgetPrivate
 		float radiusPx,
 		float borderWidthPx);
 
+	// Draws a texture through the top-rounded UI material used by thumbnail
+	// cards while preserving WBP-owned image layout and tint.
+	void ApplyTopRoundedMediaImage(UImage* image, UTexture2D* texture, float radiusPx, float borderWidthPx);
+
+	// Draws a tab join corner with an analytic UI material; bRightSide selects
+	// the mirrored top-right cutout while the left side uses top-left.
+	void ApplyTabJoinCorner(UImage* image, const FLinearColor& fillColor, float cornerSizePx, bool bRightSide);
+
 	// Draws a rounded progress bar on a border via the progress SDF material:
 	// a rounded track plus a fill clipped to percent. NativePaint feeds the
 	// material's ElementSize parameter for pixel-accurate corners.
@@ -114,6 +126,10 @@ namespace BaseWidgetPrivate
 	// capture. fallbackSize (the owning widget's geometry) covers the first paint
 	// before the surface has a cached geometry.
 	void UpdateRoundedSurfaceSize(UBorder* surfaceBorder, const FVector2D& fallbackSize);
+
+	// Feeds a top-rounded media material its painted image size so the mask lines
+	// up with the WBP-authored media bounds.
+	void UpdateTopRoundedMediaImageSize(UImage* image, const FVector2D& fallbackSize);
 
 	// Clears border drawing while keeping WBP-authored padding and child layout.
 	void MakeBorderVisualTransparent(UBorder* border);

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/SlateWrapperTypes.h"
 #include "CommonUserWidget.h"
+#include "Fonts/SlateFontInfo.h"
 #include "Shared/SimulationSetupTypes.h"
 #include "ProjectExperimentRunRowWidget.generated.h"
 
@@ -11,6 +12,7 @@ class UBaseProgressBarWidget;
 class UBaseStatusBadgeWidget;
 class UOdiroListItemViewModel;
 class UTextBlock;
+class UImage;
 class UWidget;
 
 class UProjectExperimentRunRowWidget;
@@ -114,6 +116,9 @@ private:
 	// Progress bar와 status badge에 저장된 progress 상태를 적용한다.
 	void ApplyProgressStatus() const;
 
+	// 선택된 row/header column text font override를 적용한다.
+	void ApplyColumnTextFontOverride() const;
+
 	// AnalyzeButton을 layout에 남긴 채 표시 가능 여부를 계산한다.
 	ESlateVisibility ResolveAnalyzeButtonVisibility() const;
 
@@ -170,6 +175,26 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
 	bool bShowProgressCountText = false;
 
+	// Run id column에서 WBP-authored hash icon을 표시할지 여부.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	bool bShowRunIdIcon = true;
+
+	// Progress count badge label에 header 같은 고정 색상을 적용할지 여부.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	bool bOverrideProgressCountTextColor = false;
+
+	// Progress count badge label override color.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true", EditCondition = "bOverrideProgressCountTextColor"))
+	FLinearColor ProgressCountTextColorOverride = FLinearColor::White;
+
+	// 모든 text column에 같은 font를 적용할지 여부.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
+	bool bOverrideColumnTextFont = false;
+
+	// Header처럼 여러 text widget이 섞인 row에서 공유할 column font.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true", EditCondition = "bOverrideColumnTextFont"))
+	FSlateFontInfo ColumnTextFontOverride;
+
 	// action column에서 일반 텍스트 label을 표시할지 여부.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunRow", meta = (AllowPrivateAccess = "true"))
 	bool bShowActionText = false;
@@ -181,6 +206,10 @@ private:
 	// run id 표시 텍스트.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> RunIdText;
+
+	// Run id column hash icon. Name follows the existing WBP widget.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_60;
 
 	// 진행 횟수/총 횟수 표시 텍스트.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

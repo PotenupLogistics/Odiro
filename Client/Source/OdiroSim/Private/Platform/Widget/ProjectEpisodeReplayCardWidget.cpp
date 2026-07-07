@@ -1,7 +1,9 @@
 #include "Platform/Widget/ProjectEpisodeReplayCardWidget.h"
 
-#include "Components/Button.h"
+#include "Components/Border.h"
 #include "Components/TextBlock.h"
+#include "Input/Events.h"
+#include "InputCoreTypes.h"
 #include "Misc/Paths.h"
 #include "Platform/ViewModel/ExperimentResultItemViewModels.h"
 
@@ -9,20 +11,12 @@ void UProjectEpisodeReplayCardWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	if (ReplayCardButton)
-	{
-		ReplayCardButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayCardWidget::HandleReplayCardClicked);
-		ReplayCardButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayCardWidget::HandleReplayCardClicked);
-	}
+	CacheInactiveReplayCardSurfaceColor();
+	RefreshActiveReplayVisual();
 }
 
 void UProjectEpisodeReplayCardWidget::NativeDestruct()
 {
-	if (ReplayCardButton)
-	{
-		ReplayCardButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayCardWidget::HandleReplayCardClicked);
-	}
-
 	OnReplayRequested.Clear();
 	Super::NativeDestruct();
 }
@@ -58,9 +52,49 @@ void UProjectEpisodeReplayCardWidget::InitializeFromEpisodeViewModel(
 			? NSLOCTEXT("OdiroPlatform", "EpisodeCardReplayReady", "Replay")
 			: NSLOCTEXT("OdiroPlatform", "EpisodeCardReplayMissing", "No replay"));
 	}
+
+	RefreshActiveReplayVisual();
 }
 
-void UProjectEpisodeReplayCardWidget::HandleReplayCardClicked()
+void UProjectEpisodeReplayCardWidget::SetActiveReplay(const bool bInActiveReplay)
 {
-	OnReplayRequested.Broadcast(this);
+	if (bActiveReplay == bInActiveReplay)
+	{
+		return;
+	}
+
+	bActiveReplay = bInActiveReplay;
+	RefreshActiveReplayVisual();
+}
+
+FReply UProjectEpisodeReplayCardWidget::NativeOnMouseButtonDown(
+	const FGeometry& inGeometry,
+	const FPointerEvent& inMouseEvent)
+{
+	if (inMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		OnReplayRequested.Broadcast(this);
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnMouseButtonDown(inGeometry, inMouseEvent);
+}
+
+void UProjectEpisodeReplayCardWidget::RefreshActiveReplayVisual()
+{
+	if (ReplayCardSurface)
+	{
+		CacheInactiveReplayCardSurfaceColor();
+		ReplayCardSurface->SetBrushColor(
+			bActiveReplay ? ActiveReplayCardSurfaceColor : InactiveReplayCardSurfaceColor);
+	}
+}
+
+void UProjectEpisodeReplayCardWidget::CacheInactiveReplayCardSurfaceColor()
+{
+	if (ReplayCardSurface && !bHasInactiveReplayCardSurfaceColor)
+	{
+		InactiveReplayCardSurfaceColor = ReplayCardSurface->GetBrushColor();
+		bHasInactiveReplayCardSurfaceColor = true;
+	}
 }

@@ -4,7 +4,6 @@
 #include "UI/BaseWidget.h"
 #include "RunDetailScreenWidget.generated.h"
 
-class UBaseTextWidget;
 class UBaseButtonWidget;
 class UExperimentResultInsightViewModel;
 class UExperimentResultSuggestionViewModel;
@@ -15,10 +14,10 @@ class UProjectEpisodeReplayCardWidget;
 class UProjectEpisodeReplayInterestRegionStripWidget;
 class UProjectEpisodeReplayViewerWidget;
 class UProjectWorkspaceViewModel;
+class UHorizontalBox;
 class USizeBox;
 class UTextBlock;
 class UVerticalBox;
-class UWrapBox;
 struct FPlatformAnalysisAiResponse;
 
 // Platform project run detail screen with dashboard metrics and embedded replay.
@@ -67,8 +66,14 @@ private:
 	// Opens the first replay-capable episode when this run does not already have a loaded replay.
 	void OpenInitialEpisodeReplay();
 
-	// Opens replay for one episode card and mirrors the selected episode header on success.
+	// Opens replay for one episode card and updates the active card highlight on success.
 	bool OpenEpisodeReplayCard(UProjectEpisodeReplayCardWidget* cardWidget);
+
+	// Updates active card highlight to the given replay card.
+	void SetActiveEpisodeReplayCard(UProjectEpisodeReplayCardWidget* activeCardWidget);
+
+	// Restores active card highlight from the loaded replay directory.
+	bool ApplyActiveEpisodeReplayCardFromLoadedDirectory();
 
 	// Rebuilds AI analysis row widgets.
 	void RebuildAnalysisRows();
@@ -119,9 +124,6 @@ private:
 	// Connects the RunDetail-owned interest strip to the embedded replay viewer.
 	void ApplyReplayInterestRegionStripToViewer();
 
-	// Updates the RunDetail header with the selected replay episode id.
-	void SetReplayEpisodeNumberText(const FString& episodeId);
-
 	// Analysis button click handler.
 	UFUNCTION()
 	void HandleRequestAiAnalysisClicked(UBaseButtonWidget* button);
@@ -157,6 +159,10 @@ private:
 	UPROPERTY(Transient)
 	FString LoadedReplayEpisodeDirectory;
 
+	// Runtime card currently highlighted as the replay viewer source.
+	UPROPERTY(Transient)
+	TObjectPtr<UProjectEpisodeReplayCardWidget> ActiveEpisodeReplayCard;
+
 	// Episode card Widget Blueprint class.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunDetail", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UProjectEpisodeReplayCardWidget> EpisodeCardWidgetClass;
@@ -165,21 +171,21 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunDetail", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UProjectAiSuggestionRowWidget> SuggestionRowWidgetClass;
 
-	// Runtime WrapBox slot spacing for episode replay cards.
+	// Runtime HorizontalBox slot spacing for episode replay cards.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|RunDetail|Layout", meta = (AllowPrivateAccess = "true"))
-	FMargin EpisodeReplayCardPadding = FMargin(0.0f, 0.0f, 8.0f, 8.0f);
+	FMargin EpisodeReplayCardPadding = FMargin(0.0f);
 
 	// Run id title display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> RunIdText;
+	TObjectPtr<UTextBlock> RunIdText;
 
 	// Run directory display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> RunDirectoryText;
+	TObjectPtr<UTextBlock> RunDirectoryText;
 
 	// Total duration metric display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> TotalDurationText;
+	TObjectPtr<UTextBlock> TotalDurationText;
 
 	// Small total duration sublabel below average duration.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -187,7 +193,7 @@ private:
 
 	// Success rate metric display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> SuccessRateText;
+	TObjectPtr<UTextBlock> SuccessRateText;
 
 	// Success rate metric sublabel display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -195,7 +201,7 @@ private:
 
 	// Collision count metric display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> CollisionCountText;
+	TObjectPtr<UTextBlock> CollisionCountText;
 
 	// Collision count metric sublabel display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -211,11 +217,11 @@ private:
 
 	// AI summary display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> AiSummaryText;
+	TObjectPtr<UTextBlock> AiSummaryText;
 
 	// Detail status display.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UBaseTextWidget> StatusText;
+	TObjectPtr<UTextBlock> StatusText;
 
 	// Request AI analysis command button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -223,7 +229,7 @@ private:
 
 	// Episode replay card container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UWrapBox> EpisodeReplayCardWrapBox;
+	TObjectPtr<UHorizontalBox> EpisodeReplayCardWrapBox;
 
 	// Suggestion row container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -244,10 +250,6 @@ private:
 	// Fullscreen replay host layered above run detail content.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> ReplayFullscreenHost;
-
-	// Selected replay episode id label owned by the RunDetail header.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> ReplayEpisodeNumber;
 
 	// Embedded replay viewer owned by a replay host widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

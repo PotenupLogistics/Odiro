@@ -30,10 +30,30 @@ namespace
 	// Texture path for removing one row-owned array item.
 	const TCHAR* SidebarFieldRemoveActionIconPath = TEXT("/Game/Widgets/Icon/T_icon_trash.T_icon_trash");
 
-	// Loads a field-row icon from a Blueprint-configurable soft reference.
-	UTexture2D* LoadSidebarFieldIconTexture(const TSoftObjectPtr<UTexture2D>& textureReference)
+	// Compares generated dropdown rows before replacing BaseDropdown children.
+	bool AreDropdownItemsEqual(
+		const TArray<FBaseDropdownItem>& leftItems,
+		const TArray<FBaseDropdownItem>& rightItems)
 	{
-		return textureReference.IsNull() ? nullptr : textureReference.LoadSynchronous();
+		if (leftItems.Num() != rightItems.Num())
+		{
+			return false;
+		}
+
+		for (int32 itemIndex = 0; itemIndex < leftItems.Num(); ++itemIndex)
+		{
+			const FBaseDropdownItem& leftItem = leftItems[itemIndex];
+			const FBaseDropdownItem& rightItem = rightItems[itemIndex];
+			if (leftItem.Id != rightItem.Id
+				|| !leftItem.Label.EqualTo(rightItem.Label)
+				|| leftItem.Icon.Get() != rightItem.Icon.Get()
+				|| leftItem.bDisabled != rightItem.bDisabled)
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	// Parses Scenario Template scalar text while tolerating common display suffixes.
@@ -143,17 +163,17 @@ void UScenarioEditorSidebarFieldRow::SynchronizeBaseProperties()
 	SetActionButtonState(
 		RangeToggleButton.Get(),
 		bEditable && IsRangeCapable(),
-		LoadSidebarFieldIconTexture(bRangeInputEnabled ? RangeInputIconTexture : FixedInputIconTexture),
+		ResolveCachedTexture(bRangeInputEnabled ? RangeInputIconTexture : FixedInputIconTexture),
 		FText::FromString(bRangeInputEnabled ? TEXT("1") : TEXT("2")));
 	SetActionButtonState(
 		AddItemButton.Get(),
 		bAddItemControlVisible,
-		LoadSidebarFieldIconTexture(AddItemIconTexture),
+		ResolveCachedTexture(AddItemIconTexture),
 		FText::FromString(TEXT("+")));
 	SetActionButtonState(
 		RemoveItemButton.Get(),
 		bRemoveItemControlVisible,
-		LoadSidebarFieldIconTexture(RemoveItemIconTexture),
+		ResolveCachedTexture(RemoveItemIconTexture),
 		FText::FromString(TEXT("-")));
 
 	RefreshSlider();
@@ -286,17 +306,25 @@ void UScenarioEditorSidebarFieldRow::InitializeFromItemViewModel(
 		return;
 	}
 
-	SetFieldLabel(itemViewModel->GetTitle());
-	SetValueText(itemViewModel->GetValueText());
-	SetRangeValueText(itemViewModel->GetMinValueText(), itemViewModel->GetMaxValueText());
-	SetComboOptions(itemViewModel->GetComboOptions());
-	SetInputType(itemViewModel->GetInputType());
-	SetEditable(itemViewModel->IsFieldEditable());
-	SetRangeInputEnabled(itemViewModel->IsRangeInputEnabled());
-	SetArrayControlsEnabled(itemViewModel->HasArrayControls());
-	SetComboAllowsUnset(itemViewModel->AllowsComboUnset(), itemViewModel->GetComboUnsetDisplayText());
-	SetSliderSpec(itemViewModel->GetSliderSpec());
+	FieldLabel = itemViewModel->GetTitle();
+	ValueText = itemViewModel->GetValueText();
+	MinValueText = itemViewModel->GetMinValueText();
+	MaxValueText = itemViewModel->GetMaxValueText();
+	ComboOptions = itemViewModel->GetComboOptions();
+	InputType = itemViewModel->GetInputType();
+	bMultilineValue = InputType == EScenarioEditorSidebarFieldInputType::MultilineText;
+	bEditable = itemViewModel->IsFieldEditable();
+	bRangeInputEnabled = itemViewModel->IsRangeInputEnabled() && IsRangeCapable();
+	bArrayControlsEnabled = itemViewModel->HasArrayControls();
+	bAddItemControlVisible = bArrayControlsEnabled;
+	bRemoveItemControlVisible = bArrayControlsEnabled;
+	bComboAllowsUnset = itemViewModel->AllowsComboUnset();
+	ComboUnsetDisplayText = itemViewModel->GetComboUnsetDisplayText().IsEmpty()
+		? FString(TEXT("(unset)"))
+		: itemViewModel->GetComboUnsetDisplayText();
+	SliderSpec = NormalizeSliderSpec(itemViewModel->GetSliderSpec());
 	SetVisibility(itemViewModel->IsFieldVisible() ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	SynchronizeBaseProperties();
 }
 
 FString UScenarioEditorSidebarFieldRow::GetValueText() const
@@ -662,7 +690,10 @@ void UScenarioEditorSidebarFieldRow::RefreshDropdownOptions()
 		dropdownItems.Add(item);
 	}
 
-	ValueComboBox->SetItems(dropdownItems);
+	if (!AreDropdownItemsEqual(ValueComboBox->GetItems(), dropdownItems))
+	{
+		ValueComboBox->SetItems(dropdownItems);
+	}
 	if (!ValueText.IsEmpty())
 	{
 		ValueComboBox->SetSelectedId(FName(*ValueText));
@@ -734,13 +765,32 @@ FText UScenarioEditorSidebarFieldRow::ResolveComboOptionDisplayText(const FStrin
 }
 
 UTexture2D* UScenarioEditorSidebarFieldRow::ResolveComboOptionThumbnail(
-	const FString& option) const
+	const FString& option)
 {
 	if (const TSoftObjectPtr<UTexture2D>* thumbnailTexture = ComboOptionThumbnailByValue.Find(option))
 	{
-		return thumbnailTexture->IsNull() ? nullptr : thumbnailTexture->LoadSynchronous();
+		return ResolveCachedTexture(*thumbnailTexture);
 	}
 	return nullptr;
+}
+
+UTexture2D* UScenarioEditorSidebarFieldRow::ResolveCachedTexture(
+	const TSoftObjectPtr<UTexture2D>& textureReference)
+{
+	if (textureReference.IsNull())
+	{
+		return nullptr;
+	}
+
+	const FString texturePath = textureReference.ToSoftObjectPath().ToString();
+	if (TObjectPtr<UTexture2D>* cachedTexture = CachedTexturesByPath.Find(texturePath))
+	{
+		return cachedTexture->Get();
+	}
+
+	UTexture2D* loadedTexture = textureReference.LoadSynchronous();
+	CachedTexturesByPath.Add(texturePath, loadedTexture);
+	return loadedTexture;
 }
 
 void UScenarioEditorSidebarFieldRow::SetTextBlockText(

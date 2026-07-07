@@ -74,9 +74,6 @@ private:
 	// Applies optional section preview text to the first WBP-authored list item placeholder.
 	void ApplyPreviewListItemText();
 
-	// Resolves a WBP-owned list item template from class defaults or design-time children.
-	TSubclassOf<UProjectAiSuggestionListItemWidget> ResolveListItemWidgetClass() const;
-
 	// Rebuilds optional WBP-authored item row widgets.
 	bool RebuildListItemWidgets(const TArray<FString>& listItems);
 

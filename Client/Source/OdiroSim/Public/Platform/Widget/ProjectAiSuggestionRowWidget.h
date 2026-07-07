@@ -29,9 +29,6 @@ private:
 	// Updates the severity indicator visibility from the current severity.
 	void RefreshSeverityVisibility(EProjectRunAiSuggestionSeverity severity) const;
 
-	// Resolves a WBP-owned section template from class defaults or design-time children.
-	TSubclassOf<UProjectAiSuggestionSectionWidget> ResolveSuggestionSectionWidgetClass() const;
-
 	// Applies runtime row text and collapses optional empty fields.
 	static void SetRuntimeText(UWidget* textWidget, const FString& text, bool bAutoWrap = false);
 

@@ -1,13 +1,9 @@
 #include "Scenario/Widget/ScenarioEditorOutlinerRowWidget.h"
 
-#include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/ContentWidget.h"
-#include "Components/HorizontalBox.h"
-#include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
-#include "Components/PanelSlot.h"
 #include "Components/PanelWidget.h"
 #include "Components/Spacer.h"
 #include "Components/TextBlock.h"
@@ -21,7 +17,6 @@
 namespace
 {
 	constexpr float MinimumIndentSpacerHeight = 1.0f;
-	constexpr float OutlinerIconRightPadding = 6.0f;
 	const FString CorridorOutlinerKey = TEXT("Scenario/Corridor");
 	const FString RobotOutlinerKey = TEXT("Scenario/Robot");
 	const FString ObstaclesOutlinerKey = TEXT("Scenario/Obstacles");
@@ -296,20 +291,19 @@ void UScenarioEditorOutlinerRowWidget::RefreshRow()
 		ItemSubtitleText->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
-	UImage* iconImage = ResolveOutlinerIconImage();
-	if (iconImage)
+	if (OutlinerIconImage)
 	{
 		if (UTexture2D* iconTexture = ResolveIconTexture())
 		{
-			iconImage->SetBrushFromTexture(iconTexture, false);
-			FSlateBrush iconBrush = iconImage->GetBrush();
+			OutlinerIconImage->SetBrushFromTexture(iconTexture, false);
+			FSlateBrush iconBrush = OutlinerIconImage->GetBrush();
 			iconBrush.ImageSize = FVector2D(OutlinerIconSize, OutlinerIconSize);
-			iconImage->SetBrush(iconBrush);
-			iconImage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			OutlinerIconImage->SetBrush(iconBrush);
+			OutlinerIconImage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		}
 		else
 		{
-			iconImage->SetVisibility(ESlateVisibility::Collapsed);
+			OutlinerIconImage->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 }
@@ -361,37 +355,6 @@ void UScenarioEditorOutlinerRowWidget::ApplyExpandButtonState()
 			? ESlateVisibility::Collapsed
 			: ESlateVisibility::SelfHitTestInvisible);
 	}
-}
-
-UImage* UScenarioEditorOutlinerRowWidget::ResolveOutlinerIconImage()
-{
-	if (OutlinerIconImage)
-	{
-		return OutlinerIconImage;
-	}
-	if (!OutlinerRowTextBox || !WidgetTree)
-	{
-		return nullptr;
-	}
-
-	OutlinerIconImage = WidgetTree->ConstructWidget<UImage>(
-		UImage::StaticClass(),
-		TEXT("RuntimeOutlinerIconImage"));
-	if (!OutlinerIconImage)
-	{
-		return nullptr;
-	}
-
-	if (UPanelSlot* panelSlot = OutlinerRowTextBox->InsertChildAt(0, OutlinerIconImage.Get()))
-	{
-		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(panelSlot))
-		{
-			horizontalSlot->SetPadding(FMargin(0.0f, 0.0f, OutlinerIconRightPadding, 0.0f));
-			horizontalSlot->SetHorizontalAlignment(HAlign_Center);
-			horizontalSlot->SetVerticalAlignment(VAlign_Center);
-		}
-	}
-	return OutlinerIconImage;
 }
 
 UTexture2D* UScenarioEditorOutlinerRowWidget::ResolveIconTexture() const

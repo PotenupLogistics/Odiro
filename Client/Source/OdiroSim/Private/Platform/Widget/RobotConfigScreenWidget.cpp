@@ -1,28 +1,28 @@
 #include "Platform/Widget/RobotConfigScreenWidget.h"
 
-#include "Components/Button.h"
 #include "Platform/PlatformUiSubsystem.h"
 #include "Platform/ViewModel/RobotProfileViewModel.h"
 #include "Platform/Widget/RobotConfigEditorWidget.h"
+#include "UI/BaseButtonWidget.h"
 
 namespace
 {
-// Finds an existing command button inside the wrapped legacy robot config editor.
-UButton* FindRobotConfigEditorButton(URobotConfigEditorWidget* editor, const FName buttonName)
+// Finds an existing command button inside the wrapped robot config editor.
+UBaseButtonWidget* FindRobotConfigEditorButton(URobotConfigEditorWidget* editor, const FName buttonName)
 {
-	return editor ? Cast<UButton>(editor->GetWidgetFromName(buttonName)) : nullptr;
+	return editor ? Cast<UBaseButtonWidget>(editor->GetWidgetFromName(buttonName)) : nullptr;
 }
 
 // Dispatches an existing editor button command without exposing new editor public API.
 bool ClickRobotConfigEditorButton(URobotConfigEditorWidget* editor, const FName buttonName)
 {
-	UButton* button = FindRobotConfigEditorButton(editor, buttonName);
+	UBaseButtonWidget* button = FindRobotConfigEditorButton(editor, buttonName);
 	if (!button)
 	{
 		return false;
 	}
 
-	button->OnClicked.Broadcast();
+	button->OnBaseClicked.Broadcast(button);
 	return true;
 }
 }

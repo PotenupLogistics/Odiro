@@ -28,6 +28,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Slider Combo")
 	FText GetLabel() const { return Label; }
 
+	// Updates the optional label font-size override; 0 keeps the resolved base label style.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Slider Combo")
+	void SetLabelFontSizeOverride(float inLabelFontSizeOverride);
+
+	// Returns the optional label font-size override.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Slider Combo")
+	float GetLabelFontSizeOverride() const { return LabelFontSizeOverride; }
+
+	// Updates the optional label minimum width; 0 keeps the WBP-authored label width.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Slider Combo")
+	void SetLabelMinWidthOverride(float inLabelMinWidthOverride);
+
+	// Returns the optional label minimum width.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Slider Combo")
+	float GetLabelMinWidthOverride() const { return LabelMinWidthOverride; }
+
 	// Updates whether the label should be visible.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Slider Combo")
 	void SetShowLabel(bool bInShowLabel);
@@ -92,6 +108,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Slider Combo")
 	int32 GetDisplayDecimals() const { return DisplayDecimals; }
 
+	// Updates the optional child TextInput font-size override; 0 keeps the child TextInput default.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Slider Combo")
+	void SetTextInputFontSizeOverride(float inTextInputFontSizeOverride);
+
+	// Returns the optional child TextInput font-size override.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Slider Combo")
+	float GetTextInputFontSizeOverride() const { return TextInputFontSizeOverride; }
+
+	// Updates optional child TextInput size constraints; zero fields keep the WBP-authored input size.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Slider Combo")
+	void SetTextInputSizeConstraints(FBaseWidgetSizeConstraints inTextInputSizeConstraints);
+
+	// Returns optional child TextInput size constraints.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Slider Combo")
+	FBaseWidgetSizeConstraints GetTextInputSizeConstraints() const { return TextInputSizeConstraints; }
+
 	// Updates whether slider and input are disabled.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Slider Combo")
 	void SetDisabled(bool bInDisabled);
@@ -147,6 +179,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabel", Setter = "SetLabel", BlueprintGetter = "GetLabel", BlueprintSetter = "SetLabel", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText Label = NSLOCTEXT("BaseSliderComboWidget", "DefaultLabel", "Amount");
 
+	// Optional label font size in Slate units; 0 keeps the resolved base label style.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabelFontSizeOverride", Setter = "SetLabelFontSizeOverride", BlueprintGetter = "GetLabelFontSizeOverride", BlueprintSetter = "SetLabelFontSizeOverride", Category = "UI|Style", meta = (DisplayName = "Label Font Size Override", ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	float LabelFontSizeOverride = 0.0f;
+
+	// Optional label minimum desired width in Slate units; 0 keeps the WBP-authored label width.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabelMinWidthOverride", Setter = "SetLabelMinWidthOverride", BlueprintGetter = "GetLabelMinWidthOverride", BlueprintSetter = "SetLabelMinWidthOverride", Category = "UI|Layout", meta = (DisplayName = "Label Min Width Override", ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	float LabelMinWidthOverride = 0.0f;
+
 	// Whether label text should be rendered.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "ShouldShowLabel", Setter = "SetShowLabel", BlueprintGetter = "ShouldShowLabel", BlueprintSetter = "SetShowLabel", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	bool bShowLabel = true;
@@ -186,6 +226,14 @@ protected:
 	// Decimal places for displayed numeric values; -1 keeps the compact default.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetDisplayDecimals", Setter = "SetDisplayDecimals", BlueprintGetter = "GetDisplayDecimals", BlueprintSetter = "SetDisplayDecimals", Category = "UI|Contents", meta = (ClampMin = "-1", ClampMax = "6", ExposeOnSpawn = "true"))
 	int32 DisplayDecimals = -1;
+
+	// Optional TextInput value font size in Slate units; 0 keeps the child TextInput default.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetTextInputFontSizeOverride", Setter = "SetTextInputFontSizeOverride", BlueprintGetter = "GetTextInputFontSizeOverride", BlueprintSetter = "SetTextInputFontSizeOverride", Category = "UI|Style", meta = (DisplayName = "Text Input Font Size Override", ClampMin = "0.0", UIMin = "0.0", ExposeOnSpawn = "true"))
+	float TextInputFontSizeOverride = 0.0f;
+
+	// Optional desired-size constraints forwarded to the child BaseTextInput widgets.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetTextInputSizeConstraints", Setter = "SetTextInputSizeConstraints", BlueprintGetter = "GetTextInputSizeConstraints", BlueprintSetter = "SetTextInputSizeConstraints", Category = "UI|Layout", meta = (DisplayName = "Text Input Size Constraints", ExposeOnSpawn = "true"))
+	FBaseWidgetSizeConstraints TextInputSizeConstraints;
 
 	// Disabled combo state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))

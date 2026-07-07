@@ -1,6 +1,7 @@
 #include "UI/BaseCheckBoxWidget.h"
 #include "UI/BaseFormElementPrivate.h"
 #include "Components/Border.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
@@ -31,6 +32,18 @@ namespace
 			BaseWidgetPrivate::ApplyBorderBrushTint(border, color);
 		}
 	}
+
+	// Mirrors horizontal padding so label-left mode keeps the authored gap between label and box.
+	FMargin MirrorHorizontalPadding(const FMargin& padding)
+	{
+		return FMargin(padding.Right, padding.Top, padding.Left, padding.Bottom);
+	}
+
+	// Returns the horizontal slot for WBP_BaseCheckBox row children.
+	UHorizontalBoxSlot* GetHorizontalBoxSlot(UWidget* widget)
+	{
+		return IsValid(widget) ? Cast<UHorizontalBoxSlot>(widget->Slot) : nullptr;
+	}
 }
 
 void UBaseCheckBoxWidget::SynchronizeBaseProperties()
@@ -44,9 +57,11 @@ void UBaseCheckBoxWidget::SynchronizeBaseProperties()
 	{
 		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
-		LabelTextBlock->SetVisibility(LabelTextBlock->GetText().IsEmpty()
+		const bool bHasVisibleLabel = bShowLabel && !LabelTextBlock->GetText().IsEmpty();
+		LabelTextBlock->SetVisibility(!bHasVisibleLabel
 			? ESlateVisibility::Collapsed
 			: ESlateVisibility::SelfHitTestInvisible);
+		ApplyLabelPresentation(bHasVisibleLabel);
 		if (colors && !bEnabled)
 		{
 			ApplyTextColor(LabelTextBlock.Get(), colors->TextFaintColor);
@@ -87,14 +102,6 @@ int32 UBaseCheckBoxWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
 	return Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 }
 
-void UBaseCheckBoxWidget::NativeConstruct()
-{
-	Super::NativeConstruct();
-
-	// Hit-testable so the whole row receives the toggle click.
-	SetVisibility(ESlateVisibility::Visible);
-}
-
 FReply UBaseCheckBoxWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	if (!bDisabled && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
@@ -109,9 +116,123 @@ FReply UBaseCheckBoxWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry,
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
+UPanelWidget* UBaseCheckBoxWidget::ResolveLabelRootPanel() const
+{
+	if (!LabelTextBlock)
+	{
+		return nullptr;
+	}
+
+	UWidget* boxWidget = ResolveBoxOverlayWidget();
+	if (Root
+		&& Root->GetChildIndex(LabelTextBlock.Get()) != INDEX_NONE
+		&& (!boxWidget || Root->GetChildIndex(boxWidget) != INDEX_NONE))
+	{
+		return Root.Get();
+	}
+
+	UPanelWidget* labelParent = LabelTextBlock->GetParent();
+	if (labelParent && (!boxWidget || boxWidget->GetParent() == labelParent))
+	{
+		return labelParent;
+	}
+
+	return nullptr;
+}
+
+UWidget* UBaseCheckBoxWidget::ResolveBoxOverlayWidget() const
+{
+	if (BoxOverlay)
+	{
+		return BoxOverlay.Get();
+	}
+
+	return GetWidgetFromName(TEXT("BoxOverlay"));
+}
+
+void UBaseCheckBoxWidget::CaptureLabelLayoutDefaults()
+{
+	if (UHorizontalBoxSlot* labelSlot = GetHorizontalBoxSlot(LabelTextBlock.Get()))
+	{
+		if (CapturedLabelSlotPaddingSource.Get() != labelSlot)
+		{
+			CapturedLabelSlotPaddingSource = labelSlot;
+			AuthoredLabelSlotPadding = labelSlot->GetPadding();
+		}
+	}
+
+	if (UHorizontalBoxSlot* boxSlot = GetHorizontalBoxSlot(ResolveBoxOverlayWidget()))
+	{
+		if (CapturedBoxSlotPaddingSource.Get() != boxSlot)
+		{
+			CapturedBoxSlotPaddingSource = boxSlot;
+			AuthoredBoxSlotPadding = boxSlot->GetPadding();
+		}
+	}
+}
+
+void UBaseCheckBoxWidget::ApplyLabelPresentation(const bool bHasVisibleLabel)
+{
+	CaptureLabelLayoutDefaults();
+
+	if (UPanelWidget* rootPanel = ResolveLabelRootPanel())
+	{
+		UWidget* boxWidget = ResolveBoxOverlayWidget();
+		const int32 boxIndex = boxWidget ? rootPanel->GetChildIndex(boxWidget) : INDEX_NONE;
+		const int32 labelIndex = LabelTextBlock ? rootPanel->GetChildIndex(LabelTextBlock.Get()) : INDEX_NONE;
+		if (boxIndex != INDEX_NONE && labelIndex != INDEX_NONE)
+		{
+			const int32 desiredLabelIndex = LabelPlacement == EBaseCheckBoxLabelPlacement::Left
+				? boxIndex - (labelIndex < boxIndex ? 1 : 0)
+				: boxIndex + (labelIndex < boxIndex ? 0 : 1);
+			if (labelIndex != desiredLabelIndex)
+			{
+				rootPanel->ShiftChild(desiredLabelIndex, LabelTextBlock.Get());
+			}
+		}
+	}
+
+	if (UHorizontalBoxSlot* labelSlot = GetHorizontalBoxSlot(LabelTextBlock.Get()))
+	{
+		FMargin labelPadding = LabelPlacement == EBaseCheckBoxLabelPlacement::Left
+			? MirrorHorizontalPadding(AuthoredLabelSlotPadding)
+			: AuthoredLabelSlotPadding;
+		if (!bHasVisibleLabel)
+		{
+			labelPadding = FMargin();
+		}
+		labelSlot->SetPadding(labelPadding);
+	}
+
+	if (UHorizontalBoxSlot* boxSlot = GetHorizontalBoxSlot(ResolveBoxOverlayWidget()))
+	{
+		FMargin boxPadding = LabelPlacement == EBaseCheckBoxLabelPlacement::Left
+			? MirrorHorizontalPadding(AuthoredBoxSlotPadding)
+			: AuthoredBoxSlotPadding;
+		if (!bHasVisibleLabel)
+		{
+			boxPadding.Left = 0.0f;
+			boxPadding.Right = 0.0f;
+		}
+		boxSlot->SetPadding(boxPadding);
+	}
+}
+
 void UBaseCheckBoxWidget::SetLabel(const FText inLabel)
 {
 	Label = inLabel;
+	SynchronizeBaseProperties();
+}
+
+void UBaseCheckBoxWidget::SetShowLabel(const bool bInShowLabel)
+{
+	bShowLabel = bInShowLabel;
+	SynchronizeBaseProperties();
+}
+
+void UBaseCheckBoxWidget::SetLabelPlacement(const EBaseCheckBoxLabelPlacement inLabelPlacement)
+{
+	LabelPlacement = inLabelPlacement;
 	SynchronizeBaseProperties();
 }
 

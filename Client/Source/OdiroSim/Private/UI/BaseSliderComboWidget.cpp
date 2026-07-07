@@ -2,6 +2,7 @@
 #include "UI/BaseFormElementPrivate.h"
 #include "UI/BaseSliderWidget.h"
 #include "UI/BaseTextInputWidget.h"
+#include "UI/BaseWidgetPrivate.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 
@@ -32,6 +33,64 @@ namespace
 	{
 		return owner ? Cast<WidgetType>(owner->GetWidgetFromName(FName(widgetName))) : nullptr;
 	}
+
+	// Returns whether any child size constraint should be forwarded to BaseTextInput.
+	bool HasExplicitSizeConstraints(const FBaseWidgetSizeConstraints& constraints)
+	{
+		return constraints.MinWidth > 0.0f
+			|| constraints.MinHeight > 0.0f
+			|| constraints.MaxWidth > 0.0f
+			|| constraints.MaxHeight > 0.0f;
+	}
+
+	// Merges non-zero overrides while keeping the child widget's WBP-authored size defaults.
+	FBaseWidgetSizeConstraints MergeExplicitSizeConstraints(
+		FBaseWidgetSizeConstraints baseConstraints,
+		const FBaseWidgetSizeConstraints& overrideConstraints)
+	{
+		if (overrideConstraints.MinWidth > 0.0f)
+		{
+			baseConstraints.MinWidth = overrideConstraints.MinWidth;
+		}
+		if (overrideConstraints.MinHeight > 0.0f)
+		{
+			baseConstraints.MinHeight = overrideConstraints.MinHeight;
+		}
+		if (overrideConstraints.MaxWidth > 0.0f)
+		{
+			baseConstraints.MaxWidth = overrideConstraints.MaxWidth;
+		}
+		if (overrideConstraints.MaxHeight > 0.0f)
+		{
+			baseConstraints.MaxHeight = overrideConstraints.MaxHeight;
+		}
+
+		return BaseWidgetPrivate::NormalizeSizeConstraints(baseConstraints);
+	}
+
+	// Applies a combo-owned font-size override after the semantic base label style.
+	void ApplyTextBlockFontSizeOverride(UTextBlock* textBlock, const float fontSizeOverride)
+	{
+		if (!IsValid(textBlock) || fontSizeOverride <= 0.0f)
+		{
+			return;
+		}
+
+		FSlateFontInfo font = textBlock->GetFont();
+		font.Size = fontSizeOverride;
+		textBlock->SetFont(font);
+	}
+
+	// Applies a combo-owned minimum label width without wrapping WBP layout in C++.
+	void ApplyTextBlockMinWidthOverride(UTextBlock* textBlock, const float minWidthOverride)
+	{
+		if (!IsValid(textBlock) || minWidthOverride <= 0.0f)
+		{
+			return;
+		}
+
+		textBlock->SetMinDesiredWidth(minWidthOverride);
+	}
 }
 
 void UBaseSliderComboWidget::SynchronizeBaseProperties()
@@ -52,6 +111,8 @@ void UBaseSliderComboWidget::SynchronizeBaseProperties()
 		}
 		textBlock->SetText(Label);
 		ApplyTextStyle(textBlock, EBaseTextRole::Label);
+		ApplyTextBlockFontSizeOverride(textBlock, LabelFontSizeOverride);
+		ApplyTextBlockMinWidthOverride(textBlock, LabelMinWidthOverride);
 		SetOptionalWidgetVisible(textBlock, bVisible && bShowLabel);
 	};
 	syncLabel(LabelTextBlock.Get(), true);
@@ -125,6 +186,14 @@ void UBaseSliderComboWidget::SynchronizeValueInput(UBaseTextInputWidget* input)
 
 	input->SetColorsOverride(ColorsOverride);
 	input->SetSizesOverride(SizesOverride);
+	if (TextInputFontSizeOverride > 0.0f)
+	{
+		input->SetFontSizeOverride(TextInputFontSizeOverride);
+	}
+	if (HasExplicitSizeConstraints(TextInputSizeConstraints))
+	{
+		input->SetSizeConstraints(MergeExplicitSizeConstraints(input->GetSizeConstraints(), TextInputSizeConstraints));
+	}
 	input->SetInputMode(EBaseTextInputMode::Number);
 	input->SetDisplayDecimals(DisplayDecimals);
 	input->SetValueRange(MinValue, MaxValue);
@@ -141,6 +210,14 @@ void UBaseSliderComboWidget::SynchronizeRangeInput(UBaseTextInputWidget* input)
 
 	input->SetColorsOverride(ColorsOverride);
 	input->SetSizesOverride(SizesOverride);
+	if (TextInputFontSizeOverride > 0.0f)
+	{
+		input->SetFontSizeOverride(TextInputFontSizeOverride);
+	}
+	if (HasExplicitSizeConstraints(TextInputSizeConstraints))
+	{
+		input->SetSizeConstraints(MergeExplicitSizeConstraints(input->GetSizeConstraints(), TextInputSizeConstraints));
+	}
 	input->SetInputMode(EBaseTextInputMode::NumberRange);
 	input->SetDisplayDecimals(DisplayDecimals);
 	input->SetValueRange(MinValue, MaxValue);
@@ -233,6 +310,18 @@ void UBaseSliderComboWidget::SetLabel(const FText inLabel)
 	SynchronizeBaseProperties();
 }
 
+void UBaseSliderComboWidget::SetLabelFontSizeOverride(const float inLabelFontSizeOverride)
+{
+	LabelFontSizeOverride = FMath::Max(inLabelFontSizeOverride, 0.0f);
+	SynchronizeBaseProperties();
+}
+
+void UBaseSliderComboWidget::SetLabelMinWidthOverride(const float inLabelMinWidthOverride)
+{
+	LabelMinWidthOverride = FMath::Max(inLabelMinWidthOverride, 0.0f);
+	SynchronizeBaseProperties();
+}
+
 void UBaseSliderComboWidget::SetShowLabel(const bool bInShowLabel)
 {
 	bShowLabel = bInShowLabel;
@@ -283,6 +372,18 @@ void UBaseSliderComboWidget::SetRangeValue(const float inLowerValue, const float
 void UBaseSliderComboWidget::SetDisplayDecimals(const int32 inDisplayDecimals)
 {
 	DisplayDecimals = FMath::Clamp(inDisplayDecimals, -1, 6);
+	SynchronizeBaseProperties();
+}
+
+void UBaseSliderComboWidget::SetTextInputFontSizeOverride(const float inTextInputFontSizeOverride)
+{
+	TextInputFontSizeOverride = FMath::Max(inTextInputFontSizeOverride, 0.0f);
+	SynchronizeBaseProperties();
+}
+
+void UBaseSliderComboWidget::SetTextInputSizeConstraints(const FBaseWidgetSizeConstraints inTextInputSizeConstraints)
+{
+	TextInputSizeConstraints = BaseWidgetPrivate::NormalizeSizeConstraints(inTextInputSizeConstraints);
 	SynchronizeBaseProperties();
 }
 

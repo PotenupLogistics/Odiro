@@ -9,7 +9,16 @@
 class UBaseCheckBoxWidget;
 class UBorder;
 class UPanelWidget;
+class UPanelSlot;
 class UTextBlock;
+
+// Horizontal placement for the optional BaseCheckBox label relative to the check box.
+UENUM(BlueprintType)
+enum class EBaseCheckBoxLabelPlacement : uint8
+{
+	Right,
+	Left
+};
 
 // Base-token styled checkbox with checked, unchecked, indeterminate, and disabled states.
 UCLASS(BlueprintType, Blueprintable)
@@ -28,6 +37,22 @@ public:
 	// Returns the checkbox label.
 	UFUNCTION(BlueprintPure, Category = "UI|Contents")
 	FText GetLabel() const { return Label; }
+
+	// Updates whether the label text block should be visible.
+	UFUNCTION(BlueprintCallable, Category = "UI|Contents")
+	void SetShowLabel(bool bInShowLabel);
+
+	// Returns whether the label text block should be visible.
+	UFUNCTION(BlueprintPure, Category = "UI|Contents")
+	bool ShouldShowLabel() const { return bShowLabel; }
+
+	// Updates where the label is placed relative to the checkbox square.
+	UFUNCTION(BlueprintCallable, Category = "UI|Layout")
+	void SetLabelPlacement(EBaseCheckBoxLabelPlacement inLabelPlacement);
+
+	// Returns where the label is placed relative to the checkbox square.
+	UFUNCTION(BlueprintPure, Category = "UI|Layout")
+	EBaseCheckBoxLabelPlacement GetLabelPlacement() const { return LabelPlacement; }
 
 	// Updates the checked state.
 	UFUNCTION(BlueprintCallable, Category = "UI|State")
@@ -53,15 +78,32 @@ protected:
 	// Feeds rounded checkbox material size on every paint.
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
-	// Makes the decorative checkbox row receive pointer input directly.
-	virtual void NativeConstruct() override;
-
 	// Toggles the checked state when the whole decorative row is clicked.
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	// Finds the WBP-authored row that owns both the checkbox square and label.
+	UPanelWidget* ResolveLabelRootPanel() const;
+
+	// Resolves the WBP-authored checkbox square anchor by binding or widget name.
+	UWidget* ResolveBoxOverlayWidget() const;
+
+	// Captures WBP-authored slot padding before runtime label options change it.
+	void CaptureLabelLayoutDefaults();
+
+	// Applies label visibility, spacing, and placement to the WBP-authored root row.
+	void ApplyLabelPresentation(bool bHasVisibleLabel);
 
 	// Checkbox label.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabel", Setter = "SetLabel", BlueprintGetter = "GetLabel", BlueprintSetter = "SetLabel", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
 	FText Label;
+
+	// Whether the WBP-authored label text block should be shown when it has text.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "ShouldShowLabel", Setter = "SetShowLabel", BlueprintGetter = "ShouldShowLabel", BlueprintSetter = "SetShowLabel", Category = "UI|Contents", meta = (ExposeOnSpawn = "true"))
+	bool bShowLabel = true;
+
+	// Label position relative to the checkbox square in the root row.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabelPlacement", Setter = "SetLabelPlacement", BlueprintGetter = "GetLabelPlacement", BlueprintSetter = "SetLabelPlacement", Category = "UI|Layout", meta = (ExposeOnSpawn = "true"))
+	EBaseCheckBoxLabelPlacement LabelPlacement = EBaseCheckBoxLabelPlacement::Right;
 
 	// Current checked state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetCheckState", Setter = "SetCheckState", BlueprintGetter = "GetCheckState", BlueprintSetter = "SetCheckState", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
@@ -70,6 +112,30 @@ protected:
 	// Disabled checkbox state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|State", meta = (ExposeOnSpawn = "true"))
 	bool bDisabled = false;
+
+	// Optional WBP-authored root row used to reorder the checkbox square and label.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UPanelWidget> Root;
+
+	// Optional WBP-authored checkbox square container used as the label-placement anchor.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> BoxOverlay;
+
+	// WBP-authored label slot padding captured before runtime visibility changes.
+	UPROPERTY(Transient)
+	FMargin AuthoredLabelSlotPadding;
+
+	// WBP-authored checkbox slot padding captured before runtime placement changes.
+	UPROPERTY(Transient)
+	FMargin AuthoredBoxSlotPadding;
+
+	// Slot object that supplied AuthoredLabelSlotPadding.
+	UPROPERTY(Transient)
+	TObjectPtr<UPanelSlot> CapturedLabelSlotPaddingSource;
+
+	// Slot object that supplied AuthoredBoxSlotPadding.
+	UPROPERTY(Transient)
+	TObjectPtr<UPanelSlot> CapturedBoxSlotPaddingSource;
 
 	// Rounded checkbox square owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

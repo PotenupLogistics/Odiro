@@ -4,8 +4,8 @@
 #include "Blueprint/SlateBlueprintLibrary.h"
 #include "Components/Border.h"
 #include "Components/Image.h"
-#include "Components/OverlaySlot.h"
 #include "Components/PanelWidget.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Engine/World.h"
 #include "InputCoreTypes.h"
@@ -13,32 +13,25 @@
 
 using namespace BaseFormElementPrivate;
 
-namespace
+UBaseDropdownWidget::UBaseDropdownWidget(const FObjectInitializer& objectInitializer)
+	: Super(objectInitializer)
 {
-	void ApplyDropdownOverlaySlotPadding(UWidget* widget, const FMargin& padding)
-	{
-		if (widget)
-		{
-			if (UOverlaySlot* overlaySlot = Cast<UOverlaySlot>(widget->Slot))
-			{
-				overlaySlot->SetPadding(padding);
-			}
-		}
-	}
 }
 
 void UBaseDropdownWidget::SynchronizeBaseProperties()
 {
+	CaptureAuthoredRootMinHeight();
+	const float authoredRootMinHeight = bAuthoredRootMinHeightOverride ? AuthoredRootMinHeight : 0.0f;
+
 	Super::SynchronizeBaseProperties();
 	const UBaseWidgetSizeCatalog* sizes = GetResolvedBaseSizes();
 	FBaseWidgetSizeConstraints effectiveSizeConstraints = SizeConstraints;
-	if (effectiveSizeConstraints.MinWidth <= 0.0f)
+	const float resolvedControlHeight = ControlHeightOverride > 0.0f
+		? ControlHeightOverride
+		: authoredRootMinHeight;
+	if (resolvedControlHeight > 0.0f && effectiveSizeConstraints.MinHeight <= 0.0f)
 	{
-		effectiveSizeConstraints.MinWidth = 80.0f;
-	}
-	if (sizes && sizes->ControlHeight > 0.0f && effectiveSizeConstraints.MinHeight <= 0.0f)
-	{
-		effectiveSizeConstraints.MinHeight = sizes->ControlHeight;
+		effectiveSizeConstraints.MinHeight = resolvedControlHeight;
 	}
 	BaseWidgetPrivate::ApplySizeConstraints(RootSize.Get(), effectiveSizeConstraints);
 	if (RootSizeBox.Get() != RootSize.Get())
@@ -55,7 +48,6 @@ void UBaseDropdownWidget::SynchronizeBaseProperties()
 		{
 			SetTextBlockValue(SelectedTextBlock.Get(), selectedText, false);
 		}
-		ApplyTextStyle(SelectedTextBlock.Get(), EBaseTextRole::Label);
 		if (colors)
 		{
 			ApplyTextColor(SelectedTextBlock.Get(), bDisabled
@@ -85,10 +77,13 @@ void UBaseDropdownWidget::SynchronizeBaseProperties()
 		SetOptionalWidgetVisible(OptionListSurface.Get(), bShowEmbeddedOptions, ESlateVisibility::Visible);
 		if (colors && sizes)
 		{
+			const FLinearColor listFillColor = bUseOptionListSurfaceFillColorOverride
+				? OptionListSurfaceFillColorOverride
+				: colors->SurfacePanelColor;
 			BaseWidgetPrivate::ApplyRoundedSurface(
 				nullptr,
 				OptionListSurface.Get(),
-				colors->SurfacePanelColor,
+				listFillColor,
 				colors->LineFieldColor,
 				sizes->Radius,
 				sizes->BorderWidth);
@@ -97,7 +92,6 @@ void UBaseDropdownWidget::SynchronizeBaseProperties()
 	if (EmptyOptionsTextBlock)
 	{
 		BaseWidgetPrivate::ApplyTextIfSet(EmptyOptionsTextBlock.Get(), EmptyOptionsText);
-		ApplyTextStyle(EmptyOptionsTextBlock.Get(), EBaseTextRole::Caption);
 		if (colors)
 		{
 			ApplyTextColor(EmptyOptionsTextBlock.Get(), colors->TextMutedColor);
@@ -106,12 +100,6 @@ void UBaseDropdownWidget::SynchronizeBaseProperties()
 	}
 	if (colors && sizes)
 	{
-		if (SurfaceBorder)
-		{
-			const FMargin controlPadding(sizes->Space4, sizes->Space2);
-			SurfaceBorder->SetPadding(controlPadding);
-			ApplyDropdownOverlaySlotPadding(ClosedContent.Get(), controlPadding);
-		}
 		const FLinearColor fillColor = bDisabled ? colors->SurfaceChromeColor : colors->SurfaceWellColor;
 		const FLinearColor strokeColor = bDisabled
 			? colors->LineSubtleColor
@@ -212,6 +200,12 @@ void UBaseDropdownWidget::SetEmptyOptionsText(const FText inEmptyOptionsText)
 	SynchronizeBaseProperties();
 }
 
+void UBaseDropdownWidget::SetControlHeightOverride(const float inControlHeightOverride)
+{
+	ControlHeightOverride = FMath::Max(0.0f, inControlHeightOverride);
+	SynchronizeBaseProperties();
+}
+
 bool UBaseDropdownWidget::SelectItemById(const FName itemId)
 {
 	if (bDisabled)
@@ -219,20 +213,17 @@ bool UBaseDropdownWidget::SelectItemById(const FName itemId)
 		return false;
 	}
 
-	const FBaseDropdownItem* item = FindDropdownItemById(Items, itemId);
-	if (!item || item->bDisabled)
-	{
-		return false;
-	}
+	return ApplySelectedId(itemId, true, true);
+}
 
-	const bool bChanged = SelectedId != itemId;
-	SelectedId = itemId;
-	SetOpen(false);
-	if (bChanged)
-	{
-		OnSelectionChanged.Broadcast(this, SelectedId);
-	}
-	return true;
+void UBaseDropdownWidget::SetSelectedId(const FName itemId)
+{
+	ApplySelectedId(itemId, false, false);
+}
+
+void UBaseDropdownWidget::ClearSelection()
+{
+	ApplySelectedId(NAME_None, false, true);
 }
 
 void UBaseDropdownWidget::SetOpen(const bool bInOpen)
@@ -264,19 +255,109 @@ void UBaseDropdownWidget::SetDisabled(const bool bInDisabled)
 
 bool UBaseDropdownWidget::UsesEmbeddedOptionList() const
 {
-	return bPopupInstance || !MenuWidgetClass;
+	return bPopupInstance || !ResolveMenuWidgetClass();
+}
+
+TSubclassOf<UBaseButtonWidget> UBaseDropdownWidget::ResolveOptionWidgetClass() const
+{
+	return OptionWidgetClass;
+}
+
+TSubclassOf<UBaseDropdownWidget> UBaseDropdownWidget::ResolveMenuWidgetClass() const
+{
+	return MenuWidgetClass;
+}
+
+bool UBaseDropdownWidget::ApplySelectedId(
+	const FName itemId,
+	const bool bRequireEnabledItem,
+	const bool bBroadcastSelectionChanged)
+{
+	if (itemId.IsNone())
+	{
+		const bool bChanged = !SelectedId.IsNone();
+		SelectedId = NAME_None;
+		SetOpen(false);
+		if (bBroadcastSelectionChanged && bChanged)
+		{
+			OnSelectionChanged.Broadcast(this, SelectedId);
+		}
+		return true;
+	}
+
+	const FBaseDropdownItem* item = FindDropdownItemById(Items, itemId);
+	if (!item)
+	{
+		if (bRequireEnabledItem)
+		{
+			return false;
+		}
+
+		const bool bChanged = SelectedId != itemId;
+		SelectedId = itemId;
+		SetOpen(false);
+		if (bBroadcastSelectionChanged && bChanged)
+		{
+			OnSelectionChanged.Broadcast(this, SelectedId);
+		}
+		return true;
+	}
+
+	if (item->bDisabled)
+	{
+		if (bRequireEnabledItem)
+		{
+			return false;
+		}
+
+		const bool bChanged = !SelectedId.IsNone();
+		SelectedId = NAME_None;
+		SetOpen(false);
+		if (bBroadcastSelectionChanged && bChanged)
+		{
+			OnSelectionChanged.Broadcast(this, SelectedId);
+		}
+		return false;
+	}
+
+	const bool bChanged = SelectedId != itemId;
+	SelectedId = itemId;
+	SetOpen(false);
+	if (bBroadcastSelectionChanged && bChanged)
+	{
+		OnSelectionChanged.Broadcast(this, SelectedId);
+	}
+	return true;
+}
+
+void UBaseDropdownWidget::CaptureAuthoredRootMinHeight()
+{
+	USizeBox* currentRootSizeBox = RootSizeBox.Get();
+	if (bHasCapturedAuthoredRootMinHeight && CapturedRootMinHeightSource.Get() == currentRootSizeBox)
+	{
+		return;
+	}
+
+	CapturedRootMinHeightSource = currentRootSizeBox;
+	bHasCapturedAuthoredRootMinHeight = true;
+	bAuthoredRootMinHeightOverride =
+		currentRootSizeBox && currentRootSizeBox->IsMinDesiredHeightOverride();
+	AuthoredRootMinHeight = bAuthoredRootMinHeightOverride
+		? currentRootSizeBox->GetMinDesiredHeight()
+		: 0.0f;
 }
 
 void UBaseDropdownWidget::OpenOptionListAt(const FGeometry& anchorGeometry)
 {
 	CloseOptionList();
 
-	if (IsDesignTime() || !MenuWidgetClass || !GetWorld())
+	const TSubclassOf<UBaseDropdownWidget> resolvedMenuWidgetClass = ResolveMenuWidgetClass();
+	if (IsDesignTime() || !resolvedMenuWidgetClass || !GetWorld())
 	{
 		return;
 	}
 
-	ActiveMenuWidget = CreateWidget<UBaseDropdownWidget>(GetWorld(), MenuWidgetClass);
+	ActiveMenuWidget = CreateWidget<UBaseDropdownWidget>(GetWorld(), resolvedMenuWidgetClass);
 	if (!ActiveMenuWidget)
 	{
 		return;
@@ -287,7 +368,7 @@ void UBaseDropdownWidget::OpenOptionListAt(const FGeometry& anchorGeometry)
 	ActiveMenuWidget->SelectedId = SelectedId;
 	ActiveMenuWidget->bOpen = true;
 	ActiveMenuWidget->bDisabled = bDisabled;
-	ActiveMenuWidget->OptionWidgetClass = OptionWidgetClass;
+	ActiveMenuWidget->OptionWidgetClass = ResolveOptionWidgetClass();
 	ActiveMenuWidget->SetColorsOverride(ColorsOverride);
 	ActiveMenuWidget->SetSizesOverride(SizesOverride);
 	ActiveMenuWidget->OnSelectionChanged.RemoveDynamic(this, &UBaseDropdownWidget::HandlePopupSelectionChanged);
@@ -317,7 +398,8 @@ void UBaseDropdownWidget::CloseOptionList()
 
 void UBaseDropdownWidget::RebuildOptions()
 {
-	if (!OptionContainer || !OptionWidgetClass || !GetWorld())
+	const TSubclassOf<UBaseButtonWidget> resolvedOptionWidgetClass = ResolveOptionWidgetClass();
+	if (!OptionContainer || !resolvedOptionWidgetClass || !GetWorld())
 	{
 		return;
 	}
@@ -327,7 +409,7 @@ void UBaseDropdownWidget::RebuildOptions()
 	OptionContainer->ClearChildren();
 	for (const FBaseDropdownItem& item : Items)
 	{
-		UBaseButtonWidget* option = CreateWidget<UBaseButtonWidget>(GetWorld(), OptionWidgetClass);
+		UBaseButtonWidget* option = CreateWidget<UBaseButtonWidget>(GetWorld(), resolvedOptionWidgetClass);
 		if (!option)
 		{
 			continue;

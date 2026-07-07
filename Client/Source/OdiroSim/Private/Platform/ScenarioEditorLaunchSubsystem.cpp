@@ -334,6 +334,16 @@ void UScenarioEditorLaunchSubsystem::TryApplyPendingEditorStartup(UWorld* loaded
 			*resolvedPath);
 	}
 
+	editorController->ShowPlatformRootWidget();
+	if (!editorController->ShowEditorRootWidget())
+	{
+		UE_LOG(
+			LogScenarioEditorLaunch,
+			Error,
+			TEXT("ScenarioEditor 자동 시작 실패: WBP_Root -> WBP_ScenarioEditorScreen -> ScenarioEditorRootWidget 표시 실패"));
+		return;
+	}
+
 	bAutoStartedScenarioEditorSession = true;
 	bAutoStartedScenarioEditorSessionLoadedExistingScenario = bLoadedExistingScenario;
 	AutoStartCompletedEvent.Broadcast(bLoadedExistingScenario);

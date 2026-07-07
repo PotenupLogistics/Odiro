@@ -67,6 +67,8 @@ guardrails:
   - Project experiment launch commands create a fresh user-project run through ProjectWorkspaceViewModel before starting; selected historical runs are analysis/navigation targets and must not be overwritten.
   - SimulatorLaunchSubsystem treats run output artifacts such as status.json, summary.json, and episode result.json as immutable start guards.
   - Project-run AI analysis uses the v2 `project_path` plus `run_id` request path and stores review artifacts under the run.
+  - Run detail AI dashboard reads the latest `runs/<RunId>/review/<ReviewId>/response.json` first, with legacy `review/analysis_run_response_v2.json` as fallback.
+  - Run detail AI suggestion structured lists use WBP-owned row/section/list-item templates; C++ parses API text, injects runtime data, and avoids hard-coded WBP class paths.
   - C++ writes runtime state text and visibility into WBP-owned layouts; static labels, dialog copy, layout sizing, styling, and design defaults stay in WBP defaults.
   - WindowsControlWidget owns native window commands and glyph binding only; hover/press transitions stay in WBP-authored UMG animations.
   - Platform UMG edits must complete UE_MCP_Bridge widget tree readback, Blueprint compile/save, layout data, overlap check, and runtime or Slate capture verification before completion; property or geometry MCP queries require a scoped safety check because broad JsonUtilities serialization can stack-overflow editor sessions.

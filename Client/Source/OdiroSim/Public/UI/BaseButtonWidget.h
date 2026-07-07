@@ -235,6 +235,9 @@ protected:
 	// Applies one semantic text token to a text block.
 	void ApplyTextStyle(UTextBlock* textBlock, EBaseTextRole role) const;
 
+	// Returns whether base sync may apply catalog typography to the label widget.
+	virtual bool ShouldApplyLabelTextStyle() const;
+
 	// Applies a semantic tint to an optional border while preserving its WBP-owned brush.
 	void ApplyBorderColor(UBorder* border, const FLinearColor& color) const;
 

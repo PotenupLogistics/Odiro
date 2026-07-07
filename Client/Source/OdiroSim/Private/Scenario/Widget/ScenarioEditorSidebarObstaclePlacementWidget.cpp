@@ -1092,7 +1092,7 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarObstaclePlacementWidget::A
 			: bodyBox->InsertChildAt(anchorIndex + 1 + itemIndex, fieldRow);
 		if (UVerticalBoxSlot* verticalSlot = Cast<UVerticalBoxSlot>(insertedSlot))
 		{
-			verticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 2.0f));
+			verticalSlot->SetPadding(PlacementBlockWidget->GeneratedFieldRowSlotPadding);
 			verticalSlot->SetHorizontalAlignment(HAlign_Fill);
 		}
 	}

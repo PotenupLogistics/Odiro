@@ -11,6 +11,7 @@ namespace
 	const TCHAR* MainReviewDirectoryName = TEXT("review");
 	const TCHAR* MainAnalysisResponseFileName = TEXT("analysis_run_response_v2.json");
 	const TCHAR* MainRecommendationsFileName = TEXT("recommendations.json");
+	const TCHAR* MainReviewResponseFileName = TEXT("response.json");
 	const TCHAR* MainReplayDirectoryName = TEXT("replay");
 	const TCHAR* MainReplayManifestFileName = TEXT("replay.meta.json");
 	const TCHAR* MainReplayFrameFileName = TEXT("replay.frames.bin");
@@ -274,13 +275,13 @@ namespace
 		switch (Severity)
 		{
 		case EProjectRunAiSuggestionSeverity::High:
-			return TEXT("높음");
+			return TEXT("경고");
 		case EProjectRunAiSuggestionSeverity::Medium:
-			return TEXT("중간");
+			return TEXT("주의");
 		case EProjectRunAiSuggestionSeverity::Low:
-			return TEXT("낮음");
+			return TEXT("알림");
 		default:
-			return TEXT("정보");
+			return TEXT("알림");
 		}
 	}
 
@@ -297,29 +298,33 @@ namespace
 	EProjectRunAiSuggestionSeverity ParseSuggestionSeverity(const FJsonObject& Object)
 	{
 		const FString Severity = ReadDashboardStringOrDefault(Object, TEXT("severity")).TrimStartAndEnd().ToLower();
-		if (Severity == TEXT("high") || Severity == TEXT("critical") || Severity == TEXT("error") || Severity == TEXT("높음"))
+		if (Severity == TEXT("high") || Severity == TEXT("critical") || Severity == TEXT("error")
+			|| Severity == TEXT("높음") || Severity == TEXT("경고"))
 		{
 			return EProjectRunAiSuggestionSeverity::High;
 		}
-		if (Severity == TEXT("medium") || Severity == TEXT("warning") || Severity == TEXT("중간"))
+		if (Severity == TEXT("medium") || Severity == TEXT("warning")
+			|| Severity == TEXT("중간") || Severity == TEXT("주의"))
 		{
 			return EProjectRunAiSuggestionSeverity::Medium;
 		}
-		if (Severity == TEXT("low") || Severity == TEXT("낮음"))
+		if (Severity == TEXT("low") || Severity == TEXT("낮음") || Severity == TEXT("알림"))
 		{
 			return EProjectRunAiSuggestionSeverity::Low;
 		}
 
 		const FString PriorityText = ReadDashboardStringOrDefault(Object, TEXT("priority")).TrimStartAndEnd().ToLower();
-		if (PriorityText == TEXT("high") || PriorityText == TEXT("critical") || PriorityText == TEXT("높음"))
+		if (PriorityText == TEXT("high") || PriorityText == TEXT("critical")
+			|| PriorityText == TEXT("높음") || PriorityText == TEXT("경고"))
 		{
 			return EProjectRunAiSuggestionSeverity::High;
 		}
-		if (PriorityText == TEXT("medium") || PriorityText == TEXT("warning") || PriorityText == TEXT("중간"))
+		if (PriorityText == TEXT("medium") || PriorityText == TEXT("warning")
+			|| PriorityText == TEXT("중간") || PriorityText == TEXT("주의"))
 		{
 			return EProjectRunAiSuggestionSeverity::Medium;
 		}
-		if (PriorityText == TEXT("low") || PriorityText == TEXT("낮음"))
+		if (PriorityText == TEXT("low") || PriorityText == TEXT("낮음") || PriorityText == TEXT("알림"))
 		{
 			return EProjectRunAiSuggestionSeverity::Low;
 		}
@@ -726,6 +731,74 @@ namespace
 	bool AppendAiFromAnalysisResponseJsonObject(
 		const FJsonObject& RootObject,
 		const FString& RunDirectory,
+		FProjectRunResultDashboardData& OutDashboardData);
+
+	bool AppendAnalysisResponseJsonFile(
+		const FString& ResponsePath,
+		const FString& RunDirectory,
+		const FString& DiagnosticFileName,
+		FProjectRunResultDashboardData& OutDashboardData,
+		bool& bOutResponseFailed)
+	{
+		bOutResponseFailed = false;
+
+		FString ResponseJson;
+		if (!FFileHelper::LoadFileToString(ResponseJson, *ResponsePath))
+		{
+			return false;
+		}
+
+		TSharedPtr<FJsonObject> RootObject;
+		if (!TryParseDashboardJsonObject(ResponseJson, RootObject) || !RootObject.IsValid())
+		{
+			OutDashboardData.Diagnostics.Add(FString::Printf(TEXT("%s JSON 파싱 실패"), *DiagnosticFileName));
+			return false;
+		}
+
+		const FString Status = ReadDashboardStringOrDefault(*RootObject, TEXT("status")).TrimStartAndEnd();
+		bOutResponseFailed = Status.Equals(TEXT("failed"), ESearchCase::IgnoreCase);
+		AppendAiFromAnalysisResponseJsonObject(*RootObject, RunDirectory, OutDashboardData);
+		return true;
+	}
+
+	bool AppendLatestReviewResponseFile(
+		const FString& ReviewDirectory,
+		const FString& RunDirectory,
+		FProjectRunResultDashboardData& OutDashboardData,
+		bool& bOutResponseFailed)
+	{
+		bOutResponseFailed = false;
+
+		TArray<FString> ReviewDirectoryNames;
+		IFileManager::Get().FindFiles(
+			ReviewDirectoryNames,
+			*FPaths::Combine(ReviewDirectory, TEXT("*")),
+			false,
+			true);
+		ReviewDirectoryNames.Sort();
+
+		for (int32 Index = ReviewDirectoryNames.Num() - 1; Index >= 0; --Index)
+		{
+			const FString ResponsePath = NormalizeDashboardPath(FPaths::Combine(
+				ReviewDirectory,
+				ReviewDirectoryNames[Index],
+				MainReviewResponseFileName));
+			if (AppendAnalysisResponseJsonFile(
+				ResponsePath,
+				RunDirectory,
+				MainReviewResponseFileName,
+				OutDashboardData,
+				bOutResponseFailed))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool AppendAiFromAnalysisResponseJsonObject(
+		const FJsonObject& RootObject,
+		const FString& RunDirectory,
 		FProjectRunResultDashboardData& OutDashboardData)
 	{
 		AppendWarningsArray(RootObject, OutDashboardData);
@@ -898,22 +971,23 @@ bool FProjectRunResultDashboardJson::AppendAiFromRunDirectory(
 	const FString ReviewDirectory = NormalizeDashboardPath(FPaths::Combine(RunDirectory, MainReviewDirectoryName));
 	const int32 InitialSuggestionCount = outDashboardData.Suggestions.Num();
 
-	const FString AnalysisResponsePath = NormalizeDashboardPath(FPaths::Combine(ReviewDirectory, MainAnalysisResponseFileName));
 	bool bAnalysisResponseFailed = false;
-	FString AnalysisResponseJson;
-	if (FFileHelper::LoadFileToString(AnalysisResponseJson, *AnalysisResponsePath))
+	const bool bLoadedReviewResponse = AppendLatestReviewResponseFile(
+		ReviewDirectory,
+		RunDirectory,
+		outDashboardData,
+		bAnalysisResponseFailed);
+	if (!bLoadedReviewResponse)
 	{
-		TSharedPtr<FJsonObject> RootObject;
-		if (TryParseDashboardJsonObject(AnalysisResponseJson, RootObject) && RootObject.IsValid())
-		{
-			const FString Status = ReadDashboardStringOrDefault(*RootObject, TEXT("status")).TrimStartAndEnd();
-			bAnalysisResponseFailed = Status.Equals(TEXT("failed"), ESearchCase::IgnoreCase);
-			AppendAiFromAnalysisResponseJsonObject(*RootObject, RunDirectory, outDashboardData);
-		}
-		else
-		{
-			outDashboardData.Diagnostics.Add(TEXT("analysis_run_response_v2.json JSON 파싱 실패"));
-		}
+		const FString AnalysisResponsePath = NormalizeDashboardPath(FPaths::Combine(
+			ReviewDirectory,
+			MainAnalysisResponseFileName));
+		AppendAnalysisResponseJsonFile(
+			AnalysisResponsePath,
+			RunDirectory,
+			MainAnalysisResponseFileName,
+			outDashboardData,
+			bAnalysisResponseFailed);
 	}
 
 	if (!bAnalysisResponseFailed && outDashboardData.Suggestions.Num() == InitialSuggestionCount)

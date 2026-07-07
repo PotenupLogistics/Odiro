@@ -31,6 +31,49 @@ enum class EScenarioEditorSidebarFieldInputType : uint8
 	ObjectArray
 };
 
+// Optional BaseSlider metadata for one Scenario Template field row.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioEditorSidebarFieldSliderSpec
+{
+	GENERATED_BODY()
+
+	// Whether the row should show a BaseSlider when the current value can be parsed.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bEnabled = false;
+
+	// Minimum value accepted by the BaseSlider.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	float MinValue = 0.0f;
+
+	// Maximum value accepted by the BaseSlider.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	float MaxValue = 1.0f;
+
+	// Whether slider output should be rounded and formatted as an integer.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bInteger = false;
+
+	// Decimal places used when formatting slider output text.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template", meta = (ClampMin = "0", ClampMax = "6"))
+	int32 DisplayDecimals = 2;
+
+	// Compares all slider display and behavior fields.
+	bool operator==(const FScenarioEditorSidebarFieldSliderSpec& other) const
+	{
+		return bEnabled == other.bEnabled
+			&& FMath::IsNearlyEqual(MinValue, other.MinValue)
+			&& FMath::IsNearlyEqual(MaxValue, other.MaxValue)
+			&& bInteger == other.bInteger
+			&& DisplayDecimals == other.DisplayDecimals;
+	}
+
+	// Compares all slider display and behavior fields.
+	bool operator!=(const FScenarioEditorSidebarFieldSliderSpec& other) const
+	{
+		return !(*this == other);
+	}
+};
+
 // Editable field ids exposed by one root.obstacles.placements[] editor row.
 UENUM(BlueprintType)
 enum class EScenarioEditorSidebarObstaclePlacementField : uint8

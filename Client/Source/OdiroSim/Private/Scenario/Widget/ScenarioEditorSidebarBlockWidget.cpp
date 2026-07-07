@@ -2,12 +2,12 @@
 
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/ContentWidget.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/PanelSlot.h"
 #include "Components/PanelWidget.h"
-#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -19,200 +19,116 @@
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 #include "Styling/SlateBrush.h"
 #include "Styling/SlateTypes.h"
+#include "UI/BaseButtonWidget.h"
+#include "UObject/SoftObjectPath.h"
 
 namespace
 {
-	// Shared right inset that keeps detail blocks and field controls clear of the panel edge.
-	constexpr float SidebarBlockRightInset = 4.0f;
+	// Default texture path for the expanded block toggle icon.
+	const TCHAR* SidebarBlockExpandedIconPath = TEXT("/Game/Textures/Icon/T_Icon_CaretDown.T_Icon_CaretDown");
 
-	// Texture path for the expanded block toggle icon.
-	const TCHAR* SidebarBlockExpandedIconPath = TEXT("/Game/Widgets/Icon/icon_arrow_drop_down.icon_arrow_drop_down");
+	// Default texture path for the collapsed block toggle icon.
+	const TCHAR* SidebarBlockCollapsedIconPath = TEXT("/Game/Textures/Icon/T_Icon_CaretRight.T_Icon_CaretRight");
 
-	// Texture path for the collapsed block toggle icon.
-	const TCHAR* SidebarBlockCollapsedIconPath = TEXT("/Game/Widgets/Icon/icon_arrow_right.icon_arrow_right");
-
-	// Texture path for adding one repeated block item.
-	const TCHAR* SidebarBlockAddActionIconPath = TEXT("/Game/Widgets/Icon/T_icon_add-circle.T_icon_add-circle");
-
-	// Texture path for deleting one repeated block item.
-	const TCHAR* SidebarBlockRemoveActionIconPath = TEXT("/Game/Widgets/Icon/T_icon_trash.T_icon_trash");
-
-	// Compact square footprint shared by header action icons.
-	constexpr float SidebarBlockActionIconSize = 16.0f;
-
-	// Square hit and hover footprint for block header action buttons.
-	constexpr float SidebarBlockActionButtonSize = 24.0f;
-
-	// Converts UI hex colors into Slate linear colors with a caller-controlled alpha.
-	FLinearColor MakeSidebarBlockColor(const TCHAR* hex, const float alpha = 1.0f)
+	// Loads a sidebar icon from a Blueprint-configurable soft reference.
+	UTexture2D* LoadSidebarBlockIconTexture(const TSoftObjectPtr<UTexture2D>& textureReference)
 	{
-		FLinearColor color = FLinearColor::FromSRGBColor(FColor::FromHex(hex));
-		color.A = alpha;
-		return color;
+		return textureReference.IsNull() ? nullptr : textureReference.LoadSynchronous();
 	}
 
-	// Visual treatment resolved from the sidebar block hierarchy depth.
-	struct FSidebarBlockSurfaceStyle
-	{
-		// Background color used by the block content border.
-		FLinearColor ContentColor = MakeSidebarBlockColor(TEXT("0B0B0B"));
-
-		// Outline color used by the outer block border.
-		FLinearColor OutlineColor = MakeSidebarBlockColor(TEXT("0E0E0E"));
-
-		// Padding that exposes the outer border as a hierarchy strip.
-		FMargin OutlinePadding = FMargin(1.0f);
-
-		// Padding applied inside the content border.
-		FMargin ContentPadding = FMargin(6.0f, 4.0f, 6.0f, 6.0f);
-
-		// Padding applied before the block body rows.
-		FMargin BodyPadding = FMargin(10.0f, 7.0f, 4.0f, 2.0f);
-	};
-
-	// Counts semantic path depth below root so nested template blocks get distinct surfaces.
-	int32 ResolveSidebarBlockDepth(const FString& blockPath, const bool bNested)
-	{
-		FString relativePath = blockPath;
-		if (relativePath.StartsWith(TEXT("root.")))
-		{
-			relativePath.RightChopInline(5);
-		}
-		else if (relativePath == TEXT("root") || relativePath == TEXT("scenario"))
-		{
-			relativePath.Reset();
-		}
-
-		int32 depth = 0;
-		for (const TCHAR character : relativePath)
-		{
-			if (character == TEXT('.'))
-			{
-				++depth;
-			}
-		}
-		return bNested ? FMath::Max(depth, 1) : depth;
-	}
-
-	// Resolves a stronger block surface palette and indentation for the requested depth.
-	FSidebarBlockSurfaceStyle ResolveSidebarSurfaceStyle(
-		const int32 blockDepth,
-		const bool bSelected,
-		const bool bShowNormalOutline)
-	{
-		const int32 clampedDepth = FMath::Clamp(blockDepth, 0, 3);
-		const TCHAR* contentColors[] = {
-			TEXT("080808"),
-			TEXT("121212"),
-			TEXT("1C1C1C"),
-			TEXT("262626")
-		};
-		const TCHAR* outlineColors[] = {
-			TEXT("101010"),
-			TEXT("2A2A2A"),
-			TEXT("404040"),
-			TEXT("555555")
-		};
-
-		FSidebarBlockSurfaceStyle style;
-		style.ContentColor = bSelected
-			? MakeSidebarBlockColor(TEXT("0A1824"))
-			: MakeSidebarBlockColor(contentColors[clampedDepth]);
-		style.OutlineColor = bSelected
-			? MakeSidebarBlockColor(TEXT("2498FF"))
-			: MakeSidebarBlockColor(bShowNormalOutline || blockDepth > 0
-				? outlineColors[clampedDepth]
-				: TEXT("070707"));
-		style.OutlinePadding = blockDepth > 0 || bSelected
-			? FMargin(2.0f + static_cast<float>(clampedDepth), 0.0f, 0.0f, 0.0f)
-			: FMargin(1.0f, 0.0f, 0.0f, 0.0f);
-		style.ContentPadding = FMargin(
-			6.0f + static_cast<float>(clampedDepth * 2),
-			4.0f + static_cast<float>(clampedDepth),
-			SidebarBlockRightInset,
-			6.0f + static_cast<float>(clampedDepth));
-		style.BodyPadding = FMargin(
-			10.0f + static_cast<float>(clampedDepth * 4),
-			7.0f,
-			SidebarBlockRightInset,
-			3.0f + static_cast<float>(clampedDepth));
-		return style;
-	}
-
-	// Creates a guaranteed box brush so C++ color changes do not depend on the WBP brush asset.
-	FSlateBrush MakeSidebarSurfaceBrush()
-	{
-		FSlateBrush brush;
-		brush.DrawAs = ESlateBrushDrawType::Box;
-		brush.TintColor = FSlateColor(FLinearColor::White);
-		return brush;
-	}
-
-	// Applies compact hierarchy-heading typography without changing the shared catalog asset.
-	void ApplyCompactBlockNameStyle(
-		UTextBlock* textBlock,
-		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
-		const bool bNested,
-		const int32 blockDepth)
-	{
-		if (!IsValid(textBlock)) return;
-
-		FWidgetTextStyle style = UWidgetTextStyleCatalog::ResolveStyle(
-			catalogReference,
-			bNested ? EWidgetTextStyleRole::Label : EWidgetTextStyleRole::Title);
-		style.Font.Size = 14.f;
-		textBlock->SetFont(style.Font);
-		textBlock->SetColorAndOpacity(FSlateColor(style.Color));
-	}
-
-	// Builds the flat brush used by generated block header action buttons.
-	FSlateBrush MakeSidebarActionBrush(const TCHAR* hex, const float alpha = 1.0f)
-	{
-		FSlateBrush brush;
-		brush.DrawAs = ESlateBrushDrawType::Box;
-		brush.TintColor = FSlateColor(MakeSidebarBlockColor(hex, alpha));
-		brush.Margin = FMargin(0.0f);
-		brush.ImageSize = FVector2D(SidebarBlockActionButtonSize, SidebarBlockActionButtonSize);
-		brush.OutlineSettings.Width = 0.0f;
-		brush.OutlineSettings.Color = FLinearColor::Transparent;
-		brush.OutlineSettings.CornerRadii = FVector4(4.0f, 4.0f, 4.0f, 4.0f);
-		brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-		return brush;
-	}
-
-	// Creates a compact borderless button style matching the sidebar's existing flat controls.
-	FButtonStyle MakeSidebarActionButtonStyle()
-	{
-		FButtonStyle style;
-		style.SetNormal(MakeSidebarActionBrush(TEXT("000000"), 0.0f));
-		style.SetHovered(MakeSidebarActionBrush(TEXT("3A3A3A"), 0.8f));
-		style.SetPressed(MakeSidebarActionBrush(TEXT("2F2F2F"), 0.9f));
-		style.SetDisabled(MakeSidebarActionBrush(TEXT("000000"), 0.0f));
-		style.SetNormalForeground(FSlateColor(MakeSidebarBlockColor(TEXT("F2F2F2"))));
-		style.SetHoveredForeground(FSlateColor(MakeSidebarBlockColor(TEXT("FFFFFF"))));
-		style.SetPressedForeground(FSlateColor(MakeSidebarBlockColor(TEXT("DDE8F2"))));
-		style.SetDisabledForeground(FSlateColor(MakeSidebarBlockColor(TEXT("878787"))));
-		return style;
-	}
-
-	// Loads a sidebar button icon from a fixed project content path.
+	// Loads a built-in sidebar icon fallback from a fixed content path.
 	UTexture2D* LoadSidebarBlockIconTexture(const TCHAR* texturePath)
 	{
 		return texturePath ? LoadObject<UTexture2D>(nullptr, texturePath) : nullptr;
 	}
 
-	// Applies the fixed sidebar icon texture while preserving a consistent footprint.
-	void ApplySidebarBlockIconBrush(UImage* image, UTexture2D* texture, const FLinearColor& tint)
+	// Resolves a configured icon first, then falls back to the product default caret.
+	UTexture2D* ResolveSidebarBlockIconTexture(
+		const TSoftObjectPtr<UTexture2D>& textureReference,
+		const TCHAR* fallbackTexturePath)
+	{
+		if (UTexture2D* texture = LoadSidebarBlockIconTexture(textureReference))
+		{
+			return texture;
+		}
+
+		return LoadSidebarBlockIconTexture(fallbackTexturePath);
+	}
+
+	// Resolves stale Blueprint-saved defaults where collapsed inherited the expanded caret asset.
+	UTexture2D* ResolveSidebarBlockToggleIconTexture(
+		const bool bExpanded,
+		const TSoftObjectPtr<UTexture2D>& expandedTextureReference,
+		const TSoftObjectPtr<UTexture2D>& collapsedTextureReference)
+	{
+		if (bExpanded)
+		{
+			return ResolveSidebarBlockIconTexture(
+				expandedTextureReference,
+				SidebarBlockExpandedIconPath);
+		}
+
+		const FSoftObjectPath collapsedPath =
+			collapsedTextureReference.ToSoftObjectPath();
+		const bool bCollapsedUsesExpandedDefault =
+			!collapsedTextureReference.IsNull()
+			&& collapsedPath == expandedTextureReference.ToSoftObjectPath()
+			&& collapsedPath == FSoftObjectPath(SidebarBlockExpandedIconPath);
+		if (bCollapsedUsesExpandedDefault)
+		{
+			return LoadSidebarBlockIconTexture(SidebarBlockCollapsedIconPath);
+		}
+
+		return ResolveSidebarBlockIconTexture(
+			collapsedTextureReference,
+			SidebarBlockCollapsedIconPath);
+	}
+
+	// Updates only the image resource so WBP-authored size, tint, and layout remain authoritative.
+	void SetSidebarBlockIconTexture(UImage* image, UTexture2D* texture)
 	{
 		if (!image || !texture)
 		{
 			return;
 		}
 
-		image->SetBrushFromTexture(texture, false);
-		image->SetDesiredSizeOverride(FVector2D(SidebarBlockActionIconSize, SidebarBlockActionIconSize));
-		image->SetColorAndOpacity(tint);
+		FSlateBrush brush = image->GetBrush();
+		brush.SetResourceObject(texture);
+		if (brush.GetDrawType() == ESlateBrushDrawType::NoDrawType)
+		{
+			brush.DrawAs = ESlateBrushDrawType::Image;
+		}
+		image->SetBrush(brush);
 		image->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
+
+	// Finds an icon image inside WBP-authored toggle content without requiring a fixed widget name.
+	UImage* FindSidebarBlockIconImageWidget(UWidget* widget)
+	{
+		if (!widget)
+		{
+			return nullptr;
+		}
+		if (UImage* image = Cast<UImage>(widget))
+		{
+			return image;
+		}
+		if (UPanelWidget* panelWidget = Cast<UPanelWidget>(widget))
+		{
+			for (int32 childIndex = 0; childIndex < panelWidget->GetChildrenCount(); ++childIndex)
+			{
+				if (UImage* childImage = FindSidebarBlockIconImageWidget(
+					panelWidget->GetChildAt(childIndex)))
+				{
+					return childImage;
+				}
+			}
+		}
+		if (UContentWidget* contentWidget = Cast<UContentWidget>(widget))
+		{
+			return FindSidebarBlockIconImageWidget(contentWidget->GetContent());
+		}
+		return nullptr;
 	}
 
 	// Returns whether the current pointer is inside a visible child control.
@@ -222,6 +138,16 @@ namespace
 			&& widget->IsVisible()
 			&& widget->GetCachedGeometry().IsUnderLocation(mouseEvent.GetScreenSpacePosition());
 	}
+}
+
+UScenarioEditorSidebarBlockWidget::UScenarioEditorSidebarBlockWidget(
+	const FObjectInitializer& objectInitializer)
+	: Super(objectInitializer)
+{
+	ExpandedToggleIconTexture = TSoftObjectPtr<UTexture2D>(
+		FSoftObjectPath(SidebarBlockExpandedIconPath));
+	CollapsedToggleIconTexture = TSoftObjectPtr<UTexture2D>(
+		FSoftObjectPath(SidebarBlockCollapsedIconPath));
 }
 
 void UScenarioEditorSidebarBlockWidget::NativeConstruct()
@@ -334,7 +260,9 @@ void UScenarioEditorSidebarBlockWidget::AddBodyChild(UWidget* widget)
 		if (UVerticalBoxSlot* bodySlot = bodyBox->AddChildToVerticalBox(widget))
 		{
 			const bool bFieldRowChild = widget->IsA<UScenarioEditorSidebarFieldRow>();
-			bodySlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, bFieldRowChild ? 2.0f : 6.0f));
+			bodySlot->SetPadding(bFieldRowChild
+				? GeneratedFieldRowSlotPadding
+				: GeneratedBodyWidgetSlotPadding);
 			bodySlot->SetHorizontalAlignment(HAlign_Fill);
 		}
 	}
@@ -371,16 +299,17 @@ FReply UScenarioEditorSidebarBlockWidget::NativeOnPreviewMouseButtonDown(
 void UScenarioEditorSidebarBlockWidget::HandleToggleClicked()
 {
 	SetExpanded(!bExpanded);
-	BroadcastBlockSelected();
 }
 
-void UScenarioEditorSidebarBlockWidget::HandleAddActionClicked()
+void UScenarioEditorSidebarBlockWidget::HandleAddActionClicked(UBaseButtonWidget* button)
 {
+	(void)button;
 	OnAddActionRequested.Broadcast();
 }
 
-void UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked()
+void UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked(UBaseButtonWidget* button)
 {
+	(void)button;
 	OnRemoveActionRequested.Broadcast();
 }
 
@@ -445,13 +374,13 @@ void UScenarioEditorSidebarBlockWidget::UnbindControls()
 	}
 	if (AddActionButton)
 	{
-		AddActionButton->OnClicked.RemoveDynamic(
+		AddActionButton->OnBaseClicked.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarBlockWidget::HandleAddActionClicked);
 	}
 	if (RemoveActionButton)
 	{
-		RemoveActionButton->OnClicked.RemoveDynamic(
+		RemoveActionButton->OnBaseClicked.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked);
 	}
@@ -459,89 +388,25 @@ void UScenarioEditorSidebarBlockWidget::UnbindControls()
 
 void UScenarioEditorSidebarBlockWidget::EnsureActionButtons()
 {
-	if (!bAddActionVisible && !bRemoveActionVisible)
-	{
-		return;
-	}
-
-	CreateActionButton(
-		AddActionButton,
-		AddActionTextBlock,
-		AddActionIconImage,
-		SidebarBlockAddActionIconPath);
 	if (AddActionButton)
 	{
-		AddActionButton->OnClicked.RemoveDynamic(
+		AddActionButton->OnBaseClicked.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarBlockWidget::HandleAddActionClicked);
-		AddActionButton->OnClicked.AddDynamic(
+		AddActionButton->OnBaseClicked.AddDynamic(
 			this,
 			&UScenarioEditorSidebarBlockWidget::HandleAddActionClicked);
 	}
 
-	CreateActionButton(
-		RemoveActionButton,
-		RemoveActionTextBlock,
-		RemoveActionIconImage,
-		SidebarBlockRemoveActionIconPath);
 	if (RemoveActionButton)
 	{
-		RemoveActionButton->OnClicked.RemoveDynamic(
+		RemoveActionButton->OnBaseClicked.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked);
-		RemoveActionButton->OnClicked.AddDynamic(
+		RemoveActionButton->OnBaseClicked.AddDynamic(
 			this,
 			&UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked);
 	}
-}
-
-void UScenarioEditorSidebarBlockWidget::EnsureHeaderActionContainer()
-{
-	if (HeaderActionBox || !BlockHeaderRow)
-	{
-		return;
-	}
-
-	UPanelWidget* headerPanel = Cast<UPanelWidget>(BlockHeaderRow.Get());
-	if (!headerPanel)
-	{
-		return;
-	}
-
-	HeaderActionSpacer = NewObject<USpacer>(this);
-	HeaderActionBox = NewObject<UHorizontalBox>(this);
-	if (!HeaderActionSpacer || !HeaderActionBox)
-	{
-		HeaderActionSpacer = nullptr;
-		HeaderActionBox = nullptr;
-		return;
-	}
-
-	HeaderActionSpacer->SetSize(FVector2D(0.0f, 1.0f));
-	if (UPanelSlot* spacerSlot = headerPanel->AddChild(HeaderActionSpacer.Get()))
-	{
-		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(spacerSlot))
-		{
-			FSlateChildSize fillSize;
-			fillSize.SizeRule = ESlateSizeRule::Fill;
-			fillSize.Value = 1.0f;
-			horizontalSlot->SetSize(fillSize);
-			horizontalSlot->SetHorizontalAlignment(HAlign_Fill);
-			horizontalSlot->SetVerticalAlignment(VAlign_Fill);
-		}
-	}
-
-	if (UPanelSlot* actionSlot = headerPanel->AddChild(HeaderActionBox.Get()))
-	{
-		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(actionSlot))
-		{
-			horizontalSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
-			horizontalSlot->SetHorizontalAlignment(HAlign_Right);
-			horizontalSlot->SetVerticalAlignment(VAlign_Center);
-		}
-	}
-
-	SetHeaderActionContainerVisible(false);
 }
 
 void UScenarioEditorSidebarBlockWidget::EnsureToggleIcon()
@@ -559,24 +424,17 @@ void UScenarioEditorSidebarBlockWidget::EnsureToggleIcon()
 	{
 		return;
 	}
-
-	UTexture2D* expandedTexture = LoadSidebarBlockIconTexture(SidebarBlockExpandedIconPath);
-	UTexture2D* collapsedTexture = LoadSidebarBlockIconTexture(SidebarBlockCollapsedIconPath);
-	if (!expandedTexture && !collapsedTexture)
+	if (UWidget* buttonContent = ToggleButton->GetContent())
 	{
+		if (UImage* contentIconImage = FindSidebarBlockIconImageWidget(buttonContent))
+		{
+			ToggleIconImage = contentIconImage;
+			if (ToggleTextBlock)
+			{
+				ToggleTextBlock->SetVisibility(ESlateVisibility::Collapsed);
+			}
+		}
 		return;
-	}
-
-	ToggleIconImage = NewObject<UImage>(ToggleButton.Get());
-	if (!ToggleIconImage)
-	{
-		return;
-	}
-
-	ToggleButton->SetContent(ToggleIconImage.Get());
-	if (ToggleTextBlock)
-	{
-		ToggleTextBlock->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
 
@@ -615,19 +473,19 @@ void UScenarioEditorSidebarBlockWidget::EnsureAssetHeaderSummary()
 	if (UHorizontalBoxSlot* thumbnailSlot =
 		AssetHeaderContainer->AddChildToHorizontalBox(AssetHeaderThumbnailImage.Get()))
 	{
-		thumbnailSlot->SetPadding(FMargin(0.0f, 0.0f, 7.0f, 0.0f));
+		thumbnailSlot->SetPadding(GeneratedAssetThumbnailSlotPadding);
 		thumbnailSlot->SetVerticalAlignment(VAlign_Center);
 	}
 	if (UHorizontalBoxSlot* textSlot =
 		AssetHeaderContainer->AddChildToHorizontalBox(AssetHeaderTextBox.Get()))
 	{
-		textSlot->SetPadding(FMargin(0.0f));
+		textSlot->SetPadding(GeneratedAssetTextSlotPadding);
 		textSlot->SetVerticalAlignment(VAlign_Center);
 	}
 	if (UVerticalBoxSlot* typeSlot =
 		AssetHeaderTextBox->AddChildToVerticalBox(AssetHeaderTypeTextBlock.Get()))
 	{
-		typeSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 1.0f));
+		typeSlot->SetPadding(GeneratedAssetTypeSlotPadding);
 	}
 	AssetHeaderTextBox->AddChildToVerticalBox(AssetHeaderNameTextBlock.Get());
 
@@ -635,106 +493,25 @@ void UScenarioEditorSidebarBlockWidget::EnsureAssetHeaderSummary()
 	{
 		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(headerSlot))
 		{
-			horizontalSlot->SetPadding(FMargin(6.0f, 0.0f, 4.0f, 0.0f));
+			horizontalSlot->SetPadding(GeneratedAssetContainerSlotPadding);
 			horizontalSlot->SetVerticalAlignment(VAlign_Center);
 		}
 	}
 	AssetHeaderContainer->SetVisibility(ESlateVisibility::Collapsed);
-}
-
-void UScenarioEditorSidebarBlockWidget::CreateActionButton(
-	TObjectPtr<UButton>& outButton,
-	TObjectPtr<UTextBlock>& outTextBlock,
-	TObjectPtr<UImage>& outIconImage,
-	const TCHAR* iconPath)
-{
-	if (outButton || !BlockHeaderRow)
-	{
-		return;
-	}
-
-	EnsureHeaderActionContainer();
-	UPanelWidget* actionPanel = Cast<UPanelWidget>(HeaderActionBox.Get());
-	if (!actionPanel)
-	{
-		return;
-	}
-
-	outButton = NewObject<UButton>(this);
-	if (!outButton)
-	{
-		outButton = nullptr;
-		outTextBlock = nullptr;
-		outIconImage = nullptr;
-		return;
-	}
-
-	UTexture2D* iconTexture = LoadSidebarBlockIconTexture(iconPath);
-	if (iconTexture)
-	{
-		outIconImage = NewObject<UImage>(outButton.Get());
-		if (!outIconImage)
-		{
-			outButton = nullptr;
-			outTextBlock = nullptr;
-			return;
-		}
-
-		outButton->SetContent(outIconImage.Get());
-	}
-	else
-	{
-		outTextBlock = NewObject<UTextBlock>(outButton.Get());
-		if (!outTextBlock)
-		{
-			outButton = nullptr;
-			return;
-		}
-
-		outButton->SetContent(outTextBlock.Get());
-	}
-
-	outButton->SetStyle(MakeSidebarActionButtonStyle());
-	if (UPanelSlot* actionSlot = actionPanel->AddChild(outButton.Get()))
-	{
-		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(actionSlot))
-		{
-			horizontalSlot->SetPadding(FMargin(2.0f, 0.0f, 0.0f, 0.0f));
-			horizontalSlot->SetHorizontalAlignment(HAlign_Right);
-			horizontalSlot->SetVerticalAlignment(VAlign_Center);
-		}
-	}
-	outButton->SetVisibility(ESlateVisibility::Collapsed);
+	bGeneratedAssetHeaderSummaryCreated = true;
 }
 
 void UScenarioEditorSidebarBlockWidget::SetActionButtonState(
-	UButton* button,
-	UTextBlock* textBlock,
-	UImage* iconImage,
-	const bool bVisible,
-	const FString& label,
-	const TCHAR* iconPath) const
+	UBaseButtonWidget* button,
+	const bool bVisible) const
 {
-	if (button)
+	if (!button)
 	{
-		button->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-		button->SetStyle(MakeSidebarActionButtonStyle());
-		button->SetBackgroundColor(FLinearColor::White);
-		button->SetColorAndOpacity(FLinearColor::White);
+		return;
 	}
-	if (iconImage)
-	{
-		ApplySidebarBlockIconBrush(
-			iconImage,
-			LoadSidebarBlockIconTexture(iconPath),
-			MakeSidebarBlockColor(TEXT("F2F2F2")));
-	}
-	if (textBlock)
-	{
-		textBlock->SetText(FText::FromString(label));
-		textBlock->SetJustification(ETextJustify::Center);
-		textBlock->SetColorAndOpacity(FSlateColor(MakeSidebarBlockColor(TEXT("F2F2F2"))));
-	}
+
+	button->SetDisabled(!bVisible);
+	button->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
 void UScenarioEditorSidebarBlockWidget::SetHeaderActionContainerVisible(const bool bVisible) const
@@ -742,10 +519,6 @@ void UScenarioEditorSidebarBlockWidget::SetHeaderActionContainerVisible(const bo
 	const ESlateVisibility visibility = bVisible
 		? ESlateVisibility::SelfHitTestInvisible
 		: ESlateVisibility::Collapsed;
-	if (HeaderActionSpacer)
-	{
-		HeaderActionSpacer->SetVisibility(visibility);
-	}
 	if (HeaderActionBox)
 	{
 		HeaderActionBox->SetVisibility(visibility);
@@ -754,26 +527,21 @@ void UScenarioEditorSidebarBlockWidget::SetHeaderActionContainerVisible(const bo
 
 void UScenarioEditorSidebarBlockWidget::ApplyToggleButtonState() const
 {
-	if (ToggleButton)
-	{
-		ToggleButton->SetStyle(MakeSidebarActionButtonStyle());
-		ToggleButton->SetBackgroundColor(FLinearColor::White);
-		ToggleButton->SetColorAndOpacity(FLinearColor::White);
-	}
+	UTexture2D* texture = ResolveSidebarBlockToggleIconTexture(
+		bExpanded,
+		ExpandedToggleIconTexture,
+		CollapsedToggleIconTexture);
 	if (ToggleIconImage)
 	{
-		UTexture2D* texture = LoadSidebarBlockIconTexture(
-			bExpanded ? SidebarBlockExpandedIconPath : SidebarBlockCollapsedIconPath);
-		ApplySidebarBlockIconBrush(
+		SetSidebarBlockIconTexture(
 			ToggleIconImage.Get(),
-			texture,
-			bSelected
-				? MakeSidebarBlockColor(TEXT("D6ECFF"))
-				: MakeSidebarBlockColor(TEXT("9A9A9A")));
+			texture);
 	}
 	if (ToggleTextBlock)
 	{
-		ToggleTextBlock->SetVisibility(ToggleIconImage ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+		ToggleTextBlock->SetVisibility(ToggleIconImage
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 
@@ -798,6 +566,12 @@ void UScenarioEditorSidebarBlockWidget::ApplyAssetHeaderSummaryState()
 			? ESlateVisibility::Collapsed
 			: ESlateVisibility::SelfHitTestInvisible);
 	}
+	if (HeaderActionSpacer)
+	{
+		HeaderActionSpacer->SetVisibility(bShowAssetHeader
+			? ESlateVisibility::SelfHitTestInvisible
+			: ESlateVisibility::Collapsed);
+	}
 	if (!AssetHeaderContainer)
 	{
 		return;
@@ -814,20 +588,10 @@ void UScenarioEditorSidebarBlockWidget::ApplyAssetHeaderSummaryState()
 	if (AssetHeaderTypeTextBlock)
 	{
 		AssetHeaderTypeTextBlock->SetText(AssetHeaderTypeText);
-		FWidgetTextStyle typeStyle =
-			UWidgetTextStyleCatalog::ResolveStyle(TextStyleCatalog, EWidgetTextStyleRole::Caption);
-		typeStyle.Font.Size = 11;
-		AssetHeaderTypeTextBlock->SetFont(typeStyle.Font);
-		AssetHeaderTypeTextBlock->SetColorAndOpacity(FSlateColor(typeStyle.Color));
 	}
 	if (AssetHeaderNameTextBlock)
 	{
 		AssetHeaderNameTextBlock->SetText(AssetHeaderNameText);
-		FWidgetTextStyle nameStyle =
-			UWidgetTextStyleCatalog::ResolveStyle(TextStyleCatalog, EWidgetTextStyleRole::Label);
-		nameStyle.Font.Size = 14;
-		AssetHeaderNameTextBlock->SetFont(nameStyle.Font);
-		AssetHeaderNameTextBlock->SetColorAndOpacity(FSlateColor(nameStyle.Color));
 	}
 	if (AssetHeaderThumbnailImage)
 	{
@@ -836,9 +600,12 @@ void UScenarioEditorSidebarBlockWidget::ApplyAssetHeaderSummaryState()
 			: AssetHeaderThumbnailTexture.LoadSynchronous();
 		if (thumbnailTexture)
 		{
-			AssetHeaderThumbnailImage->SetBrushFromTexture(thumbnailTexture, true);
-			AssetHeaderThumbnailImage->SetDesiredSizeOverride(FVector2D(34.0f, 34.0f));
-			AssetHeaderThumbnailImage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			SetSidebarBlockIconTexture(AssetHeaderThumbnailImage.Get(), thumbnailTexture);
+			if (bGeneratedAssetHeaderSummaryCreated && GeneratedAssetThumbnailSize > 0.0f)
+			{
+				AssetHeaderThumbnailImage->SetDesiredSizeOverride(
+					FVector2D(GeneratedAssetThumbnailSize, GeneratedAssetThumbnailSize));
+			}
 		}
 		else
 		{
@@ -849,98 +616,9 @@ void UScenarioEditorSidebarBlockWidget::ApplyAssetHeaderSummaryState()
 
 void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 {
-	const int32 blockDepth = bFocusedDetailLayout || bDetailHostLayout
-		? 0
-		: ResolveSidebarBlockDepth(BlockPath, bNested);
-	const FSidebarBlockSurfaceStyle surfaceStyle =
-		ResolveSidebarSurfaceStyle(blockDepth, bSelected, bShowNormalOutline);
-	FSidebarBlockSurfaceStyle resolvedSurfaceStyle = surfaceStyle;
-	if (bDetailHostLayout)
-	{
-		resolvedSurfaceStyle.OutlineColor = FLinearColor::Transparent;
-		resolvedSurfaceStyle.ContentColor = FLinearColor::Transparent;
-		resolvedSurfaceStyle.OutlinePadding = FMargin(0.0f);
-		resolvedSurfaceStyle.ContentPadding = FMargin(0.0f);
-		resolvedSurfaceStyle.BodyPadding = FMargin(0.0f);
-	}
-
-	if (UBorder* outlineBorder = Cast<UBorder>(OutlineBorder.Get()))
-	{
-		outlineBorder->SetBrush(MakeSidebarSurfaceBrush());
-		outlineBorder->SetPadding(resolvedSurfaceStyle.OutlinePadding);
-		outlineBorder->SetBrushColor(resolvedSurfaceStyle.OutlineColor);
-	}
-
-	if (UBorder* contentBorder = Cast<UBorder>(ContentBorder.Get()))
-	{
-		contentBorder->SetBrush(MakeSidebarSurfaceBrush());
-		contentBorder->SetPadding(resolvedSurfaceStyle.ContentPadding);
-		contentBorder->SetBrushColor(resolvedSurfaceStyle.ContentColor);
-	}
-
 	if (BlockHeaderRow)
 	{
 		BlockHeaderRow->SetVisibility(bDetailHostLayout ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
-		if (UVerticalBoxSlot* headerSlot = Cast<UVerticalBoxSlot>(BlockHeaderRow->Slot))
-		{
-			headerSlot->SetPadding(FMargin(0.0f, 1.0f, 0.0f, 3.0f));
-		}
-	}
-
-	if (BodyBox)
-	{
-		if (UVerticalBoxSlot* bodySlot = Cast<UVerticalBoxSlot>(BodyBox->Slot))
-		{
-			bodySlot->SetPadding(resolvedSurfaceStyle.BodyPadding);
-		}
-	}
-
-	ApplyCompactBlockNameStyle(
-		NameTextBlock.Get(),
-		TextStyleCatalog,
-		bNested,
-		blockDepth);
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
-		PathTextBlock.Get(),
-		TextStyleCatalog,
-		EWidgetTextStyleRole::Caption);
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
-		BadgeTextBlock.Get(),
-		TextStyleCatalog,
-		EWidgetTextStyleRole::Caption);
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
-		ToggleTextBlock.Get(),
-		TextStyleCatalog,
-		EWidgetTextStyleRole::Caption);
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
-		AddActionTextBlock.Get(),
-		TextStyleCatalog,
-		EWidgetTextStyleRole::Label);
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
-		RemoveActionTextBlock.Get(),
-		TextStyleCatalog,
-		EWidgetTextStyleRole::Label);
-
-	if (NameTextBlock && bSelected)
-	{
-		NameTextBlock->SetColorAndOpacity(FSlateColor(MakeSidebarBlockColor(TEXT("F4FAFF"))));
-	}
-	if (BadgeTextBlock)
-	{
-		BadgeTextBlock->SetColorAndOpacity(FSlateColor(bSelected
-			? MakeSidebarBlockColor(TEXT("9FD3FF"))
-			: MakeSidebarBlockColor(TEXT("AFC8DF"))));
-	}
-	if (ToggleTextBlock)
-	{
-		ToggleTextBlock->SetColorAndOpacity(FSlateColor(bSelected
-			? MakeSidebarBlockColor(TEXT("D6ECFF"))
-			: MakeSidebarBlockColor(TEXT("9A9A9A"))));
-	}
-	if (UBorder* selectedBorder = Cast<UBorder>(SelectedStateWidget.Get()))
-	{
-		selectedBorder->SetPadding(FMargin(3.0f, 0.0f, 0.0f, 0.0f));
-		selectedBorder->SetBrushColor(MakeSidebarBlockColor(TEXT("2498FF")));
 	}
 }
 
@@ -961,18 +639,10 @@ void UScenarioEditorSidebarBlockWidget::RefreshBlock()
 	SetTextBlockText(BadgeTextBlock.Get(), BadgeText);
 	SetActionButtonState(
 		AddActionButton.Get(),
-		AddActionTextBlock.Get(),
-		AddActionIconImage.Get(),
-		bAddActionVisible && !bDetailHostLayout,
-		TEXT("+"),
-		SidebarBlockAddActionIconPath);
+		bAddActionVisible && !bDetailHostLayout);
 	SetActionButtonState(
 		RemoveActionButton.Get(),
-		RemoveActionTextBlock.Get(),
-		RemoveActionIconImage.Get(),
-		bRemoveActionVisible && !bDetailHostLayout,
-		TEXT("-"),
-		SidebarBlockRemoveActionIconPath);
+		bRemoveActionVisible && !bDetailHostLayout);
 	SetHeaderActionContainerVisible((bAddActionVisible || bRemoveActionVisible) && !bDetailHostLayout);
 	ApplyVisualStyle();
 	ApplyToggleButtonState();

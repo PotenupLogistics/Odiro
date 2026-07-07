@@ -68,6 +68,14 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Replay Card|Style", meta = (AllowPrivateAccess = "true"))
 	FLinearColor ActiveReplayCardSurfaceColor;
 
+	// Episode 성공 상태 label에 적용하는 WBP-authored 색.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Replay Card|Style", meta = (AllowPrivateAccess = "true"))
+	FLinearColor SuccessEpisodeStateTextColor = FLinearColor(0.0f, 0.72f, 0.28f, 1.0f);
+
+	// Episode 실패 상태 label에 적용하는 WBP-authored 색.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Replay Card|Style", meta = (AllowPrivateAccess = "true"))
+	FLinearColor FailureEpisodeStateTextColor = FLinearColor(0.92f, 0.14f, 0.14f, 1.0f);
+
 	// Episode id label owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> EpisodeIdText;

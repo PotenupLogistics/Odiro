@@ -72,6 +72,10 @@ private:
 	void BindControls();
 	void UnbindControls();
 	void RefreshRow();
+	// Finds the WBP-owned image inside ExpandButton so layout and styling stay Blueprint-authored.
+	void EnsureExpandIconImage();
+	// Applies the current expanded/collapsed icon state to the WBP-authored expand control.
+	void ApplyExpandButtonState();
 	// Resolves the authored or runtime-created semantic icon image for this row.
 	UImage* ResolveOutlinerIconImage();
 	// Resolves the semantic icon texture from the row group or actor category.
@@ -88,6 +92,10 @@ private:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> ExpandGlyphText;
+
+	// Optional WBP-owned image shown inside ExpandButton.
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UImage> ExpandIconImage;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> ItemLabelText;
@@ -116,6 +124,14 @@ private:
 	// Fixed pixel size for the outliner semantic icon.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner", meta = (ClampMin = "0.0", AllowPrivateAccess = "true"))
 	float OutlinerIconSize = 14.0f;
+
+	// Icon shown by ExpandButton when this row is expanded.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style", meta = (AllowPrivateAccess = "true"))
+	TSoftObjectPtr<UTexture2D> ExpandedExpandButtonIconTexture;
+
+	// Icon shown by ExpandButton when this row is collapsed.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style", meta = (AllowPrivateAccess = "true"))
+	TSoftObjectPtr<UTexture2D> CollapsedExpandButtonIconTexture;
 
 	// Icon texture for corridor rows.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner", meta = (AllowPrivateAccess = "true"))

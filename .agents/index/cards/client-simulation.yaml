@@ -174,7 +174,7 @@ guardrails:
   - Scenario editor reusable WBP class references come from ScenarioEditorWidgetClassCatalog assets or exposed widget properties; do not add C++ WBP class-path fallbacks.
   - Scenario LLM prompt widgets read input and forward commands only; prompt ViewModel owns generation/load/run command state, while scenario path validation, generation delegate binding, editor load/save, and project run launch stay behind ScenarioEditorUiSubsystem.
   - Scenario Template sidebar repeated rows use ScenarioTemplateFieldRowViewModel items; native widgets only bind rows, inject item state, and forward edit events.
-  - Scenario Template sidebar helper code owns only repeated block/field-row visual setup and no-argument add/remove action wiring; data mutation stays in ScenarioTemplateSidebarViewModel commands.
+  - Scenario Template sidebar WBP assets own layout/style defaults; native helper code only creates dynamic repeated rows/controls, applies Blueprint-configurable generated-content properties, and wires no-argument add/remove actions. Data mutation stays in ScenarioTemplateSidebarViewModel commands.
   - Shared corridor/geometry helpers own reusable surface metadata, procedural lane mesh helpers, and analytic surface queries.
   - Scenario editor authoring UI hides legacy GroundRegion draw/outliner affordances; Corridor surfaces are the editable ground source, while runtime GroundRegion compatibility remains in simulation/evaluation.
   - Scenario preview framing consumes Scenario-owned bounds resolving and does not inspect DeliveryBot grid actors directly.

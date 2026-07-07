@@ -36,9 +36,15 @@ void UBaseDropdownOptionWidget::SynchronizeBaseProperties()
 		const bool bRowActive = bRowSelected
 			|| effectiveState == EBaseWidgetState::Pressed
 			|| effectiveState == EBaseWidgetState::Selected;
+		const FLinearColor activeFillColor = bUseOptionActiveFillColorOverride
+			? OptionActiveFillColorOverride
+			: colors->SurfaceControlActiveColor;
+		const FLinearColor hoverFillColor = bUseOptionHoverFillColorOverride
+			? OptionHoverFillColorOverride
+			: colors->SurfaceHoverColor;
 		const FLinearColor fillColor = bRowActive
-			? colors->SurfaceControlActiveColor
-			: (bRowHovered ? colors->SurfaceHoverColor : FLinearColor::Transparent);
+			? activeFillColor
+			: (bRowHovered ? hoverFillColor : FLinearColor::Transparent);
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			BorderFrame.Get(),
 			SurfaceBorder.Get(),
@@ -49,9 +55,10 @@ void UBaseDropdownOptionWidget::SynchronizeBaseProperties()
 
 		if (LabelTextBlock)
 		{
+			const FLinearColor normalLabelColor = colors->TextPrimaryColor;
 			const FLinearColor labelColor = effectiveState == EBaseWidgetState::Disabled
 				? colors->TextFaintColor
-				: (bRowSelected ? colors->AccentColor : colors->TextPrimaryColor);
+				: (bRowSelected && !bPreserveSelectedLabelColor ? colors->AccentColor : normalLabelColor);
 			LabelTextBlock->SetColorAndOpacity(FSlateColor(labelColor));
 		}
 	}
@@ -65,4 +72,9 @@ void UBaseDropdownOptionWidget::SynchronizeBaseProperties()
 			? ESlateVisibility::SelfHitTestInvisible
 			: ESlateVisibility::Collapsed);
 	}
+}
+
+bool UBaseDropdownOptionWidget::ShouldApplyLabelTextStyle() const
+{
+	return false;
 }

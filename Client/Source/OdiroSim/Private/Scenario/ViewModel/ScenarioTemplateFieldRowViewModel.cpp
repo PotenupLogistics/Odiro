@@ -87,6 +87,23 @@ void UScenarioTemplateFieldRowViewModel::SetComboAllowsUnset(
 		unsetDisplayText.IsEmpty() ? FString(TEXT("(unset)")) : unsetDisplayText);
 }
 
+void UScenarioTemplateFieldRowViewModel::SetSliderSpec(
+	FScenarioEditorSidebarFieldSliderSpec inSliderSpec)
+{
+	inSliderSpec.DisplayDecimals = FMath::Clamp(inSliderSpec.DisplayDecimals, 0, 6);
+	if (!FMath::IsFinite(inSliderSpec.MinValue)
+		|| !FMath::IsFinite(inSliderSpec.MaxValue)
+		|| inSliderSpec.MinValue >= inSliderSpec.MaxValue)
+	{
+		inSliderSpec.bEnabled = false;
+	}
+	if (inSliderSpec.bInteger)
+	{
+		inSliderSpec.DisplayDecimals = 0;
+	}
+	UE_MVVM_SET_PROPERTY_VALUE(SliderSpec, inSliderSpec);
+}
+
 void UScenarioTemplateFieldRowViewModel::SetFieldVisible(const bool bInVisible)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(bVisible, bInVisible);

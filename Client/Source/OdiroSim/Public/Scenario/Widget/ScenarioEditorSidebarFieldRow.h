@@ -1,20 +1,18 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
 #include "Scenario/Editor/ScenarioEditorTypes.h"
+#include "UI/BaseWidget.h"
 #include "Types/SlateEnums.h"
 #include "ScenarioEditorSidebarFieldRow.generated.h"
 
-class UEditableTextBox;
-class UButton;
-class UComboBoxString;
-class UHorizontalBox;
-class UImage;
+class UBaseButtonWidget;
+class UBaseDropdownWidget;
+class UBaseSliderWidget;
+class UBaseTextInputWidget;
 class UTexture2D;
-class UMultiLineEditableTextBox;
-class USizeBox;
 class UTextBlock;
+class UWidget;
 class UWidgetTextStyleCatalog;
 class UScenarioTemplateFieldRowViewModel;
 
@@ -57,163 +55,157 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 
 // Leaf property row for project scenario sidebar fields such as "scenario_id : value".
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UScenarioEditorSidebarFieldRow : public UUserWidget
+class ODIROSIM_API UScenarioEditorSidebarFieldRow : public UBaseWidget
 {
 	GENERATED_BODY()
 
 public:
-	// Binds editable controls after UMG construction.
+	// Sets default icon assets used by BaseButton-backed row actions.
+	UScenarioEditorSidebarFieldRow(const FObjectInitializer& objectInitializer = FObjectInitializer::Get());
+
+	// Binds Base child widget delegates after UMG construction.
 	virtual void NativeConstruct() override;
-	// Releases editable controls before teardown.
+	// Releases Base child widget delegates before teardown.
 	virtual void NativeDestruct() override;
+	// Applies exposed row properties to bound WBP-owned Base child widgets.
+	virtual void SynchronizeBaseProperties() override;
 
-	// Label displayed on the left side of the field row.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	FString FieldLabel;
+	// Updates the row label and refreshes bound controls.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetFieldLabel(const FString& label);
 
-	// Current text value shown by either the editable or read-only value control.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	FString ValueText;
+	// Returns the row label.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	FString GetFieldLabel() const { return FieldLabel; }
 
-	// Optional minimum text used when the field is edited as a range.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	FString MinValueText;
+	// Updates the row value and refreshes bound controls.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetValueText(const FString& text);
 
-	// Optional maximum text used when the field is edited as a range.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	FString MaxValueText;
+	// Returns the value currently displayed by the row.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	FString GetValueText() const;
 
-	// Option list used when this row is edited through a combo box.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	TArray<FString> ComboOptions;
+	// Updates the min/max value text used by range-capable rows.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetRangeValueText(const FString& minText, const FString& maxText);
 
-	// Preferred editor control shape for this row.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	EScenarioEditorSidebarFieldInputType InputType = EScenarioEditorSidebarFieldInputType::Text;
+	// Returns the minimum text currently displayed by the range editor.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	FString GetMinValueText() const;
 
-	// Controls whether the row should expose the editable text box when one is bound.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	bool bEditable = true;
+	// Returns the maximum text currently displayed by the range editor.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	FString GetMaxValueText() const;
 
-	// Controls whether editable values use the bounded multiline input instead of the single-line input.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	bool bMultilineValue = false;
+	// Updates the options available when this row uses dropdown input.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetComboOptions(const TArray<FString>& options);
 
-	// Controls whether range-capable rows show min/max boxes instead of a single value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	bool bRangeInputEnabled = false;
+	// Returns the options available when this row uses dropdown input.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	TArray<FString> GetComboOptions() const { return ComboOptions; }
 
-	// Controls whether this row exposes add/remove buttons for array-like fields.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	bool bArrayControlsEnabled = false;
+	// Updates optional display names and thumbnails used by dropdown options.
+	void SetComboOptionSummaries(
+		const TMap<FString, FText>& optionDisplayTexts,
+		const TMap<FString, TSoftObjectPtr<UTexture2D>>& optionThumbnailTextures);
 
-	// Controls whether this row exposes the add button independently from remove.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	bool bAddItemControlVisible = false;
+	// Updates the preferred editor control shape for this row.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetInputType(EScenarioEditorSidebarFieldInputType inInputType);
 
-	// Controls whether this row exposes the remove button independently from add.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	bool bRemoveItemControlVisible = false;
+	// Returns the preferred editor control shape for this row.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	EScenarioEditorSidebarFieldInputType GetInputType() const { return InputType; }
 
-	// Controls whether combo-box input exposes an explicit unset option.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	bool bComboAllowsUnset = false;
+	// Toggles editable versus read-only value presentation.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetEditable(bool bInEditable);
 
-	// Repeated item index emitted by indexed row delegates.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	int32 ActionContextIndex = INDEX_NONE;
+	// Returns whether the row currently exposes editable controls.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	bool IsEditable() const { return bEditable; }
 
-	// Display label used for an unset combo-box value.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	FString ComboUnsetDisplayText = TEXT("(unset)");
+	// Toggles multiline editable presentation for long string values.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetMultilineValue(bool bInMultilineValue);
 
-	// Minimum height used by multiline inputs before content-driven expansion.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template", meta = (ClampMin = "24.0"))
-	float MultilineValueHeight = 96.0f;
+	// Returns whether text mode should use multiline wrapping.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	bool IsMultilineValue() const { return bMultilineValue; }
 
-	// Shared typography catalog used to style label and value controls.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
-	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
+	// Toggles range-capable rows between single-value and min/max editing.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetRangeInputEnabled(bool bInRangeInputEnabled);
 
-	// Optional label text block bound by the UMG row.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UTextBlock> LabelTextBlock;
+	// Returns whether the row is currently using min/max range input.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	bool IsRangeInputEnabled() const { return bRangeInputEnabled; }
 
-	// Optional separator text block, normally ":".
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UTextBlock> SeparatorTextBlock;
+	// Toggles add/remove controls for array-like fields.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetArrayControlsEnabled(bool bInArrayControlsEnabled);
 
-	// Optional read-only value text block for non-editable rows.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UTextBlock> ValueTextBlock;
+	// Returns whether add/remove controls are enabled as a group.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	bool HasArrayControls() const { return bArrayControlsEnabled; }
 
-	// Optional editable text box for editable rows.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UEditableTextBox> ValueEditableTextBox;
+	// Toggles only the add control for array-like fields.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetAddItemControlVisible(bool bInAddItemControlVisible);
 
-	// Optional combo box for fields constrained to a known option set.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UComboBoxString> ValueComboBox;
+	// Returns whether the add-item control is visible.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	bool IsAddItemControlVisible() const { return bAddItemControlVisible; }
 
-	// Optional fixed-size wrapper for editable multiline values.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<USizeBox> ValueMultiLineSizeBox;
+	// Toggles only the remove control for array-like fields.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetRemoveItemControlVisible(bool bInRemoveItemControlVisible);
 
-	// Optional multiline editable text box for long string values.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UMultiLineEditableTextBox> ValueMultiLineEditableTextBox;
+	// Returns whether the remove-item control is visible.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	bool IsRemoveItemControlVisible() const { return bRemoveItemControlVisible; }
 
-	// Optional horizontal range editor container used for min/max field values.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UHorizontalBox> ValueRangeBox;
+	// Updates the repeated item context index emitted by indexed delegates.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetActionContextIndex(int32 inActionContextIndex);
 
-	// Optional editable text box for the range minimum value.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UEditableTextBox> MinValueEditableTextBox;
+	// Returns the repeated item context index emitted by indexed delegates.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	int32 GetActionContextIndex() const { return ActionContextIndex; }
 
-	// Optional separator text shown between range min and max values.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UTextBlock> RangeSeparatorTextBlock;
+	// Toggles the explicit unset option for combo-box fields.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetComboAllowsUnset(bool bInComboAllowsUnset, const FString& unsetDisplayText);
 
-	// Optional editable text box for the range maximum value.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UEditableTextBox> MaxValueEditableTextBox;
+	// Returns whether dropdown input exposes an explicit unset option.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	bool AllowsComboUnset() const { return bComboAllowsUnset; }
 
-	// Optional button that toggles a range-capable field between single and min/max input.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UButton> RangeToggleButton;
+	// Returns the display label used for an unset dropdown value.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	FString GetComboUnsetDisplayText() const { return ComboUnsetDisplayText; }
 
-	// Optional text used by the range toggle button.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UTextBlock> RangeToggleTextBlock;
+	// Updates explicit BaseSlider bounds for numeric and range rows.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetSliderSpec(FScenarioEditorSidebarFieldSliderSpec inSliderSpec);
 
-	// Optional icon used by the range toggle button when the WBP owns icon binding.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UImage> RangeToggleIconImage;
+	// Returns explicit BaseSlider bounds for numeric and range rows.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarFieldSliderSpec GetSliderSpec() const { return SliderSpec; }
 
-	// Optional button that requests adding an array item near this row.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UButton> AddItemButton;
+	// Updates the shared typography catalog reference kept for legacy callers.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
 
-	// Optional text used by the add item button.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UTextBlock> AddItemTextBlock;
+	// Returns the legacy typography catalog reference.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	TSoftObjectPtr<UWidgetTextStyleCatalog> GetTextStyleCatalog() const { return TextStyleCatalog; }
 
-	// Optional icon used by the add item button when C++ or WBP owns icon binding.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UImage> AddItemIconImage;
-
-	// Optional button that requests removing an array item represented by this row.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UButton> RemoveItemButton;
-
-	// Optional text used by the remove item button.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UTextBlock> RemoveItemTextBlock;
-
-	// Optional icon used by the remove item button when C++ or WBP owns icon binding.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UImage> RemoveItemIconImage;
+	// Applies display/editor state from the field row ViewModel.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void InitializeFromItemViewModel(UScenarioTemplateFieldRowViewModel* itemViewModel);
 
 	// Emits committed text from the editable value control.
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
@@ -243,152 +235,220 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
 	FScenarioEditorSidebarFieldRowIndexedActionRequested OnIndexedRemoveItemRequested;
 
-	// Updates the row label and refreshes bound controls.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetFieldLabel(const FString& label);
+protected:
+	// Label displayed on the left side of the field row.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetFieldLabel", Setter = "SetFieldLabel", BlueprintGetter = "GetFieldLabel", BlueprintSetter = "SetFieldLabel", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	FString FieldLabel;
 
-	// Updates the row value and refreshes bound controls.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetValueText(const FString& text);
+	// Current text value shown by either the editable or read-only value control.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetValueText", Setter = "SetValueText", BlueprintGetter = "GetValueText", BlueprintSetter = "SetValueText", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	FString ValueText;
 
-	// Updates the min/max value text used by range-capable rows.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetRangeValueText(const FString& minText, const FString& maxText);
+	// Optional minimum text used when the field is edited as a range.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetMinValueText", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	FString MinValueText;
 
-	// Updates the options available when this row uses combo-box input.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetComboOptions(const TArray<FString>& options);
+	// Optional maximum text used when the field is edited as a range.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetMaxValueText", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	FString MaxValueText;
 
-	// Updates optional display names and thumbnails used by combo-box options.
-	void SetComboOptionSummaries(
-		const TMap<FString, FText>& optionDisplayTexts,
-		const TMap<FString, TSoftObjectPtr<UTexture2D>>& optionThumbnailTextures);
+	// Option list used when this row is edited through a dropdown.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetComboOptions", Setter = "SetComboOptions", BlueprintGetter = "GetComboOptions", BlueprintSetter = "SetComboOptions", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	TArray<FString> ComboOptions;
 
-	// Updates the preferred editor control shape for this row.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetInputType(EScenarioEditorSidebarFieldInputType inInputType);
+	// Preferred editor control shape for this row.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetInputType", Setter = "SetInputType", BlueprintGetter = "GetInputType", BlueprintSetter = "SetInputType", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	EScenarioEditorSidebarFieldInputType InputType = EScenarioEditorSidebarFieldInputType::Text;
 
-	// Toggles editable versus read-only value presentation.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetEditable(bool bInEditable);
+	// Controls whether the row should expose editable controls when bound.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsEditable", Setter = "SetEditable", BlueprintGetter = "IsEditable", BlueprintSetter = "SetEditable", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	bool bEditable = true;
 
-	// Toggles multiline editable presentation for long string values.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetMultilineValue(bool bInMultilineValue);
+	// Controls whether editable text values use multiline wrapping.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsMultilineValue", Setter = "SetMultilineValue", BlueprintGetter = "IsMultilineValue", BlueprintSetter = "SetMultilineValue", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	bool bMultilineValue = false;
 
-	// Toggles range-capable rows between single-value and min/max editing.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetRangeInputEnabled(bool bInRangeInputEnabled);
+	// Controls whether range-capable rows show min/max boxes instead of a single value.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsRangeInputEnabled", Setter = "SetRangeInputEnabled", BlueprintGetter = "IsRangeInputEnabled", BlueprintSetter = "SetRangeInputEnabled", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	bool bRangeInputEnabled = false;
 
-	// Toggles add/remove controls for array-like fields.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetArrayControlsEnabled(bool bInArrayControlsEnabled);
+	// Controls whether this row exposes add/remove buttons for array-like fields.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "HasArrayControls", Setter = "SetArrayControlsEnabled", BlueprintGetter = "HasArrayControls", BlueprintSetter = "SetArrayControlsEnabled", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	bool bArrayControlsEnabled = false;
 
-	// Toggles only the add control for array-like fields.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetAddItemControlVisible(bool bInAddItemControlVisible);
+	// Controls whether this row exposes the add button independently from remove.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsAddItemControlVisible", Setter = "SetAddItemControlVisible", BlueprintGetter = "IsAddItemControlVisible", BlueprintSetter = "SetAddItemControlVisible", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	bool bAddItemControlVisible = false;
 
-	// Toggles only the remove control for array-like fields.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetRemoveItemControlVisible(bool bInRemoveItemControlVisible);
+	// Controls whether this row exposes the remove button independently from add.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsRemoveItemControlVisible", Setter = "SetRemoveItemControlVisible", BlueprintGetter = "IsRemoveItemControlVisible", BlueprintSetter = "SetRemoveItemControlVisible", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	bool bRemoveItemControlVisible = false;
 
-	// Updates the repeated item context index emitted by indexed delegates.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetActionContextIndex(int32 inActionContextIndex);
+	// Controls whether dropdown input exposes an explicit unset option.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "AllowsComboUnset", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	bool bComboAllowsUnset = false;
 
-	// Toggles the explicit unset option for combo-box fields.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetComboAllowsUnset(bool bInComboAllowsUnset, const FString& unsetDisplayText);
+	// Repeated item index emitted by indexed row delegates.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetActionContextIndex", Setter = "SetActionContextIndex", BlueprintGetter = "GetActionContextIndex", BlueprintSetter = "SetActionContextIndex", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	int32 ActionContextIndex = INDEX_NONE;
 
-	// Updates the shared typography catalog reference used by this row.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
+	// Display label used for an unset dropdown value.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetComboUnsetDisplayText", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	FString ComboUnsetDisplayText = TEXT("(unset)");
 
-	// Applies display/editor state from the field row ViewModel.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void InitializeFromItemViewModel(UScenarioTemplateFieldRowViewModel* itemViewModel);
+	// Minimum height used by multiline inputs before content-driven expansion.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template", meta = (ClampMin = "24.0", ExposeOnSpawn = "true"))
+	float MultilineValueHeight = 96.0f;
 
-	// Returns the value currently displayed by the row.
-	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
-	FString GetValueText() const;
+	// Explicit BaseSlider bounds for numeric and range rows.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSliderSpec", Setter = "SetSliderSpec", BlueprintGetter = "GetSliderSpec", BlueprintSetter = "SetSliderSpec", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	FScenarioEditorSidebarFieldSliderSpec SliderSpec;
 
-	// Returns the minimum text currently displayed by the range editor.
-	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
-	FString GetMinValueText() const;
+	// Shared typography catalog kept as a compatibility bridge for existing setup code.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetTextStyleCatalog", Setter = "SetTextStyleCatalog", BlueprintGetter = "GetTextStyleCatalog", BlueprintSetter = "SetTextStyleCatalog", Category = "Scenario|Editor|Template", meta = (ExposeOnSpawn = "true"))
+	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
 
-	// Returns the maximum text currently displayed by the range editor.
-	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
-	FString GetMaxValueText() const;
+	// Icon shown when a range-capable row is currently using min/max input.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style", meta = (ExposeOnSpawn = "true"))
+	TSoftObjectPtr<UTexture2D> RangeInputIconTexture;
+
+	// Icon shown when a range-capable row is currently using single-value input.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style", meta = (ExposeOnSpawn = "true"))
+	TSoftObjectPtr<UTexture2D> FixedInputIconTexture;
+
+	// Icon shown by the optional add-item control.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style", meta = (ExposeOnSpawn = "true"))
+	TSoftObjectPtr<UTexture2D> AddItemIconTexture;
+
+	// Icon shown by the optional remove-item control.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style", meta = (ExposeOnSpawn = "true"))
+	TSoftObjectPtr<UTexture2D> RemoveItemIconTexture;
+
+	// Icon size passed to BaseButton action buttons; values <= 0 use BaseButton defaults.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Style", meta = (ClampMin = "0.0", ExposeOnSpawn = "true"))
+	float GeneratedActionIconSize = 0.0f;
+
+	// Optional label text widget bound by the UMG row.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UTextBlock> LabelTextBlock;
+
+	// Optional separator text widget, normally ":".
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UTextBlock> SeparatorTextBlock;
+
+	// Optional BaseTextInput used for read-only, single-line, multiline, and range values.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UBaseTextInputWidget> ValueEditableTextBox;
+
+	// Optional BaseDropdown for fields constrained to a known option set.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UBaseDropdownWidget> ValueComboBox;
+
+	// Optional BaseButton that toggles between single and min/max input.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UBaseButtonWidget> RangeToggleButton;
+
+	// Optional BaseButton that requests adding an array item near this row.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UBaseButtonWidget> AddItemButton;
+
+	// Optional BaseButton that requests removing an array item represented by this row.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UBaseButtonWidget> RemoveItemButton;
+
+	// Optional BaseSlider shown only when explicit slider bounds are configured.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UBaseSliderWidget> ValueSlider;
 
 private:
 	// Handles text commits from the optional editable value control.
 	UFUNCTION()
-	void HandleValueTextCommitted(const FText& text, ETextCommit::Type commitMethod);
+	void HandleValueTextCommitted(UBaseTextInputWidget* widget, const FText& text);
 
-	// Handles committed selections from the optional combo box.
+	// Handles committed selections from the optional dropdown.
 	UFUNCTION()
-	void HandleValueComboSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+	void HandleDropdownSelectionChanged(UWidget* widget, FName selectedId);
 
-	// Builds one combo option row with optional asset thumbnail metadata.
+	// Handles committed lower/upper values from the range variant of the value input.
 	UFUNCTION()
-	UWidget* HandleGenerateComboOptionWidget(FString item);
+	void HandleRangeValueCommitted(UBaseTextInputWidget* widget, float lowerValue, float upperValue);
 
-	// Handles range minimum text commits.
-	UFUNCTION()
-	void HandleMinValueTextCommitted(const FText& text, ETextCommit::Type commitMethod);
-	// Handles range maximum text commits.
-	UFUNCTION()
-	void HandleMaxValueTextCommitted(const FText& text, ETextCommit::Type commitMethod);
 	// Handles clicks on the range mode toggle.
 	UFUNCTION()
-	void HandleRangeToggleClicked();
+	void HandleRangeToggleClicked(UBaseButtonWidget* button);
+
 	// Handles clicks on the add array item button.
 	UFUNCTION()
-	void HandleAddItemClicked();
+	void HandleAddItemClicked(UBaseButtonWidget* button);
+
 	// Handles clicks on the remove array item button.
 	UFUNCTION()
-	void HandleRemoveItemClicked();
+	void HandleRemoveItemClicked(UBaseButtonWidget* button);
+
+	// Handles single-value slider edits.
+	UFUNCTION()
+	void HandleSliderValueChanged(UWidget* widget, float value);
+
+	// Handles range slider edits.
+	UFUNCTION()
+	void HandleSliderRangeValueChanged(UWidget* widget, float lowerValue, float upperValue);
 
 	// Binds editable control delegates owned by this row.
 	void BindControls();
 	// Releases editable control delegates owned by this row.
 	void UnbindControls();
-	// Applies shared sidebar field spacing to the optional WBP-owned controls.
-	void ApplyVisualStyle();
-	// Creates generated icon content for optional range/fixed buttons when WBP binding is absent.
-	void EnsureRangeToggleIcon();
-	// Creates generated icon content for optional row add/remove buttons when WBP binding is absent.
-	void EnsureArrayActionIcons();
-	// Applies the flat no-background visual style to row action buttons.
-	void ApplyFlatButtonStyle(UButton* button) const;
-	// Applies the range/fixed icon and flat visual state to the range toggle button.
-	void ApplyRangeToggleButtonState() const;
-	// Applies visibility and style state to row add/remove buttons.
-	void ApplyArrayActionButtonState() const;
-	// Applies stored label, value, and editability state to bound controls.
-	void RefreshRow();
 	// Returns whether the current type should show the multiline editor.
 	bool UsesMultilineInput() const;
-	// Returns whether the current type should show the combo-box editor.
+	// Returns whether the current type should show the dropdown editor.
 	bool UsesComboInput() const;
 	// Returns whether the current type can toggle to min/max input.
 	bool IsRangeCapable() const;
 	// Returns whether the row should currently show min/max input.
 	bool UsesRangeInput() const;
-	// Applies combo options and selected value to the bound combo box.
-	void RefreshComboBoxOptions();
-	// Returns the user-facing display text for one combo option.
+	// Returns whether the current type can use BaseSlider.
+	bool IsSliderCapable() const;
+	// Returns whether the BaseSlider should currently be visible.
+	bool ShouldShowSlider() const;
+	// Applies dropdown options and selected value to the bound dropdown.
+	void RefreshDropdownOptions();
+	// Applies scalar/range values to the bound BaseSlider.
+	void RefreshSlider();
+	// Emits a value commit through the legacy row delegate surface.
+	void BroadcastValueCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Returns the user-facing display text for one dropdown option.
 	FText ResolveComboOptionDisplayText(const FString& option) const;
-	// Returns the optional thumbnail texture for one combo option.
-	TSoftObjectPtr<UTexture2D> ResolveComboOptionThumbnail(const FString& option) const;
-	// Applies text to a bound text block.
-	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
+	// Returns the optional thumbnail texture for one dropdown option.
+	UTexture2D* ResolveComboOptionThumbnail(const FString& option) const;
+	// Applies runtime text to a WBP-owned TextBlock child.
+	void SetTextBlockText(UTextBlock* textWidget, const FString& text) const;
+	// Applies text-mode state to a BaseTextInput child.
+	void SetTextInputState(UBaseTextInputWidget* inputWidget, const FString& text, bool bVisible, bool bTextWrap);
+	// Applies number-range state to the primary BaseTextInput child.
+	void SetRangeTextInputState(UBaseTextInputWidget* inputWidget, bool bVisible);
+	// Applies icon and visibility state to a BaseButton child.
+	void SetActionButtonState(UBaseButtonWidget* button, bool bVisible, UTexture2D* icon, const FText& fallbackGlyph) const;
+	// Applies multiline height while preserving the WBP-authored primary input size baseline.
+	void SetValueInputSizeConstraints(UBaseTextInputWidget* inputWidget, bool bTextWrap);
+	// Normalizes invalid slider specs to disabled state.
+	static FScenarioEditorSidebarFieldSliderSpec NormalizeSliderSpec(FScenarioEditorSidebarFieldSliderSpec inSliderSpec);
 
-	// Option value to display text map used by asset-backed combo rows.
+	// Option value to display text map used by asset-backed dropdown rows.
 	UPROPERTY(Transient)
 	TMap<FString, FText> ComboOptionDisplayTextByValue;
 
-	// Option value to thumbnail map used by asset-backed combo rows.
+	// Option value to thumbnail map used by asset-backed dropdown rows.
 	UPROPERTY(Transient)
 	TMap<FString, TSoftObjectPtr<UTexture2D>> ComboOptionThumbnailByValue;
+
+	// Prevents child events from echoing property synchronization writes.
+	UPROPERTY(Transient)
+	bool bSynchronizing = false;
+
+	// WBP-authored primary text-input size constraints restored outside multiline mode.
+	UPROPERTY(Transient)
+	FBaseWidgetSizeConstraints ValueInputBaseSizeConstraints;
+
+	// Whether the primary text-input size baseline has been captured.
+	UPROPERTY(Transient)
+	bool bValueInputBaseSizeConstraintsCaptured = false;
 };

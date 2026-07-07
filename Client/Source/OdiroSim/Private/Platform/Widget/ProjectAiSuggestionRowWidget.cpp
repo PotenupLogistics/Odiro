@@ -1,13 +1,25 @@
 #include "Platform/Widget/ProjectAiSuggestionRowWidget.h"
 
+#include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Platform/ViewModel/ExperimentResultItemViewModels.h"
+#include "Platform/Widget/ProjectAiSuggestionSectionWidget.h"
 #include "UI/BaseWidgetTokens.h"
 #include "UI/BaseTextWidget.h"
 
 namespace
 {
+	// Parsed display section from API strings such as "이유\n- ...".
+	struct FSuggestionTextSection
+	{
+		// Two-character UI header shown at the left of the bullet list.
+		FString Header;
+
+		// Bullet list items displayed to the right of Header.
+		TArray<FString> Items;
+	};
+
 	// Appends one trimmed display line to a multi-line detail string.
 	void AppendSuggestionDisplayLine(FString& output, const FString& line)
 	{
@@ -22,6 +34,162 @@ namespace
 			output += TEXT("\n");
 		}
 		output += trimmedLine;
+	}
+
+	// Returns the compact row header for known API section titles.
+	FString NormalizeSuggestionSectionHeader(const FString& rawHeader)
+	{
+		const FString header = rawHeader.TrimStartAndEnd();
+		if (header == TEXT("확인 항목"))
+		{
+			return TEXT("확인");
+		}
+		return header;
+	}
+
+	// Returns true for section headings produced by the Result Analysis v2 API.
+	bool IsKnownSuggestionSectionHeader(const FString& line)
+	{
+		const FString header = line.TrimStartAndEnd();
+		return header == TEXT("이유")
+			|| header == TEXT("확인 항목")
+			|| header == TEXT("확인")
+			|| header == TEXT("관찰")
+			|| header == TEXT("해석");
+	}
+
+	// Removes the API bullet marker while preserving the displayed text.
+	FString StripSuggestionBulletPrefix(const FString& line)
+	{
+		FString item = line.TrimStartAndEnd();
+		if (item.StartsWith(TEXT("-")))
+		{
+			item.RightChopInline(1);
+		}
+		return item.TrimStartAndEnd();
+	}
+
+	// Parses API-authored heading plus dash-list text into display sections.
+	bool ParseSuggestionTextSections(const FString& text, TArray<FSuggestionTextSection>& outSections)
+	{
+		outSections.Reset();
+
+		TArray<FString> lines;
+		text.ParseIntoArrayLines(lines, false);
+
+		FSuggestionTextSection* activeSection = nullptr;
+		for (const FString& rawLine : lines)
+		{
+			const FString line = rawLine.TrimStartAndEnd();
+			if (line.IsEmpty())
+			{
+				continue;
+			}
+
+			if (IsKnownSuggestionSectionHeader(line))
+			{
+				FSuggestionTextSection& newSection = outSections.AddDefaulted_GetRef();
+				newSection.Header = NormalizeSuggestionSectionHeader(line);
+				activeSection = &newSection;
+				continue;
+			}
+
+			if (line.StartsWith(TEXT("-")) && activeSection)
+			{
+				const FString item = StripSuggestionBulletPrefix(line);
+				if (!item.IsEmpty())
+				{
+					activeSection->Items.Add(item);
+				}
+				continue;
+			}
+
+			if (activeSection && activeSection->Items.IsEmpty())
+			{
+				activeSection->Items.Add(line);
+			}
+			else
+			{
+				outSections.Reset();
+				return false;
+			}
+		}
+
+		outSections.RemoveAll(
+			[](const FSuggestionTextSection& section)
+			{
+				return section.Header.IsEmpty() || section.Items.IsEmpty();
+			});
+		return !outSections.IsEmpty();
+	}
+
+	// Appends parsed sections from one API field into a display section list.
+	bool AppendParsedSuggestionSections(const FString& text, TArray<FSuggestionTextSection>& outSections)
+	{
+		TArray<FSuggestionTextSection> parsedSections;
+		if (!ParseSuggestionTextSections(text, parsedSections))
+		{
+			return false;
+		}
+
+		outSections.Append(MoveTemp(parsedSections));
+		return true;
+	}
+
+	// Formats parsed sections as a compact header/list row for the existing WBP text slots.
+	FString FormatSuggestionTextSections(const TArray<FSuggestionTextSection>& sections)
+	{
+		FString output;
+		for (const FSuggestionTextSection& section : sections)
+		{
+			if (section.Header.IsEmpty() || section.Items.IsEmpty())
+			{
+				continue;
+			}
+
+			if (!output.IsEmpty())
+			{
+				output += TEXT("\n");
+			}
+
+			const FString firstLinePrefix = FString::Printf(TEXT("%s │ "), *section.Header);
+			const FString continuationPrefix = TEXT("     │ ");
+			bool bFirstItem = true;
+			for (const FString& item : section.Items)
+			{
+				const FString trimmedItem = item.TrimStartAndEnd();
+				if (trimmedItem.IsEmpty())
+				{
+					continue;
+				}
+
+				if (!bFirstItem)
+				{
+					output += TEXT("\n");
+				}
+
+				output += bFirstItem ? firstLinePrefix : continuationPrefix;
+				output += TEXT("- ");
+				output += trimmedItem;
+				bFirstItem = false;
+			}
+		}
+		return output;
+	}
+
+	// Converts API-authored structured text to compact row text; leaves free text unchanged.
+	FString FormatStructuredSuggestionText(const FString& text)
+	{
+		TArray<FSuggestionTextSection> sections;
+		if (ParseSuggestionTextSections(text, sections))
+		{
+			const FString formattedText = FormatSuggestionTextSections(sections).TrimStartAndEnd();
+			if (!formattedText.IsEmpty())
+			{
+				return formattedText;
+			}
+		}
+		return text.TrimStartAndEnd();
 	}
 
 	// Chooses the strongest available title for the header row.
@@ -54,7 +222,9 @@ namespace
 	}
 
 	// Combines optional AI response fields into the WBP-authored detail line.
-	FString BuildSuggestionDetail(const UExperimentResultSuggestionViewModel* suggestionItem)
+	FString BuildSuggestionDetail(
+		const UExperimentResultSuggestionViewModel* suggestionItem,
+		const bool bOmitReason)
 	{
 		FString detail;
 		if (!suggestionItem)
@@ -63,7 +233,10 @@ namespace
 		}
 
 		AppendSuggestionDisplayLine(detail, suggestionItem->GetSubtitle());
-		AppendSuggestionDisplayLine(detail, suggestionItem->GetReason());
+		if (!bOmitReason)
+		{
+			AppendSuggestionDisplayLine(detail, FormatStructuredSuggestionText(suggestionItem->GetReason()));
+		}
 		return detail;
 	}
 }
@@ -77,8 +250,13 @@ void UProjectAiSuggestionRowWidget::InitializeFromSuggestionViewModel(
 	}
 
 	const FString title = BuildSuggestionTitle(suggestionItem);
-	const FString detail = BuildSuggestionDetail(suggestionItem);
-	const FString recommendation = suggestionItem->GetRecommendation().TrimStartAndEnd();
+	bool bReasonRendered = false;
+	bool bRecommendationRendered = false;
+	RebuildStructuredSections(suggestionItem, bReasonRendered, bRecommendationRendered);
+	const FString detail = BuildSuggestionDetail(suggestionItem, bReasonRendered);
+	const FString recommendation = bRecommendationRendered
+		? FString()
+		: FormatStructuredSuggestionText(suggestionItem->GetRecommendation());
 	const bool bParameterTextActsAsTitle = !TitleText && ParameterText;
 
 	SetRuntimeText(SeverityText.Get(), suggestionItem->GetSeverityLabel());
@@ -94,6 +272,97 @@ void UProjectAiSuggestionRowWidget::InitializeFromSuggestionViewModel(
 	SetIndicatorVisible(SuggestedValuePill.Get(), false);
 	SetIndicatorVisible(ValueRow.Get(), false);
 	RefreshSeverityVisibility(suggestionItem->GetSeverity());
+}
+
+bool UProjectAiSuggestionRowWidget::RebuildStructuredSections(
+	const UExperimentResultSuggestionViewModel* suggestionItem,
+	bool& bOutReasonRendered,
+	bool& bOutRecommendationRendered)
+{
+	bOutReasonRendered = false;
+	bOutRecommendationRendered = false;
+
+	const TSubclassOf<UProjectAiSuggestionSectionWidget> sectionWidgetClass = ResolveSuggestionSectionWidgetClass();
+	if (!suggestionItem || !StructuredSectionListBox || !sectionWidgetClass)
+	{
+		ClearStructuredSections();
+		return false;
+	}
+
+	TArray<FSuggestionTextSection> reasonSections;
+	TArray<FSuggestionTextSection> recommendationSections;
+	const bool bReasonParsed = AppendParsedSuggestionSections(suggestionItem->GetReason(), reasonSections);
+	const bool bRecommendationParsed =
+		AppendParsedSuggestionSections(suggestionItem->GetRecommendation(), recommendationSections);
+
+	TArray<FSuggestionTextSection> sections;
+	sections.Append(reasonSections);
+	sections.Append(recommendationSections);
+	if (sections.IsEmpty())
+	{
+		ClearStructuredSections();
+		return false;
+	}
+
+	StructuredSectionListBox->ClearChildren();
+	bool bRenderedAnySection = false;
+	for (const FSuggestionTextSection& section : sections)
+	{
+		if (section.Header.IsEmpty() || section.Items.IsEmpty())
+		{
+			continue;
+		}
+
+		UProjectAiSuggestionSectionWidget* sectionWidget =
+			CreateWidget<UProjectAiSuggestionSectionWidget>(this, sectionWidgetClass);
+		if (!sectionWidget)
+		{
+			continue;
+		}
+
+		sectionWidget->InitializeSection(section.Header, section.Items);
+		StructuredSectionListBox->AddChild(sectionWidget);
+		bRenderedAnySection = true;
+	}
+
+	StructuredSectionListBox->SetVisibility(
+		bRenderedAnySection ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	bOutReasonRendered = bRenderedAnySection && bReasonParsed;
+	bOutRecommendationRendered = bRenderedAnySection && bRecommendationParsed;
+	return bRenderedAnySection;
+}
+
+TSubclassOf<UProjectAiSuggestionSectionWidget> UProjectAiSuggestionRowWidget::ResolveSuggestionSectionWidgetClass() const
+{
+	if (SuggestionSectionWidgetClass)
+	{
+		return SuggestionSectionWidgetClass;
+	}
+
+	if (!StructuredSectionListBox)
+	{
+		return nullptr;
+	}
+
+	for (int32 childIndex = 0; childIndex < StructuredSectionListBox->GetChildrenCount(); ++childIndex)
+	{
+		if (const UProjectAiSuggestionSectionWidget* previewSection =
+			Cast<UProjectAiSuggestionSectionWidget>(StructuredSectionListBox->GetChildAt(childIndex)))
+		{
+			return previewSection->GetClass();
+		}
+	}
+
+	return nullptr;
+}
+
+void UProjectAiSuggestionRowWidget::ClearStructuredSections() const
+{
+	if (StructuredSectionListBox)
+	{
+		StructuredSectionListBox->ClearChildren();
+		StructuredSectionListBox->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void UProjectAiSuggestionRowWidget::RefreshSeverityVisibility(const EProjectRunAiSuggestionSeverity severity) const

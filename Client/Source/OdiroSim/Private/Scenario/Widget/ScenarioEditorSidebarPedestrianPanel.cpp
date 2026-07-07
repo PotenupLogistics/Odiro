@@ -23,14 +23,9 @@ void UScenarioEditorSidebarPedestrianPanel::NativeConstruct()
 	{
 		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
 	}
-	SidebarWidgetHelpers::ApplyPanelRootPadding(this, FName(TEXT("PedestrianPanelRootBox")));
 	BindControls();
 	ConfigureFieldRows();
 	RefreshFromDraft();
-
-	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
-	CollectBlockWidgets(blockWidgets);
-	SidebarWidgetHelpers::ApplyPanelBlockSpacing(blockWidgets);
 }
 
 void UScenarioEditorSidebarPedestrianPanel::NativeDestruct()
@@ -622,7 +617,7 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarPedestrianPanel::AddSpawnS
 			: bodyBox->InsertChildAt(anchorIndex + 1 + segmentIndex, fieldRow);
 		if (UVerticalBoxSlot* verticalSlot = Cast<UVerticalBoxSlot>(insertedSlot))
 		{
-			verticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 2.0f));
+			verticalSlot->SetPadding(SpawnZoneBlockWidget->GeneratedFieldRowSlotPadding);
 			verticalSlot->SetHorizontalAlignment(HAlign_Fill);
 		}
 	}

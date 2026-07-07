@@ -521,6 +521,25 @@ bool FPlatformUiStartupToScenarioEditorMapSmokeTest::RunTest(const FString& para
 		TEXT("Platform root class derives from UPlatformRootWidget"),
 		platformRootClass->IsChildOf(UPlatformRootWidget::StaticClass()));
 
+	UPlatformRootWidget* rootWidget = NewObject<UPlatformRootWidget>();
+	TestNotNull(TEXT("Platform root widget can be instantiated for screen policy smoke"), rootWidget);
+	if (!rootWidget)
+	{
+		return false;
+	}
+
+	rootWidget->SetActiveScreen(EPlatformRootScreen::ScenarioEditor);
+	TestEqual(
+		TEXT("ScenarioEditor screen is allowed without active project for auto-started editor sessions"),
+		rootWidget->GetActiveScreen(),
+		EPlatformRootScreen::ScenarioEditor);
+
+	rootWidget->SetActiveScreen(EPlatformRootScreen::RobotConfig);
+	TestEqual(
+		TEXT("Non-scenario workspace screens still require active project"),
+		rootWidget->GetActiveScreen(),
+		EPlatformRootScreen::Startup);
+
 	return true;
 }
 

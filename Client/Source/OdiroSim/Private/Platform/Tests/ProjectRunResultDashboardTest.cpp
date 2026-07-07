@@ -201,6 +201,7 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("episode display outcome parsed"), DashboardData.Episodes[1].OutcomeLabel, FString(TEXT("실패")));
 	TestEqual(TEXT("insight count"), DashboardData.Insights.Num(), 1);
 	TestEqual(TEXT("insight severity parsed"), DashboardData.Insights[0].Severity, EProjectRunAiSuggestionSeverity::High);
+	TestEqual(TEXT("insight severity label"), DashboardData.Insights[0].SeverityLabel, FString(TEXT("경고")));
 	TestTrue(TEXT("insight title parsed"), DashboardData.Insights[0].Title.Contains(TEXT("충돌")));
 	TestTrue(TEXT("insight description parsed"), DashboardData.Insights[0].Description.Contains(TEXT("반복")));
 	TestEqual(TEXT("warning count filters internal warnings"), DashboardData.Warnings.Num(), 1);
@@ -210,7 +211,9 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 	}
 	TestEqual(TEXT("suggestion count"), DashboardData.Suggestions.Num(), 2);
 	TestEqual(TEXT("string priority severity"), DashboardData.Suggestions[0].Severity, EProjectRunAiSuggestionSeverity::High);
+	TestEqual(TEXT("string priority severity label"), DashboardData.Suggestions[0].SeverityLabel, FString(TEXT("경고")));
 	TestEqual(TEXT("medium priority severity"), DashboardData.Suggestions[1].Severity, EProjectRunAiSuggestionSeverity::Medium);
+	TestEqual(TEXT("medium priority severity label"), DashboardData.Suggestions[1].SeverityLabel, FString(TEXT("주의")));
 	TestTrue(TEXT("v2 suggestion title parsed"), DashboardData.Suggestions[0].Title.Contains(TEXT("정적 장애물 배치")));
 	TestTrue(TEXT("v2 suggestion reason parsed"), DashboardData.Suggestions[0].Reason.Contains(TEXT("충돌")));
 	TestTrue(TEXT("v2 suggestion recommendation parsed"), DashboardData.Suggestions[1].Recommendation.Contains(TEXT("look-ahead")));
@@ -336,6 +339,49 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("saved AI summary parsed"), SavedResponseData.AiSummary.Contains(TEXT("환경 또는 장애물")));
 	TestEqual(TEXT("saved AI response suggestions"), SavedResponseData.Suggestions.Num(), 2);
 	TestEqual(TEXT("saved AI response episodes"), SavedResponseData.Episodes.Num(), 2);
+
+	const FString LatestReviewDirectory = FPaths::Combine(ReviewDirectory, TEXT("0002"));
+	TestTrue(TEXT("create latest review fixture directory"), IFileManager::Get().MakeDirectory(*LatestReviewDirectory, true));
+
+	const FString LatestReviewResponseJson = TEXT(R"({
+		"schema": "analysis_run_response_v2",
+		"version": 2,
+		"status": "success",
+		"run_id": "000123",
+		"review_id": "0002",
+		"summary": {
+			"overall_judgement": "change_recommended",
+			"message": "최신 response.json을 사용했습니다."
+		},
+		"recommendations": [
+			{
+				"target": "policy",
+				"priority": "low",
+				"title": "최신 리뷰 제안",
+				"reason": "latest response.json에서 읽었습니다.",
+				"recommendation": "review 하위 response.json을 우선 표시하세요."
+			}
+		]
+	})");
+	TestTrue(
+		TEXT("write latest review response fixture"),
+		FFileHelper::SaveStringToFile(
+			LatestReviewResponseJson,
+			*FPaths::Combine(LatestReviewDirectory, TEXT("response.json")),
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM));
+
+	FProjectRunResultDashboardData LatestResponseData;
+	TestTrue(
+		TEXT("dashboard prefers latest review response"),
+		FProjectRunResultDashboardJson::BuildFromRunDirectory(RunDirectory, LatestResponseData));
+	TestTrue(TEXT("latest review response loaded"), LatestResponseData.bAiLoaded);
+	TestTrue(TEXT("latest review response summary parsed"), LatestResponseData.AiSummary.Contains(TEXT("최신 response.json")));
+	TestEqual(TEXT("latest review response suggestions"), LatestResponseData.Suggestions.Num(), 1);
+	if (LatestResponseData.Suggestions.Num() > 0)
+	{
+		TestTrue(TEXT("latest review response title parsed"), LatestResponseData.Suggestions[0].Title.Contains(TEXT("최신 리뷰")));
+		TestEqual(TEXT("latest review response severity label"), LatestResponseData.Suggestions[0].SeverityLabel, FString(TEXT("알림")));
+	}
 
 	IFileManager::Get().DeleteDirectory(*TestRoot, false, true);
 	return true;

@@ -2,6 +2,7 @@
 
 #include "UI/BaseButtonWidget.h"
 #include "UI/BaseCheckBoxWidget.h"
+#include "UI/BaseDropdownOptionWidget.h"
 #include "UI/BaseContextMenuWidget.h"
 #include "UI/BaseDropdownWidget.h"
 #include "UI/BaseFormElementTypes.h"
@@ -22,6 +23,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Image.h"
+#include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
@@ -31,6 +33,7 @@
 #include "Fonts/SlateFontInfo.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/AutomationTest.h"
+#include "UObject/UnrealType.h"
 
 namespace
 {
@@ -67,6 +70,86 @@ namespace
 	UMaterialInstanceDynamic* GetJoinCornerMaterialForTest(UImage* image)
 	{
 		return image ? Cast<UMaterialInstanceDynamic>(image->GetBrush().GetResourceObject()) : nullptr;
+	}
+
+	// Converts documented sRGB hex tokens into Slate brush colors.
+	FLinearColor MakeUiTestColor(const TCHAR* hex)
+	{
+		FLinearColor color = FColor::FromHex(hex).ReinterpretAsLinear();
+		color.A = 1.0f;
+		return color;
+	}
+
+	// Writes a bool test fixture property through reflection.
+	bool SetBoolPropertyForTest(UObject* object, const TCHAR* propertyName, const bool value)
+	{
+		if (!object)
+		{
+			return false;
+		}
+
+		FBoolProperty* property = FindFProperty<FBoolProperty>(object->GetClass(), propertyName);
+		if (!property)
+		{
+			return false;
+		}
+
+		property->SetPropertyValue_InContainer(object, value);
+		return true;
+	}
+
+	// Writes a color test fixture property through reflection.
+	bool SetLinearColorPropertyForTest(UObject* object, const TCHAR* propertyName, const FLinearColor& value)
+	{
+		if (!object)
+		{
+			return false;
+		}
+
+		FStructProperty* property = FindFProperty<FStructProperty>(object->GetClass(), propertyName);
+		if (!property || property->Struct != TBaseStructure<FLinearColor>::Get())
+		{
+			return false;
+		}
+
+		*property->ContainerPtrToValuePtr<FLinearColor>(object) = value;
+		return true;
+	}
+
+	// Reads a bool property through reflection.
+	bool GetBoolPropertyForTest(const UObject* object, const TCHAR* propertyName, bool& outValue)
+	{
+		if (!object)
+		{
+			return false;
+		}
+
+		FBoolProperty* property = FindFProperty<FBoolProperty>(object->GetClass(), propertyName);
+		if (!property)
+		{
+			return false;
+		}
+
+		outValue = property->GetPropertyValue_InContainer(object);
+		return true;
+	}
+
+	// Reads a color property through reflection.
+	bool GetLinearColorPropertyForTest(const UObject* object, const TCHAR* propertyName, FLinearColor& outValue)
+	{
+		if (!object)
+		{
+			return false;
+		}
+
+		FStructProperty* property = FindFProperty<FStructProperty>(object->GetClass(), propertyName);
+		if (!property || property->Struct != TBaseStructure<FLinearColor>::Get())
+		{
+			return false;
+		}
+
+		outValue = *property->ContainerPtrToValuePtr<FLinearColor>(object);
+		return true;
 	}
 }
 
@@ -118,6 +201,94 @@ bool FBaseFormElementsSizeConstraintsTest::RunTest(const FString& parameters)
 	TestFalse(TEXT("zero min height clears override"), sizeBox->IsMinDesiredHeightOverride());
 	TestFalse(TEXT("zero max width clears override"), sizeBox->IsMaxDesiredWidthOverride());
 	TestFalse(TEXT("zero max height clears override"), sizeBox->IsMaxDesiredHeightOverride());
+
+	UBaseDropdownWidget* dropdown = NewObject<UBaseDropdownWidget>();
+	TestNotNull(TEXT("dropdown created for control height override"), dropdown);
+	USizeBox* dropdownSizeBox = NewObject<USizeBox>(dropdown);
+	TestNotNull(TEXT("dropdown size box created"), dropdownSizeBox);
+	if (!dropdown || !dropdownSizeBox)
+	{
+		return false;
+	}
+	dropdownSizeBox->SetMinDesiredHeight(26.0f);
+
+	if (FObjectProperty* rootSizeBoxProperty =
+		FindFProperty<FObjectProperty>(UBaseWidget::StaticClass(), TEXT("RootSizeBox")))
+	{
+		rootSizeBoxProperty->SetObjectPropertyValue_InContainer(dropdown, dropdownSizeBox);
+	}
+	else
+	{
+		AddError(TEXT("RootSizeBox property not found on UBaseWidget"));
+		return false;
+	}
+
+	dropdown->SetControlHeightOverride(-1.0f);
+	TestEqual(TEXT("dropdown control height override clamps to zero"), dropdown->GetControlHeightOverride(), 0.0f);
+	TestFalse(TEXT("dropdown does not apply hardcoded min width"), dropdownSizeBox->IsMinDesiredWidthOverride());
+
+	UBorder* dropdownSurface = NewObject<UBorder>(dropdown);
+	TestNotNull(TEXT("dropdown surface created"), dropdownSurface);
+	UOverlay* dropdownOverlay = NewObject<UOverlay>(dropdown);
+	TestNotNull(TEXT("dropdown overlay created"), dropdownOverlay);
+	UTextBlock* dropdownClosedContent = NewObject<UTextBlock>(dropdown);
+	TestNotNull(TEXT("dropdown closed content created"), dropdownClosedContent);
+	if (!dropdownSurface || !dropdownOverlay || !dropdownClosedContent)
+	{
+		return false;
+	}
+
+	const FMargin authoredSurfacePadding(5.0f, 6.0f, 7.0f, 8.0f);
+	const FMargin authoredClosedContentPadding(1.0f, 2.0f, 3.0f, 4.0f);
+	dropdownSurface->SetPadding(authoredSurfacePadding);
+	UOverlaySlot* closedContentSlot = dropdownOverlay->AddChildToOverlay(dropdownClosedContent);
+	TestNotNull(TEXT("dropdown closed content slot created"), closedContentSlot);
+	if (!closedContentSlot)
+	{
+		return false;
+	}
+	closedContentSlot->SetPadding(authoredClosedContentPadding);
+	if (FObjectProperty* surfaceBorderProperty =
+		FindFProperty<FObjectProperty>(UBaseDropdownWidget::StaticClass(), TEXT("SurfaceBorder")))
+	{
+		surfaceBorderProperty->SetObjectPropertyValue_InContainer(dropdown, dropdownSurface);
+	}
+	else
+	{
+		AddError(TEXT("SurfaceBorder property not found on UBaseDropdownWidget"));
+		return false;
+	}
+	if (FObjectProperty* closedContentProperty =
+		FindFProperty<FObjectProperty>(UBaseDropdownWidget::StaticClass(), TEXT("ClosedContent")))
+	{
+		closedContentProperty->SetObjectPropertyValue_InContainer(dropdown, dropdownClosedContent);
+	}
+	else
+	{
+		AddError(TEXT("ClosedContent property not found on UBaseDropdownWidget"));
+		return false;
+	}
+	dropdown->SynchronizeBaseProperties();
+	TestEqual(TEXT("dropdown preserves surface padding left"), dropdownSurface->GetPadding().Left, authoredSurfacePadding.Left);
+	TestEqual(TEXT("dropdown preserves surface padding top"), dropdownSurface->GetPadding().Top, authoredSurfacePadding.Top);
+	TestEqual(TEXT("dropdown preserves surface padding right"), dropdownSurface->GetPadding().Right, authoredSurfacePadding.Right);
+	TestEqual(TEXT("dropdown preserves surface padding bottom"), dropdownSurface->GetPadding().Bottom, authoredSurfacePadding.Bottom);
+	TestEqual(TEXT("dropdown preserves closed content slot padding left"), closedContentSlot->GetPadding().Left, authoredClosedContentPadding.Left);
+	TestEqual(TEXT("dropdown preserves closed content slot padding top"), closedContentSlot->GetPadding().Top, authoredClosedContentPadding.Top);
+	TestEqual(TEXT("dropdown preserves closed content slot padding right"), closedContentSlot->GetPadding().Right, authoredClosedContentPadding.Right);
+	TestEqual(TEXT("dropdown preserves closed content slot padding bottom"), closedContentSlot->GetPadding().Bottom, authoredClosedContentPadding.Bottom);
+
+	dropdown->SetControlHeightOverride(24.0f);
+	TestTrue(TEXT("dropdown control height override applies min height"), dropdownSizeBox->IsMinDesiredHeightOverride());
+	TestEqual(TEXT("dropdown applied control height override"), dropdownSizeBox->GetMinDesiredHeight(), 24.0f);
+	dropdown->SetControlHeightOverride(0.0f);
+	TestTrue(TEXT("dropdown restored authored min height"), dropdownSizeBox->IsMinDesiredHeightOverride());
+	TestEqual(TEXT("dropdown cleared control height override restores authored min height"), dropdownSizeBox->GetMinDesiredHeight(), 26.0f);
+
+	FBaseWidgetSizeConstraints dropdownConstraints;
+	dropdownConstraints.MinHeight = 18.0f;
+	dropdown->SetSizeConstraints(dropdownConstraints);
+	TestEqual(TEXT("dropdown explicit size constraints win over control height override"), dropdownSizeBox->GetMinDesiredHeight(), 18.0f);
 	return true;
 }
 
@@ -259,6 +430,207 @@ bool FBaseFormElementsGhostButtonFrameTest::RunTest(const FString& parameters)
 	button->SetSelected(false);
 	button->SetBaseState(EBaseWidgetState::Disabled);
 	assertStrokeMatchesFill(TEXT("disabled ghost button"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseDropdownOptionStyleOverridesTest,
+	"OdiroSim.UI.BaseFormElements.DropdownOptionStyleOverrides",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Verifies dropdown option row style defaults can be owned by the WBP class.
+bool FBaseDropdownOptionStyleOverridesTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UBaseDropdownWidget* menu = NewObject<UBaseDropdownWidget>();
+	TestNotNull(TEXT("dropdown menu created"), menu);
+	UBorder* optionListSurface = NewObject<UBorder>(menu);
+	TestNotNull(TEXT("dropdown menu option-list surface created"), optionListSurface);
+	if (!menu || !optionListSurface)
+	{
+		return false;
+	}
+	if (FObjectProperty* optionListSurfaceProperty =
+		FindFProperty<FObjectProperty>(UBaseDropdownWidget::StaticClass(), TEXT("OptionListSurface")))
+	{
+		optionListSurfaceProperty->SetObjectPropertyValue_InContainer(menu, optionListSurface);
+	}
+	else
+	{
+		AddError(TEXT("OptionListSurface property not found on UBaseDropdownWidget"));
+		return false;
+	}
+	UTextBlock* selectedTextBlock = NewObject<UTextBlock>(menu);
+	UTextBlock* emptyOptionsTextBlock = NewObject<UTextBlock>(menu);
+	TestNotNull(TEXT("dropdown selected text created"), selectedTextBlock);
+	TestNotNull(TEXT("dropdown empty text created"), emptyOptionsTextBlock);
+	if (!selectedTextBlock || !emptyOptionsTextBlock)
+	{
+		return false;
+	}
+	FSlateFontInfo authoredSelectedFont = selectedTextBlock->GetFont();
+	authoredSelectedFont.TypefaceFontName = FName(TEXT("400 Regular"));
+	authoredSelectedFont.Size = 21;
+	selectedTextBlock->SetFont(authoredSelectedFont);
+	FSlateFontInfo authoredEmptyFont = emptyOptionsTextBlock->GetFont();
+	authoredEmptyFont.TypefaceFontName = FName(TEXT("700 Bold"));
+	authoredEmptyFont.Size = 17;
+	emptyOptionsTextBlock->SetFont(authoredEmptyFont);
+	if (FObjectProperty* selectedTextBlockProperty =
+		FindFProperty<FObjectProperty>(UBaseDropdownWidget::StaticClass(), TEXT("SelectedTextBlock")))
+	{
+		selectedTextBlockProperty->SetObjectPropertyValue_InContainer(menu, selectedTextBlock);
+	}
+	else
+	{
+		AddError(TEXT("SelectedTextBlock property not found on UBaseDropdownWidget"));
+		return false;
+	}
+	if (FObjectProperty* emptyOptionsTextBlockProperty =
+		FindFProperty<FObjectProperty>(UBaseDropdownWidget::StaticClass(), TEXT("EmptyOptionsTextBlock")))
+	{
+		emptyOptionsTextBlockProperty->SetObjectPropertyValue_InContainer(menu, emptyOptionsTextBlock);
+	}
+	else
+	{
+		AddError(TEXT("EmptyOptionsTextBlock property not found on UBaseDropdownWidget"));
+		return false;
+	}
+
+	const FLinearColor menuFillColor = MakeUiTestColor(TEXT("000000"));
+	TestTrue(
+		TEXT("dropdown menu fill override flag stores"),
+		SetBoolPropertyForTest(menu, TEXT("bUseOptionListSurfaceFillColorOverride"), true));
+	TestTrue(
+		TEXT("dropdown menu fill override color stores"),
+		SetLinearColorPropertyForTest(menu, TEXT("OptionListSurfaceFillColorOverride"), menuFillColor));
+	menu->SetOpen(true);
+	UMaterialInstanceDynamic* menuMaterial =
+		Cast<UMaterialInstanceDynamic>(optionListSurface->Background.GetResourceObject());
+	TestNotNull(TEXT("dropdown menu surface material exists"), menuMaterial);
+	if (!menuMaterial)
+	{
+		return false;
+	}
+	TestTrue(
+		TEXT("dropdown menu surface uses WBP override fill color"),
+		menuMaterial->K2_GetVectorParameterValue(TEXT("FillColor")).Equals(
+			BaseWidgetPrivate::EncodeUiMaterialColor(menuFillColor)));
+	TestEqual(TEXT("dropdown selected text preserves WBP-authored font size"), selectedTextBlock->GetFont().Size, 21.0f);
+	TestEqual(TEXT("dropdown empty text preserves WBP-authored font size"), emptyOptionsTextBlock->GetFont().Size, 17.0f);
+	TestEqual(
+		TEXT("dropdown empty text preserves WBP-authored typeface"),
+		emptyOptionsTextBlock->GetFont().TypefaceFontName,
+		FName(TEXT("700 Bold")));
+
+	UBaseDropdownOptionWidget* option = NewObject<UBaseDropdownOptionWidget>();
+	TestNotNull(TEXT("dropdown option created"), option);
+	if (!option)
+	{
+		return false;
+	}
+
+	UBorder* surfaceBorder = NewObject<UBorder>(option);
+	UTextBlock* labelTextBlock = NewObject<UTextBlock>(option);
+	TestNotNull(TEXT("option surface created"), surfaceBorder);
+	TestNotNull(TEXT("option label created"), labelTextBlock);
+	if (!surfaceBorder || !labelTextBlock)
+	{
+		return false;
+	}
+
+	if (FObjectProperty* surfaceBorderProperty =
+		FindFProperty<FObjectProperty>(UBaseButtonWidget::StaticClass(), TEXT("SurfaceBorder")))
+	{
+		surfaceBorderProperty->SetObjectPropertyValue_InContainer(option, surfaceBorder);
+	}
+	else
+	{
+		AddError(TEXT("SurfaceBorder property not found on UBaseButtonWidget"));
+		return false;
+	}
+	if (FObjectProperty* labelTextBlockProperty =
+		FindFProperty<FObjectProperty>(UBaseButtonWidget::StaticClass(), TEXT("LabelTextBlock")))
+	{
+		labelTextBlockProperty->SetObjectPropertyValue_InContainer(option, labelTextBlock);
+	}
+	else
+	{
+		AddError(TEXT("LabelTextBlock property not found on UBaseButtonWidget"));
+		return false;
+	}
+
+	const FLinearColor hoverColor = MakeUiTestColor(TEXT("1E1E1E"));
+	const FLinearColor activeColor = MakeUiTestColor(TEXT("242424"));
+	FSlateFontInfo authoredLabelFont = labelTextBlock->GetFont();
+	authoredLabelFont.TypefaceFontName = FName(TEXT("400 Regular"));
+	authoredLabelFont.Size = 19;
+	labelTextBlock->SetFont(authoredLabelFont);
+	TestTrue(
+		TEXT("option hover override flag stores"),
+		SetBoolPropertyForTest(option, TEXT("bUseOptionHoverFillColorOverride"), true));
+	TestTrue(
+		TEXT("option hover override color stores"),
+		SetLinearColorPropertyForTest(option, TEXT("OptionHoverFillColorOverride"), hoverColor));
+	TestTrue(
+		TEXT("option active override flag stores"),
+		SetBoolPropertyForTest(option, TEXT("bUseOptionActiveFillColorOverride"), true));
+	TestTrue(
+		TEXT("option active override color stores"),
+		SetLinearColorPropertyForTest(option, TEXT("OptionActiveFillColorOverride"), activeColor));
+	TestTrue(
+		TEXT("option selected label color preserve flag stores"),
+		SetBoolPropertyForTest(option, TEXT("bPreserveSelectedLabelColor"), true));
+
+	option->SetLabel(FText::FromString(TEXT("Option")));
+	TestTrue(
+		TEXT("option hover state can be set"),
+		SetButtonInteractionStateForTest(option, EBaseWidgetState::Hovered));
+	UMaterialInstanceDynamic* material =
+		Cast<UMaterialInstanceDynamic>(surfaceBorder->Background.GetResourceObject());
+	TestNotNull(TEXT("option hover surface material exists"), material);
+	if (!material)
+	{
+		return false;
+	}
+	TestTrue(
+		TEXT("option hover surface uses WBP override color"),
+		material->K2_GetVectorParameterValue(TEXT("FillColor")).Equals(
+			BaseWidgetPrivate::EncodeUiMaterialColor(hoverColor)));
+	TestEqual(
+		TEXT("hovered label keeps normal font"),
+		labelTextBlock->GetFont().TypefaceFontName,
+		FName(TEXT("400 Regular")));
+	TestEqual(TEXT("hovered label preserves WBP-authored font size"), labelTextBlock->GetFont().Size, 19.0f);
+
+	SetButtonInteractionStateForTest(option, EBaseWidgetState::Default);
+	option->SetSelected(true);
+	material = Cast<UMaterialInstanceDynamic>(surfaceBorder->Background.GetResourceObject());
+	TestNotNull(TEXT("option selected surface material exists"), material);
+	if (!material)
+	{
+		return false;
+	}
+	TestTrue(
+		TEXT("option active surface uses WBP override color"),
+		material->K2_GetVectorParameterValue(TEXT("FillColor")).Equals(
+			BaseWidgetPrivate::EncodeUiMaterialColor(activeColor)));
+
+	const UBaseWidgetColorCatalog* colors = UBaseWidgetColorCatalog::MakeDefaultCatalogReference().LoadSynchronous();
+	TestNotNull(TEXT("base color catalog loads"), colors);
+	if (!colors)
+	{
+		return false;
+	}
+	TestTrue(
+		TEXT("selected label keeps normal text color"),
+		labelTextBlock->GetColorAndOpacity().GetSpecifiedColor().Equals(colors->TextPrimaryColor));
+	TestEqual(
+		TEXT("selected label preserves WBP-authored font"),
+		labelTextBlock->GetFont().TypefaceFontName,
+		FName(TEXT("400 Regular")));
+	TestEqual(TEXT("selected label preserves WBP-authored font size"), labelTextBlock->GetFont().Size, 19.0f);
 	return true;
 }
 
@@ -999,6 +1371,162 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	"OdiroSim.UI.BaseFormElements.Selection",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBaseDropdownBlueprintDefaultsTest,
+	"OdiroSim.UI.BaseFormElements.DropdownBlueprintDefaults",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Verifies dropdown generated widget classes are WBP-owned defaults, not C++ path fallbacks.
+bool FBaseDropdownBlueprintDefaultsTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	UClass* dropdownClass = LoadClass<UBaseDropdownWidget>(
+		nullptr,
+		TEXT("/Game/Widgets/Common/WBP_BaseDropdown.WBP_BaseDropdown_C"));
+	TestNotNull(TEXT("base dropdown blueprint class loads"), dropdownClass);
+	if (!dropdownClass)
+	{
+		return false;
+	}
+
+	UBaseDropdownWidget* dropdownCdo = Cast<UBaseDropdownWidget>(dropdownClass->GetDefaultObject());
+	TestNotNull(TEXT("base dropdown class default object is native dropdown"), dropdownCdo);
+	if (!dropdownCdo)
+	{
+		return false;
+	}
+
+	FClassProperty* optionWidgetClassProperty =
+		FindFProperty<FClassProperty>(UBaseDropdownWidget::StaticClass(), TEXT("OptionWidgetClass"));
+	TestNotNull(TEXT("OptionWidgetClass property exists"), optionWidgetClassProperty);
+	if (!optionWidgetClassProperty)
+	{
+		return false;
+	}
+	UClass* optionWidgetClass =
+		Cast<UClass>(optionWidgetClassProperty->GetObjectPropertyValue_InContainer(dropdownCdo));
+	TestNotNull(TEXT("base dropdown WBP sets option widget class"), optionWidgetClass);
+
+	FClassProperty* menuWidgetClassProperty =
+		FindFProperty<FClassProperty>(UBaseDropdownWidget::StaticClass(), TEXT("MenuWidgetClass"));
+	TestNotNull(TEXT("MenuWidgetClass property exists"), menuWidgetClassProperty);
+	if (!menuWidgetClassProperty)
+	{
+		return false;
+	}
+	UClass* menuWidgetClass =
+		Cast<UClass>(menuWidgetClassProperty->GetObjectPropertyValue_InContainer(dropdownCdo));
+	TestNotNull(TEXT("base dropdown WBP sets menu widget class"), menuWidgetClass);
+
+	FIntProperty* menuZOrderProperty =
+		FindFProperty<FIntProperty>(UBaseDropdownWidget::StaticClass(), TEXT("MenuZOrder"));
+	TestNotNull(TEXT("MenuZOrder property exists"), menuZOrderProperty);
+	if (!menuZOrderProperty)
+	{
+		return false;
+	}
+	TestEqual(
+		TEXT("base dropdown WBP keeps popup layer above platform root"),
+		menuZOrderProperty->GetPropertyValue_InContainer(dropdownCdo),
+		50);
+
+	UClass* dropdownMenuClass = LoadClass<UBaseDropdownWidget>(
+		nullptr,
+		TEXT("/Game/Widgets/Common/WBP_BaseDropdownMenu.WBP_BaseDropdownMenu_C"));
+	TestNotNull(TEXT("base dropdown menu blueprint class loads"), dropdownMenuClass);
+	if (!dropdownMenuClass)
+	{
+		return false;
+	}
+	UBaseDropdownWidget* dropdownMenuCdo = Cast<UBaseDropdownWidget>(dropdownMenuClass->GetDefaultObject());
+	TestNotNull(TEXT("base dropdown menu class default object is native dropdown"), dropdownMenuCdo);
+	if (!dropdownMenuCdo)
+	{
+		return false;
+	}
+	bool bUseMenuFillOverride = false;
+	TestTrue(
+		TEXT("base dropdown menu fill override property reads"),
+		GetBoolPropertyForTest(
+			dropdownMenuCdo,
+			TEXT("bUseOptionListSurfaceFillColorOverride"),
+			bUseMenuFillOverride));
+	TestTrue(TEXT("base dropdown menu WBP owns panel fill color"), bUseMenuFillOverride);
+	FLinearColor menuFillColor = FLinearColor::Transparent;
+	TestTrue(
+		TEXT("base dropdown menu fill override color reads"),
+		GetLinearColorPropertyForTest(
+			dropdownMenuCdo,
+			TEXT("OptionListSurfaceFillColorOverride"),
+			menuFillColor));
+	TestTrue(
+		TEXT("base dropdown menu WBP uses black panel fill"),
+		menuFillColor.Equals(MakeUiTestColor(TEXT("000000"))));
+
+	UClass* dropdownOptionClass = LoadClass<UBaseDropdownOptionWidget>(
+		nullptr,
+		TEXT("/Game/Widgets/Common/WBP_BaseDropdownOption.WBP_BaseDropdownOption_C"));
+	TestNotNull(TEXT("base dropdown option blueprint class loads"), dropdownOptionClass);
+	if (!dropdownOptionClass)
+	{
+		return false;
+	}
+	UBaseDropdownOptionWidget* dropdownOptionCdo =
+		Cast<UBaseDropdownOptionWidget>(dropdownOptionClass->GetDefaultObject());
+	TestNotNull(TEXT("base dropdown option class default object is native option"), dropdownOptionCdo);
+	if (!dropdownOptionCdo)
+	{
+		return false;
+	}
+	bool bUseOptionHoverFillOverride = false;
+	TestTrue(
+		TEXT("base dropdown option hover fill override property reads"),
+		GetBoolPropertyForTest(
+			dropdownOptionCdo,
+			TEXT("bUseOptionHoverFillColorOverride"),
+			bUseOptionHoverFillOverride));
+	TestTrue(TEXT("base dropdown option WBP owns hover fill color"), bUseOptionHoverFillOverride);
+	FLinearColor optionHoverFillColor = FLinearColor::Transparent;
+	TestTrue(
+		TEXT("base dropdown option hover fill override color reads"),
+		GetLinearColorPropertyForTest(
+			dropdownOptionCdo,
+			TEXT("OptionHoverFillColorOverride"),
+			optionHoverFillColor));
+	TestTrue(
+		TEXT("base dropdown option WBP uses dark hover fill"),
+		optionHoverFillColor.Equals(MakeUiTestColor(TEXT("1E1E1E"))));
+	bool bUseOptionActiveFillOverride = false;
+	TestTrue(
+		TEXT("base dropdown option active fill override property reads"),
+		GetBoolPropertyForTest(
+			dropdownOptionCdo,
+			TEXT("bUseOptionActiveFillColorOverride"),
+			bUseOptionActiveFillOverride));
+	TestTrue(TEXT("base dropdown option WBP owns active fill color"), bUseOptionActiveFillOverride);
+	FLinearColor optionActiveFillColor = FLinearColor::Transparent;
+	TestTrue(
+		TEXT("base dropdown option active fill override color reads"),
+		GetLinearColorPropertyForTest(
+			dropdownOptionCdo,
+			TEXT("OptionActiveFillColorOverride"),
+			optionActiveFillColor));
+	TestTrue(
+		TEXT("base dropdown option WBP uses requested active fill"),
+		optionActiveFillColor.Equals(MakeUiTestColor(TEXT("242424"))));
+	bool bPreserveSelectedLabelColor = false;
+	TestTrue(
+		TEXT("base dropdown option preserve selected label color property reads"),
+		GetBoolPropertyForTest(
+			dropdownOptionCdo,
+			TEXT("bPreserveSelectedLabelColor"),
+			bPreserveSelectedLabelColor));
+	TestTrue(TEXT("base dropdown option WBP preserves selected label color"), bPreserveSelectedLabelColor);
+
+	return true;
+}
+
 bool FBaseFormElementsSelectionTest::RunTest(const FString& parameters)
 {
 	(void)parameters;
@@ -1025,6 +1553,15 @@ bool FBaseFormElementsSelectionTest::RunTest(const FString& parameters)
 	TestEqual(TEXT("dropdown preserves selection after missing id"), dropdown->GetSelectedId(), FName(TEXT("A")));
 	TestFalse(TEXT("dropdown rejects disabled id"), dropdown->SelectItemById(TEXT("B")));
 	TestEqual(TEXT("dropdown preserves selection after disabled id"), dropdown->GetSelectedId(), FName(TEXT("A")));
+	dropdown->SetDisabled(true);
+	dropdown->SetSelectedId(NAME_None);
+	TestEqual(TEXT("dropdown programmatic clear works while disabled"), dropdown->GetSelectedId(), NAME_None);
+	dropdown->SetSelectedId(TEXT("A"));
+	TestEqual(TEXT("dropdown programmatic select works while disabled"), dropdown->GetSelectedId(), FName(TEXT("A")));
+	dropdown->SetSelectedId(NAME_None);
+	TestFalse(TEXT("dropdown user select rejects while disabled"), dropdown->SelectItemById(TEXT("A")));
+	TestEqual(TEXT("dropdown disabled user select does not change id"), dropdown->GetSelectedId(), NAME_None);
+	dropdown->SetDisabled(false);
 
 	FBaseSwitcherItem switcherA;
 	switcherA.Id = TEXT("One");

@@ -98,7 +98,10 @@ class PathFollower:
         robot_spec = request.robotSpec or request.vehicleSpec or {}
         drive_spec = request.driveSpec or {}
 
-        self.followSpeedKmh = float(control_spec.get("targetSpeedKmh", self.followSpeedKmh))
+        # self.followSpeedKmh = float(control_spec.get("targetSpeedKmh", self.followSpeedKmh))
+        max_speed_kmh = float(robot_spec.get("maxSpeedKmh", 0.0))
+        if max_speed_kmh > 0.0:
+            self.followSpeedKmh = max_speed_kmh
         self.maxPathErrorM = float(control_spec.get("maxPathErrorM", self.maxPathErrorM))
         self.slowDownSpeedKmh = float(control_spec.get("obstacleSlowSpeedKmh", self.slowDownSpeedKmh))
         self.lookAheadDistanceM = float(control_spec.get("lookAheadDistanceM", self.lookAheadDistanceM))
@@ -209,7 +212,6 @@ class PathFollower:
         self.collisionStopDistanceM = float(
             lidar_spec.get("collisionStopDistanceM", self.collisionStopDistanceM)
         )
-        max_speed_kmh = float(robot_spec.get("maxSpeedKmh", 0.0))
         if max_speed_kmh > 0.0:
             self.followSpeedKmh = min(self.followSpeedKmh, max_speed_kmh)
         self.followSpeedKmh = max(0.0, self.followSpeedKmh)
@@ -355,7 +357,7 @@ class PathFollower:
         speed_kmh = self.limit_obstacle_slowdown_speed_by_steering(speed_kmh, steering, reason)
         speed_kmh = self.limit_speed_by_goal_approach(speed_kmh, request.robotState, state)
 
-        if reason in {"front_obstacle_slowdown", "front_obstacle_caution_slowdown", "front_ground_slowdown"}:
+        if reason in {"front_obstacle_slowdown", "front_obstacle_caution_slowdown"}:
             state.slowdownCount += 1
 
         if reason == "front_obstacle_soft_stop":
@@ -1009,50 +1011,9 @@ class PathFollower:
         return not (ray.distanceM <= self.stopDistanceM and self.is_collision_stop_ray(ray))
 
     def is_ignored_lidar_policy_ray(self, ray) -> bool:
-        if not ray.blocksPolicy:
-            return True
-
         actor_name = ray.actorName or ""
         actor_tags = ray.actorTags or []
-        return (
-            (actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0)
-            or self.is_static_map_actor_name(actor_name)
-            or self.has_static_map_tags(actor_tags)
-        )
-
-    # 정적 맵 actor 이름이면 주행 정책 장애물에서 제외한다.
-    def is_static_map_actor_name(self, actor_name: str) -> bool:
-        normalized_name = str(actor_name or "").strip().lower()
-        return (
-            normalized_name.startswith("scenariocorridorruntimeactor")
-            or normalized_name.startswith("generated_city_")
-        )
-
-    # 정적 맵 태그이면 주행 정책 장애물에서 제외한다.
-    def has_static_map_tags(self, actor_tags: list[str]) -> bool:
-        normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
-        return any(self.is_static_map_tag(tag) for tag in normalized_tags)
-
-    # Ground-tagged hits are traversable low-surface candidates, not blocking obstacles.
-    def has_ground_tags(self, actor_tags: list[str]) -> bool:
-        normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
-        return any(self.is_ground_tag(tag) for tag in normalized_tags)
-
-    # Ground tag matching stays exact or namespaced to avoid hiding unrelated tags.
-    def is_ground_tag(self, tag: str) -> bool:
-        return tag == "ground" or tag.endswith(".ground")
-
-    # 정적 맵 geometry 태그인지 확인한다.
-    def is_static_map_tag(self, tag: str) -> bool:
-        return (
-            self.is_ground_tag(tag)
-            or tag == "city_block"
-            or tag == "building"
-            or tag == "wall"
-            or tag.startswith("city_block_role_")
-            or tag.endswith(".building")
-            or tag.endswith(".wall")
-        )
+        return actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0
 
     # 로봇과 전체 경로 선분 사이의 최소 거리를 계산한다.
     def get_closest_path_distance_cm(
@@ -1262,32 +1223,24 @@ class PathFollower:
     # 전방 장애물 거리 기준으로 목표 속도와 reason을 결정한다.
     def get_target_speed_kmh(self, request: ScenarioDecideRequest, state: AgentState) -> tuple[float, str]:
         front_ray = self.find_nearest_path_blocking_front_hit_ray(request, state)
-        if front_ray is not None and front_ray.distanceM <= self.slowDownDistanceM:
-            if front_ray.distanceM <= self.stopDistanceM:
-                self.record_lidar_obstacle_warning_once(state, front_ray)
-                return 0.0, "front_obstacle_soft_stop"
+        if front_ray is None or front_ray.distanceM > self.slowDownDistanceM:
+            return self.followSpeedKmh, "follow_path"
 
-            if not self.is_collision_stop_ray(front_ray) and front_ray.distanceM <= self.obstacleWarningDistanceM:
-                self.record_lidar_obstacle_warning_once(state, front_ray)
-                return min(self.slowDownSpeedKmh, self.followSpeedKmh), "front_obstacle_caution_slowdown"
+        if front_ray.distanceM <= self.stopDistanceM:
+            self.record_lidar_obstacle_warning_once(state, front_ray)
+            return 0.0, "front_obstacle_soft_stop"
 
-            slowdown_range_m = max(self.slowDownDistanceM - self.stopDistanceM, 0.1)
-            distance_ratio = clamp((front_ray.distanceM - self.stopDistanceM) / slowdown_range_m, 0.0, 1.0)
-            smooth_ratio = distance_ratio * distance_ratio * (3.0 - 2.0 * distance_ratio)
-            roll_speed_kmh = min(self.slowDownSpeedKmh, self.followSpeedKmh)
-            target_speed_kmh = roll_speed_kmh + ((self.followSpeedKmh - roll_speed_kmh) * smooth_ratio)
+        if not self.is_collision_stop_ray(front_ray) and front_ray.distanceM <= self.obstacleWarningDistanceM:
+            self.record_lidar_obstacle_warning_once(state, front_ray)
+            return min(self.slowDownSpeedKmh, self.followSpeedKmh), "front_obstacle_caution_slowdown"
 
-            return max(0.0, target_speed_kmh), "front_obstacle_slowdown"
+        slowdown_range_m = max(self.slowDownDistanceM - self.stopDistanceM, 0.1)
+        distance_ratio = clamp((front_ray.distanceM - self.stopDistanceM) / slowdown_range_m, 0.0, 1.0)
+        smooth_ratio = distance_ratio * distance_ratio * (3.0 - 2.0 * distance_ratio)
+        roll_speed_kmh = min(self.slowDownSpeedKmh, self.followSpeedKmh)
+        target_speed_kmh = roll_speed_kmh + ((self.followSpeedKmh - roll_speed_kmh) * smooth_ratio)
 
-        ground_ray = self.find_nearest_path_ground_front_hit_ray(request, state)
-        if ground_ray is not None and ground_ray.distanceM <= self.stopDistanceM:
-            return self.get_ground_traversal_speed_kmh(), "front_ground_slowdown"
-
-        return self.followSpeedKmh, "follow_path"
-
-    # Returns a mild pass-over speed for Ground-tagged low surfaces.
-    def get_ground_traversal_speed_kmh(self) -> float:
-        return min(self.followSpeedKmh, max(self.slowDownSpeedKmh, self.followSpeedKmh * 0.65))
+        return max(0.0, target_speed_kmh), "front_obstacle_slowdown"
 
     # 현재 path corridor 위에 있는 전방 hit ray 중 가장 가까운 값을 찾는다.
     def find_nearest_path_blocking_front_hit_ray(
@@ -1300,29 +1253,6 @@ class PathFollower:
             state=state,
             bRequirePathCorridor=True,
         )
-
-    # Finds the nearest Ground-tagged hit on the current path corridor.
-    def find_nearest_path_ground_front_hit_ray(
-        self,
-        request: ScenarioDecideRequest,
-        state: AgentState,
-    ):
-        lidar_rays = select_policy_lidar_rays_2d(request)
-        front_rays = [
-            ray
-            for ray in lidar_rays
-            if (
-                ray.hit
-                and self.has_ground_tags(ray.actorTags or [])
-                and abs(self.normalize_angle_degree(ray.rayYawDegree)) <= self.frontAngleDegree
-                and self.is_ray_on_current_path_corridor(request, state, ray)
-            )
-        ]
-
-        if not front_rays:
-            return None
-
-        return min(front_rays, key=lambda ray: ray.distanceM)
 
     # 전방 각도 안에서 가장 가까운 hit ray를 찾는다.
     def find_nearest_front_hit_ray(

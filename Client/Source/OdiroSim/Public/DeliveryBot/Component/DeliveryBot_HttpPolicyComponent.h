@@ -164,12 +164,14 @@ private:
 	float StartRetryElapsedSeconds{ 0.f }; // start 재시도 누적 시간
 	float DecideElapsedSeconds{ 0.f }; // decide 요청 누적 시간
 	float LastDecisionRunTimeSeconds{ 0.f }; // 마지막 decide 요청 runtime
+	float ScenarioStartWorldTimeSeconds{ 0.f }; // episode runtime을 계산하기 위한 scenario 시작 world time
 	
 	bool bStartRequested{ false };
 	bool bScenarioStarted{ false };
 	bool bStartRequestInFlight{ false };
 	bool bDecisionRequestInFlight{ false };
 	bool bEndRequestInFlight{ false };
+	bool bHasScenarioStartWorldTimeSeconds{ false }; // 시작 시간이 한 번 고정되었는지 여부
 	bool bLoggedStartWaitingForPython{ false }; // Python 서버 준비 대기 로그 중복 방지
 
 	// Python /scenario/end 요청 자체의 최대 대기 시간이다.

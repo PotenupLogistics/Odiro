@@ -1795,6 +1795,11 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 
 	const FDeliveryBotSetupInfo& setupInfo = deliveryBot->GetSetupInfo();
 	const FDeliveryBotObservationInfo observation = deliveryBot->BuildObservation();
+	if (!bHasScenarioStartWorldTimeSeconds)
+	{
+		ScenarioStartWorldTimeSeconds = observation.WorldTimeSeconds;
+		bHasScenarioStartWorldTimeSeconds = true;
+	}
 
 	if (EpisodeId.IsEmpty())
 	{
@@ -1890,12 +1895,15 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 	const FDeliveryBotSetupInfo& setupInfo = deliveryBot->GetSetupInfo();
 	const FDeliveryBotObservationInfo observation = deliveryBot->BuildPolicyObservation();
 	const EDeliveryBotLidarModeType lidarModeType = setupInfo.LidarSensorConfigInfo.LidarModeType;
+	const float episodeRunTimeSeconds = bHasScenarioStartWorldTimeSeconds
+		? FMath::Max(0.0f, observation.WorldTimeSeconds - ScenarioStartWorldTimeSeconds)
+		: FMath::Max(0.0f, observation.WorldTimeSeconds);
 	LastDecisionSequence = observation.Sequence;
-	LastDecisionRunTimeSeconds = observation.WorldTimeSeconds;
+	LastDecisionRunTimeSeconds = episodeRunTimeSeconds;
 	
 	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
 	requestObject->SetNumberField(TEXT("sequence"), observation.Sequence);
-	requestObject->SetNumberField(TEXT("runTimeSeconds"), observation.WorldTimeSeconds);
+	requestObject->SetNumberField(TEXT("runTimeSeconds"), episodeRunTimeSeconds);
 	requestObject->SetNumberField(TEXT("sensorSequence"), observation.SensorSequence);
 	requestObject->SetNumberField(TEXT("sensorTimeSeconds"), observation.LidarScanInfo.SimulationTimeSeconds);
 
@@ -2327,6 +2335,7 @@ void UDeliveryBot_HttpPolicyComponent::ResetScenarioState()
 	LastDecisionSequence = 0;
 	LastDecisionRequestObject.Reset();
 	LastDecisionRunTimeSeconds = 0.f;
+	ScenarioStartWorldTimeSeconds = 0.f;
 	StartRetryElapsedSeconds = 0.f;
 	DecideElapsedSeconds = 0.f;
 
@@ -2335,5 +2344,6 @@ void UDeliveryBot_HttpPolicyComponent::ResetScenarioState()
 	bStartRequestInFlight = false;
 	bDecisionRequestInFlight = false;
 	bEndRequestInFlight = false;
+	bHasScenarioStartWorldTimeSeconds = false;
 	bLoggedStartWaitingForPython = false;
 }

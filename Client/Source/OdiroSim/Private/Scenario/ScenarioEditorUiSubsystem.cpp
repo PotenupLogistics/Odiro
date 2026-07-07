@@ -453,7 +453,7 @@ bool UScenarioEditorUiSubsystem::LoadDemoProjectScenario(FString& outStatusText)
 	}
 
 	editorController->RequestMoveEditorViewToPlayerStart();
-	outStatusText = TEXT("시나리오를 현재 프로젝트에 적용했습니다.");
+	outStatusText = TEXT("시나리오를 적용했습니다.");
 	return true;
 }
 

@@ -6,6 +6,7 @@
 #include "Components/TextBlock.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
 #include "Scenario/ViewModel/ScenarioLlmPromptViewModel.h"
+#include "UI/BaseButtonWidget.h"
 
 void UScenarioLlmPromptWidget::NativeOnInitialized()
 {
@@ -17,7 +18,6 @@ void UScenarioLlmPromptWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	BindLlmSubsystem();
-	ConfigureStatusTextBlock();
 	RequestEditorWidgetInputMode();
 	SetStatusText(TEXT("프롬프트를 입력하세요."));
 }
@@ -90,12 +90,12 @@ void UScenarioLlmPromptWidget::SetStatusText(const FString& message)
 	}
 }
 
-void UScenarioLlmPromptWidget::HandleGenerateButtonClicked()
+void UScenarioLlmPromptWidget::HandleGenerateButtonClicked(UBaseButtonWidget*)
 {
 	GenerateFromPromptTextBox();
 }
 
-void UScenarioLlmPromptWidget::HandleLoadGeneratedScenarioButtonClicked()
+void UScenarioLlmPromptWidget::HandleLoadGeneratedScenarioButtonClicked(UBaseButtonWidget*)
 {
 	LoadGeneratedScenario();
 }
@@ -132,16 +132,16 @@ void UScenarioLlmPromptWidget::BindControls()
 {
 	if (GenerateButton)
 	{
-		GenerateButton->OnClicked.RemoveDynamic(this, &UScenarioLlmPromptWidget::HandleGenerateButtonClicked);
-		GenerateButton->OnClicked.AddDynamic(this, &UScenarioLlmPromptWidget::HandleGenerateButtonClicked);
+		GenerateButton->OnBaseClicked.RemoveDynamic(this, &UScenarioLlmPromptWidget::HandleGenerateButtonClicked);
+		GenerateButton->OnBaseClicked.AddDynamic(this, &UScenarioLlmPromptWidget::HandleGenerateButtonClicked);
 	}
 
 	if (LoadGeneratedScenarioButton)
 	{
-		LoadGeneratedScenarioButton->OnClicked.RemoveDynamic(
+		LoadGeneratedScenarioButton->OnBaseClicked.RemoveDynamic(
 			this,
 			&UScenarioLlmPromptWidget::HandleLoadGeneratedScenarioButtonClicked);
-		LoadGeneratedScenarioButton->OnClicked.AddDynamic(
+		LoadGeneratedScenarioButton->OnBaseClicked.AddDynamic(
 			this,
 			&UScenarioLlmPromptWidget::HandleLoadGeneratedScenarioButtonClicked);
 	}
@@ -173,17 +173,6 @@ void UScenarioLlmPromptWidget::UnbindLlmSubsystem()
 	{
 		uiSubsystem->UnbindScenarioGenerationCompleted(this);
 	}
-}
-
-void UScenarioLlmPromptWidget::ConfigureStatusTextBlock()
-{
-	if (!StatusTextBlock)
-	{
-		return;
-	}
-
-	StatusTextBlock->SetAutoWrapText(true);
-	StatusTextBlock->SetWrappingPolicy(ETextWrappingPolicy::AllowPerCharacterWrapping);
 }
 
 void UScenarioLlmPromptWidget::RequestEditorWidgetInputMode()

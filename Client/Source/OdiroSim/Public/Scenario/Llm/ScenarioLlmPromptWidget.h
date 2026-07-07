@@ -6,6 +6,7 @@
 #include "ScenarioLlmPromptWidget.generated.h"
 
 class UButton;
+class UBaseButtonWidget;
 class UEditableTextBox;
 class UMultiLineEditableTextBox;
 class UScenarioEditorUiSubsystem;
@@ -49,11 +50,11 @@ public:
 protected:
 	// Handles the Generate button click.
 	UFUNCTION()
-	void HandleGenerateButtonClicked();
+	void HandleGenerateButtonClicked(UBaseButtonWidget* button);
 
 	// Handles the Load button click.
 	UFUNCTION()
-	void HandleLoadGeneratedScenarioButtonClicked();
+	void HandleLoadGeneratedScenarioButtonClicked(UBaseButtonWidget* button);
 
 	// Handles the Run button click.
 	UFUNCTION()
@@ -70,8 +71,6 @@ private:
 	void BindLlmSubsystem();
 	// Removes generation completion event subscriptions owned by this widget.
 	void UnbindLlmSubsystem();
-	// Applies wrapping behavior to the optional status text block.
-	void ConfigureStatusTextBlock();
 	// Requests editor UI input focus while the prompt panel is active.
 	void RequestEditorWidgetInputMode();
 	// Releases the editor UI input focus request made by this widget.
@@ -101,11 +100,11 @@ private:
 
 	// Optional generate button bound by the UMG widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> GenerateButton;
+	TObjectPtr<UBaseButtonWidget> GenerateButton;
 
 	// Optional load button bound by the UMG widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> LoadGeneratedScenarioButton;
+	TObjectPtr<UBaseButtonWidget> LoadGeneratedScenarioButton;
 
 	// Optional run button bound by the UMG widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

@@ -48,51 +48,167 @@ namespace
 			Centiseconds));
 	}
 
-	FText BuildReplayInterestEventTitle(const FScenarioReplayEventMarker& Marker)
+	FText BuildReplayInterestEventTypeLabel(const FString& EventType)
 	{
-		if (Marker.EventType.Equals(TEXT("Repath"), ESearchCase::IgnoreCase))
+		if (EventType.Equals(TEXT("Repath"), ESearchCase::IgnoreCase))
 		{
 			return FText::FromString(TEXT("경로 재계산"));
 		}
-
-		if (Marker.EventType.Equals(TEXT("Collision"), ESearchCase::IgnoreCase))
+		if (EventType.Equals(TEXT("Collision"), ESearchCase::IgnoreCase)
+			|| EventType.Equals(TEXT("StaticObstacleCollision"), ESearchCase::IgnoreCase))
 		{
 			return FText::FromString(TEXT("충돌"));
 		}
-
-		if (Marker.EventType.Equals(TEXT("Stuck"), ESearchCase::IgnoreCase))
+		if (EventType.Equals(TEXT("BlockedRegionCollision"), ESearchCase::IgnoreCase))
+		{
+			return FText::FromString(TEXT("차단 영역 충돌"));
+		}
+		if (EventType.Equals(TEXT("PedestrianCollision"), ESearchCase::IgnoreCase))
+		{
+			return FText::FromString(TEXT("보행자 충돌"));
+		}
+		if (EventType.Equals(TEXT("Stuck"), ESearchCase::IgnoreCase))
 		{
 			return FText::FromString(TEXT("정체"));
 		}
-
-		if (Marker.EventType.Equals(TEXT("RobotTipOver"), ESearchCase::IgnoreCase))
+		if (EventType.Equals(TEXT("RobotTipOver"), ESearchCase::IgnoreCase))
 		{
 			return FText::FromString(TEXT("전복"));
 		}
-
-		if (Marker.EventType.Equals(TEXT("Success"), ESearchCase::IgnoreCase))
+		if (EventType.Equals(TEXT("GoalReached"), ESearchCase::IgnoreCase)
+			|| EventType.Equals(TEXT("Success"), ESearchCase::IgnoreCase))
 		{
-			return FText::FromString(TEXT("성공"));
+			return FText::FromString(TEXT("목표 도달"));
+		}
+		if (EventType.Equals(TEXT("Timeout"), ESearchCase::IgnoreCase))
+		{
+			return FText::FromString(TEXT("시간 초과"));
+		}
+		if (EventType.Equals(TEXT("PathfindFail"), ESearchCase::IgnoreCase))
+		{
+			return FText::FromString(TEXT("경로 탐색 실패"));
+		}
+		if (EventType.Equals(TEXT("PolicyDecisionError"), ESearchCase::IgnoreCase))
+		{
+			return FText::FromString(TEXT("정책 판단 오류"));
+		}
+		if (EventType.Equals(TEXT("DeliveryBotSimulationFailure"), ESearchCase::IgnoreCase))
+		{
+			return FText::FromString(TEXT("시뮬레이션 실패"));
 		}
 
-		return FText::FromString(Marker.EventType.IsEmpty()
-			? TEXT("이벤트")
-			: Marker.EventType);
+		return FText::FromString(TEXT("이벤트"));
+	}
+
+	FText BuildReplayInterestEventTitle(const FScenarioReplayEventMarker& Marker)
+	{
+		return BuildReplayInterestEventTypeLabel(Marker.EventType);
+	}
+
+	bool TryBuildReplayInterestEventSummaryText(const FString& SourceText, FText& OutText)
+	{
+		const FString NormalizedText = SourceText.TrimStartAndEnd();
+		if (NormalizedText.IsEmpty())
+		{
+			return false;
+		}
+
+		if (NormalizedText.Equals(TEXT("local_repath_ready"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("로컬 경로 재계산을 실행했습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("collision_repath_ready"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("충돌 상황 이후 경로를 다시 계산했습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("dynamic_repath_ready"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("동적 장애물 감지로 경로를 다시 계산했습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("Repath"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("경로 재계산 이벤트가 기록되었습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("Collision"), ESearchCase::IgnoreCase)
+			|| NormalizedText.Equals(TEXT("StaticObstacleCollision"), ESearchCase::IgnoreCase)
+			|| NormalizedText.Equals(TEXT("BlockedRegionCollision"), ESearchCase::IgnoreCase)
+			|| NormalizedText.Equals(TEXT("PedestrianCollision"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("충돌이 기록되었습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("Stuck"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("로봇 정체가 기록되었습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("RobotTipOver"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("로봇 전복이 기록되었습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("GoalReached"), ESearchCase::IgnoreCase)
+			|| NormalizedText.Equals(TEXT("Success"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("목표 지점에 도달했습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("Timeout"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("제한 시간이 초과되었습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("PathfindFail"), ESearchCase::IgnoreCase)
+			|| NormalizedText.Equals(TEXT("PathFindingFailed"), ESearchCase::IgnoreCase)
+			|| NormalizedText.Equals(TEXT("PATH_NOT_FOUND"), ESearchCase::IgnoreCase)
+			|| NormalizedText.Equals(TEXT("path_not_found"), ESearchCase::IgnoreCase)
+			|| NormalizedText.Equals(TEXT("start_cell_blocked"), ESearchCase::IgnoreCase)
+			|| NormalizedText.Equals(TEXT("goal_cell_blocked"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("경로 탐색에 실패했습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("PolicyDecisionError"), ESearchCase::IgnoreCase)
+			|| NormalizedText.Equals(TEXT("PYTHON_REQUEST_FAILED"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("정책 판단 중 오류가 발생했습니다."));
+			return true;
+		}
+		if (NormalizedText.Equals(TEXT("DeliveryBotSimulationFailure"), ESearchCase::IgnoreCase))
+		{
+			OutText = FText::FromString(TEXT("주행 시뮬레이션 실패가 기록되었습니다."));
+			return true;
+		}
+
+		return false;
 	}
 
 	FText BuildReplayInterestEventSummary(const FScenarioReplayEventMarker& Marker)
 	{
-		if (!Marker.Message.IsEmpty())
+		FText SummaryText;
+		if (!Marker.Reason.IsEmpty()
+			&& TryBuildReplayInterestEventSummaryText(Marker.Reason, SummaryText))
 		{
-			return FText::FromString(Marker.Message);
+			return SummaryText;
 		}
 
-		if (!Marker.Reason.IsEmpty())
+		if (!Marker.Message.IsEmpty()
+			&& TryBuildReplayInterestEventSummaryText(Marker.Message, SummaryText))
 		{
-			return FText::FromString(Marker.Reason);
+			return SummaryText;
 		}
 
-		return FText::FromString(TEXT("상세 정보 없음"));
+		if (!Marker.EventType.IsEmpty()
+			&& TryBuildReplayInterestEventSummaryText(Marker.EventType, SummaryText))
+		{
+			return SummaryText;
+		}
+
+		return FText::FromString(TEXT("이벤트 상세 정보가 기록되었습니다."));
 	}
 
 	// ApplyRoundedSurface expects token-style sRGB input; WBP color pickers store
@@ -194,14 +310,12 @@ void UProjectEpisodeReplayInterestEventCardWidget::InitializeFromEventMarker(
 {
 	EventMarker = InMarker;
 
-	const FString EventTypeLabel = EventMarker.EventType.IsEmpty()
-		? TEXT("Event")
-		: EventMarker.EventType;
+	const FText EventTypeLabel = BuildReplayInterestEventTypeLabel(EventMarker.EventType);
 	const FLinearColor EventColor = GetReplayInterestEventColor(EventMarker.EventType);
 
 	if (EventTypeText)
 	{
-		EventTypeText->SetText(FText::FromString(EventTypeLabel));
+		EventTypeText->SetText(EventTypeLabel);
 	}
 	if (EventTimeText)
 	{

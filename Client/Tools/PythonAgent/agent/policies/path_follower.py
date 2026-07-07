@@ -98,7 +98,10 @@ class PathFollower:
         robot_spec = request.robotSpec or request.vehicleSpec or {}
         drive_spec = request.driveSpec or {}
 
-        self.followSpeedKmh = float(control_spec.get("targetSpeedKmh", self.followSpeedKmh))
+        # self.followSpeedKmh = float(control_spec.get("targetSpeedKmh", self.followSpeedKmh))
+        max_speed_kmh = float(robot_spec.get("maxSpeedKmh", 0.0))
+        if max_speed_kmh > 0.0:
+            self.followSpeedKmh = max_speed_kmh
         self.maxPathErrorM = float(control_spec.get("maxPathErrorM", self.maxPathErrorM))
         self.slowDownSpeedKmh = float(control_spec.get("obstacleSlowSpeedKmh", self.slowDownSpeedKmh))
         self.lookAheadDistanceM = float(control_spec.get("lookAheadDistanceM", self.lookAheadDistanceM))
@@ -209,7 +212,6 @@ class PathFollower:
         self.collisionStopDistanceM = float(
             lidar_spec.get("collisionStopDistanceM", self.collisionStopDistanceM)
         )
-        max_speed_kmh = float(robot_spec.get("maxSpeedKmh", 0.0))
         if max_speed_kmh > 0.0:
             self.followSpeedKmh = min(self.followSpeedKmh, max_speed_kmh)
         self.followSpeedKmh = max(0.0, self.followSpeedKmh)

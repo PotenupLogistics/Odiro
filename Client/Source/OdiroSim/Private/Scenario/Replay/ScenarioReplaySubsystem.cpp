@@ -48,6 +48,15 @@ namespace
 	const float ReplayPointCloudHighlightSphereZOffsetCm = 8.0f;
 	const float ReplayPointCloudHighlightColorBrightness = 10.f;
 
+	// Allows terminal events recorded just after the last replay sample to remain visible.
+	double GetReplayEventMarkerEndToleranceSeconds(const FEpisodeReplayManifest& Manifest)
+	{
+		const double SampleIntervalSeconds = Manifest.SampleRateHz > KINDA_SMALL_NUMBER
+			? 1.0 / Manifest.SampleRateHz
+			: 0.0;
+		return FMath::Max(2.0, SampleIntervalSeconds * 2.0);
+	}
+
 	// Carries validated point cloud import paths and coordinate metadata.
 	struct FReplayPointCloudImportInfo
 	{
@@ -1621,6 +1630,7 @@ void UScenarioReplaySubsystem::LoadEpisodeEventMarkers(
 	}
 
 	int32 InvalidLineCount = 0;
+	int32 ClampedLineCount = 0;
 	for (const FString& SourceLine : Lines)
 	{
 		FString Line = SourceLine;
@@ -1648,12 +1658,26 @@ void UScenarioReplaySubsystem::LoadEpisodeEventMarkers(
 		double TimeSeconds = 0.0;
 		if (!EventObject->TryGetNumberField(TEXT("run_time_seconds"), TimeSeconds)
 			|| !FMath::IsFinite(TimeSeconds)
-			|| TimeSeconds < 0.0
-			|| (Manifest.DurationSeconds > 0.0
-				&& TimeSeconds > Manifest.DurationSeconds + KINDA_SMALL_NUMBER))
+			|| TimeSeconds < 0.0)
 		{
 			++InvalidLineCount;
 			continue;
+		}
+
+		if (Manifest.DurationSeconds > 0.0
+			&& TimeSeconds > Manifest.DurationSeconds + KINDA_SMALL_NUMBER)
+		{
+			const double OverrunSeconds = TimeSeconds - Manifest.DurationSeconds;
+			if (OverrunSeconds <= GetReplayEventMarkerEndToleranceSeconds(Manifest))
+			{
+				TimeSeconds = Manifest.DurationSeconds;
+				++ClampedLineCount;
+			}
+			else
+			{
+				++InvalidLineCount;
+				continue;
+			}
 		}
 
 		double EventIndexValue = static_cast<double>(ReplayEventMarkers.Num());
@@ -1682,6 +1706,17 @@ void UScenarioReplaySubsystem::LoadEpisodeEventMarkers(
 			TEXT("Replay event marker load skipped invalid lines | Path=%s InvalidLines=%d"),
 			*EventsPath,
 			InvalidLineCount);
+	}
+
+	if (ClampedLineCount > 0)
+	{
+		UE_LOG(
+			LogScenarioReplay,
+			Log,
+			TEXT("Replay event marker load clamped end-of-replay lines | Path=%s ClampedLines=%d Duration=%.3f"),
+			*EventsPath,
+			ClampedLineCount,
+			Manifest.DurationSeconds);
 	}
 
 	UE_LOG(

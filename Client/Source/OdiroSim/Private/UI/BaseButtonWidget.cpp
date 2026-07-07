@@ -283,7 +283,10 @@ void UBaseButtonWidget::SynchronizeBaseProperties()
 	{
 		LabelTextBlock->SetText(Label);
 		LabelTextBlock->SetJustification(ToTextJustify(ContentAlign));
-		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
+		if (ShouldApplyLabelTextStyle())
+		{
+			ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
+		}
 		if (colors)
 		{
 			LabelTextBlock->SetColorAndOpacity(FSlateColor(foregroundColor));
@@ -554,6 +557,11 @@ void UBaseButtonWidget::ApplyTextStyle(UTextBlock* textBlock, const EBaseTextRol
 	{
 		BaseWidgetPrivate::ApplyTextStyle(textBlock, style);
 	}
+}
+
+bool UBaseButtonWidget::ShouldApplyLabelTextStyle() const
+{
+	return true;
 }
 
 void UBaseButtonWidget::ApplyBorderColor(UBorder* border, const FLinearColor& color) const

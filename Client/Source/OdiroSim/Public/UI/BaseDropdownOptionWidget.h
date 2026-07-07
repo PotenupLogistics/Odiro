@@ -26,6 +26,29 @@ protected:
 	// Disables CommonUI self-selection so only the dropdown drives the active row.
 	virtual void NativeConstruct() override;
 
+	// Keeps option typography authored in WBP while base sync still owns runtime text and state.
+	virtual bool ShouldApplyLabelTextStyle() const override;
+
+	// Whether the hovered row fill color is owned by this WBP instead of the color catalog.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Option Style", meta = (ExposeOnSpawn = "true"))
+	bool bUseOptionHoverFillColorOverride = false;
+
+	// WBP-authored hovered row fill color used when enabled.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Option Style", meta = (EditCondition = "bUseOptionHoverFillColorOverride", ExposeOnSpawn = "true"))
+	FLinearColor OptionHoverFillColorOverride = FLinearColor::Transparent;
+
+	// Whether the active/selected row fill color is owned by this WBP instead of the color catalog.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Option Style", meta = (ExposeOnSpawn = "true"))
+	bool bUseOptionActiveFillColorOverride = false;
+
+	// WBP-authored active/selected row fill color used when enabled.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Option Style", meta = (EditCondition = "bUseOptionActiveFillColorOverride", ExposeOnSpawn = "true"))
+	FLinearColor OptionActiveFillColorOverride = FLinearColor::Transparent;
+
+	// Keeps selected option text on the normal label color instead of the accent color.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Option Style", meta = (ExposeOnSpawn = "true"))
+	bool bPreserveSelectedLabelColor = false;
+
 	// Optional check mark shown on the selected option row.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UImage> CheckImage;

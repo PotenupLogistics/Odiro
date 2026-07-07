@@ -22,7 +22,25 @@ namespace
 		bool bArrayControlsEnabled = false;
 		// 현재 schema branch에서 row를 표시할지 여부.
 		bool bVisible = true;
+		// 명시 bounds가 있는 slider 표시 metadata.
+		FScenarioEditorSidebarFieldSliderSpec SliderSpec;
 	};
+
+	// 명시 bounds가 있는 semantic field에만 BaseSlider metadata를 부여한다.
+	FScenarioEditorSidebarFieldSliderSpec ResolveScenarioTemplateFieldSliderSpec(
+		const FString& fieldId)
+	{
+		FScenarioEditorSidebarFieldSliderSpec sliderSpec;
+		if (fieldId == TEXT("EncounterCooperation")
+			|| fieldId == TEXT("EncounterEvasiveness"))
+		{
+			sliderSpec.bEnabled = true;
+			sliderSpec.MinValue = 0.0f;
+			sliderSpec.MaxValue = 1.0f;
+			sliderSpec.DisplayDecimals = 2;
+		}
+		return sliderSpec;
+	}
 
 	// 전용 list widget이 생기기 전까지 comma-separated text로 다루는 string-list field를 식별한다.
 	bool IsScenarioTemplateStringListField(const FString& fieldId)
@@ -77,6 +95,7 @@ namespace
 		fieldSpec.bEditable = bEditable;
 		fieldSpec.bArrayControlsEnabled = bArrayControlsEnabled;
 		fieldSpec.bVisible = bVisible && !IsScenarioTemplateHiddenDetailField(id);
+		fieldSpec.SliderSpec = ResolveScenarioTemplateFieldSliderSpec(id);
 
 		if (IsScenarioTemplateStringListField(fieldSpec.Id))
 		{
@@ -2102,6 +2121,7 @@ UScenarioTemplateFieldRowViewModel* UScenarioTemplateSidebarViewModel::CreateFie
 			fieldSpec.bEditable,
 			fieldSpec.bArrayControlsEnabled,
 			fieldSpec.bVisible);
+		item->SetSliderSpec(fieldSpec.SliderSpec);
 	}
 	return item;
 }

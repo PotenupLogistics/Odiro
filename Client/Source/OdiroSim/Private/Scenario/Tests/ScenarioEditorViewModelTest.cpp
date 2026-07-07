@@ -228,6 +228,7 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Pedestrian speed field uses range input"), speedItem ? speedItem->GetInputType() : EScenarioEditorSidebarFieldInputType::Text, EScenarioEditorSidebarFieldInputType::Range);
 	TestFalse(TEXT("Pedestrian speed field disables range input for fixed values"), speedItem && speedItem->IsRangeInputEnabled());
 	TestEqual(TEXT("Pedestrian speed fixed value is formatted"), speedItem ? speedItem->GetValueText() : FString(), FString(TEXT("1.25")));
+	TestFalse(TEXT("Pedestrian speed has no implicit slider bounds"), speedItem && speedItem->GetSliderSpec().bEnabled);
 
 	TArray<UScenarioTemplateFieldRowViewModel*> encounterItems =
 		viewModel->CreatePedestrianEncounterFieldItems(0, scenarioTemplate.Pedestrians.Encounters[0]);
@@ -240,6 +241,11 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Pedestrian encounter persona has normal option"), encounterItems.IsValidIndex(3) && encounterItems[3]->GetComboOptions().Contains(TEXT("normal")));
 	TestEqual(TEXT("Pedestrian encounter meet offset min is formatted"), encounterItems.IsValidIndex(4) ? encounterItems[4]->GetMinValueText() : FString(), FString(TEXT("0.50")));
 	TestTrue(TEXT("Pedestrian encounter meet offset enables range input"), encounterItems.IsValidIndex(4) && encounterItems[4]->IsRangeInputEnabled());
+	TestFalse(TEXT("Pedestrian encounter meet offset has no implicit slider bounds"), encounterItems.IsValidIndex(4) && encounterItems[4]->GetSliderSpec().bEnabled);
+	TestTrue(TEXT("Pedestrian encounter cooperation exposes slider bounds"), encounterItems.IsValidIndex(5) && encounterItems[5]->GetSliderSpec().bEnabled);
+	TestEqual(TEXT("Pedestrian encounter cooperation slider min"), encounterItems.IsValidIndex(5) ? encounterItems[5]->GetSliderSpec().MinValue : -1.0f, 0.0f);
+	TestEqual(TEXT("Pedestrian encounter cooperation slider max"), encounterItems.IsValidIndex(5) ? encounterItems[5]->GetSliderSpec().MaxValue : -1.0f, 1.0f);
+	TestTrue(TEXT("Pedestrian encounter evasiveness exposes slider bounds"), encounterItems.IsValidIndex(6) && encounterItems[6]->GetSliderSpec().bEnabled);
 
 	scenarioTemplate.Obstacles.MinClearWidthMeters =
 		UScenarioTemplateSidebarViewModel::MakeRangeTemplateNumberValue(0.8, 1.2);

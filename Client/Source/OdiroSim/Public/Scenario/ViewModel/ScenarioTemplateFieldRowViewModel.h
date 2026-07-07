@@ -103,6 +103,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|TemplateSidebar")
 	void SetComboAllowsUnset(bool bInComboAllowsUnset, const FString& unsetDisplayText);
 
+	// BaseSlider metadata를 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|TemplateSidebar")
+	FScenarioEditorSidebarFieldSliderSpec GetSliderSpec() const { return SliderSpec; }
+
+	// BaseSlider metadata를 갱신한다.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|TemplateSidebar")
+	void SetSliderSpec(FScenarioEditorSidebarFieldSliderSpec inSliderSpec);
+
 	// Field row 표시 여부를 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|TemplateSidebar")
 	bool IsFieldVisible() const { return bVisible; }
@@ -155,6 +163,10 @@ private:
 	// ComboBox unset option display text.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scenario|Editor|TemplateSidebar", meta = (AllowPrivateAccess = "true"))
 	FString ComboUnsetDisplayText = TEXT("(unset)");
+
+	// 명시 bounds가 있는 BaseSlider 표시 metadata.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scenario|Editor|TemplateSidebar", meta = (AllowPrivateAccess = "true"))
+	FScenarioEditorSidebarFieldSliderSpec SliderSpec;
 
 	// Field row visibility state owned by the sidebar ViewModel.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scenario|Editor|TemplateSidebar", meta = (AllowPrivateAccess = "true"))

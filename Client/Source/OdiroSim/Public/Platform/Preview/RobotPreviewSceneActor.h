@@ -94,11 +94,14 @@ public:
 	void AddShowOnlyActors(TArray<AActor*>& OutActors);
 
 private:
+	// Returns the spawned preview stage child actor used for floor and background decoration.
+	AActor* GetPreviewStageActor() const;
+
 	// Returns the spawned visual-only child actor used for the robot body and wheels.
 	AActor* GetPreviewVisualActor() const;
 
-	// Disables collision, physics, and ticking on the preview visual child actor.
-	static void ConfigurePreviewVisualActor(AActor* VisualActor);
+	// Disables collision, physics, and ticking on one preview-only child actor.
+	static void ConfigurePreviewChildActor(AActor* PreviewActor);
 
 	// Assigns a mesh to one preview component and disables gameplay collision.
 	static void ConfigurePreviewMeshComponent(UStaticMeshComponent* Component, UStaticMesh* Mesh);
@@ -178,6 +181,10 @@ private:
 	// Flat floor mesh that gives the render target spatial context.
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
 	TObjectPtr<UStaticMeshComponent> StageFloor;
+
+	// Preview-specific stage actor that owns artist-authored floor and background decoration.
+	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
+	TObjectPtr<UChildActorComponent> PreviewStageActorComponent;
 
 	// Simple body mesh scaled from robot.body dimensions.
 	UPROPERTY(VisibleAnywhere, Category = "Platform|RobotPreview")
@@ -269,9 +276,16 @@ private:
 	// Preview-only LiDAR display layer and density settings.
 	FRobotPreviewLidarDisplayOptions LidarDisplayOptions;
 
+	// Visual-only Blueprint class used for the Preview floor and background decoration.
+	UPROPERTY(Transient)
+	TSubclassOf<AActor> PreviewStageActorClass;
+
 	// Visual-only Blueprint class used for the Preview robot body and wheels.
 	UPROPERTY(Transient)
 	TSubclassOf<AActor> PreviewVisualActorClass;
+
+	// True when the Preview stage Blueprint child is active.
+	bool bUsingPreviewStageActor = false;
 
 	// True when the Preview visual Blueprint child is active.
 	bool bUsingPreviewVisualActor = false;

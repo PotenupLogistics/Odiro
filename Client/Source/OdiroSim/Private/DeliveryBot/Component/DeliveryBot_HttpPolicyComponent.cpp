@@ -355,15 +355,15 @@ namespace
 		return rayCount;
 	}
 
-	// OS1은 Python으로 보낼 3D ray를 column별 대표 ray로 줄이고, 기존 3D 모드는 원본을 유지한다.
+	// Python 정책 payload에 넣을 3D ray를 full 또는 yaw/column별 대표 ray로 선택한다.
 	void Build3DRayPayloadInfos(
-		EDeliveryBotLidarModeType lidarModeType,
 		const TArray<FDeliveryBotLidarRayInfo>& sourceRayInfos,
+		bool bSendFull3DRays,
 		TArray<const FDeliveryBotLidarRayInfo*>& outRayInfos)
 	{
 		outRayInfos.Reset();
 
-		if (!FDeliveryBotLidarRayPattern::IsOusterOS1Mode(lidarModeType))
+		if (bSendFull3DRays)
 		{
 			for (const FDeliveryBotLidarRayInfo& rayInfo : sourceRayInfos)
 			{
@@ -1915,10 +1915,32 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 	TArray<TSharedPtr<FJsonValue>> lidarRay2DValues;
 	TArray<TSharedPtr<FJsonValue>> lidarRay3DValues;
 	TArray<const FDeliveryBotLidarRayInfo*> lidarRay3DInfosForPayload;
-	Build3DRayPayloadInfos(lidarModeType, observation.LidarScanInfo.RayInfos, lidarRay3DInfosForPayload);
+	const int32 rawLidarRay1DCount = CountLidarRaysForDimension(
+		observation.LidarScanInfo.RayInfos,
+		EDeliveryBotLidarRayDimensionType::OneD);
+	const int32 rawLidarRay2DCount = CountLidarRaysForDimension(
+		observation.LidarScanInfo.RayInfos,
+		EDeliveryBotLidarRayDimensionType::TwoD);
 	const int32 rawLidarRay3DCount = CountLidarRaysForDimension(
 		observation.LidarScanInfo.RayInfos,
 		EDeliveryBotLidarRayDimensionType::ThreeD);
+	const FString policyRaySelectionMode = ResolvePolicyRaySelectionMode(
+		lidarModeType,
+		rawLidarRay1DCount,
+		rawLidarRay2DCount,
+		rawLidarRay3DCount,
+		rawLidarRay2DCount);
+	const bool bSendOneDRaysToPolicy = bSendFullLidarRaysToPythonPolicy || policyRaySelectionMode == TEXT("1d");
+	const bool bSendTwoDRaysToPolicy = bSendFullLidarRaysToPythonPolicy || policyRaySelectionMode == TEXT("2d");
+	const bool bSendLegacyTwoDRaysToPolicy = bSendFullLidarRaysToPythonPolicy || policyRaySelectionMode == TEXT("legacy2d");
+	const bool bSendThreeDRaysToPolicy = bSendFullLidarRaysToPythonPolicy || policyRaySelectionMode == TEXT("3d");
+	if (bSendThreeDRaysToPolicy)
+	{
+		Build3DRayPayloadInfos(
+			observation.LidarScanInfo.RayInfos,
+			bSendFullLidarRaysToPythonPolicy,
+			lidarRay3DInfosForPayload);
+	}
 
 	legacyLidarRayValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
 	lidarRay1DValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
@@ -1930,12 +1952,21 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 		switch (rayInfo.RayDimensionType)
 		{
 		case EDeliveryBotLidarRayDimensionType::OneD:
-			lidarRay1DValues.Add(MakeShared<FJsonValueObject>(MakeJsonLidarRay1DObject(rayInfo)));
+			if (bSendOneDRaysToPolicy)
+			{
+				lidarRay1DValues.Add(MakeShared<FJsonValueObject>(MakeJsonLidarRay1DObject(rayInfo)));
+			}
 			break;
 
 		case EDeliveryBotLidarRayDimensionType::TwoD:
-			lidarRay2DValues.Add(MakeShared<FJsonValueObject>(MakeJsonLidarRay2DObject(rayInfo)));
-			legacyLidarRayValues.Add(MakeShared<FJsonValueObject>(MakeJsonLegacyLidarRayObject(rayInfo)));
+			if (bSendTwoDRaysToPolicy)
+			{
+				lidarRay2DValues.Add(MakeShared<FJsonValueObject>(MakeJsonLidarRay2DObject(rayInfo)));
+			}
+			if (bSendLegacyTwoDRaysToPolicy)
+			{
+				legacyLidarRayValues.Add(MakeShared<FJsonValueObject>(MakeJsonLegacyLidarRayObject(rayInfo)));
+			}
 			break;
 
 		case EDeliveryBotLidarRayDimensionType::ThreeD:
@@ -1965,10 +1996,13 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 	lidarObject->SetArrayField(TEXT("rays3d"), lidarRay3DValues);
 	lidarObject->SetNumberField(TEXT("rawRays3dCount"), rawLidarRay3DCount);
 	lidarObject->SetNumberField(TEXT("transmittedRays3dCount"), lidarRay3DValues.Num());
+	lidarObject->SetBoolField(TEXT("sendFullRays"), bSendFullLidarRaysToPythonPolicy);
+	lidarObject->SetStringField(
+		TEXT("rayPayloadMode"),
+		bSendFullLidarRaysToPythonPolicy ? TEXT("full") : TEXT("policy"));
 	lidarObject->SetBoolField(
 		TEXT("rays3dCompacted"),
-		FDeliveryBotLidarRayPattern::IsOusterOS1Mode(lidarModeType) &&
-			rawLidarRay3DCount > lidarRay3DValues.Num());
+		rawLidarRay3DCount > lidarRay3DValues.Num());
 	requestObject->SetObjectField(TEXT("lidar"), lidarObject);
 
 	TArray<TSharedPtr<FJsonValue>> observedObjectValues;

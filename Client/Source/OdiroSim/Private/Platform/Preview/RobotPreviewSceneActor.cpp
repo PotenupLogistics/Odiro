@@ -23,6 +23,7 @@ namespace
 	const TCHAR* PreviewSphereMeshPath = TEXT("/Engine/BasicShapes/Sphere.Sphere");
 	const TCHAR* PreviewCylinderMeshPath = TEXT("/Engine/BasicShapes/Cylinder.Cylinder");
 	const TCHAR* PreviewMaterialPath = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
+	const TCHAR* PreviewStageBlueprintPath = TEXT("/Game/Blueprints/PreviewStage/BP_PreviewStage");
 	const TCHAR* PreviewRobotVisualBlueprintPath = TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBotPreviewVisual");
 	const TCHAR* PreviewRobotVisualFallbackBlueprintPath = TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBotReplayVisual");
 	const TCHAR* PreviewRobotBodyMeshPath = TEXT("/Game/Models/DeliveryBot/SM_DeliveryBot.SM_DeliveryBot");
@@ -295,6 +296,9 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	StageFloor->SetRelativeLocation(FVector(0.0, 0.0, -3.0));
 	StageFloor->SetRelativeScale3D(FVector(8.0, 5.0, 0.04));
 
+	PreviewStageActorComponent = CreateDefaultSubobject<UChildActorComponent>(TEXT("PreviewStageActor"));
+	PreviewStageActorComponent->SetupAttachment(SceneRoot);
+
 	BodyVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BodyVisual"));
 	BodyVisual->SetupAttachment(RobotRoot);
 
@@ -366,6 +370,7 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(PreviewSphereMeshPath);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(PreviewCylinderMeshPath);
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> PreviewMaterial(PreviewMaterialPath);
+	static ConstructorHelpers::FClassFinder<AActor> PreviewStageActorFinder(PreviewStageBlueprintPath);
 	static ConstructorHelpers::FClassFinder<AActor> PreviewVisualActorFinder(PreviewRobotVisualBlueprintPath);
 	static ConstructorHelpers::FClassFinder<AActor> PreviewVisualFallbackActorFinder(
 		PreviewRobotVisualFallbackBlueprintPath);
@@ -390,6 +395,19 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	UMaterialInterface* LidarStopRangeMaterial = LoadOptionalPreviewMaterial(PreviewLidarStopRangeMaterialPath);
 	UMaterialInterface* LidarSlowRangeRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarSlowRangeRayMaterialPath);
 	UMaterialInterface* LidarStopRangeRayMaterial = LoadOptionalPreviewMaterial(PreviewLidarStopRangeRayMaterialPath);
+
+	if (PreviewStageActorFinder.Succeeded())
+	{
+		PreviewStageActorClass = PreviewStageActorFinder.Class;
+	}
+
+	bUsingPreviewStageActor = PreviewStageActorClass != nullptr;
+	if (bUsingPreviewStageActor)
+	{
+		PreviewStageActorComponent->SetChildActorClass(PreviewStageActorClass);
+	}
+	PreviewStageActorComponent->SetVisibility(bUsingPreviewStageActor, true);
+	PreviewStageActorComponent->SetHiddenInGame(!bUsingPreviewStageActor, true);
 
 	if (PreviewVisualActorFinder.Succeeded())
 	{
@@ -419,6 +437,8 @@ ARobotPreviewSceneActor::ARobotPreviewSceneActor()
 	SkeletalBodyVisual->SetHiddenInGame(bUsingPreviewVisualActor || !bUsingSkeletalBodyMesh);
 
 	ConfigurePreviewMeshComponent(StageFloor, CubeMesh.Object);
+	StageFloor->SetVisibility(!bUsingPreviewStageActor, true);
+	StageFloor->SetHiddenInGame(bUsingPreviewStageActor);
 	ConfigurePreviewMeshComponent(
 		BodyVisual,
 		bUsingFallbackBodyMesh ? CubeMesh.Object : RobotBodyMesh.Object);
@@ -611,10 +631,21 @@ void ARobotPreviewSceneActor::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 
+	if (bUsingPreviewStageActor)
+	{
+		ConfigurePreviewChildActor(GetPreviewStageActor());
+	}
 	if (bUsingPreviewVisualActor)
 	{
-		ConfigurePreviewVisualActor(GetPreviewVisualActor());
+		ConfigurePreviewChildActor(GetPreviewVisualActor());
 	}
+}
+
+AActor* ARobotPreviewSceneActor::GetPreviewStageActor() const
+{
+	return IsValid(PreviewStageActorComponent)
+		? PreviewStageActorComponent->GetChildActor()
+		: nullptr;
 }
 
 AActor* ARobotPreviewSceneActor::GetPreviewVisualActor() const
@@ -624,20 +655,20 @@ AActor* ARobotPreviewSceneActor::GetPreviewVisualActor() const
 		: nullptr;
 }
 
-void ARobotPreviewSceneActor::ConfigurePreviewVisualActor(AActor* VisualActor)
+void ARobotPreviewSceneActor::ConfigurePreviewChildActor(AActor* PreviewActor)
 {
-	if (!IsValid(VisualActor))
+	if (!IsValid(PreviewActor))
 	{
 		return;
 	}
 
-	VisualActor->Tags.AddUnique(RobotPreviewTag);
-	VisualActor->SetActorEnableCollision(false);
-	VisualActor->SetActorHiddenInGame(false);
-	VisualActor->SetActorTickEnabled(false);
+	PreviewActor->Tags.AddUnique(RobotPreviewTag);
+	PreviewActor->SetActorEnableCollision(false);
+	PreviewActor->SetActorHiddenInGame(false);
+	PreviewActor->SetActorTickEnabled(false);
 
 	TArray<UPrimitiveComponent*> PrimitiveComponents;
-	VisualActor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+	PreviewActor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
 	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
 	{
 		if (!IsValid(PrimitiveComponent))
@@ -738,11 +769,19 @@ float ARobotPreviewSceneActor::GetPreviewRadiusCm() const
 void ARobotPreviewSceneActor::AddShowOnlyActors(TArray<AActor*>& OutActors)
 {
 	OutActors.Add(this);
+	if (bUsingPreviewStageActor)
+	{
+		if (AActor* PreviewStageActor = GetPreviewStageActor())
+		{
+			ConfigurePreviewChildActor(PreviewStageActor);
+			OutActors.Add(PreviewStageActor);
+		}
+	}
 	if (bUsingPreviewVisualActor)
 	{
 		if (AActor* PreviewVisualActor = GetPreviewVisualActor())
 		{
-			ConfigurePreviewVisualActor(PreviewVisualActor);
+			ConfigurePreviewChildActor(PreviewVisualActor);
 			OutActors.Add(PreviewVisualActor);
 		}
 	}
@@ -1413,7 +1452,7 @@ void ARobotPreviewSceneActor::RefreshPreviewVisualTransform()
 	PreviewVisualActorComponent->SetRelativeLocation(FVector(0.0f, 0.0f, PreviewRobotVisualZOffsetCm));
 	PreviewVisualActorComponent->SetRelativeRotation(FRotator::ZeroRotator);
 	PreviewVisualActorComponent->SetRelativeScale3D(FVector(PreviewRobotVisualScale));
-	ConfigurePreviewVisualActor(GetPreviewVisualActor());
+	ConfigurePreviewChildActor(GetPreviewVisualActor());
 }
 
 void ARobotPreviewSceneActor::RefreshBodyTransform(const FRobotProfileSettings& Settings)

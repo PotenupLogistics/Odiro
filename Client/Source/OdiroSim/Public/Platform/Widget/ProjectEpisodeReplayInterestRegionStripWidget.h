@@ -72,6 +72,9 @@ private:
 	// Finds the runtime card index for one stable replay event id.
 	int32 FindCardIndexByEventIndex(int32 EventIndex) const;
 
+	// Toggles the WBP-authored card row and empty-state message for current card availability.
+	void UpdateEmptyStateVisibility(bool bHasCards);
+
 	// Count label owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> InterestCountText;
@@ -83,6 +86,10 @@ private:
 	// Runtime card row owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UHorizontalBox> InterestCardRow;
+
+	// Empty-state message owned by the Widget Blueprint when no replay events exist.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EmptyStateText;
 
 	// Widget Blueprint class used for each replay event card.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|Replay", meta = (AllowPrivateAccess = "true"))

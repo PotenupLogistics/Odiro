@@ -41,8 +41,25 @@ void UProjectEpisodeReplayInterestRegionStripWidget::SetEventMarkers(
 			EventMarkers.Num())));
 	}
 
-	if (!InterestCardRow || !EventCardWidgetClass)
+	if (!InterestCardRow)
 	{
+		UpdateEmptyStateVisibility(false);
+		SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	if (EventMarkers.IsEmpty())
+	{
+		UpdateEmptyStateVisibility(false);
+		SetVisibility(EmptyStateText
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		return;
+	}
+
+	if (!EventCardWidgetClass)
+	{
+		UpdateEmptyStateVisibility(false);
 		SetVisibility(ESlateVisibility::Collapsed);
 		return;
 	}
@@ -79,9 +96,15 @@ void UProjectEpisodeReplayInterestRegionStripWidget::SetEventMarkers(
 		EventCards.Add(CardWidget);
 	}
 
-	SetVisibility(EventCards.IsEmpty()
-		? ESlateVisibility::Collapsed
-		: ESlateVisibility::Visible);
+	const bool bHasCards = !EventCards.IsEmpty();
+	UpdateEmptyStateVisibility(bHasCards);
+	if (!bHasCards && EmptyStateText)
+	{
+		EmptyStateText->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	SetVisibility(bHasCards
+		? ESlateVisibility::Visible
+		: ESlateVisibility::Collapsed);
 	SelectedCardIndex = INDEX_NONE;
 	SetSelectedCardIndex(InitialSelectedCardIndex, false);
 }
@@ -110,7 +133,10 @@ void UProjectEpisodeReplayInterestRegionStripWidget::ClearEventMarkers()
 		InterestCountText->SetText(FText::FromString(TEXT("0개")));
 	}
 
-	SetVisibility(ESlateVisibility::Collapsed);
+	UpdateEmptyStateVisibility(false);
+	SetVisibility(EmptyStateText
+		? ESlateVisibility::Visible
+		: ESlateVisibility::Collapsed);
 }
 
 void UProjectEpisodeReplayInterestRegionStripWidget::SetCurrentTime(
@@ -246,4 +272,21 @@ int32 UProjectEpisodeReplayInterestRegionStripWidget::FindCardIndexByEventIndex(
 	}
 
 	return INDEX_NONE;
+}
+
+void UProjectEpisodeReplayInterestRegionStripWidget::UpdateEmptyStateVisibility(bool bHasCards)
+{
+	if (InterestScrollBox)
+	{
+		InterestScrollBox->SetVisibility(bHasCards
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+	}
+
+	if (EmptyStateText)
+	{
+		EmptyStateText->SetVisibility(bHasCards
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
+	}
 }

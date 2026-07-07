@@ -22,6 +22,7 @@ paths:
   - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayInterestRegionStripWidget.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
   - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayViewerWidget.cpp
+  - Client/Content/Blueprints/PreviewStage/BP_PreviewStage.uasset
   - Client/Content/Blueprints/Vehicle/BP_DeliveryBotPreviewVisual.uasset
   - Client/Content/Blueprints/Vehicle/BP_DeliveryBotReplayVisual.uasset
   - Client/Content/Materials/M_LidarRayHit.uasset
@@ -99,6 +100,7 @@ entry:
       - Client/Source/OdiroSim/Private/DeliveryBot/DeliveryBotLidarRayPattern.cpp
       - Client/Source/OdiroSim/Public/Platform/Preview
       - Client/Source/OdiroSim/Private/Platform/Preview
+      - Client/Content/Blueprints/PreviewStage/BP_PreviewStage.uasset
       - Client/Content/Blueprints/Vehicle/BP_DeliveryBotPreviewVisual.uasset
       - Client/Source/OdiroSim/Public/Platform/Widget/PlatformRootWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/PlatformRootWidget.cpp
@@ -202,6 +204,7 @@ guardrails:
   - Embedded Replay LiDAR Ray rendering uses a ScenarioReplaySubsystem-owned replay-only actor; UI controls should toggle subsystem visibility, not spawn actors or read ray files.
   - Embedded Replay fullscreen LiDAR controls split FullscreenRayToggleButton for actual sensor rays and FullscreenLidarDistanceToggleButton for distance/range overlays such as SlowDownDistance, StopDistance, and FrontAngle.
   - Robot profile preview and Embedded Replay LiDAR Ray rendering include obstacle_warning_distance_m as a visual range layer only; policy behavior remains owned by the runtime/Python obstacle policy path.
+  - Robot profile preview uses BP_PreviewStage for artist-authored floor and background decoration; keep it preview-only with no policy, physics, replay playback, or profile writes.
   - Robot profile preview uses BP_DeliveryBotPreviewVisual for the displayed DeliveryBot body and wheels; keep Replay wheel-pose contracts owned by BP_DeliveryBotReplayVisual.
   - Robot profile preview and Embedded Replay LiDAR Ray rendering share DeliveryBotLidarRayBeamRendering for SM_LiDARLay beam component setup, material assignment, and transform math; OS1 active sweep and full-range beams should use the same MI_RobotPreview_LidarRay_OusterActive/OusterFull material assets in both surfaces; keep Replay default-off and add it to SceneCapture show-only only while toggled visible.
   - Embedded Replay V2 wheel data stores baked visual wheel poses from the runtime robot; replay actors must apply the poses without running Chaos Vehicle, policy, HTTP, or sensors.

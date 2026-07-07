@@ -108,6 +108,9 @@ private:
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python")
 	float DecideIntervalSeconds{ 0.1f }; // Python decide 요청 간격
 
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python")
+	bool bSendFullLidarRaysToPythonPolicy{ false }; // /scenario/decide payload에 정책용 ray만 보낼지 전체 ray를 보낼지 결정
+
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Debug")
 	bool bDrawPythonPathDebug{ true }; // Python path debug draw 표시 여부
 

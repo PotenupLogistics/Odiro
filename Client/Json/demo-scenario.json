@@ -1,8 +1,8 @@
 {
 	"schema": "scenario",
 	"version": 1,
-	"scenario_id": "right_angle_city_corridor_test",
-	"intent": "Right-angle 3-point corridor test: building side on the inside of the L-shaped walkway, road side on the outside, with enough straight length for generated building and road blocks.",
+	"scenario_id": "도시_L자_보행로",
+	"intent": "직각 3-points 통로 이동 검증: L자형 보행로 좌측의 건물, 우측의 도로, 이동 간 마주할 수 있는 장애물 2개",
 	"corridor":
 	{
 		"axis":
@@ -66,8 +66,12 @@
 				"at":
 				{
 					"segment": "east_straight",
-					"along_m": 15.559847593149451,
-					"offset_m": -0.746226232840975,
+					"along_m": 15.95268285949034,
+					"offset_m":
+					{
+						"min": -3.75,
+						"max": -0.050000000000000003
+					},
 					"lane": "walkway"
 				},
 				"yaw_deg": 0,
@@ -81,7 +85,11 @@
 				{
 					"segment": "east_straight",
 					"along_m": 33.965277892312272,
-					"offset_m": -0.50532512108590311,
+					"offset_m":
+					{
+						"min": -5,
+						"max": 0
+					},
 					"lane": "walkway"
 				},
 				"yaw_deg": 55.520351694577286,
@@ -154,7 +162,7 @@
 					"offset_m": 0.87824667657217503,
 					"lane": "walkway"
 				},
-				"yaw_deg": 360,
+				"yaw_deg": 0,
 				"allow_blocking": false
 			},
 			{
@@ -168,7 +176,7 @@
 					"offset_m": 0.87245437117653069,
 					"lane": "walkway"
 				},
-				"yaw_deg": 360,
+				"yaw_deg": 0,
 				"allow_blocking": false
 			}
 		]
@@ -197,8 +205,8 @@
 		{
 			"type": "corridor_pose",
 			"segment": "south_straight",
-			"along_m": 52.439177061012238,
-			"offset_m": 0,
+			"along_m": 69.999234,
+			"offset_m": -1.32,
 			"lane": "walkway",
 			"heading": "forward"
 		}
